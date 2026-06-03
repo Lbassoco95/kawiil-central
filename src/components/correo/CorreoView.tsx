@@ -1,11 +1,15 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { MailList } from "./MailList";
 import { MailContactPanel } from "./MailContactPanel";
 import { MailReadingOverlay } from "./MailReadingOverlay";
+import { MailFoldersSheet } from "./MailFoldersSheet";
+import { MailRulesSheet } from "./MailRulesSheet";
 import { ComposeEmailDialog } from "@/components/microsoft/ComposeEmailDialog";
+import { CreateMailRuleDialog } from "@/components/microsoft/CreateMailRuleDialog";
 import { MailTaskDrawer } from "./MailTaskDrawer";
 import { MailTranslateDrawer } from "./MailTranslateDrawer";
 import { type MailTabId } from "./MailTabs";
+import { useEmailDetail, useMailFolders } from "@/hooks/useMicrosoft";
 
 interface EmailShape {
   id?: string;
@@ -24,6 +28,15 @@ export function CorreoView() {
   const [composeOpen, setComposeOpen] = useState(false);
   const [taskEmail, setTaskEmail] = useState<EmailShape | null>(null);
   const [translateEmail, setTranslateEmail] = useState<EmailShape | null>(null);
+  const [foldersOpen, setFoldersOpen] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
+  const [ruleDialogOpen, setRuleDialogOpen] = useState(false);
+  const [ruleSenderEmail, setRuleSenderEmail] = useState("");
+  const [ruleSenderName, setRuleSenderName] = useState("");
+
+  const { data: foldersQueryData } = useMailFolders();
+  const folders = (foldersQueryData?.folders ?? []) as { id: string; displayName: string }[];
+  const { data: selectedEmailDetail } = useEmailDetail(selectedEmailId);
 
   const handleSelectEmail = useCallback((id: string) => {
     setSelectedEmailId(id);
@@ -40,6 +53,25 @@ export function CorreoView() {
     setTaskEmail(email);
   }, []);
 
+  const handleCreateRule = useCallback(() => {
+    const email = (selectedEmailDetail as any)?.from?.emailAddress?.address || "";
+    const name = (selectedEmailDetail as any)?.from?.emailAddress?.name || "";
+    setRuleSenderEmail(email);
+    setRuleSenderName(name);
+    setRuleDialogOpen(true);
+  }, [selectedEmailDetail]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === "c" || e.key === "C") setComposeOpen(true);
+      if (e.key === "Escape") setReadingOpen(false);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
   return (
     <div className="flex h-full min-h-0 bg-card relative">
       {/* Left: email list + reading overlay */}
@@ -49,6 +81,9 @@ export function CorreoView() {
           onSelectTab={handleSelectTab}
           selectedEmailId={selectedEmailId}
           onSelectEmail={handleSelectEmail}
+          onCompose={() => setComposeOpen(true)}
+          onOpenFolders={() => setFoldersOpen(true)}
+          onOpenRules={() => setRulesOpen(true)}
         />
         <MailReadingOverlay
           emailId={selectedEmailId}
@@ -56,6 +91,7 @@ export function CorreoView() {
           onClose={() => setReadingOpen(false)}
           onCompose={() => setComposeOpen(true)}
           onCreateTask={handleCreateTask}
+          onCreateRule={handleCreateRule}
         />
       </div>
 
@@ -63,7 +99,9 @@ export function CorreoView() {
       <div className="w-[290px] shrink-0 border-l border-border/30 overflow-hidden">
         <MailContactPanel
           emailId={selectedEmailId}
-          onAskAI={() => {/* TODO */}}
+          onAskAI={() => {}}
+          onCreateTask={() => selectedEmailDetail && handleCreateTask(selectedEmailDetail as EmailShape)}
+          onCreateRule={handleCreateRule}
         />
       </div>
 
@@ -83,11 +121,27 @@ export function CorreoView() {
         ))}
       </div>
 
+      {/* Sheets */}
+      <MailFoldersSheet open={foldersOpen} onOpenChange={setFoldersOpen} />
+      <MailRulesSheet
+        open={rulesOpen}
+        onOpenChange={setRulesOpen}
+        folders={foldersData as any[]}
+        onNewRule={() => { setRulesOpen(false); setRuleDialogOpen(true); }}
+      />
+
       {/* Dialogs */}
       <ComposeEmailDialog
         open={composeOpen}
         onOpenChange={setComposeOpen}
         showAccountingTemplates
+      />
+      <CreateMailRuleDialog
+        open={ruleDialogOpen}
+        onOpenChange={setRuleDialogOpen}
+        senderEmail={ruleSenderEmail}
+        senderName={ruleSenderName}
+        folders={foldersData as any[]}
       />
       <MailTaskDrawer
         open={!!taskEmail}
