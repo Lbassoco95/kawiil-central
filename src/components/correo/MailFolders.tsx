@@ -162,7 +162,7 @@ function FolderRow({
   folder: RawFolder;
   childrenMap: Map<string, RawFolder[]>;
   selectedFolderId: string;
-  onSelectFolder: (id: string) => void;
+  onSelectFolder: (id: string, name: string) => void;
   inboxUnread: number;
   depth?: number;
 }) {
@@ -184,7 +184,7 @@ function FolderRow({
           badge ? "unread" : "",
         ].filter(Boolean).join(" ")}
         style={depth > 0 ? { paddingLeft: `${10 + depth * 14}px` } : undefined}
-        onClick={() => onSelectFolder(folder.id)}
+        onClick={() => onSelectFolder(folder.id, folder.displayName)}
       >
         {/* Chevron expandir */}
         {hasChildren ? (
@@ -227,7 +227,7 @@ function FolderRow({
 // ─── Componente principal ────────────────────────────────────
 interface Props {
   selectedFolderId: string;
-  onSelectFolder: (id: string) => void;
+  onSelectFolder: (id: string, name: string) => void;
   onCompose: () => void;
 }
 

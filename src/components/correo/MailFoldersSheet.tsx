@@ -6,9 +6,10 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCompose?: () => void;
+  onSelectFolder?: (folderId: string, folderName: string) => void;
 }
 
-export function MailFoldersSheet({ open, onOpenChange, onCompose }: Props) {
+export function MailFoldersSheet({ open, onOpenChange, onCompose, onSelectFolder }: Props) {
   const [selectedFolderId, setSelectedFolderId] = useState("");
 
   return (
@@ -20,8 +21,9 @@ export function MailFoldersSheet({ open, onOpenChange, onCompose }: Props) {
         <div className="overflow-y-auto h-full">
           <MailFolders
             selectedFolderId={selectedFolderId}
-            onSelectFolder={(id) => {
+            onSelectFolder={(id, name) => {
               setSelectedFolderId(id);
+              onSelectFolder?.(id, name ?? id);
               onOpenChange(false);
             }}
             onCompose={() => {

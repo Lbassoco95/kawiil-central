@@ -40,11 +40,14 @@ interface Props {
   onCompose: () => void;
   onOpenFolders: () => void;
   onOpenRules: () => void;
+  customFolderOverride?: string;
+  customFolderName?: string;
+  onClearCustomFolder?: () => void;
 }
 
 type ReadFilter = "todos" | "sinleer" | "leidos";
 
-export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmail, onCompose, onOpenFolders, onOpenRules }: Props) {
+export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmail, onCompose, onOpenFolders, onOpenRules, customFolderOverride, customFolderName, onClearCustomFolder }: Props) {
   const [search, setSearch] = useState("");
   const [readFilter, setReadFilter] = useState<ReadFilter>("todos");
   const queryClient = useQueryClient();
@@ -56,8 +59,8 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
   const debouncedSearch = useDebouncedValue(search, 350);
 
   // For AI tabs, load inbox and filter client-side
-  const isAiTab = AI_TABS.includes(activeTab);
-  const folderId = TAB_TO_FOLDER[activeTab] ?? "inbox";
+  const isAiTab = AI_TABS.includes(activeTab) && !customFolderOverride;
+  const folderId = customFolderOverride ?? TAB_TO_FOLDER[activeTab] ?? "inbox";
 
   const { data, isLoading, isFetching, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useOutlookEmails(folderId, debouncedSearch || undefined);
@@ -136,6 +139,20 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
     <div className="flex flex-col h-full min-h-0">
       {/* Tabs */}
       <MailTabs activeTab={activeTab} onSelectTab={onSelectTab} />
+
+      {/* Custom folder breadcrumb */}
+      {customFolderOverride && (
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-primary/5 border-b border-primary/20 shrink-0">
+          <FolderOpen className="w-3.5 h-3.5 text-primary shrink-0" />
+          <span className="text-[12px] font-medium text-primary flex-1 truncate">{customFolderName || "Carpeta"}</span>
+          <button
+            onClick={onClearCustomFolder}
+            className="text-[11px] text-primary/60 hover:text-primary transition-colors"
+          >
+            ← Bandeja
+          </button>
+        </div>
+      )}
 
       {/* Toolbar row */}
       <div className="flex items-center gap-1.5 px-3 py-2 border-b border-border/40 shrink-0">

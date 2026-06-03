@@ -9,7 +9,7 @@ import { CreateMailRuleDialog } from "@/components/microsoft/CreateMailRuleDialo
 import { MailTaskDrawer } from "./MailTaskDrawer";
 import { MailTranslateDrawer } from "./MailTranslateDrawer";
 import { type MailTabId } from "./MailTabs";
-import { useEmailDetail, useMailFolders } from "@/hooks/useMicrosoft";
+import { useEmailDetail, useMailFolders, useMarkEmailRead } from "@/hooks/useMicrosoft";
 
 interface EmailShape {
   id?: string;
@@ -21,11 +21,17 @@ interface EmailShape {
   importance?: string;
 }
 
+interface ForwardState {
+  subject: string;
+  bodyHtml: string;
+}
+
 export function CorreoView() {
   const [activeTab, setActiveTab] = useState<MailTabId>("inbox");
   const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
   const [readingOpen, setReadingOpen] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
+  const [forwardState, setForwardState] = useState<ForwardState | null>(null);
   const [taskEmail, setTaskEmail] = useState<EmailShape | null>(null);
   const [translateEmail, setTranslateEmail] = useState<EmailShape | null>(null);
   const [foldersOpen, setFoldersOpen] = useState(false);
@@ -33,20 +39,35 @@ export function CorreoView() {
   const [ruleDialogOpen, setRuleDialogOpen] = useState(false);
   const [ruleSenderEmail, setRuleSenderEmail] = useState("");
   const [ruleSenderName, setRuleSenderName] = useState("");
+  const [customFolderOverride, setCustomFolderOverride] = useState<string | null>(null);
+  const [customFolderName, setCustomFolderName] = useState<string | null>(null);
 
   const { data: foldersQueryData } = useMailFolders();
   const folders = (foldersQueryData?.folders ?? []) as { id: string; displayName: string }[];
   const { data: selectedEmailDetail } = useEmailDetail(selectedEmailId);
+  const markRead = useMarkEmailRead();
 
   const handleSelectEmail = useCallback((id: string) => {
     setSelectedEmailId(id);
     setReadingOpen(true);
-  }, []);
+    // Auto-mark as read when opening
+    markRead.mutate(id);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSelectTab = useCallback((tab: MailTabId) => {
     setActiveTab(tab);
     setSelectedEmailId(null);
     setReadingOpen(false);
+    setCustomFolderOverride(null);
+    setCustomFolderName(null);
+  }, []);
+
+  const handleSelectFolder = useCallback((folderId: string, folderName: string) => {
+    setCustomFolderOverride(folderId);
+    setCustomFolderName(folderName);
+    setSelectedEmailId(null);
+    setReadingOpen(false);
+    setFoldersOpen(false);
   }, []);
 
   const handleCreateTask = useCallback((email: EmailShape) => {
@@ -61,11 +82,29 @@ export function CorreoView() {
     setRuleDialogOpen(true);
   }, [selectedEmailDetail]);
 
+  const handleForward = useCallback(() => {
+    const detail = selectedEmailDetail as any;
+    if (!detail) return;
+    const origSubject = detail.subject || "(sin asunto)";
+    const origFrom = detail.from?.emailAddress?.name || detail.from?.emailAddress?.address || "";
+    const origDate = detail.receivedDateTime
+      ? new Date(detail.receivedDateTime).toLocaleString("es-MX")
+      : "";
+    const origBody = detail.body?.content || detail.bodyPreview || "";
+    const bodyHtml = `<br/><br/>---------- Mensaje reenviado ----------<br/>
+<b>De:</b> ${origFrom}<br/>
+<b>Fecha:</b> ${origDate}<br/>
+<b>Asunto:</b> ${origSubject}<br/><br/>
+${detail.body?.contentType === "html" ? origBody : `<pre style="font-family:inherit">${origBody}</pre>`}`;
+    setForwardState({ subject: `Fwd: ${origSubject}`, bodyHtml });
+    setComposeOpen(true);
+  }, [selectedEmailDetail]);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      if (e.key === "c" || e.key === "C") setComposeOpen(true);
+      if (e.key === "c" || e.key === "C") { setForwardState(null); setComposeOpen(true); }
       if (e.key === "Escape") setReadingOpen(false);
     };
     window.addEventListener("keydown", handler);
@@ -81,15 +120,19 @@ export function CorreoView() {
           onSelectTab={handleSelectTab}
           selectedEmailId={selectedEmailId}
           onSelectEmail={handleSelectEmail}
-          onCompose={() => setComposeOpen(true)}
+          onCompose={() => { setForwardState(null); setComposeOpen(true); }}
           onOpenFolders={() => setFoldersOpen(true)}
           onOpenRules={() => setRulesOpen(true)}
+          customFolderOverride={customFolderOverride ?? undefined}
+          customFolderName={customFolderName ?? undefined}
+          onClearCustomFolder={() => { setCustomFolderOverride(null); setCustomFolderName(null); }}
         />
         <MailReadingOverlay
           emailId={selectedEmailId}
           open={readingOpen}
           onClose={() => setReadingOpen(false)}
-          onCompose={() => setComposeOpen(true)}
+          onCompose={() => { setForwardState(null); setComposeOpen(true); }}
+          onForward={handleForward}
           onCreateTask={handleCreateTask}
           onCreateRule={handleCreateRule}
         />
@@ -109,7 +152,7 @@ export function CorreoView() {
       <div className="absolute bottom-0 left-0 right-0 z-20 flex items-center gap-4 px-4 py-1.5 bg-card/90 backdrop-blur-sm border-t border-border/30 text-[11px] text-muted-foreground/50 pointer-events-none">
         {[
           { key: "C", label: "Redactar" },
-          { key: "R", label: "Responder" },
+          { key: "F", label: "Reenviar" },
           { key: "E", label: "Archivar" },
           { key: "Enter", label: "Abrir" },
           { key: "Esc", label: "Cerrar" },
@@ -122,7 +165,11 @@ export function CorreoView() {
       </div>
 
       {/* Sheets */}
-      <MailFoldersSheet open={foldersOpen} onOpenChange={setFoldersOpen} />
+      <MailFoldersSheet
+        open={foldersOpen}
+        onOpenChange={setFoldersOpen}
+        onSelectFolder={handleSelectFolder}
+      />
       <MailRulesSheet
         open={rulesOpen}
         onOpenChange={setRulesOpen}
@@ -133,7 +180,9 @@ export function CorreoView() {
       {/* Dialogs */}
       <ComposeEmailDialog
         open={composeOpen}
-        onOpenChange={setComposeOpen}
+        onOpenChange={(o) => { setComposeOpen(o); if (!o) setForwardState(null); }}
+        initialSubject={forwardState?.subject}
+        initialBodyHtml={forwardState?.bodyHtml}
         showAccountingTemplates
       />
       <CreateMailRuleDialog
