@@ -664,7 +664,11 @@ function DropboxLiveBrowser() {
                 </button>
               </div>
               {searchResults.map((entry) => {
-                const parentPath = entry.path.split("/").slice(0, -1).join("/") || "/";
+                // Strip user:MEMBER_ID: prefix for display purposes
+                const displayPath = entry.path.startsWith("user:")
+                  ? entry.path.replace(/^user:[^:]+:/, "")
+                  : entry.path;
+                const parentPath = displayPath.split("/").slice(0, -1).join("/") || "/";
                 const displayParent = parentPath.replace(/^\/Kawiil Mx\/?/, "") || "Kawiil Mx";
                 return (
                   <button
