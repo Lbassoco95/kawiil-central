@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
   invokeSlackApi,
+  invokeSlackFileUpload,
   withHardTimeout,
   markSlackConversationRead,
   isSlackMarkReadFatal,
@@ -20,6 +21,7 @@ import {
   SLACK_CONV_BOOTSTRAP_PAGES,
   SLACK_CONV_LIST_TIMEOUT_MS,
 } from "@/lib/slackWorkspaceFetch";
+import { saveSlackHistoryCache, loadSlackHistoryCache } from "@/lib/slackHistoryCache";
 import { useSlackUserProfiles } from "@/hooks/useSlackUserProfiles";
 import { useSlackChannelNotificationBadges, markSlackChannelNotificationsRead } from "@/hooks/useSlackChannelNotificationBadges";
 import { useSlackUnreadMentionsCount } from "@/hooks/useSlackActivityFeed";
@@ -88,6 +90,7 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
   const [mobilePanel, setMobilePanel] = useState<"sidebar" | "messages">("sidebar");
   const slackConvGenRef = useRef(0);
   const slackReconnectToastAtRef = useRef(0);
+  const prefetchedChannelsRef = useRef<Set<string>>(new Set());
 
   // Sincronizar con URL
   useEffect(() => {
@@ -219,22 +222,30 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
         throw new Error("No se pudo cargar el historial");
       }
       const msgs = (data.messages ?? []).slice().reverse();
+      if (isFirst && msgs.length > 0) {
+        saveSlackHistoryCache(selectedChannel, msgs);
+      }
       return { messages: msgs, nextCursor: data.response_metadata?.next_cursor };
     },
     getNextPageParam: (first) => first.nextCursor,
     enabled: !!selectedChannel,
-    staleTime: 5 * 60_000,   // 5 minutos — evita re-fetch al volver a canales recientes
-    gcTime: 2 * 60 * 60_000, // 2 horas en memoria
+    staleTime: 5 * 60_000,
+    gcTime: 2 * 60 * 60_000,
     refetchOnWindowFocus: false,
-    // Polling fallback para canales donde el webhook Slack Events puede no estar configurado
     refetchInterval: (query) => {
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return false;
       if (query.state.fetchStatus === "fetching") return false;
       const pages = query.state.data?.pages?.length ?? 0;
-      if (pages !== 1) return false; // no re-paginar si hay múltiples páginas
+      if (pages !== 1) return false;
       return 60_000;
     },
     refetchIntervalInBackground: false,
+    placeholderData: () => {
+      if (!selectedChannel) return undefined;
+      const cached = loadSlackHistoryCache(selectedChannel);
+      if (!cached?.length) return undefined;
+      return { pages: [{ messages: cached }], pageParams: [undefined] };
+    },
   });
 
   const messages = useMemo(
@@ -361,15 +372,35 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
 
   // ─── Enviar mensaje ─────────────────────────────────────
   const sendMutation = useMutation({
-    mutationFn: async (text: string) => {
+    mutationFn: async ({ text, files }: { text: string; files?: File[] }) => {
       if (!selectedChannel) throw new Error("Sin canal seleccionado");
+
+      if (files && files.length > 0) {
+        // Upload each file; first file carries the message text as initial_comment
+        await Promise.all(
+          files.map((file, i) => {
+            const fd = new FormData();
+            fd.append("action", "files.upload");
+            fd.append("channel", selectedChannel);
+            fd.append("file", file, file.name);
+            fd.append("filename", file.name);
+            if (i === 0 && text.trim()) fd.append("initial_comment", text.trim());
+            return invokeSlackFileUpload(fd);
+          }),
+        );
+        // Post text-only message if there are multiple files (first file already has comment)
+        if (files.length > 1 && text.trim()) {
+          await invokeSlackApi<{ ok: boolean }>({ action: "chat.postMessage", channel: selectedChannel, text }, 30_000);
+        }
+        return;
+      }
+
       const data = await invokeSlackApi<{ ok: boolean; ts?: string }>({
         action: "chat.postMessage",
         channel: selectedChannel,
         text,
       }, 30_000);
       if (!data.ok) throw new Error("No se pudo enviar el mensaje");
-      return data;
     },
     onSuccess: () => {
       void historyQuery.refetch();
@@ -470,12 +501,68 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
   });
 
   // Cuando aparecen badges nuevos, forzar un snapshot inmediato
-  // (evita esperar 30s para detectar canales ya leídos en Slack nativo)
   const syncKey = syncChannelIds.join(",");
   useEffect(() => {
     if (!user?.id || !syncKey) return;
     void qc.invalidateQueries({ queryKey: ["slack-unread-snapshot", user.id] });
   }, [syncKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ─── Background prefetch: seed memory cache + pre-warm unread channels ──
+  const convCount = conversations.length;
+  const unreadKey = Object.entries(unreadBadges)
+    .filter(([, v]) => v > 0)
+    .map(([k]) => k)
+    .sort()
+    .join(",");
+  useEffect(() => {
+    if (!convCount) return;
+
+    // Seed React Query memory cache from localStorage — zero API calls, instant channel switch
+    for (const conv of conversations) {
+      if (qc.getQueryData(["slack-history-v2", conv.id])) continue;
+      const cached = loadSlackHistoryCache(conv.id);
+      if (cached?.length) {
+        qc.setQueryData(["slack-history-v2", conv.id], {
+          pages: [{ messages: cached }],
+          pageParams: [undefined],
+        });
+      }
+    }
+
+    // Fire background API fetches for unread channels without cache (staggered 900ms)
+    const toFetch = Object.entries(unreadBadges)
+      .filter(([ch, count]) => {
+        if (!count || ch === selectedChannel) return false;
+        if (prefetchedChannelsRef.current.has(ch)) return false;
+        if (qc.getQueryData(["slack-history-v2", ch])) return false;
+        return true;
+      })
+      .slice(0, 4)
+      .map(([ch]) => ch);
+
+    toFetch.forEach((channelId, i) => {
+      prefetchedChannelsRef.current.add(channelId);
+      window.setTimeout(() => {
+        void qc.prefetchInfiniteQuery({
+          queryKey: ["slack-history-v2", channelId],
+          initialPageParam: undefined as string | undefined,
+          queryFn: async () => {
+            const data = await invokeSlackApi<{
+              ok: boolean;
+              messages?: SlackMessage[];
+              response_metadata?: { next_cursor?: string };
+            }>({ action: "conversations.history", channel: channelId, limit: 40 }, HISTORY_FIRST_MS);
+            const msgs = (data.messages ?? []).slice().reverse();
+            if (msgs.length) saveSlackHistoryCache(channelId, msgs);
+            return { messages: msgs, nextCursor: data.response_metadata?.next_cursor };
+          },
+          staleTime: 5 * 60_000,
+          pages: 1,
+        } as Parameters<typeof qc.prefetchInfiniteQuery>[0]);
+      }, i * 900);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [convCount, unreadKey]);
 
   // ─── Menciones no leídas ────────────────────────────────
   const unreadMentions = useSlackUnreadMentionsCount();
@@ -590,8 +677,8 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
         <SlackComposerNew
           channelName={channelName}
           isSending={sendMutation.isPending}
-          onSend={(text) => {
-            sendMutation.mutate(text);
+          onSend={(text, files) => {
+            sendMutation.mutate({ text, files });
             onStopTyping();
           }}
           disabled={!selectedChannel}
