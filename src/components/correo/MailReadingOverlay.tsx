@@ -153,13 +153,22 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onForwar
             </div>
             {iframeSrc ? (
               <iframe
-                srcDoc={`<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><style>body{font-family:system-ui,sans-serif;font-size:14px;line-height:1.7;color:#374151;margin:0;padding:0}a{color:#2563eb}img{max-width:100%}</style></head><body>${iframeSrc}</body></html>`}
+                srcDoc={`<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><style>body{font-family:system-ui,sans-serif;font-size:14px;line-height:1.7;color:#374151;margin:0;padding:0}a{color:#2563eb;cursor:pointer}img{max-width:100%}</style></head><body>${iframeSrc}</body></html>`}
                 className="w-full border-0 min-h-[400px]"
-                sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
                 style={{ height: "auto" }}
                 onLoad={(e) => {
                   const iframe = e.currentTarget;
-                  try { iframe.style.height = iframe.contentDocument?.body.scrollHeight + "px"; } catch {}
+                  try {
+                    // Force all links to open in new tab
+                    const doc = iframe.contentDocument;
+                    if (doc) {
+                      doc.querySelectorAll("a").forEach((a) => {
+                        a.setAttribute("target", "_blank");
+                        a.setAttribute("rel", "noopener noreferrer");
+                      });
+                      iframe.style.height = doc.body.scrollHeight + "px";
+                    }
+                  } catch {}
                 }}
               />
             ) : (
