@@ -5,6 +5,14 @@ import type { SlackUserProfile } from "@/hooks/useSlackUserProfiles";
 import { SlackAttachmentPreviewDialog } from "@/components/slack/SlackAttachmentPreviewDialog";
 
 // ─── Utilidades ──────────────────────────────────────────────
+const EXTRA_EMOJIS: Array<[string, string]> = [
+  ["white_check_mark", "✅"], ["fire", "🔥"], ["rocket", "🚀"], ["tada", "🎉"],
+  ["clap", "👏"], ["100", "💯"], ["heart", "❤️"], ["pray", "🙏"],
+  ["muscle", "💪"], ["thinking_face", "🤔"], ["+1", "👍"], ["eyes", "👀"],
+  ["question", "❓"], ["warning", "⚠️"], ["x", "❌"], ["star", "⭐"],
+  ["raised_hands", "🙌"], ["point_right", "👉"], ["bulb", "💡"], ["clock1", "🕐"],
+];
+
 function formatTs(ts: string): string {
   if (!ts) return "";
   const d = new Date(parseFloat(ts) * 1000);
@@ -267,11 +275,24 @@ export function MessageItem({
   );
 
   const [previewFile, setPreviewFile] = useState<SlackFile | null>(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
 
   const hasReacted = (name: string) =>
     selfUserId
       ? (message.reactions?.some(r => r.name === name && r.users?.includes(selfUserId)) ?? false)
       : false;
+
+  useEffect(() => {
+    if (!showEmojiPicker) return;
+    const handler = (e: MouseEvent) => {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target as Node)) {
+        setShowEmojiPicker(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showEmojiPicker]);
 
   return (
     <div className={`sl-msg${isCompact ? " compact" : ""}`} data-ts={message.ts}>
@@ -380,6 +401,60 @@ export function MessageItem({
         >
           ❓
         </button>
+        {onReact && (
+          <div ref={emojiPickerRef} style={{ position: "relative" }}>
+            <button
+              className="sl-msg-action sl-quick-react"
+              title="Más reacciones"
+              onClick={() => setShowEmojiPicker((v) => !v)}
+            >
+              ＋
+            </button>
+            {showEmojiPicker && (
+              <div
+                style={{
+                  position: "absolute",
+                  bottom: "calc(100% + 4px)",
+                  right: 0,
+                  zIndex: 200,
+                  background: "hsl(var(--popover))",
+                  border: "1px solid hsl(var(--border))",
+                  borderRadius: 10,
+                  padding: "8px",
+                  display: "grid",
+                  gridTemplateColumns: "repeat(5, 1fr)",
+                  gap: 2,
+                  boxShadow: "0 4px 16px hsl(0 0% 0% / 0.15)",
+                  minWidth: 176,
+                }}
+              >
+                {EXTRA_EMOJIS.map(([emojiName, char]) => (
+                  <button
+                    key={emojiName}
+                    title={emojiName}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      onReact(message.ts ?? "", emojiName);
+                      setShowEmojiPicker(false);
+                    }}
+                    style={{
+                      background: hasReacted(emojiName) ? "hsl(var(--primary) / 0.15)" : "transparent",
+                      border: "none",
+                      borderRadius: 6,
+                      cursor: "pointer",
+                      fontSize: 18,
+                      lineHeight: 1,
+                      padding: "4px",
+                      textAlign: "center",
+                    }}
+                  >
+                    {char}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         {onOpenThread && (
           <button className="sl-msg-action" title="Responder en hilo" onClick={() => onOpenThread(message.thread_ts || message.ts || "")}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
