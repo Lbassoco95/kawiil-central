@@ -317,7 +317,7 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
               />
               );
             }
-            ))}
+            )}
           </div>
         ))}
         {isFetchingNextPage && (
