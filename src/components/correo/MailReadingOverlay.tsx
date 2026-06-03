@@ -1,10 +1,11 @@
 import { cn } from "@/lib/utils";
-import { ArrowLeft, Reply, Forward, Archive, Trash2, CheckSquare, Filter, Tag } from "lucide-react";
-import { useEmailDetail, useArchiveEmail, useDeleteEmail } from "@/hooks/useMicrosoft";
+import { ArrowLeft, Reply, Forward, Archive, Trash2, CheckSquare, Filter, Tag, FolderInput, ChevronRight } from "lucide-react";
+import { useEmailDetail, useArchiveEmail, useDeleteEmail, useMoveEmail, useMailFolders } from "@/hooks/useMicrosoft";
 import { useResolvedEmailHtml } from "@/hooks/useResolvedEmailHtml";
 import { useEmailAttachments } from "@/hooks/useMicrosoft";
 import { MailLabelPicker } from "./MailLabelPicker";
-import { useMemo } from "react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useMemo, useState } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -38,6 +39,14 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onForwar
   );
   const archiveEmail = useArchiveEmail();
   const deleteEmail = useDeleteEmail();
+  const moveEmail = useMoveEmail();
+  const { data: foldersData } = useMailFolders();
+  const [moveFolderOpen, setMoveFolderOpen] = useState(false);
+
+  const folders = useMemo(() => {
+    const all = (foldersData?.folders ?? []) as { id: string; displayName: string; wellKnownFolderName?: string }[];
+    return all;
+  }, [foldersData]);
 
   const iframeSrc = useMemo(() => {
     if (!resolvedHtml && !(emailDetail as any)?.body?.content) return "";
@@ -86,6 +95,44 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onForwar
             </button>
           )}
           <div className="w-px h-4 bg-border mx-1" />
+
+          {/* Move to folder */}
+          <Popover open={moveFolderOpen} onOpenChange={setMoveFolderOpen}>
+            <PopoverTrigger asChild>
+              <button
+                className="h-[30px] w-[30px] flex items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                title="Mover a carpeta"
+              >
+                <FolderInput className="w-3.5 h-3.5" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent side="bottom" align="end" className="w-[220px] p-1.5">
+              <p className="text-[10.5px] font-bold uppercase tracking-widest text-muted-foreground px-2 pb-1.5">
+                Mover a carpeta
+              </p>
+              <div className="max-h-[260px] overflow-y-auto space-y-0.5">
+                {folders.length === 0 && (
+                  <p className="text-[12px] text-muted-foreground/60 px-2 py-1.5">Sin carpetas</p>
+                )}
+                {folders.map((folder) => (
+                  <button
+                    key={folder.id}
+                    onClick={() => {
+                      if (!emailId) return;
+                      moveEmail.mutate({ messageId: emailId, destinationId: folder.id });
+                      setMoveFolderOpen(false);
+                      onClose();
+                    }}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-accent text-[12.5px] text-left transition-colors"
+                  >
+                    <ChevronRight className="w-3 h-3 text-muted-foreground shrink-0" />
+                    <span className="truncate">{folder.displayName}</span>
+                  </button>
+                ))}
+              </div>
+            </PopoverContent>
+          </Popover>
+
           <button
             className="h-[30px] w-[30px] flex items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
             title="Crear regla"
@@ -159,7 +206,6 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onForwar
                 onLoad={(e) => {
                   const iframe = e.currentTarget;
                   try {
-                    // Force all links to open in new tab
                     const doc = iframe.contentDocument;
                     if (doc) {
                       doc.querySelectorAll("a").forEach((a) => {

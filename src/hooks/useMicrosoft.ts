@@ -1726,6 +1726,71 @@ export function useCreateMailRule() {
   });
 }
 
+export function useUpdateMailRule() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      displayName,
+      senderEmail,
+      moveToFolderId,
+      moveToFolderName,
+      markAsRead,
+      isEnabled,
+    }: {
+      id: string;
+      displayName?: string;
+      senderEmail?: string;
+      moveToFolderId?: string | null;
+      moveToFolderName?: string | null;
+      markAsRead?: boolean;
+      isEnabled?: boolean;
+    }) => {
+      const updates: Record<string, unknown> = {};
+      if (displayName !== undefined) updates.rule_name = displayName;
+      if (senderEmail !== undefined) updates.sender_email = senderEmail.trim().toLowerCase();
+      if (moveToFolderId !== undefined) updates.move_to_folder_id = moveToFolderId;
+      if (moveToFolderName !== undefined) updates.move_to_folder_name = moveToFolderName;
+      if (markAsRead !== undefined) updates.mark_as_read = markAsRead;
+      if (isEnabled !== undefined) updates.is_enabled = isEnabled;
+      const { data, error } = await supabase
+        .from("email_inbox_rules")
+        .update(updates)
+        .eq("id", id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data as EmailInboxRule;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["email-inbox-rules", user?.id] });
+      toast.success("Regla actualizada");
+    },
+    onError: (err: Error) => toast.error("Error al actualizar la regla: " + err.message),
+  });
+}
+
+export function useDeleteMailRule() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("email_inbox_rules")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["email-inbox-rules", user?.id] });
+      toast.success("Regla eliminada");
+    },
+    onError: (err: Error) => toast.error("Error al eliminar la regla: " + err.message),
+  });
+}
 
 export function useFlagEmail() {
   const queryClient = useQueryClient();
