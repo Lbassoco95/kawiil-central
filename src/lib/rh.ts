@@ -106,6 +106,8 @@ export interface RhAttendanceEvent {
 export const BREAK_MAX_MINUTES = 20;
 /** Intervalo mínimo entre descansos cortos (horas). */
 export const BREAK_INTERVAL_HOURS = 2;
+/** Tiempo desde el inicio de jornada para habilitar el primer descanso (horas). */
+export const FIRST_BREAK_AFTER_HOURS = 1;
 
 export type RhJornadaState = "none" | "working" | "lunch" | "break" | "done";
 
@@ -359,7 +361,7 @@ export function summarizeJornada(
   let breaksTaken = 0;
   let pauseStartedAt: number | null = null;
   let openPause: { kind: "lunch" | "break"; at: number } | null = null;
-  let lastResumeOrStart = t(checkIn);
+  let lastBreakStart: number | null = null;
 
   for (const e of sorted) {
     switch (e.event_type) {
@@ -369,18 +371,17 @@ export function summarizeJornada(
       case "break_start":
         openPause = { kind: "break", at: t(e) };
         breaksTaken += 1;
+        lastBreakStart = t(e);
         break;
       case "lunch_end":
         if (openPause?.kind === "lunch") {
           lunchMs += t(e) - openPause.at;
-          lastResumeOrStart = t(e);
           openPause = null;
         }
         break;
       case "break_end":
         if (openPause?.kind === "break") {
           breakMs += t(e) - openPause.at;
-          lastResumeOrStart = t(e);
           openPause = null;
         }
         break;
@@ -399,9 +400,12 @@ export function summarizeJornada(
   const grossMs = end - t(checkIn);
   const workedMs = Math.max(0, grossMs - lunchMs - breakMs);
 
-  // Descanso corto disponible cada 2h desde el inicio o el último descanso.
-  const intervalMs = BREAK_INTERVAL_HOURS * 3600_000;
-  const nextBreakAt = lastResumeOrStart + intervalMs;
+  // Descanso corto: el primero a 1h del check-in; los siguientes 2h después de
+  // tomar el anterior. Una vez disponible, sigue disponible hasta que se tome.
+  const nextBreakAt =
+    lastBreakStart === null
+      ? t(checkIn) + FIRST_BREAK_AFTER_HOURS * 3600_000
+      : lastBreakStart + BREAK_INTERVAL_HOURS * 3600_000;
   const canBreak = state === "working" && now >= nextBreakAt;
 
   return {

@@ -63,7 +63,97 @@ export function useIsAnyInterviewer(): boolean {
 export function useCanAccessRecruitment(): boolean {
   const isRecruiter = useIsRecruiter();
   const isInterviewer = useIsAnyInterviewer();
-  return isRecruiter || isInterviewer;
+  const isOwner = useIsAnyOwner();
+  return isRecruiter || isInterviewer || isOwner;
+}
+
+/** ¿El usuario actual es responsable de alguna vacante? */
+export function useIsAnyOwner(): boolean {
+  const { user } = useAuth();
+  const { data } = useQuery({
+    queryKey: ["rh-is-owner", user?.id],
+    queryFn: async (): Promise<boolean> => {
+      const { count, error } = await db
+        .from("rh_process_owners")
+        .select("process_id", { count: "exact", head: true })
+        .eq("user_id", user!.id);
+      if (error) return false;
+      return (count ?? 0) > 0;
+    },
+    enabled: !!user,
+    staleTime: 60 * 1000,
+  });
+  return !!data;
+}
+
+/** ¿El usuario actual es responsable de ESTA vacante? (gestión acotada) */
+export function useIsProcessOwner(processId: string | null): boolean {
+  const { user } = useAuth();
+  const { data } = useQuery({
+    queryKey: ["rh-is-owner-of", processId, user?.id],
+    queryFn: async (): Promise<boolean> => {
+      const { count, error } = await db
+        .from("rh_process_owners")
+        .select("process_id", { count: "exact", head: true })
+        .eq("user_id", user!.id)
+        .eq("process_id", processId);
+      if (error) return false;
+      return (count ?? 0) > 0;
+    },
+    enabled: !!user && !!processId,
+    staleTime: 60 * 1000,
+  });
+  return !!data;
+}
+
+/* ---------------- Responsables por vacante ---------------- */
+export function useProcessOwners(processId: string | null) {
+  return useQuery({
+    queryKey: ["rh-owners", processId],
+    queryFn: async (): Promise<string[]> => {
+      const { data, error } = await db
+        .from("rh_process_owners")
+        .select("user_id")
+        .eq("process_id", processId);
+      if (error) throw error;
+      return ((data as { user_id: string }[]) ?? []).map((r) => r.user_id);
+    },
+    enabled: !!processId,
+  });
+}
+
+export function useAddOwner() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ processId, userId }: { processId: string; userId: string }) => {
+      const orgId = await getMyOrgId(user!.id);
+      const { error } = await db.from("rh_process_owners").insert({
+        organization_id: orgId, process_id: processId, user_id: userId, created_by: user!.id,
+      });
+      if (error) throw error;
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["rh-owners", vars.processId] });
+      toast.success("Responsable asignado");
+    },
+    onError: (e: Error) => toast.error(e.message || "No se pudo asignar"),
+  });
+}
+
+export function useRemoveOwner() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ processId, userId }: { processId: string; userId: string }) => {
+      const { error } = await db.from("rh_process_owners").delete().eq("process_id", processId).eq("user_id", userId);
+      if (error) throw error;
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["rh-owners", vars.processId] });
+      toast.success("Responsable quitado");
+    },
+    onError: (e: Error) => toast.error(e.message || "No se pudo quitar"),
+  });
 }
 
 /* ---------------- Entrevistadores por vacante ---------------- */
@@ -568,6 +658,21 @@ async function logActivity(
     content,
     metadata,
     created_by: userId,
+  });
+}
+
+export function useDeleteCandidate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ candidate }: { candidate: Candidate }) => {
+      const { error } = await db.from("rh_candidates").delete().eq("id", candidate.id);
+      if (error) throw error;
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["rh-candidates", vars.candidate.process_id] });
+      toast.success("Candidato eliminado");
+    },
+    onError: (e: Error) => toast.error(e.message || "No se pudo eliminar el candidato"),
   });
 }
 
