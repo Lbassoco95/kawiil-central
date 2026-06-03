@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   PenLine,
   Inbox,
@@ -17,7 +17,7 @@ import {
 import { cn } from "@/lib/utils";
 import { type MailTabId } from "./MailTabs";
 import {
-  useUnreadEmailCount,
+  useOutlookEmails,
   useMailFolders,
   useEmailUserLabels,
   useCreateEmailLabel,
@@ -61,7 +61,15 @@ export function MailSidebar({
   activeLabelId,
   onSelectLabel,
 }: MailSidebarProps) {
-  const { data: unreadCount = 0 } = useUnreadEmailCount();
+  // Derive unread count from the same React Query cache that MailList uses
+  // so the badge is always in sync with what the list shows.
+  const { data: inboxData } = useOutlookEmails("inbox");
+  const unreadCount = useMemo(() => {
+    return (inboxData?.pages ?? [])
+      .flatMap((p) => p.emails as any[])
+      .filter((e) => !e.isRead)
+      .length;
+  }, [inboxData]);
   const { data: foldersData } = useMailFolders();
   const { data: userLabels = [] } = useEmailUserLabels();
   const createLabel = useCreateEmailLabel();
@@ -79,14 +87,26 @@ export function MailSidebar({
     parentFolderId?: string;
   }[];
 
-  // Show top-level custom folders — exclude well-known system folders
-  const WELL_KNOWN = new Set([
+  // Exclude system folders by wellKnownFolderName AND by display name (Graph sometimes returns null wellKnownFolderName)
+  const WELL_KNOWN_IDS = new Set([
     "inbox", "drafts", "sentitems", "deleteditems", "junkemail",
     "outbox", "archive", "msgfolderroot", "recoverableitemsdeletions",
+    "conversationhistory", "scheduled",
   ]);
-  const customFolders = folders.filter(
-    (f) => !f.wellKnownFolderName || !WELL_KNOWN.has(f.wellKnownFolderName.toLowerCase()),
-  );
+  const WELL_KNOWN_DISPLAY = new Set([
+    "bandeja de entrada", "inbox",
+    "borradores", "drafts",
+    "elementos enviados", "sent items", "sentitems",
+    "elementos eliminados", "deleted items",
+    "correo no deseado", "junk email",
+    "bandeja de salida", "outbox",
+    "archivo", "archive",
+  ]);
+  const customFolders = folders.filter((f) => {
+    if (f.wellKnownFolderName && WELL_KNOWN_IDS.has(f.wellKnownFolderName.toLowerCase())) return false;
+    if (WELL_KNOWN_DISPLAY.has(f.displayName.toLowerCase())) return false;
+    return true;
+  });
 
   const handleCreateLabel = async () => {
     if (!newLabelName.trim()) return;
