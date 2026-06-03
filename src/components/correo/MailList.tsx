@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { Search, RefreshCw, Loader2, PenLine, FolderOpen, ListFilter } from "lucide-react";
-import { useOutlookEmails, useArchiveEmail, useMarkEmailRead } from "@/hooks/useMicrosoft";
+import { useOutlookEmails, useArchiveEmail, useMarkEmailRead, useMarkEmailUnread } from "@/hooks/useMicrosoft";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   emailListTimestamp,
@@ -42,12 +42,16 @@ interface Props {
   onOpenRules: () => void;
 }
 
+type ReadFilter = "todos" | "sinleer" | "leidos";
+
 export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmail, onCompose, onOpenFolders, onOpenRules }: Props) {
   const [search, setSearch] = useState("");
+  const [readFilter, setReadFilter] = useState<ReadFilter>("todos");
   const queryClient = useQueryClient();
   const listRef = useRef<HTMLDivElement>(null);
   const archiveEmail = useArchiveEmail();
   const markRead = useMarkEmailRead();
+  const markUnread = useMarkEmailUnread();
 
   const debouncedSearch = useDebouncedValue(search, 350);
 
@@ -62,6 +66,9 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
     () => (data?.pages ?? []).flatMap((p) => p.emails as Record<string, unknown>[]),
     [data]
   );
+
+  // Reset read filter when tab changes
+  useEffect(() => { setReadFilter("todos"); }, [activeTab]);
 
   const filtered = useMemo(() => {
     let list = allEmails;
@@ -79,8 +86,10 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
         return chips.some((c) => c.tone === tone);
       });
     }
+    if (readFilter === "sinleer") list = list.filter((e) => !(e.isRead as boolean));
+    if (readFilter === "leidos") list = list.filter((e) => e.isRead as boolean);
     return list;
-  }, [allEmails, activeTab, isAiTab]);
+  }, [allEmails, activeTab, isAiTab, readFilter]);
 
   const handleScroll = useCallback(() => {
     const el = listRef.current;
@@ -154,6 +163,28 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
         </button>
       </div>
 
+      {/* Read filter */}
+      <div className="flex items-center gap-0 px-3 py-1.5 border-b border-border/30 shrink-0">
+        {(["todos", "sinleer", "leidos"] as ReadFilter[]).map((f) => {
+          const labels: Record<ReadFilter, string> = { todos: "Todos", sinleer: "Sin leer", leidos: "Leídos" };
+          const unreadCount = f === "sinleer" ? allEmails.filter(e => !(e.isRead as boolean)).length : null;
+          return (
+            <button
+              key={f}
+              onClick={() => setReadFilter(f)}
+              className={cn(
+                "px-3 py-1 text-[11.5px] rounded-full transition-colors",
+                readFilter === f
+                  ? "bg-primary/10 text-primary font-semibold"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {labels[f]}{unreadCount ? ` (${unreadCount})` : ""}
+            </button>
+          );
+        })}
+      </div>
+
       {/* Search row */}
       <div className="flex items-center gap-1.5 px-3 py-2 border-b border-border/40 shrink-0">
         <div className="flex-1 relative">
@@ -199,7 +230,10 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
                 isActive={selectedEmailId === (email.id as string)}
                 onClick={() => onSelectEmail(email.id as string)}
                 onArchive={() => archiveEmail.mutate(email.id as string)}
-                onMarkRead={() => markRead.mutate(email.id as string)}
+                onMarkRead={() => {
+                  if (email.isRead) markUnread.mutate(email.id as string);
+                  else markRead.mutate(email.id as string);
+                }}
               />
             ))}
           </div>

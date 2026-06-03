@@ -101,8 +101,11 @@ export function MailItem({ email, isActive, onClick, onArchive, onMarkRead }: Pr
       <div className="absolute right-3 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center gap-0.5 bg-accent rounded-md p-0.5">
         {onMarkRead && (
           <button
-            className="w-6 h-6 flex items-center justify-center rounded text-muted-foreground hover:bg-accent-foreground/10 hover:text-foreground"
-            title="Marcar leído"
+            className={cn(
+              "w-6 h-6 flex items-center justify-center rounded hover:bg-accent-foreground/10 transition-colors",
+              unread ? "text-primary" : "text-muted-foreground hover:text-foreground"
+            )}
+            title={unread ? "Marcar como leído" : "Marcar como no leído"}
             onClick={(e) => { e.stopPropagation(); onMarkRead(); }}
           >
             <Check className="w-3 h-3" />
