@@ -21,6 +21,7 @@ import {
   SLACK_CONV_BOOTSTRAP_PAGES,
   SLACK_CONV_LIST_TIMEOUT_MS,
 } from "@/lib/slackWorkspaceFetch";
+import { saveSlackHistoryCache, loadSlackHistoryCache } from "@/lib/slackHistoryCache";
 import { useSlackUserProfiles } from "@/hooks/useSlackUserProfiles";
 import { useSlackChannelNotificationBadges, markSlackChannelNotificationsRead } from "@/hooks/useSlackChannelNotificationBadges";
 import { useSlackUnreadMentionsCount } from "@/hooks/useSlackActivityFeed";
@@ -220,22 +221,30 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
         throw new Error("No se pudo cargar el historial");
       }
       const msgs = (data.messages ?? []).slice().reverse();
+      if (isFirst && msgs.length > 0) {
+        saveSlackHistoryCache(selectedChannel, msgs);
+      }
       return { messages: msgs, nextCursor: data.response_metadata?.next_cursor };
     },
     getNextPageParam: (first) => first.nextCursor,
     enabled: !!selectedChannel,
-    staleTime: 5 * 60_000,   // 5 minutos — evita re-fetch al volver a canales recientes
-    gcTime: 2 * 60 * 60_000, // 2 horas en memoria
+    staleTime: 5 * 60_000,
+    gcTime: 2 * 60 * 60_000,
     refetchOnWindowFocus: false,
-    // Polling fallback para canales donde el webhook Slack Events puede no estar configurado
     refetchInterval: (query) => {
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return false;
       if (query.state.fetchStatus === "fetching") return false;
       const pages = query.state.data?.pages?.length ?? 0;
-      if (pages !== 1) return false; // no re-paginar si hay múltiples páginas
+      if (pages !== 1) return false;
       return 60_000;
     },
     refetchIntervalInBackground: false,
+    placeholderData: () => {
+      if (!selectedChannel) return undefined;
+      const cached = loadSlackHistoryCache(selectedChannel);
+      if (!cached?.length) return undefined;
+      return { pages: [{ messages: cached }], pageParams: [undefined] };
+    },
   });
 
   const messages = useMemo(
