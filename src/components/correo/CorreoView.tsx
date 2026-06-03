@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { MailList } from "./MailList";
+import { MailSidebar } from "./MailSidebar";
 import { MailContactPanel } from "./MailContactPanel";
 import { MailReadingOverlay } from "./MailReadingOverlay";
 import { MailFoldersSheet } from "./MailFoldersSheet";
@@ -41,6 +42,7 @@ export function CorreoView() {
   const [ruleSenderName, setRuleSenderName] = useState("");
   const [customFolderOverride, setCustomFolderOverride] = useState<string | null>(null);
   const [customFolderName, setCustomFolderName] = useState<string | null>(null);
+  const [activeLabelId, setActiveLabelId] = useState<string | null>(null);
 
   const { data: foldersQueryData } = useMailFolders();
   const folders = (foldersQueryData?.folders ?? []) as { id: string; displayName: string }[];
@@ -113,6 +115,17 @@ ${detail.body?.contentType === "html" ? origBody : `<pre style="font-family:inhe
 
   return (
     <div className="flex h-full min-h-0 bg-card relative">
+      {/* Sidebar */}
+      <MailSidebar
+        activeTab={activeTab}
+        onSelectTab={handleSelectTab}
+        onCompose={() => { setForwardState(null); setComposeOpen(true); }}
+        onSelectFolder={handleSelectFolder}
+        activeCustomFolderId={customFolderOverride ?? undefined}
+        activeLabelId={activeLabelId}
+        onSelectLabel={(id) => { setActiveLabelId(id); setCustomFolderOverride(null); setCustomFolderName(null); }}
+      />
+
       {/* Left: email list + reading overlay */}
       <div className="relative flex flex-col flex-1 min-w-0 border-r border-border/30 overflow-hidden">
         <MailList
@@ -126,6 +139,7 @@ ${detail.body?.contentType === "html" ? origBody : `<pre style="font-family:inhe
           customFolderOverride={customFolderOverride ?? undefined}
           customFolderName={customFolderName ?? undefined}
           onClearCustomFolder={() => { setCustomFolderOverride(null); setCustomFolderName(null); }}
+          externalLabelFilter={activeLabelId}
         />
         <MailReadingOverlay
           emailId={selectedEmailId}

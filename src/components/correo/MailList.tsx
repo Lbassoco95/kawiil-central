@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
-import { Search, RefreshCw, Loader2, PenLine, FolderOpen } from "lucide-react";
+import { Search, RefreshCw, Loader2, PenLine, FolderOpen, ListFilter } from "lucide-react";
 import { useOutlookEmails, useArchiveEmail, useMarkEmailRead, useMarkEmailUnread, useEmailUserLabels, useEmailLabelAssignmentsBulk } from "@/hooks/useMicrosoft";
 import { useQueryClient } from "@tanstack/react-query";
 import { getLabelStyle } from "./MailLabelPicker";
@@ -49,10 +49,11 @@ interface Props {
 
 type ReadFilter = "todos" | "sinleer" | "leidos";
 
-export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmail, onCompose, onOpenFolders, onOpenRules, customFolderOverride, customFolderName, onClearCustomFolder }: Props) {
+export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmail, onCompose, onOpenFolders, onOpenRules, customFolderOverride, customFolderName, onClearCustomFolder, externalLabelFilter }: Props) {
   const [search, setSearch] = useState("");
   const [readFilter, setReadFilter] = useState<ReadFilter>("sinleer");
   const [labelFilter, setLabelFilter] = useState<string | null>(null);
+  const effectiveLabelFilter = externalLabelFilter !== undefined ? externalLabelFilter : labelFilter;
   const queryClient = useQueryClient();
   const { data: userLabels = [] } = useEmailUserLabels();
   const listRef = useRef<HTMLDivElement>(null);
@@ -98,14 +99,14 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
     }
     if (readFilter === "sinleer") list = list.filter((e) => !(e.isRead as boolean));
     if (readFilter === "leidos") list = list.filter((e) => e.isRead as boolean);
-    if (labelFilter) {
+    if (effectiveLabelFilter) {
       const emailsWithLabel = new Set(
-        bulkAssignments.filter(a => a.label_id === labelFilter).map(a => a.email_message_id)
+        bulkAssignments.filter(a => a.label_id === effectiveLabelFilter).map(a => a.email_message_id)
       );
       list = list.filter((e) => emailsWithLabel.has(e.id as string));
     }
     return list;
-  }, [allEmails, activeTab, isAiTab, readFilter, labelFilter, bulkAssignments]);
+  }, [allEmails, activeTab, isAiTab, readFilter, effectiveLabelFilter, bulkAssignments]);
 
   const handleScroll = useCallback(() => {
     const el = listRef.current;

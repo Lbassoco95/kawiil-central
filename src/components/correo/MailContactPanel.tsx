@@ -1,9 +1,10 @@
 import { useMemo } from "react";
-import { useEmailDetail } from "@/hooks/useMicrosoft";
+import { useEmailDetail, useEmailLabelAssignments } from "@/hooks/useMicrosoft";
 import { useOutlookEmails } from "@/hooks/useMicrosoft";
 import { inferEmailChips, emailListTimestamp, formatEmailDate } from "@/lib/emailChips";
 import { cn } from "@/lib/utils";
-import { Sparkles, Mail, CheckSquare, Link2, Filter } from "lucide-react";
+import { Sparkles, Mail, CheckSquare, Link2, Filter, Tag } from "lucide-react";
+import { MailLabelPicker, getLabelStyle } from "./MailLabelPicker";
 
 interface Props {
   emailId: string | null;
@@ -39,6 +40,7 @@ const CHIP_STYLES: Record<string, { bg: string; text: string }> = {
 
 export function MailContactPanel({ emailId, onAskAI, onCreateTask, onCreateRule }: Props) {
   const { data: emailDetail } = useEmailDetail(emailId);
+  const { data: labelAssignments = [] } = useEmailLabelAssignments(emailId);
 
   const senderName = (emailDetail as any)?.from?.emailAddress?.name || "";
   const senderEmail = (emailDetail as any)?.from?.emailAddress?.address || "";
@@ -142,6 +144,35 @@ export function MailContactPanel({ emailId, onAskAI, onCreateTask, onCreateRule 
           <Filter className="w-3 h-3" />
           Crear regla
         </button>
+      </div>
+
+      {/* Labels section */}
+      <div className="px-5 py-3.5 border-b border-border/30">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+            <Tag className="w-[11px] h-[11px]" /> Etiquetas
+          </p>
+          <MailLabelPicker emailMessageId={emailId || ""}>
+            <button className="text-[11px] text-primary hover:text-primary/80 font-medium">+ Agregar</button>
+          </MailLabelPicker>
+        </div>
+        {labelAssignments.length === 0 ? (
+          <p className="text-[12px] text-muted-foreground/50 italic">Sin etiquetas</p>
+        ) : (
+          <div className="flex flex-wrap gap-1.5">
+            {labelAssignments.map(a => {
+              if (!a.email_user_labels) return null;
+              const style = getLabelStyle(a.email_user_labels.color);
+              return (
+                <span key={a.id} className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium"
+                  style={{ background: style.bg, color: style.text }}>
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: style.dot }} />
+                  {a.email_user_labels.name}
+                </span>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Scrollable content */}
