@@ -792,6 +792,60 @@ serve(async (req) => {
       });
     }
 
+    if (action === 'search') {
+      const query = body.query || '';
+      const searchPath = body.path || '';
+
+      if (!query.trim()) {
+        return new Response(JSON.stringify({ matches: [] }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const scoped = parseScopedPath(searchPath);
+      const scopedHeaders = getScopedDropboxHeaders(
+        DROPBOX_ACCESS_TOKEN,
+        adminMemberId,
+        rootNamespaceId,
+        scoped.namespaceId,
+      );
+
+      const searchOptions: Record<string, any> = { max_results: 30 };
+      if (scoped.path && scoped.path !== '' && scoped.path !== '/') {
+        searchOptions.path = scoped.path;
+      }
+
+      const response = await fetch('https://api.dropboxapi.com/2/files/search_v2', {
+        method: 'POST',
+        headers: scopedHeaders,
+        body: JSON.stringify({ query: query.trim(), options: searchOptions }),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Dropbox search error [${response.status}]: ${errText}`);
+      }
+
+      const data = await response.json();
+      const matches = (data.matches || []).map((m: any) => {
+        const meta = m.metadata?.metadata || m.metadata || {};
+        const tag = meta['.tag'] || 'file';
+        const filePath = meta.path_display || '';
+        return {
+          id: meta.id || filePath,
+          name: meta.name || '',
+          path: scoped.namespaceId ? buildScopedPath(scoped.namespaceId, filePath) : filePath,
+          type: tag === 'folder' ? 'folder' : 'file',
+          size: meta.size || null,
+          modified: meta.client_modified || meta.server_modified || null,
+        };
+      });
+
+      return new Response(JSON.stringify({ matches }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     return new Response(JSON.stringify({ error: 'Invalid action' }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
