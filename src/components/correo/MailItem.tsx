@@ -1,88 +1,123 @@
-import { Paperclip } from "lucide-react";
-import {
-  getAvatarGradient,
-  getInitials,
-  inferEmailChips,
-  formatEmailDate,
-  emailListTimestamp,
-} from "@/lib/emailChips";
+import { cn } from "@/lib/utils";
+import { Archive, Check } from "lucide-react";
+import { inferEmailChips, emailListTimestamp, formatEmailDate } from "@/lib/emailChips";
 
 interface Props {
   email: Record<string, unknown>;
   isActive: boolean;
   onClick: () => void;
+  onArchive?: () => void;
+  onMarkRead?: () => void;
 }
 
-export function MailItem({ email, isActive, onClick }: Props) {
+export function MailItem({ email, isActive, onClick, onArchive, onMarkRead }: Props) {
   const from = email.from as { emailAddress?: { name?: string; address?: string } } | undefined;
   const senderName = from?.emailAddress?.name || from?.emailAddress?.address || "Sin remitente";
-  const senderEmail = from?.emailAddress?.address || "";
   const subject = (email.subject as string) || "(sin asunto)";
   const bodyPreview = (email.bodyPreview as string) || "";
   const unread = !(email.isRead as boolean);
-  const hasAttachments = !!(email.hasAttachments as boolean);
+  const importance = (email.importance as string) || "";
+
+  const chips = inferEmailChips({
+    from: email.from as { emailAddress?: { address?: string } },
+    subject: email.subject as string,
+    importance: email.importance as string,
+  });
+  const firstChip = chips[0];
+
+  const CHIP_COLORS: Record<string, string> = {
+    urgente: "hsl(0 72% 51%)",
+    sat: "hsl(0 72% 51%)",
+    factura: "hsl(32 90% 48%)",
+    cliente: "hsl(210 100% 47%)",
+    interno: "hsl(157 72% 36%)",
+  };
+  const chipColor = firstChip ? CHIP_COLORS[firstChip.tone] || "hsl(var(--muted-foreground))" : undefined;
+
   const ts = emailListTimestamp({
     receivedDateTime: email.receivedDateTime as string | undefined,
     sentDateTime: email.sentDateTime as string | undefined,
     createdDateTime: email.createdDateTime as string | undefined,
   });
-
-  const chips = inferEmailChips({
-    from: email.from as { emailAddress?: { address?: string } },
-    subject: email.subject as string | undefined,
-    importance: email.importance as string | undefined,
-  });
-
-  const avatarBg = getAvatarGradient(senderEmail, senderName);
-  const initials = getInitials(senderName, senderEmail);
   const timeLabel = formatEmailDate(ts);
 
   return (
     <div
-      className={["mail-item", isActive ? "active" : "", unread ? "unread" : ""].filter(Boolean).join(" ")}
+      className={cn(
+        "group relative grid items-center px-4 h-11 cursor-pointer transition-colors",
+        "grid-cols-[8px_160px_minmax(0,1fr)_52px]",
+        "border-l-2",
+        isActive
+          ? "bg-accent border-l-primary"
+          : "border-l-transparent hover:bg-accent/50",
+        importance === "high" && !isActive && "border-l-destructive",
+      )}
       onClick={onClick}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => e.key === "Enter" && onClick()}
     >
-      {/* Avatar */}
-      <div
-        className="mi-avatar"
-        style={{ background: avatarBg }}
-        aria-hidden
-      >
-        {initials}
-      </div>
+      {/* Unread dot */}
+      <span className={cn(
+        "w-1.5 h-1.5 rounded-full bg-primary transition-opacity shrink-0",
+        !unread && "opacity-0"
+      )} />
 
-      {/* Cuerpo */}
-      <div className="mi-body">
-        <div className="mi-row1">
-          <span className="mi-from">{senderName}</span>
-          <span className="mi-time">{timeLabel}</span>
-        </div>
-        <div className="mi-subj">{subject}</div>
-        {bodyPreview && bodyPreview !== "…" && (
-          <div className="mi-preview">{bodyPreview}</div>
-        )}
-        {chips.length > 0 && (
-          <div className="mi-chips">
-            {chips.map((chip) => (
-              <span key={chip.label} className={`mi-chip ${chip.tone}`}>
-                {chip.label}
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Sender */}
+      <span className={cn(
+        "text-[12.5px] truncate pr-3 shrink-0",
+        unread ? "font-bold text-foreground" : "font-medium text-muted-foreground"
+      )}>
+        {senderName}
+      </span>
 
-      {/* Meta derecha */}
-      {hasAttachments && (
-        <div className="mi-meta-right">
-          <span className="mi-attach">
-            <Paperclip size={11} />
+      {/* Subject + preview */}
+      <div className="flex items-baseline overflow-hidden min-w-0">
+        {chipColor && (
+          <span className="w-1.5 h-1.5 rounded-full mr-2 shrink-0 self-center" style={{ background: chipColor }} />
+        )}
+        <span className={cn(
+          "text-[12.5px] truncate shrink-0 max-w-[55%]",
+          unread ? "font-semibold text-foreground" : "text-muted-foreground"
+        )}>
+          {subject}
+        </span>
+        {bodyPreview && (
+          <span className="text-[12.5px] text-muted-foreground/60 truncate flex-1 min-w-0">
+            &nbsp;—&nbsp;{bodyPreview}
           </span>
-        </div>
-      )}
+        )}
+      </div>
+
+      {/* Date — hides on hover, actions appear */}
+      <span className={cn(
+        "text-[11.5px] text-muted-foreground text-right tabular-nums whitespace-nowrap",
+        "group-hover:opacity-0 transition-opacity"
+      )}>
+        {timeLabel}
+      </span>
+
+      {/* Hover actions */}
+      <div className="absolute right-3 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center gap-0.5 bg-accent rounded-md p-0.5">
+        {onMarkRead && (
+          <button
+            className="w-6 h-6 flex items-center justify-center rounded text-muted-foreground hover:bg-accent-foreground/10 hover:text-foreground"
+            title="Marcar leído"
+            onClick={(e) => { e.stopPropagation(); onMarkRead(); }}
+          >
+            <Check className="w-3 h-3" />
+          </button>
+        )}
+        {onArchive && (
+          <button
+            className="w-6 h-6 flex items-center justify-center rounded text-muted-foreground hover:bg-accent-foreground/10 hover:text-foreground"
+            title="Archivar"
+            onClick={(e) => { e.stopPropagation(); onArchive(); }}
+          >
+            <Archive className="w-3 h-3" />
+          </button>
+        )}
+      </div>
     </div>
   );
 }

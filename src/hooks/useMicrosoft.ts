@@ -1654,28 +1654,30 @@ export function useCancelScheduledMailJob() {
   });
 }
 
-export type MailRule = {
+export type EmailInboxRule = {
   id: string;
-  displayName: string;
-  sequence: number;
-  isEnabled: boolean;
-  conditions?: Record<string, unknown>;
-  actions?: Record<string, unknown>;
+  user_id: string;
+  rule_name: string;
+  sender_email: string;
+  move_to_folder_id: string | null;
+  move_to_folder_name: string | null;
+  mark_as_read: boolean;
+  is_enabled: boolean;
+  created_at: string;
 };
 
 export function useListMailRules() {
   const { user } = useAuth();
 
   return useQuery({
-    queryKey: ["mail-rules", user?.id],
+    queryKey: ["email-inbox-rules", user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke("microsoft-api", {
-        body: { action: "list-mail-rules" },
-      });
-      if (isNotConnectedError(data, error)) return [];
+      const { data, error } = await supabase
+        .from("email_inbox_rules")
+        .select("*")
+        .order("created_at", { ascending: true });
       if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      return (data?.value || []) as MailRule[];
+      return (data ?? []) as EmailInboxRule[];
     },
     enabled: !!user,
     staleTime: 5 * 60 * 1000,
@@ -1691,53 +1693,39 @@ export function useCreateMailRule() {
       displayName,
       senderEmail,
       moveToFolderId,
+      moveToFolderName,
       markAsRead,
     }: {
       displayName?: string;
       senderEmail: string;
       moveToFolderId?: string;
+      moveToFolderName?: string;
       markAsRead?: boolean;
     }) => {
-      const { data, error } = await supabase.functions.invoke("microsoft-api", {
-        body: { action: "create-mail-rule", params: { displayName, senderEmail, moveToFolderId, markAsRead } },
-      });
-      const errBody = await readSupabaseFunctionErrorBody(error);
-      if (error) {
-        const combined = [errBody, (error as Error)?.message ?? ""].join(" ");
-        // Permission errors → guide user to reconnect
-        if (
-          combined.includes("PERMISSION_REQUIRED") ||
-          combined.includes("MICROSOFT_PERMISSION_REQUIRED") ||
-          combined.includes("MailboxSettings") ||
-          combined.includes("permisos necesarios") ||
-          combined.includes("insufficient")
-        ) {
-          throw new Error("Permisos insuficientes. Usa el botón \"Actualizar permisos\" en la barra superior del módulo de Correo para re-autorizar Microsoft.");
-        }
-        // Extract friendly message from JSON body (must parse OUTSIDE the try so the throw propagates)
-        let friendlyMsg: string | null = null;
-        try {
-          const parsed = JSON.parse(errBody) as { error?: string; message?: string; code?: string };
-          if (parsed.code === "UNKNOWN_ACTION") {
-            friendlyMsg = "La función no está desplegada con soporte de reglas. Pide al equipo que ejecute: supabase functions deploy microsoft-api";
-          } else {
-            friendlyMsg = parsed.message || parsed.error || null;
-          }
-        } catch { /* not JSON */ }
-        if (friendlyMsg) throw new Error(friendlyMsg);
-        // Generic fallback — any FunctionsHttpError from this mutation
-        throw new Error("No se pudo crear la regla. Si el problema persiste, reconecta Microsoft desde Configuración → Integraciones.");
-      }
-      if (data?.error) throw new Error(String(data.error));
-      return data as MailRule;
+      const { data, error } = await supabase
+        .from("email_inbox_rules")
+        .insert({
+          user_id: user!.id,
+          rule_name: displayName || `Regla: ${senderEmail}`,
+          sender_email: senderEmail.trim().toLowerCase(),
+          move_to_folder_id: moveToFolderId ?? null,
+          move_to_folder_name: moveToFolderName ?? null,
+          mark_as_read: markAsRead ?? false,
+          is_enabled: true,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return data as EmailInboxRule;
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["mail-rules", user?.id] });
+      void queryClient.invalidateQueries({ queryKey: ["email-inbox-rules", user?.id] });
       toast.success("Regla creada");
     },
-    onError: (err: Error) => toast.error(err.message.slice(0, 300)),
+    onError: (err: Error) => toast.error("Error al crear la regla: " + err.message),
   });
 }
+
 
 export function useFlagEmail() {
   const queryClient = useQueryClient();

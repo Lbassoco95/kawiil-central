@@ -59,6 +59,7 @@ export function CreateMailRuleDialog({ open, onOpenChange, senderEmail = "", sen
       displayName: ruleName.trim() || `Regla: ${sender.trim()}`,
       senderEmail: sender.trim(),
       moveToFolderId: selectedFolderId ?? undefined,
+      moveToFolderName: selectedFolder?.displayName ?? undefined,
       markAsRead,
     });
     onOpenChange(false);

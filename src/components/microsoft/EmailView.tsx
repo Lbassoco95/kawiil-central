@@ -54,6 +54,7 @@ import {
   INBOX_UNREAD_QUERY_KEY,
   SCHEDULED_MAIL_JOBS_QUERY_KEY,
   mailFoldersRootFallbackUserMessage,
+  useListMailRules,
 } from "@/hooks/useMicrosoft";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
@@ -975,6 +976,7 @@ export function EmailView() {
   const createMailFolder = useCreateMailFolder();
   const moveEmail = useMoveEmail();
   const deleteEmail = useDeleteEmail();
+  const { data: inboxRules = [] } = useListMailRules();
   const { data: attachments = [] } = useEmailAttachments(selectedEmailId ?? undefined);
   const { html: resolvedEmailHtml, loading: bodyCidLoading } = useResolvedEmailHtml(
     selectedEmailId ?? undefined,
@@ -1005,6 +1007,33 @@ export function EmailView() {
   const isLoading = emailsQuery.isLoading;
   const hasNextPage = emailsQuery.hasNextPage;
   const isFetchingNextPage = emailsQuery.isFetchingNextPage;
+
+  // Track which email IDs have already had rules applied to avoid duplicate moves.
+  const appliedRuleIdsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!inboxRules.length || !allEmails.length) return;
+    const enabledRules = inboxRules.filter((r) => r.is_enabled);
+    if (!enabledRules.length) return;
+
+    for (const email of allEmails as any[]) {
+      if (appliedRuleIdsRef.current.has(email.id)) continue;
+      const fromAddr: string = (email.from?.emailAddress?.address ?? "").toLowerCase();
+      if (!fromAddr) continue;
+      const matchingRule = enabledRules.find(
+        (r) => r.sender_email.toLowerCase() === fromAddr
+      );
+      if (!matchingRule) continue;
+
+      appliedRuleIdsRef.current.add(email.id);
+
+      if (matchingRule.move_to_folder_id && email.parentFolderId !== matchingRule.move_to_folder_id) {
+        moveEmail.mutate({ messageId: email.id, destinationId: matchingRule.move_to_folder_id });
+      } else if (matchingRule.mark_as_read && !email.isRead) {
+        markRead.mutate(email.id);
+      }
+    }
+  }, [allEmails, inboxRules]);
 
   useEffect(() => {
     const sentinel = loadMoreSentinelRef.current;
