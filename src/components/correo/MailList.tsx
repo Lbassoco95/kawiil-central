@@ -50,7 +50,7 @@ type ReadFilter = "todos" | "sinleer" | "leidos";
 
 export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmail, onCompose, onOpenFolders, onOpenRules, customFolderOverride, customFolderName, onClearCustomFolder }: Props) {
   const [search, setSearch] = useState("");
-  const [readFilter, setReadFilter] = useState<ReadFilter>("todos");
+  const [readFilter, setReadFilter] = useState<ReadFilter>("sinleer");
   const [labelFilter, setLabelFilter] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const { data: userLabels = [] } = useEmailUserLabels();
@@ -229,8 +229,8 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
 
       {/* Read filter */}
       <div className="flex items-center gap-0 px-3 py-1.5 border-b border-border/30 shrink-0">
-        {(["todos", "sinleer", "leidos"] as ReadFilter[]).map((f) => {
-          const labels: Record<ReadFilter, string> = { todos: "Todos", sinleer: "Sin leer", leidos: "Leídos" };
+        {(["sinleer", "leidos", "todos"] as ReadFilter[]).map((f) => {
+          const labelMap: Record<ReadFilter, string> = { sinleer: "Sin leer", leidos: "Leídos", todos: "Todos" };
           const unreadCount = f === "sinleer" ? allEmails.filter(e => !(e.isRead as boolean)).length : null;
           return (
             <button
@@ -243,7 +243,7 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              {labels[f]}{unreadCount ? ` (${unreadCount})` : ""}
+              {labelMap[f]}{unreadCount != null ? ` (${unreadCount})` : ""}
             </button>
           );
         })}
@@ -278,8 +278,16 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
           </div>
         )}
         {!isLoading && filtered.length === 0 && (
-          <div className="flex items-center justify-center py-16 text-[13px] text-muted-foreground">
-            No hay mensajes
+          <div className="flex flex-col items-center justify-center py-20 gap-3 text-center px-6">
+            {readFilter === "sinleer" ? (
+              <>
+                <span className="text-3xl">✓</span>
+                <p className="text-[14px] font-semibold text-foreground">Estás al día</p>
+                <p className="text-[12.5px] text-muted-foreground">No tienes correos nuevos sin leer.</p>
+              </>
+            ) : (
+              <p className="text-[13px] text-muted-foreground">No hay mensajes</p>
+            )}
           </div>
         )}
         {groups.map(({ bucket, emails }) => (

@@ -95,10 +95,11 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onForwar
           </button>
           <MailLabelPicker emailMessageId={emailId || ""}>
             <button
-              className="h-[30px] w-[30px] flex items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+              className="h-[30px] flex items-center gap-1.5 px-2.5 rounded-md border border-border text-[12px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
               title="Etiquetas"
             >
               <Tag className="w-3.5 h-3.5" />
+              Etiqueta
             </button>
           </MailLabelPicker>
           <button
