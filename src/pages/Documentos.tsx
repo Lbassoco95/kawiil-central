@@ -325,8 +325,16 @@ function DropboxLiveBrowser() {
       const { data, error } = await supabase.functions.invoke("dropbox-browse", {
         body: { action: "search", query: query.trim(), path: currentPath || "" },
       });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      const bodyErr = data && typeof data === "object" && "error" in data
+        ? String((data as { error?: string }).error ?? "").trim()
+        : "";
+      if (error) {
+        let detail = bodyErr || (await invokeErrorDetail(error)).trim();
+        toast.error(detail ? `Error al buscar: ${detail.slice(0, 400)}` : "Error al buscar en Dropbox");
+        setIsSearchMode(false);
+        return;
+      }
+      if (bodyErr) { toast.error(`Error al buscar: ${bodyErr.slice(0, 400)}`); setIsSearchMode(false); return; }
       setSearchResults(data.matches || []);
     } catch (e: any) {
       toast.error("Error al buscar: " + (e.message || "Error desconocido"));
