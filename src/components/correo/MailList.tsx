@@ -316,8 +316,7 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
                 labelChips={chips.length > 0 ? chips : undefined}
               />
               );
-            }
-            ))}
+            })}
           </div>
         ))}
         {isFetchingNextPage && (
