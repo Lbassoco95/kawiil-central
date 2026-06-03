@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   useCalendarEvents,
   useCreateCalendarEvent,
@@ -41,12 +40,14 @@ import { es } from "date-fns/locale";
 import {
   Plus, ChevronLeft, ChevronRight, Loader2, Trash2, Video, Pencil,
   CalendarDays, CheckSquare, Clock, MapPin, Users, ExternalLink, AlertCircle,
+  PanelRightClose, PanelRightOpen,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Link } from "react-router-dom";
+import { CalendarKawiilCard } from "@/components/microsoft/CalendarKawiilCard";
 
 type ViewMode = "day" | "3days" | "week" | "month";
 
@@ -129,7 +130,15 @@ function taskDueDateKey(due: string | null | undefined): string | null {
   return null;
 }
 
-export function CalendarView() {
+export function CalendarView({
+  aiEvents,
+  aiTasksDue,
+  aiPeriodLabel,
+}: {
+  aiEvents?: any[];
+  aiTasksDue?: any[];
+  aiPeriodLabel?: string;
+}) {
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
   const [viewMode, setViewMode] = useState<ViewMode>(() =>
@@ -140,6 +149,7 @@ export function CalendarView() {
   const [showCreate, setShowCreate] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [showKawiilTasks, setShowKawiilTasks] = useState(true);
+  const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [activeCategoryFilters, setActiveCategoryFilters] = useState<string[]>(() => {
     if (typeof window === "undefined") return [];
     try {
@@ -166,77 +176,50 @@ export function CalendarView() {
     if (isMobile) setViewMode("day");
   }, [isMobile]);
 
-  // Persist & restore scroll position de la PÁGINA; si no hay scroll guardado,
-  // scrollear automáticamente a la hora actual (cuando hoy está visible).
-  // Detectamos el contenedor scrollable ancestro (AppLayout usa overflow-auto en <main>)
-  // porque no siempre es window el que scrollea.
+  // Scroll to current time on load/view change
   useEffect(() => {
     if (typeof window === "undefined") return;
     const anchor = scrollAreaRef.current;
     if (!anchor) return;
-
-    const getScrollParent = (node: HTMLElement | null): HTMLElement | Window => {
-      let current = node?.parentElement ?? null;
-      while (current) {
-        const style = window.getComputedStyle(current);
-        const oy = style.overflowY;
-        if ((oy === "auto" || oy === "scroll") && current.scrollHeight > current.clientHeight) {
-          return current;
-        }
-        current = current.parentElement;
-      }
-      return window;
-    };
-
-    const scroller = getScrollParent(anchor);
-    const getScrollTop = () =>
-      scroller === window ? window.scrollY : (scroller as HTMLElement).scrollTop;
-    const setScrollTop = (top: number) => {
-      if (scroller === window) window.scrollTo({ top });
-      else (scroller as HTMLElement).scrollTop = top;
-    };
-    const getClientHeight = () =>
-      scroller === window ? window.innerHeight : (scroller as HTMLElement).clientHeight;
 
     const key = `kawiil-cal-scroll-${viewMode}`;
     let restored = false;
     try {
       const saved = window.sessionStorage.getItem(key);
       if (saved) {
-        setScrollTop(parseInt(saved, 10) || 0);
+        anchor.scrollTop = parseInt(saved, 10) || 0;
         restored = true;
       }
     } catch { /* ignore */ }
 
     let cancelInitialScroll = false;
     if (!restored) {
-      // Scroll a la hora actual: dejarla a ~1/3 desde la parte superior del viewport.
       const t = window.setTimeout(() => {
         if (cancelInitialScroll) return;
         const indicator = nowIndicatorRef.current;
         if (!indicator) return;
-        const rect = indicator.getBoundingClientRect();
-        const top = getScrollTop() + rect.top - getClientHeight() / 3;
-        setScrollTop(Math.max(0, top));
+        const containerRect = anchor.getBoundingClientRect();
+        const indicatorRect = indicator.getBoundingClientRect();
+        const top = anchor.scrollTop + (indicatorRect.top - containerRect.top) - anchor.clientHeight / 3;
+        anchor.scrollTop = Math.max(0, top);
       }, 120);
       const onUserScrollOnce = () => {
         cancelInitialScroll = true;
         window.clearTimeout(t);
       };
-      const target: EventTarget = scroller === window ? window : (scroller as HTMLElement);
-      target.addEventListener("scroll", onUserScrollOnce, { passive: true, once: true });
+      anchor.addEventListener("scroll", onUserScrollOnce, { passive: true, once: true });
     }
 
     const onScroll = () => {
-      try { window.sessionStorage.setItem(key, String(getScrollTop())); } catch { /* ignore */ }
+      try { window.sessionStorage.setItem(key, String(anchor.scrollTop)); } catch { /* ignore */ }
     };
-    const target: EventTarget = scroller === window ? window : (scroller as HTMLElement);
-    target.addEventListener("scroll", onScroll, { passive: true });
+    anchor.addEventListener("scroll", onScroll, { passive: true });
     return () => {
       cancelInitialScroll = true;
-      target.removeEventListener("scroll", onScroll);
+      anchor.removeEventListener("scroll", onScroll);
     };
   }, [viewMode]);
+
   const [newEvent, setNewEvent] = useState({
     subject: "", startTime: "09:00", endTime: "10:00", attendees: "",
     location: "", description: "", isOnlineMeeting: false, isAllDay: false, categories: [] as string[],
@@ -377,33 +360,14 @@ export function CalendarView() {
   };
   const goToday = () => {
     setCurrentDate(new Date());
-    // Tras renderizar el cambio de fecha, hacer scroll de la PÁGINA al indicador de "ahora".
-    // Detectamos el contenedor scrollable ancestro porque el scroll vive en <main> (AppLayout).
     window.setTimeout(() => {
       const anchor = scrollAreaRef.current;
       const indicator = nowIndicatorRef.current;
       if (!anchor || !indicator) return;
-
-      let current: HTMLElement | null = anchor.parentElement;
-      let scroller: HTMLElement | Window = window;
-      while (current) {
-        const style = window.getComputedStyle(current);
-        if ((style.overflowY === "auto" || style.overflowY === "scroll") && current.scrollHeight > current.clientHeight) {
-          scroller = current;
-          break;
-        }
-        current = current.parentElement;
-      }
-
-      const rect = indicator.getBoundingClientRect();
-      const clientHeight = scroller === window ? window.innerHeight : (scroller as HTMLElement).clientHeight;
-      const scrollTop = scroller === window ? window.scrollY : (scroller as HTMLElement).scrollTop;
-      const top = Math.max(0, scrollTop + rect.top - clientHeight / 3);
-      if (scroller === window) {
-        window.scrollTo({ top, behavior: "smooth" });
-      } else {
-        (scroller as HTMLElement).scrollTo({ top, behavior: "smooth" });
-      }
+      const containerRect = anchor.getBoundingClientRect();
+      const indicatorRect = indicator.getBoundingClientRect();
+      const top = Math.max(0, anchor.scrollTop + (indicatorRect.top - containerRect.top) - anchor.clientHeight / 3);
+      anchor.scrollTo({ top, behavior: "smooth" });
     }, 80);
   };
 
@@ -536,135 +500,152 @@ export function CalendarView() {
   };
 
   const todayAgendaCard = (
-    <Card>
-      <CardContent className="p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <CalendarDays className="h-4 w-4 text-primary" />
-          <h3 className="text-sm font-semibold text-foreground">Hoy</h3>
-          <span className="text-xs text-muted-foreground ml-auto">{format(new Date(), "d MMM", { locale: es })}</span>
-        </div>
-        {todayEvents.length === 0 && todayTasks.length === 0 ? (
-          <p className="text-xs text-muted-foreground py-2">Sin eventos ni tareas para hoy</p>
-        ) : (
-          <div className="space-y-1.5">
-            {todayEvents.filter((e: any) => !e._isAllDay).slice(0, 5).map((event: any) => {
-              const time = formatMX(event._parsedStart, "HH:mm");
-              return (
-                <button key={event.id} className="w-full flex items-start gap-2 p-2 rounded-lg hover:bg-accent/50 text-left transition-colors"
-                  onClick={() => setSelectedEventId(event.id)}>
-                  <div className="h-1.5 w-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-medium text-foreground truncate">{event.subject}</p>
-                    <p className="text-[11px] text-muted-foreground">{time}</p>
-                  </div>
-                </button>
-              );
-            })}
-            {todayTasks.slice(0, 5).map((task: any) => (
-              <Link
-                key={task.id}
-                to={taskDetailHref(task.id)}
-                className="flex items-start gap-2 p-2 rounded-lg bg-amber-50/50 dark:bg-amber-900/10 hover:bg-amber-100/70 dark:hover:bg-amber-900/25 transition-colors text-left w-full"
-              >
-                <div className={cn("h-1.5 w-1.5 rounded-full mt-1.5 shrink-0", PRIORITY_COLORS[task.priority] || "bg-amber-400")} />
+    <div>
+      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Hoy · {format(new Date(), "d MMM", { locale: es })}</p>
+      {todayEvents.length === 0 && todayTasks.length === 0 ? (
+        <p className="text-xs text-muted-foreground py-1">Sin eventos ni tareas para hoy</p>
+      ) : (
+        <div className="space-y-1">
+          {todayEvents.filter((e: any) => !e._isAllDay).slice(0, 5).map((event: any) => {
+            const time = formatMX(event._parsedStart, "HH:mm");
+            return (
+              <button key={event.id} className="w-full flex items-start gap-2 p-1.5 rounded-md hover:bg-accent/50 text-left transition-colors"
+                onClick={() => setSelectedEventId(event.id)}>
+                <div className="h-1.5 w-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-medium text-foreground truncate underline-offset-2 hover:underline">{task.title}</p>
-                  {task.clients?.name && <p className="text-[11px] text-muted-foreground">{task.clients.name}</p>}
+                  <p className="text-xs font-medium text-foreground truncate">{event.subject}</p>
+                  <p className="text-[11px] text-muted-foreground">{time}</p>
                 </div>
-              </Link>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+              </button>
+            );
+          })}
+          {todayTasks.slice(0, 5).map((task: any) => (
+            <Link
+              key={task.id}
+              to={taskDetailHref(task.id)}
+              className="flex items-start gap-2 p-1.5 rounded-md bg-amber-50/50 dark:bg-amber-900/10 hover:bg-amber-100/70 dark:hover:bg-amber-900/25 transition-colors text-left w-full"
+            >
+              <div className={cn("h-1.5 w-1.5 rounded-full mt-1.5 shrink-0", PRIORITY_COLORS[task.priority] || "bg-amber-400")} />
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium text-foreground truncate underline-offset-2 hover:underline">{task.title}</p>
+                {task.clients?.name && <p className="text-[11px] text-muted-foreground">{task.clients.name}</p>}
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
   );
 
   const upcomingTasksCard =
     showKawiilTasks && upcomingTasks.length > 0 ? (
-      <Card>
-        <CardContent className="p-4 space-y-3">
-          <div className="flex items-center gap-2">
-            <CheckSquare className="h-4 w-4 text-amber-600" />
-            <h3 className="text-sm font-semibold text-foreground">Próximos vencimientos</h3>
-          </div>
-          <div className="space-y-1.5">
-            {upcomingTasks.map((task: any) => {
-              const daysLeft = differenceInDays(parseISO(task.due_date), new Date());
-              const urgencyColor = daysLeft === 0 ? "text-red-600" : daysLeft <= 2 ? "text-amber-600" : "text-muted-foreground";
-              return (
-                <Link key={task.id} to={taskDetailHref(task.id)} className="flex items-start gap-2 py-1.5 rounded-md hover:bg-accent/40 transition-colors -mx-1 px-1 text-left">
-                  <div className={cn("h-1.5 w-1.5 rounded-full mt-1.5 shrink-0", PRIORITY_COLORS[task.priority] || "bg-amber-400")} />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-medium text-foreground truncate underline-offset-2 hover:underline">{task.title}</p>
-                    <div className="flex items-center gap-2">
-                      {task.clients?.name && <span className="text-[11px] text-muted-foreground truncate">{task.clients.name}</span>}
-                      <span className={cn("text-[11px] shrink-0", urgencyColor)}>
-                        {daysLeft === 0 ? "Hoy" : daysLeft === 1 ? "Mañana" : `${daysLeft}d`}
-                      </span>
-                    </div>
+      <div>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Próximos vencimientos</p>
+        <div className="space-y-1">
+          {upcomingTasks.map((task: any) => {
+            const daysLeft = differenceInDays(parseISO(task.due_date), new Date());
+            const urgencyColor = daysLeft === 0 ? "text-red-600" : daysLeft <= 2 ? "text-amber-600" : "text-muted-foreground";
+            return (
+              <Link key={task.id} to={taskDetailHref(task.id)} className="flex items-start gap-2 py-1.5 rounded-md hover:bg-accent/40 transition-colors -mx-1 px-1 text-left">
+                <div className={cn("h-1.5 w-1.5 rounded-full mt-1.5 shrink-0", PRIORITY_COLORS[task.priority] || "bg-amber-400")} />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-medium text-foreground truncate underline-offset-2 hover:underline">{task.title}</p>
+                  <div className="flex items-center gap-2">
+                    {task.clients?.name && <span className="text-[11px] text-muted-foreground truncate">{task.clients.name}</span>}
+                    <span className={cn("text-[11px] shrink-0", urgencyColor)}>
+                      {daysLeft === 0 ? "Hoy" : daysLeft === 1 ? "Mañana" : `${daysLeft}d`}
+                    </span>
                   </div>
-                </Link>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      </div>
     ) : null;
 
   return (
-    <div className="flex gap-4 animate-fade-in">
-      {/* Main calendar area */}
-      <div ref={scrollAreaRef} className="flex-1 min-w-0 space-y-4">
-        {isMobile && (
-          <div className="space-y-3">
-            {todayAgendaCard}
-            {upcomingTasksCard}
+    <div className="flex flex-col h-full min-h-0 bg-card animate-fade-in">
+      {/* TOP BAR */}
+      <div className="shrink-0 flex items-center border-b border-border/50 bg-card/80 backdrop-blur-sm min-h-[44px] px-1 gap-0 overflow-x-auto">
+        {/* Navigation: prev, today, next */}
+        <button onClick={goPrev} className="h-[30px] w-[30px] rounded-md flex items-center justify-center text-muted-foreground hover:bg-accent hover:text-foreground shrink-0 ml-1">
+          <ChevronLeft className="h-4 w-4" />
+        </button>
+        <button onClick={goToday} className="h-[30px] px-2.5 rounded-md text-[12px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground shrink-0">
+          Hoy
+        </button>
+        <button onClick={goNext} className="h-[30px] w-[30px] rounded-md flex items-center justify-center text-muted-foreground hover:bg-accent hover:text-foreground shrink-0">
+          <ChevronRight className="h-4 w-4" />
+        </button>
+
+        {/* Title */}
+        <span className="ml-2 text-[13px] font-semibold text-foreground capitalize shrink-0 mr-1">
+          <span className="hidden sm:inline">{headerLabel}</span>
+          <span className="sm:hidden">{headerLabelShort}</span>
+        </span>
+        {isLoading && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground shrink-0" />}
+
+        {/* View mode tabs */}
+        {!isMobile && (
+          <div className="flex items-center ml-2 shrink-0">
+            {(["day", "3days", "week", "month"] as const).map((v) => (
+              <button
+                key={v}
+                onClick={() => setViewMode(v)}
+                className={cn(
+                  "h-11 flex items-center px-3 text-[12.5px] font-medium border-b-2 transition-colors whitespace-nowrap",
+                  viewMode === v
+                    ? "text-foreground border-b-foreground font-semibold"
+                    : "text-muted-foreground border-b-transparent hover:text-foreground"
+                )}
+              >
+                {v === "day" ? "Día" : v === "3days" ? "3 Días" : v === "week" ? "Semana" : "Mes"}
+              </button>
+            ))}
           </div>
         )}
-        {/* Toolbar */}
-        <div className="surface-toolbar flex flex-wrap items-center justify-between gap-2 p-3 md:p-4">
-          <div className="flex items-center gap-2 min-w-0">
-            <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" onClick={goPrev}>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button variant="outline" size="sm" className="h-8 shrink-0" onClick={goToday}>Hoy</Button>
-            <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" onClick={goNext}>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-            <h2 className="font-semibold capitalize ml-1 truncate text-sm sm:text-base md:text-lg">
-              <span className="hidden sm:inline">{headerLabel}</span>
-              <span className="sm:hidden">{headerLabelShort}</span>
-            </h2>
-            {isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground shrink-0" />}
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <label className="hidden sm:flex items-center gap-1.5 text-xs cursor-pointer">
-              <Switch checked={showKawiilTasks} onCheckedChange={setShowKawiilTasks} className="scale-75" />
-              <span className="text-muted-foreground">Tareas Kawiil</span>
-            </label>
-            {!isMobile && (
-              <div className="flex gap-0.5 rounded-full border border-border/50 bg-background/70 p-0.5 backdrop-blur-sm">
-                {(["day", "3days", "week", "month"] as const).map((v) => (
-                  <button key={v} className={`tab-pill ${viewMode === v ? "tab-pill-active" : "tab-pill-inactive"}`} onClick={() => setViewMode(v)}>
-                    {v === "day" ? "Día" : v === "3days" ? "3 Días" : v === "week" ? "Semana" : "Mes"}
-                  </button>
-                ))}
-              </div>
-            )}
-            <Button size="sm" className="h-8 gap-1.5" onClick={() => { setSelectedDate(new Date()); setShowCreate(true); }}>
-              <Plus className="h-4 w-4" />
-              <span className="hidden sm:inline">Evento</span>
-            </Button>
-          </div>
-        </div>
 
-        {/* Day/3days/Week grid */}
-        {viewMode !== "month" && (
-          <Card className="overflow-hidden">
-            <CardContent className="p-0 overflow-x-auto">
+        {/* Right actions */}
+        <div className="ml-auto flex items-center gap-0.5 pr-2 shrink-0">
+          <label className="hidden md:flex items-center gap-1.5 text-[12px] cursor-pointer mr-1.5 text-muted-foreground">
+            <Switch checked={showKawiilTasks} onCheckedChange={setShowKawiilTasks} className="scale-75 origin-right" />
+            <span>Tareas</span>
+          </label>
+          <button
+            onClick={() => { setSelectedDate(new Date()); setShowCreate(true); }}
+            className="h-[30px] flex items-center gap-1.5 px-3 rounded-md bg-primary text-primary-foreground text-[12px] font-semibold hover:bg-primary/90 transition-colors shrink-0"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Evento</span>
+          </button>
+          <button
+            onClick={() => setRightPanelOpen((v) => !v)}
+            className="h-[30px] w-[30px] rounded-md flex items-center justify-center text-muted-foreground hover:bg-accent hover:text-foreground"
+            title={rightPanelOpen ? "Ocultar panel" : "Mostrar panel"}
+          >
+            {rightPanelOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
+          </button>
+        </div>
+      </div>
+
+      {/* BODY: calendar grid + right panel */}
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        {/* Calendar area */}
+        <div ref={scrollAreaRef} className="flex-1 min-w-0 overflow-y-auto overflow-x-auto">
+          {isMobile && (
+            <div className="p-3 space-y-3">
+              {todayAgendaCard}
+              {upcomingTasksCard}
+            </div>
+          )}
+
+          {/* Day/3days/Week grid */}
+          {viewMode !== "month" && (
+            <div className="overflow-x-auto">
               <div className={getMinWidth()}>
                 {/* Day headers */}
-                <div className="grid border-b border-border sticky top-16 z-10 bg-card"
+                <div className="grid border-b border-border sticky top-0 z-10 bg-card"
                   style={{ gridTemplateColumns: `56px repeat(${colCount}, 1fr)` }}>
                   <div className="p-2 text-[10px] text-muted-foreground text-center border-r border-border flex items-center justify-center">
                     CDMX
@@ -741,9 +722,6 @@ export function CalendarView() {
                   const nowMinutes = now.getHours() * 60 + now.getMinutes();
                   const dayStartMin = START_HOUR * 60;
                   const dayEndMin = END_HOUR * 60;
-                  const totalGridHeight = ((END_HOUR - START_HOUR) * 60 / SLOT_MINUTES) * SLOT_HEIGHT;
-                  // Mostrar el indicador siempre que hoy esté visible; si la hora cae fuera
-                  // del rango 06:00–23:00 lo "clampamos" al borde correspondiente.
                   const showNow = viewDays.some((d) => isToday(d));
                   const clampedMinutes = Math.max(dayStartMin, Math.min(nowMinutes, dayEndMin));
                   const nowTop = ((clampedMinutes - dayStartMin) / SLOT_MINUTES) * SLOT_HEIGHT;
@@ -752,122 +730,120 @@ export function CalendarView() {
                     .toString()
                     .padStart(2, "0")}`;
                   return (
-                <div className="grid border-t border-border relative" style={{ gridTemplateColumns: `56px repeat(${colCount}, 1fr)` }}>
-                  {showNow && (
-                    <div
-                      ref={nowIndicatorRef}
-                      className="pointer-events-none absolute z-30 flex items-center"
-                      style={{ top: nowTop - 10, left: 48, right: 0, height: 20 }}
-                      aria-label={`Hora actual: ${nowLabel}`}
-                    >
-                      <span className="relative inline-flex items-center justify-center shrink-0">
-                        <span className="absolute inline-flex h-4 w-4 rounded-full bg-red-500/25 motion-safe:animate-ping" />
-                        <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-card shadow-sm" />
-                      </span>
-                      <span className="ml-1 inline-flex items-center rounded-full bg-card border border-red-500 text-red-600 dark:text-red-400 px-1.5 py-[1px] text-[10px] font-semibold shadow-sm leading-none shrink-0">
-                        {nowLabel}
-                      </span>
-                      <span className="flex-1 h-[2px] bg-red-500/70 ml-1 shadow-[0_0_4px_rgba(239,68,68,0.35)]" />
-                    </div>
-                  )}
-                  <div className="border-r border-border">
-                    {TIME_SLOTS.map((slotMinutes) => (
-                      <div key={slotMinutes} className="text-[11px] text-muted-foreground text-right pr-2 border-b border-border pt-1 leading-none"
-                        style={{ height: `${SLOT_HEIGHT}px` }}>{minutesToLabel(slotMinutes)}</div>
-                    ))}
-                  </div>
-
-                  {viewDays.map((day) => {
-                    const dayEvents = getEventsForDay(day).filter((e: any) => !e._isAllDay);
-                    const dayIsToday = isToday(day);
-                    const pastHeight = dayIsToday
-                      ? Math.max(0, Math.min(nowTop, (END_HOUR - START_HOUR) * (60 / SLOT_MINUTES) * SLOT_HEIGHT))
-                      : 0;
-                    return (
-                      <div key={day.toISOString() + "-column"} className={cn(
-                        "relative border-r border-border last:border-r-0 cursor-pointer hover:bg-muted/10",
-                        dayIsToday && "bg-primary/[0.03]"
+                    <div className="grid border-t border-border relative" style={{ gridTemplateColumns: `56px repeat(${colCount}, 1fr)` }}>
+                      {showNow && (
+                        <div
+                          ref={nowIndicatorRef}
+                          className="pointer-events-none absolute z-30 flex items-center"
+                          style={{ top: nowTop - 10, left: 48, right: 0, height: 20 }}
+                          aria-label={`Hora actual: ${nowLabel}`}
+                        >
+                          <span className="relative inline-flex items-center justify-center shrink-0">
+                            <span className="absolute inline-flex h-4 w-4 rounded-full bg-red-500/25 motion-safe:animate-ping" />
+                            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-card shadow-sm" />
+                          </span>
+                          <span className="ml-1 inline-flex items-center rounded-full bg-card border border-red-500 text-red-600 dark:text-red-400 px-1.5 py-[1px] text-[10px] font-semibold shadow-sm leading-none shrink-0">
+                            {nowLabel}
+                          </span>
+                          <span className="flex-1 h-[2px] bg-red-500/70 ml-1 shadow-[0_0_4px_rgba(239,68,68,0.35)]" />
+                        </div>
                       )}
-                        onClick={() => { setSelectedDate(day); setShowCreate(true); }}>
-                        {dayIsToday && pastHeight > 0 && (
-                          <div
-                            aria-hidden
-                            className="pointer-events-none absolute inset-x-0 top-0 bg-muted/40 dark:bg-muted/15"
-                            style={{ height: pastHeight }}
-                          />
-                        )}
+                      <div className="border-r border-border">
                         {TIME_SLOTS.map((slotMinutes) => (
-                          <div key={slotMinutes} className="border-b border-border/60 last:border-b-0 transition-colors duration-100 relative"
-                            style={{ height: `${SLOT_HEIGHT}px` }}
-                            onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; e.currentTarget.classList.add("bg-primary/20"); }}
-                            onDragLeave={(e) => e.currentTarget.classList.remove("bg-primary/20")}
-                            onDrop={(e) => { e.preventDefault(); e.currentTarget.classList.remove("bg-primary/20"); handleDrop(day, slotMinutes); }}
-                          />
+                          <div key={slotMinutes} className="text-[11px] text-muted-foreground text-right pr-2 border-b border-border pt-1 leading-none"
+                            style={{ height: `${SLOT_HEIGHT}px` }}>{minutesToLabel(slotMinutes)}</div>
                         ))}
-
-                        {dayEvents.map((event: any) => {
-                          const startTotal = event._parsedStart.getHours() * 60 + event._parsedStart.getMinutes();
-                          const endDt = event.end?.dateTime ? parseEventTime(event.end.dateTime) : null;
-                          const endTotal = endDt ? endDt.getHours() * 60 + endDt.getMinutes() : startTotal + SLOT_MINUTES;
-                          const dayStart = START_HOUR * 60;
-                          const dayEnd = END_HOUR * 60;
-                          const clampedStart = Math.max(startTotal, dayStart);
-                          const clampedEnd = Math.min(endTotal, dayEnd);
-                          if (clampedEnd <= clampedStart) return null;
-
-                          const top = ((clampedStart - dayStart) / SLOT_MINUTES) * SLOT_HEIGHT + 2;
-                          const height = Math.max(SLOT_HEIGHT, ((clampedEnd - clampedStart) / SLOT_MINUTES) * SLOT_HEIGHT - 4);
-                          const startStr = formatMX(event._parsedStart, "HH:mm");
-                          const endStr = endDt ? formatMX(endDt, "HH:mm") : "";
-                          const primaryCategory: string | undefined = event.categories?.[0];
-                          const catClasses = getCategoryClasses(primaryCategory);
-                          const meetingUrl = event.onlineMeeting?.joinUrl || event.onlineMeetingUrl;
-
-                          return (
-                            <div key={event.id} className={cn("absolute inset-x-0 px-0.5", draggedEvent?.id === event.id && "opacity-40")}
-                              style={{ top, height }} draggable
-                              onDragStart={(e) => { e.stopPropagation(); setDraggedEvent(event); e.dataTransfer.effectAllowed = "move"; }}
-                              onDragEnd={() => setDraggedEvent(null)}>
-                              <div className={cn("h-full rounded-md px-1.5 py-0.5 text-xs truncate group relative shadow-sm cursor-grab active:cursor-grabbing transition-all duration-150 hover:shadow-md border",
-                                primaryCategory ? catClasses : "bg-primary/15 text-primary border-primary/20")}
-                                title={`${startStr}${endStr ? " - " + endStr : ""} ${event.subject}`}
-                                onClick={(e) => { e.stopPropagation(); setSelectedEventId(event.id); }}>
-                                <div className="flex items-start gap-1 pr-4">
-                                  <div className="flex-1 min-w-0">
-                                    <div className="text-[10px] opacity-70">{endStr ? `${startStr}–${endStr}` : startStr}</div>
-                                    <div className="font-medium truncate leading-tight">{event.subject}</div>
-                                    {event.location?.displayName && <div className="text-[9px] opacity-70 truncate">{event.location.displayName}</div>}
-                                  </div>
-                                  {meetingUrl && (
-                                    <button type="button" className="ml-auto p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
-                                      onClick={(e) => { e.stopPropagation(); window.open(meetingUrl, "_blank"); }} title="Unirse a reunión">
-                                      <Video className="h-3 w-3" />
-                                    </button>
-                                  )}
-                                </div>
-                                <button className="absolute right-0.5 top-0.5 opacity-0 group-hover:opacity-100 transition-opacity p-0.5"
-                                  onClick={(e) => { e.stopPropagation(); deleteEvent.mutate(event.id); }}>
-                                  <Trash2 className="h-3 w-3 text-destructive" />
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
                       </div>
-                    );
-                  })}
-                </div>
+
+                      {viewDays.map((day) => {
+                        const dayEvents = getEventsForDay(day).filter((e: any) => !e._isAllDay);
+                        const dayIsToday = isToday(day);
+                        const pastHeight = dayIsToday
+                          ? Math.max(0, Math.min(nowTop, (END_HOUR - START_HOUR) * (60 / SLOT_MINUTES) * SLOT_HEIGHT))
+                          : 0;
+                        return (
+                          <div key={day.toISOString() + "-column"} className={cn(
+                            "relative border-r border-border last:border-r-0 cursor-pointer hover:bg-muted/10",
+                            dayIsToday && "bg-primary/[0.03]"
+                          )}
+                            onClick={() => { setSelectedDate(day); setShowCreate(true); }}>
+                            {dayIsToday && pastHeight > 0 && (
+                              <div
+                                aria-hidden
+                                className="pointer-events-none absolute inset-x-0 top-0 bg-muted/40 dark:bg-muted/15"
+                                style={{ height: pastHeight }}
+                              />
+                            )}
+                            {TIME_SLOTS.map((slotMinutes) => (
+                              <div key={slotMinutes} className="border-b border-border/60 last:border-b-0 transition-colors duration-100 relative"
+                                style={{ height: `${SLOT_HEIGHT}px` }}
+                                onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; e.currentTarget.classList.add("bg-primary/20"); }}
+                                onDragLeave={(e) => e.currentTarget.classList.remove("bg-primary/20")}
+                                onDrop={(e) => { e.preventDefault(); e.currentTarget.classList.remove("bg-primary/20"); handleDrop(day, slotMinutes); }}
+                              />
+                            ))}
+
+                            {dayEvents.map((event: any) => {
+                              const startTotal = event._parsedStart.getHours() * 60 + event._parsedStart.getMinutes();
+                              const endDt = event.end?.dateTime ? parseEventTime(event.end.dateTime) : null;
+                              const endTotal = endDt ? endDt.getHours() * 60 + endDt.getMinutes() : startTotal + SLOT_MINUTES;
+                              const dayStart = START_HOUR * 60;
+                              const dayEnd = END_HOUR * 60;
+                              const clampedStart = Math.max(startTotal, dayStart);
+                              const clampedEnd = Math.min(endTotal, dayEnd);
+                              if (clampedEnd <= clampedStart) return null;
+
+                              const top = ((clampedStart - dayStart) / SLOT_MINUTES) * SLOT_HEIGHT + 2;
+                              const height = Math.max(SLOT_HEIGHT, ((clampedEnd - clampedStart) / SLOT_MINUTES) * SLOT_HEIGHT - 4);
+                              const startStr = formatMX(event._parsedStart, "HH:mm");
+                              const endStr = endDt ? formatMX(endDt, "HH:mm") : "";
+                              const primaryCategory: string | undefined = event.categories?.[0];
+                              const catClasses = getCategoryClasses(primaryCategory);
+                              const meetingUrl = event.onlineMeeting?.joinUrl || event.onlineMeetingUrl;
+
+                              return (
+                                <div key={event.id} className={cn("absolute inset-x-0 px-0.5", draggedEvent?.id === event.id && "opacity-40")}
+                                  style={{ top, height }} draggable
+                                  onDragStart={(e) => { e.stopPropagation(); setDraggedEvent(event); e.dataTransfer.effectAllowed = "move"; }}
+                                  onDragEnd={() => setDraggedEvent(null)}>
+                                  <div className={cn("h-full rounded-md px-1.5 py-0.5 text-xs truncate group relative shadow-sm cursor-grab active:cursor-grabbing transition-all duration-150 hover:shadow-md border",
+                                    primaryCategory ? catClasses : "bg-primary/15 text-primary border-primary/20")}
+                                    title={`${startStr}${endStr ? " - " + endStr : ""} ${event.subject}`}
+                                    onClick={(e) => { e.stopPropagation(); setSelectedEventId(event.id); }}>
+                                    <div className="flex items-start gap-1 pr-4">
+                                      <div className="flex-1 min-w-0">
+                                        <div className="text-[10px] opacity-70">{endStr ? `${startStr}–${endStr}` : startStr}</div>
+                                        <div className="font-medium truncate leading-tight">{event.subject}</div>
+                                        {event.location?.displayName && <div className="text-[9px] opacity-70 truncate">{event.location.displayName}</div>}
+                                      </div>
+                                      {meetingUrl && (
+                                        <button type="button" className="ml-auto p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                                          onClick={(e) => { e.stopPropagation(); window.open(meetingUrl, "_blank"); }} title="Unirse a reunión">
+                                          <Video className="h-3 w-3" />
+                                        </button>
+                                      )}
+                                    </div>
+                                    <button className="absolute right-0.5 top-0.5 opacity-0 group-hover:opacity-100 transition-opacity p-0.5"
+                                      onClick={(e) => { e.stopPropagation(); deleteEvent.mutate(event.id); }}>
+                                      <Trash2 className="h-3 w-3 text-destructive" />
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })}
+                    </div>
                   );
                 })()}
               </div>
-            </CardContent>
-          </Card>
-        )}
+            </div>
+          )}
 
-        {/* Monthly view */}
-        {viewMode === "month" && (
-          <Card className="overflow-hidden">
-            <CardContent className="p-0">
+          {/* Monthly view */}
+          {viewMode === "month" && (
+            <div>
               <div className="grid grid-cols-7 border-b border-border">
                 {[
                   { short: "Lun", letter: "L" },
@@ -925,136 +901,161 @@ export function CalendarView() {
                   );
                 })}
               </div>
-            </CardContent>
-          </Card>
-        )}
-      </div>
+            </div>
+          )}
+        </div>
 
-      {/* Right sidebar — Mini cal + Filters + Agenda / Kawiil tasks */}
-      {!isMobile && (
-        <div className="w-72 shrink-0 space-y-4 self-start sticky top-20 max-h-[calc(100vh-5rem)] overflow-y-auto">
-          <Card>
-            <CardContent className="p-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-foreground capitalize">
-                  {format(currentDate, "MMMM yyyy", { locale: es })}
-                </p>
-                <div className="flex gap-0.5">
-                  <button
-                    type="button"
-                    className="p-1 rounded hover:bg-accent text-muted-foreground"
-                    onClick={() => setCurrentDate(subMonths(currentDate, 1))}
-                    aria-label="Mes anterior"
-                  >
-                    <ChevronLeft className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    className="p-1 rounded hover:bg-accent text-muted-foreground"
-                    onClick={() => setCurrentDate(addMonths(currentDate, 1))}
-                    aria-label="Mes siguiente"
-                  >
-                    <ChevronRight className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-              <div className="grid grid-cols-7 gap-0.5 text-center">
-                {["L", "M", "X", "J", "V", "S", "D"].map((d) => (
-                  <span key={d} className="text-[10px] font-semibold text-muted-foreground py-1">
-                    {d}
-                  </span>
-                ))}
-                {eachDayOfInterval({
-                  start: startOfWeek(startOfMonth(currentDate), { weekStartsOn: 1 }),
-                  end: endOfWeek(endOfMonth(currentDate), { weekStartsOn: 1 }),
-                }).map((d) => {
-                  const inMonth = isSameMonth(d, currentDate);
-                  const today = isToday(d);
-                  const selected = isSameDay(d, currentDate);
-                  const hasEvents = (allEvents as any[]).some((e: any) =>
-                    isSameDay(parseEventTime(e.start?.dateTime || e.start?.date), d),
-                  );
-                  return (
-                    <button
-                      key={d.toISOString()}
-                      type="button"
-                      onClick={() => setCurrentDate(d)}
-                      className={cn(
-                        "relative h-7 text-[11px] rounded-md transition-colors",
-                        !inMonth && "text-muted-foreground/40",
-                        inMonth && !today && !selected && "hover:bg-accent text-foreground",
-                        today && "ring-1 ring-primary/40 text-primary font-semibold",
-                        selected && "bg-primary text-primary-foreground font-semibold",
-                      )}
-                    >
-                      {format(d, "d")}
-                      {hasEvents && !selected && (
-                        <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-primary" />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-
-          {outlookCategories.length > 0 && (
-            <Card>
-              <CardContent className="p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold text-foreground">Filtros por categoría</p>
-                  {activeCategoryFilters.length > 0 && (
+        {/* Right panel — collapsible */}
+        <div className={cn(
+          "shrink-0 border-l border-border/30 flex flex-col overflow-hidden transition-all duration-200",
+          rightPanelOpen && !isMobile ? "w-[260px]" : "w-0"
+        )}>
+          <div className="w-[260px] flex-1 overflow-y-auto">
+            <div className="p-3 space-y-4">
+              {/* Mini calendar */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground capitalize">
+                    {format(currentDate, "MMMM yyyy", { locale: es })}
+                  </p>
+                  <div className="flex gap-0.5">
                     <button
                       type="button"
-                      onClick={() => setActiveCategoryFilters([])}
-                      className="text-[10px] text-primary hover:underline"
+                      className="p-1 rounded hover:bg-accent text-muted-foreground"
+                      onClick={() => setCurrentDate(subMonths(currentDate, 1))}
+                      aria-label="Mes anterior"
                     >
-                      Limpiar
+                      <ChevronLeft className="h-3.5 w-3.5" />
                     </button>
-                  )}
+                    <button
+                      type="button"
+                      className="p-1 rounded hover:bg-accent text-muted-foreground"
+                      onClick={() => setCurrentDate(addMonths(currentDate, 1))}
+                      aria-label="Mes siguiente"
+                    >
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  {(outlookCategories as any[]).map((cat: any) => {
-                    const name: string = cat.displayName;
-                    const active = activeCategoryFilters.includes(name);
-                    const dot = catColorPreview(name);
+                <div className="grid grid-cols-7 gap-0.5 text-center">
+                  {["L", "M", "X", "J", "V", "S", "D"].map((d) => (
+                    <span key={d} className="text-[10px] font-semibold text-muted-foreground py-1">
+                      {d}
+                    </span>
+                  ))}
+                  {eachDayOfInterval({
+                    start: startOfWeek(startOfMonth(currentDate), { weekStartsOn: 1 }),
+                    end: endOfWeek(endOfMonth(currentDate), { weekStartsOn: 1 }),
+                  }).map((d) => {
+                    const inMonth = isSameMonth(d, currentDate);
+                    const today = isToday(d);
+                    const selected = isSameDay(d, currentDate);
+                    const hasEvents = (allEvents as any[]).some((e: any) =>
+                      isSameDay(parseEventTime(e.start?.dateTime || e.start?.date), d),
+                    );
                     return (
                       <button
-                        key={name}
+                        key={d.toISOString()}
                         type="button"
-                        onClick={() =>
-                          setActiveCategoryFilters((prev) =>
-                            prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name],
-                          )
-                        }
+                        onClick={() => setCurrentDate(d)}
                         className={cn(
-                          "w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-[11px] transition-colors",
-                          active ? "bg-primary/10 text-foreground" : "hover:bg-accent/50 text-muted-foreground",
+                          "relative h-7 text-[11px] rounded-md transition-colors",
+                          !inMonth && "text-muted-foreground/40",
+                          inMonth && !today && !selected && "hover:bg-accent text-foreground",
+                          today && "ring-1 ring-primary/40 text-primary font-semibold",
+                          selected && "bg-primary text-primary-foreground font-semibold",
                         )}
                       >
-                        <span
-                          className={cn("inline-block h-2.5 w-2.5 rounded-full border", dot)}
-                          aria-hidden
-                        />
-                        <span className="truncate flex-1">{name}</span>
-                        {active && <span className="text-primary text-[10px]">●</span>}
+                        {format(d, "d")}
+                        {hasEvents && !selected && (
+                          <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-primary" />
+                        )}
                       </button>
                     );
                   })}
                 </div>
-                {activeCategoryFilters.length > 0 && (
-                  <p className="text-[10px] text-muted-foreground pt-1 border-t border-border/40">
-                    Mostrando {events.length} de {allEvents.length} eventos
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          )}
+              </div>
 
-          {todayAgendaCard}
-          {upcomingTasksCard}
+              {/* Category filters */}
+              {outlookCategories.length > 0 && (
+                <div className="border-t border-border/30 pt-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Categorías</p>
+                    {activeCategoryFilters.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setActiveCategoryFilters([])}
+                        className="text-[10px] text-primary hover:underline"
+                      >
+                        Limpiar
+                      </button>
+                    )}
+                  </div>
+                  <div className="space-y-0.5">
+                    {(outlookCategories as any[]).map((cat: any) => {
+                      const name: string = cat.displayName;
+                      const active = activeCategoryFilters.includes(name);
+                      const dot = catColorPreview(name);
+                      return (
+                        <button
+                          key={name}
+                          type="button"
+                          onClick={() =>
+                            setActiveCategoryFilters((prev) =>
+                              prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name],
+                            )
+                          }
+                          className={cn(
+                            "w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-[11px] transition-colors",
+                            active ? "bg-primary/10 text-foreground" : "hover:bg-accent/50 text-muted-foreground",
+                          )}
+                        >
+                          <span
+                            className={cn("inline-block h-2.5 w-2.5 rounded-full border", dot)}
+                            aria-hidden
+                          />
+                          <span className="truncate flex-1">{name}</span>
+                          {active && <span className="text-primary text-[10px]">●</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {activeCategoryFilters.length > 0 && (
+                    <p className="text-[10px] text-muted-foreground pt-1 border-t border-border/40 mt-1">
+                      Mostrando {events.length} de {allEvents.length} eventos
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* AI analysis card */}
+              {aiEvents && aiEvents.length > 0 && (
+                <div className="border-t border-border/30 pt-3">
+                  <CalendarKawiilCard
+                    scope="week"
+                    periodLabel={aiPeriodLabel || ""}
+                    events={aiEvents}
+                    tasksDue={aiTasksDue || []}
+                    cacheKey={aiPeriodLabel || ""}
+                  />
+                </div>
+              )}
+
+              {/* Today agenda */}
+              <div className="border-t border-border/30 pt-3">
+                {todayAgendaCard}
+              </div>
+
+              {/* Upcoming tasks */}
+              {upcomingTasksCard && (
+                <div className="border-t border-border/30 pt-3">
+                  {upcomingTasksCard}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
-      )}
+      </div>
 
       {/* Create event dialog */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>

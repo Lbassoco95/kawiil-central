@@ -87,6 +87,15 @@ div[id*="lovable" i] {
     --area-legal: 240 100% 32%;
     --area-softlanding: 157 72% 32%;
     --area-pld: 25 95% 53%;
+
+    /* Mail / Superhuman design tokens */
+    --mail-bg0: var(--background);
+    --mail-bg1: var(--card);
+    --mail-bg2: var(--muted);
+    --mail-bg3: var(--border);
+    --mail-fg0: var(--foreground);
+    --mail-fg1: var(--muted-foreground);
+    --mail-fg2: var(--muted-foreground);
   }
 
   [data-theme="dark"] {
@@ -118,6 +127,15 @@ div[id*="lovable" i] {
     --sidebar-accent-foreground: 220 15% 95%;
     --sidebar-border: 226 16% 14%;
     --sidebar-ring: 210 100% 58%;
+
+    /* Mail / Superhuman design tokens — dark */
+    --mail-bg0: 224 22% 7%;
+    --mail-bg1: 224 18% 10%;
+    --mail-bg2: 224 16% 13%;
+    --mail-bg3: 224 14% 17%;
+    --mail-fg0: 220 16% 93%;
+    --mail-fg1: 220 12% 65%;
+    --mail-fg2: 220 10% 42%;
   }
 
   /* =====================================================================

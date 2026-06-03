@@ -122,7 +122,6 @@ const Microsoft365Calendario = () => {
           aiEvents={aiEvents}
           aiTasksDue={aiTasksDue}
           aiPeriodLabel={aiPeriodLabel}
-          aiCacheKey={`${monYmd}_${sunYmd}`}
         />
       </ErrorBoundary>
     </AppLayout>
