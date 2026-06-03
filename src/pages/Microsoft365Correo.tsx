@@ -1,10 +1,10 @@
 import { AppLayout } from "@/components/AppLayout";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { EmailView } from "@/components/microsoft/EmailView";
+import { CorreoView } from "@/components/correo/CorreoView";
 import { MicrosoftConnectCard } from "@/components/microsoft/MicrosoftConnectCard";
 import { useMicrosoftConnection } from "@/hooks/useMicrosoft";
 import { useTasksRealtime } from "@/hooks/useTasksRealtime";
-import { Mail } from "lucide-react";
+import { Mail, RefreshCw } from "lucide-react";
 
 const Microsoft365Correo = () => {
   const { isConnected, isLoading, connect, isConnecting, profile } = useMicrosoftConnection();
@@ -33,6 +33,16 @@ const Microsoft365Correo = () => {
                 )}
               </p>
             </div>
+            {isConnected && (
+              <button
+                onClick={() => connect()}
+                disabled={isConnecting}
+                className="ml-auto flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground shrink-0"
+              >
+                <RefreshCw className={`w-3 h-3 ${isConnecting ? "animate-spin" : ""}`} />
+                Actualizar permisos
+              </button>
+            )}
           </div>
         </div>
 
@@ -58,7 +68,7 @@ const Microsoft365Correo = () => {
           ) : (
             <ErrorBoundary>
               <div className="h-full min-h-0 min-w-0 w-full animate-fade-in">
-                <EmailView />
+                <CorreoView />
               </div>
             </ErrorBoundary>
           )}
