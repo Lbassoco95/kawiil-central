@@ -90,6 +90,7 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
   const [mobilePanel, setMobilePanel] = useState<"sidebar" | "messages">("sidebar");
   const slackConvGenRef = useRef(0);
   const slackReconnectToastAtRef = useRef(0);
+  const prefetchedChannelsRef = useRef<Set<string>>(new Set());
 
   // Sincronizar con URL
   useEffect(() => {
@@ -500,12 +501,68 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
   });
 
   // Cuando aparecen badges nuevos, forzar un snapshot inmediato
-  // (evita esperar 30s para detectar canales ya leídos en Slack nativo)
   const syncKey = syncChannelIds.join(",");
   useEffect(() => {
     if (!user?.id || !syncKey) return;
     void qc.invalidateQueries({ queryKey: ["slack-unread-snapshot", user.id] });
   }, [syncKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ─── Background prefetch: seed memory cache + pre-warm unread channels ──
+  const convCount = conversations.length;
+  const unreadKey = Object.entries(unreadBadges)
+    .filter(([, v]) => v > 0)
+    .map(([k]) => k)
+    .sort()
+    .join(",");
+  useEffect(() => {
+    if (!convCount) return;
+
+    // Seed React Query memory cache from localStorage — zero API calls, instant channel switch
+    for (const conv of conversations) {
+      if (qc.getQueryData(["slack-history-v2", conv.id])) continue;
+      const cached = loadSlackHistoryCache(conv.id);
+      if (cached?.length) {
+        qc.setQueryData(["slack-history-v2", conv.id], {
+          pages: [{ messages: cached }],
+          pageParams: [undefined],
+        });
+      }
+    }
+
+    // Fire background API fetches for unread channels without cache (staggered 900ms)
+    const toFetch = Object.entries(unreadBadges)
+      .filter(([ch, count]) => {
+        if (!count || ch === selectedChannel) return false;
+        if (prefetchedChannelsRef.current.has(ch)) return false;
+        if (qc.getQueryData(["slack-history-v2", ch])) return false;
+        return true;
+      })
+      .slice(0, 4)
+      .map(([ch]) => ch);
+
+    toFetch.forEach((channelId, i) => {
+      prefetchedChannelsRef.current.add(channelId);
+      window.setTimeout(() => {
+        void qc.prefetchInfiniteQuery({
+          queryKey: ["slack-history-v2", channelId],
+          initialPageParam: undefined as string | undefined,
+          queryFn: async () => {
+            const data = await invokeSlackApi<{
+              ok: boolean;
+              messages?: SlackMessage[];
+              response_metadata?: { next_cursor?: string };
+            }>({ action: "conversations.history", channel: channelId, limit: 40 }, HISTORY_FIRST_MS);
+            const msgs = (data.messages ?? []).slice().reverse();
+            if (msgs.length) saveSlackHistoryCache(channelId, msgs);
+            return { messages: msgs, nextCursor: data.response_metadata?.next_cursor };
+          },
+          staleTime: 5 * 60_000,
+          pages: 1,
+        } as Parameters<typeof qc.prefetchInfiniteQuery>[0]);
+      }, i * 900);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [convCount, unreadKey]);
 
   // ─── Menciones no leídas ────────────────────────────────
   const unreadMentions = useSlackUnreadMentionsCount();
