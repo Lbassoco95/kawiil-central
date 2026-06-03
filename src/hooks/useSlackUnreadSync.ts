@@ -5,7 +5,7 @@ import { loadSlackReadMap } from "@/lib/slackReadCursor";
 import { markSlackChannelNotificationsRead } from "@/hooks/useSlackChannelNotificationBadges";
 
 /** Throttle entre invalidaciones por `visibilitychange` para no machacar slack-api al alternar pestañas. */
-const VISIBILITY_REFETCH_THROTTLE_MS = 10_000;
+const VISIBILITY_REFETCH_THROTTLE_MS = 2_000;
 
 /** Firma estable por contenido (los refetch de React Query suelen devolver otro objeto con los mismos números). */
 function unreadCountsSignature(m: Record<string, number>): string {
@@ -65,8 +65,8 @@ export function useSlackUnreadSync({
     staleTime: 30_000,
     refetchOnWindowFocus: true,
     refetchInterval: () => {
-      if (typeof document === "undefined") return 180_000;
-      return document.visibilityState === "visible" ? 30_000 : 180_000;
+      if (typeof document === "undefined") return 120_000;
+      return document.visibilityState === "visible" ? 15_000 : 120_000;
     },
   });
 

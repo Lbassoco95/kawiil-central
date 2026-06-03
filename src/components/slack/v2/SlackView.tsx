@@ -12,6 +12,7 @@ import {
   type SlackConversation,
   type SlackMessage,
 } from "@/lib/slackApi";
+import { saveSlackReadCursor } from "@/lib/slackReadCursor";
 import {
   fetchSlackConversationsPaged,
   loadCachedSlackConversations,
@@ -245,6 +246,10 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
   useEffect(() => {
     if (!selectedChannel || !messages.length || historyQuery.isLoading) return;
     const ts = messages[messages.length - 1]?.ts;
+    // Guardar cursor local para sincronización bidireccional (detectar no leídos vs Slack nativo)
+    if (ts && user?.id) {
+      saveSlackReadCursor(user.id, selectedChannel, ts);
+    }
     // Marcar leído en Slack y en Supabase al mismo tiempo
     void markSlackConversationRead(selectedChannel, ts).catch((err) => {
       if (isSlackMarkReadFatal(err)) {
@@ -463,6 +468,14 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
     pollChannelIds: syncChannelIds,
     holdUnreadSnapshot: historyQuery.isLoading,
   });
+
+  // Cuando aparecen badges nuevos, forzar un snapshot inmediato
+  // (evita esperar 30s para detectar canales ya leídos en Slack nativo)
+  const syncKey = syncChannelIds.join(",");
+  useEffect(() => {
+    if (!user?.id || !syncKey) return;
+    void qc.invalidateQueries({ queryKey: ["slack-unread-snapshot", user.id] });
+  }, [syncKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Menciones no leídas ────────────────────────────────
   const unreadMentions = useSlackUnreadMentionsCount();
