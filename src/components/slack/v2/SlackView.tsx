@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
   invokeSlackApi,
+  invokeSlackFileUpload,
   withHardTimeout,
   markSlackConversationRead,
   isSlackMarkReadFatal,
@@ -361,15 +362,35 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
 
   // ─── Enviar mensaje ─────────────────────────────────────
   const sendMutation = useMutation({
-    mutationFn: async (text: string) => {
+    mutationFn: async ({ text, files }: { text: string; files?: File[] }) => {
       if (!selectedChannel) throw new Error("Sin canal seleccionado");
+
+      if (files && files.length > 0) {
+        // Upload each file; first file carries the message text as initial_comment
+        await Promise.all(
+          files.map((file, i) => {
+            const fd = new FormData();
+            fd.append("action", "files.upload");
+            fd.append("channel", selectedChannel);
+            fd.append("file", file, file.name);
+            fd.append("filename", file.name);
+            if (i === 0 && text.trim()) fd.append("initial_comment", text.trim());
+            return invokeSlackFileUpload(fd);
+          }),
+        );
+        // Post text-only message if there are multiple files (first file already has comment)
+        if (files.length > 1 && text.trim()) {
+          await invokeSlackApi<{ ok: boolean }>({ action: "chat.postMessage", channel: selectedChannel, text }, 30_000);
+        }
+        return;
+      }
+
       const data = await invokeSlackApi<{ ok: boolean; ts?: string }>({
         action: "chat.postMessage",
         channel: selectedChannel,
         text,
       }, 30_000);
       if (!data.ok) throw new Error("No se pudo enviar el mensaje");
-      return data;
     },
     onSuccess: () => {
       void historyQuery.refetch();
@@ -590,8 +611,8 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
         <SlackComposerNew
           channelName={channelName}
           isSending={sendMutation.isPending}
-          onSend={(text) => {
-            sendMutation.mutate(text);
+          onSend={(text, files) => {
+            sendMutation.mutate({ text, files });
             onStopTyping();
           }}
           disabled={!selectedChannel}
