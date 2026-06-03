@@ -562,13 +562,20 @@ serve(async (req) => {
     }
 
     if (action === "get_link") {
-      const scoped = parseScopedPath(path);
-      const scopedHeaders = getScopedDropboxHeaders(
-        DROPBOX_ACCESS_TOKEN,
-        adminMemberId,
-        rootNamespaceId,
-        scoped.namespaceId,
-      );
+      // Support "user:MEMBER_ID:/path" format returned by search for personal-namespace files
+      let linkPath = path;
+      let linkUserId: string | null = null;
+      if (path?.startsWith('user:')) {
+        const rest = path.slice(5);
+        const sep = rest.indexOf(':');
+        linkUserId = sep === -1 ? rest : rest.slice(0, sep);
+        linkPath = sep === -1 ? '' : rest.slice(sep + 1);
+      }
+
+      const scoped = parseScopedPath(linkPath);
+      const scopedHeaders = linkUserId
+        ? { 'Authorization': `Bearer ${DROPBOX_ACCESS_TOKEN}`, 'Content-Type': 'application/json', 'Dropbox-API-Select-User': linkUserId }
+        : getScopedDropboxHeaders(DROPBOX_ACCESS_TOKEN, adminMemberId, rootNamespaceId, scoped.namespaceId);
 
       let shareUrl = "";
       try {
@@ -804,12 +811,15 @@ serve(async (req) => {
 
       const scoped = parseScopedPath(searchPath);
 
-      // search_v2 requires Dropbox-API-Select-User (not Select-Admin) for team tokens
+      // search_v2 requires Select-User for team tokens; add team namespace root to find team files
       const searchHeaders: Record<string, string> = {
         'Authorization': `Bearer ${DROPBOX_ACCESS_TOKEN}`,
         'Content-Type': 'application/json',
       };
       if (adminMemberId) searchHeaders['Dropbox-API-Select-User'] = adminMemberId;
+      if (rootNamespaceId && !scoped.namespaceId) {
+        searchHeaders['Dropbox-API-Path-Root'] = JSON.stringify({ '.tag': 'namespace_id', namespace_id: rootNamespaceId });
+      }
 
       const searchOptions: Record<string, any> = { max_results: 30 };
       if (scoped.path && scoped.path !== '' && scoped.path !== '/') {
@@ -832,10 +842,14 @@ serve(async (req) => {
         const meta = m.metadata?.metadata || m.metadata || {};
         const tag = meta['.tag'] || 'file';
         const filePath = meta.path_display || '';
+        // Prefix personal-namespace paths so get_link knows to use Select-User context
+        const resultPath = scoped.namespaceId
+          ? buildScopedPath(scoped.namespaceId, filePath)
+          : adminMemberId ? `user:${adminMemberId}:${filePath}` : filePath;
         return {
           id: meta.id || filePath,
           name: meta.name || '',
-          path: scoped.namespaceId ? buildScopedPath(scoped.namespaceId, filePath) : filePath,
+          path: resultPath,
           type: tag === 'folder' ? 'folder' : 'file',
           size: meta.size || null,
           modified: meta.client_modified || meta.server_modified || null,
