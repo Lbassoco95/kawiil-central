@@ -16,6 +16,7 @@ import {
   Search,
   ChevronRight,
   ChevronDown,
+  RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { type MailTabId } from "./MailTabs";
@@ -205,7 +206,7 @@ export function MailSidebar({
       .length;
   }, [inboxData]);
 
-  const { data: foldersData } = useMailFolders();
+  const { data: foldersData, isFetching: foldersFetching, refetch: refetchFolders } = useMailFolders();
   const { data: userLabels = [] } = useEmailUserLabels();
   const createLabel = useCreateEmailLabel();
 
@@ -310,7 +311,17 @@ export function MailSidebar({
             <p className="text-[9.5px] font-bold uppercase tracking-widest text-muted-foreground/60">
               Carpetas
             </p>
-            <span className="text-[10px] text-muted-foreground/50">{customFolders.length}</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] text-muted-foreground/50">{customFolders.length}</span>
+              <button
+                onClick={() => { void refetchFolders(); }}
+                title="Actualizar carpetas"
+                className="text-muted-foreground/50 hover:text-foreground transition-colors"
+              >
+                <Loader2 className={cn("w-3 h-3", foldersFetching ? "animate-spin" : "hidden")} />
+                {!foldersFetching && <RefreshCw className="w-3 h-3" />}
+              </button>
+            </div>
           </div>
           {customFolders.length > 6 && (
             <div className="relative mb-1">

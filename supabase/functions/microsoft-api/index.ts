@@ -1451,22 +1451,33 @@ Deno.serve(async (req) => {
 
         let inboxChildren: unknown[] = [];
         if (inboxFolder && typeof inboxFolder.id === "string") {
-          try {
-            const enc = encodeURIComponent(inboxFolder.id);
-            let path = `/me/mailFolders/${enc}/childFolders?$select=${MAIL_FOLDER_LIST_SELECT}&$top=1000`;
-            for (let page = 0; page < 10; page++) {
-              const data = (await graphRequest(accessToken, path)) as {
-                value?: unknown[];
-                "@odata.nextLink"?: string;
-              };
-              if (Array.isArray(data?.value)) inboxChildren = inboxChildren.concat(data.value);
-              const nl = data?.["@odata.nextLink"];
-              const next = typeof nl === "string" && nl ? nextLinkToPath(nl) : null;
-              if (!next) break;
-              path = next;
+          const enc = encodeURIComponent(inboxFolder.id);
+          const childPaths = [
+            `/me/mailFolders/${enc}/childFolders?$select=${MAIL_FOLDER_LIST_SELECT}&$top=1000&includeHiddenFolders=true`,
+            `/me/mailFolders/${enc}/childFolders?$select=${MAIL_FOLDER_LIST_SELECT}&$top=1000`,
+            `/me/mailFolders/${enc}/childFolders?$top=1000`,
+          ];
+          for (const firstPath of childPaths) {
+            try {
+              const fetched: unknown[] = [];
+              let path: string | null = firstPath;
+              for (let page = 0; page < 10 && path; page++) {
+                const data = (await graphRequest(accessToken, path)) as {
+                  value?: unknown[];
+                  "@odata.nextLink"?: string;
+                };
+                if (Array.isArray(data?.value)) for (const v of data.value) fetched.push(v);
+                const nl = data?.["@odata.nextLink"];
+                path = typeof nl === "string" && nl ? nextLinkToPath(nl) : null;
+              }
+              if (fetched.length > 0) {
+                inboxChildren = fetched;
+                console.log(`[microsoft-api] mail-folders: ${fetched.length} inbox children loaded`);
+                break;
+              }
+            } catch (e) {
+              console.warn("[microsoft-api] mail-folders: inbox children fetch failed, trying next strategy", String(e).slice(0, 200));
             }
-          } catch (e) {
-            console.warn("[microsoft-api] mail-folders: no se pudieron cargar hijos de inbox", e);
           }
         }
 

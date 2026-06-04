@@ -900,7 +900,7 @@ export function useMailFolders() {
       return parsed;
     },
     enabled: !!user,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
   });
 }
 
