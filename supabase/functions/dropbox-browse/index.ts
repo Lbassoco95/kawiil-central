@@ -562,20 +562,25 @@ serve(async (req) => {
     }
 
     if (action === "get_link") {
-      // Support "user:MEMBER_ID:/path" format returned by search for personal-namespace files
+      // Support "user:MEMBER_ID:/path" format returned by search.
+      // Member IDs contain colons (e.g. dbmid:XXX), so split on ':/' (the path always starts with '/')
       let linkPath = path;
       let linkUserId: string | null = null;
       if (path?.startsWith('user:')) {
-        const rest = path.slice(5);
-        const sep = rest.indexOf(':');
-        linkUserId = sep === -1 ? rest : rest.slice(0, sep);
-        linkPath = sep === -1 ? '' : rest.slice(sep + 1);
+        const rest = path.slice(5); // remove 'user:'
+        const colonSlashIdx = rest.indexOf(':/');
+        linkUserId = colonSlashIdx === -1 ? rest : rest.slice(0, colonSlashIdx);
+        linkPath = colonSlashIdx === -1 ? '' : rest.slice(colonSlashIdx + 1);
       }
 
       const scoped = parseScopedPath(linkPath);
-      const scopedHeaders = linkUserId
+      const scopedHeaders: Record<string, string> = linkUserId
         ? { 'Authorization': `Bearer ${DROPBOX_ACCESS_TOKEN}`, 'Content-Type': 'application/json', 'Dropbox-API-Select-User': linkUserId }
         : getScopedDropboxHeaders(DROPBOX_ACCESS_TOKEN, adminMemberId, rootNamespaceId, scoped.namespaceId);
+      // Team namespace paths also need Path-Root so Dropbox can resolve /Kawiil Mx/...
+      if (linkUserId && rootNamespaceId && !scopedHeaders['Dropbox-API-Path-Root']) {
+        scopedHeaders['Dropbox-API-Path-Root'] = JSON.stringify({ '.tag': 'namespace_id', namespace_id: rootNamespaceId });
+      }
 
       let shareUrl = "";
       try {
@@ -841,13 +846,18 @@ serve(async (req) => {
       const matches = (data.matches || []).map((m: any) => {
         const meta = m.metadata?.metadata || m.metadata || {};
         const tag = meta['.tag'] || 'file';
-        const filePath = meta.path_display || '';
-        // Prefix personal-namespace paths so get_link knows to use Select-User context
+        const rawPath = meta.path_display || '';
+        // When Dropbox-API-Path-Root is set to a namespace, Dropbox prefixes paths
+        // with the namespace ID (e.g. "NSIDxxx:/Kawiil Mx/file.pdf").
+        // Strip that prefix to get the clean path the user context can use.
+        const cleanPath = /^[^/][^:]*:/.test(rawPath) ? rawPath.replace(/^[^/][^:]*:/, '') : rawPath;
+        // Always use user: prefix so get_link uses Select-User (works for both
+        // team folders mounted in user's Dropbox and personal files)
         const resultPath = scoped.namespaceId
-          ? buildScopedPath(scoped.namespaceId, filePath)
-          : adminMemberId ? `user:${adminMemberId}:${filePath}` : filePath;
+          ? buildScopedPath(scoped.namespaceId, cleanPath)
+          : adminMemberId ? `user:${adminMemberId}:${cleanPath}` : cleanPath;
         return {
-          id: meta.id || filePath,
+          id: meta.id || rawPath,
           name: meta.name || '',
           path: resultPath,
           type: tag === 'folder' ? 'folder' : 'file',
