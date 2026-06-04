@@ -14,12 +14,15 @@ import {
   X,
   Loader2,
   Search,
+  ChevronRight,
+  ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { type MailTabId } from "./MailTabs";
 import {
   useOutlookEmails,
   useMailFolders,
+  useChildFolders,
   useEmailUserLabels,
   useCreateEmailLabel,
 } from "@/hooks/useMicrosoft";
@@ -71,6 +74,119 @@ function isSystemFolder(f: { wellKnownFolderName?: string; displayName: string }
   return false;
 }
 
+type FolderItem = {
+  id: string;
+  displayName: string;
+  wellKnownFolderName?: string;
+  unreadItemCount?: number;
+  childFolderCount?: number;
+  parentFolderId?: string;
+};
+
+function FolderRow({
+  folder,
+  depth,
+  activeCustomFolderId,
+  onSelectLabel,
+  onSelectFolder,
+  expandedFolderIds,
+  toggleExpanded,
+  searchActive,
+}: {
+  folder: FolderItem;
+  depth: number;
+  activeCustomFolderId?: string;
+  onSelectLabel: (id: string | null) => void;
+  onSelectFolder: (id: string, name: string) => void;
+  expandedFolderIds: Set<string>;
+  toggleExpanded: (id: string) => void;
+  searchActive: boolean;
+}) {
+  const isExpanded = expandedFolderIds.has(folder.id);
+  const hasChildren = (folder.childFolderCount ?? 0) > 0;
+  const { data: children = [], isLoading: childrenLoading } = useChildFolders(
+    isExpanded && !searchActive ? folder.id : null,
+  );
+  const active = activeCustomFolderId === folder.id;
+  const MAX_DEPTH = 5;
+
+  return (
+    <>
+      <div
+        className={cn(
+          "flex items-center gap-0 w-full rounded-md transition-colors",
+          active
+            ? "bg-accent text-foreground font-semibold border-l-2 border-primary"
+            : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+        )}
+        style={{ paddingLeft: depth * 12 }}
+      >
+        {/* Expand/collapse chevron — only visible when not searching and folder has children */}
+        {hasChildren && !searchActive ? (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleExpanded(folder.id);
+            }}
+            className="flex items-center justify-center w-5 h-8 shrink-0 text-muted-foreground/60 hover:text-foreground"
+          >
+            {isExpanded ? (
+              <ChevronDown className="w-3 h-3" />
+            ) : (
+              <ChevronRight className="w-3 h-3" />
+            )}
+          </button>
+        ) : (
+          <span className="w-5 shrink-0" />
+        )}
+
+        {/* Folder name button */}
+        <button
+          onClick={() => { onSelectLabel(null); onSelectFolder(folder.id, folder.displayName); }}
+          className={cn(
+            "flex items-center gap-2 flex-1 h-8 text-[12px] text-left min-w-0",
+            active ? "pr-2.5" : "pr-2.5",
+          )}
+        >
+          <Folder className={cn("w-[13px] h-[13px] shrink-0", active ? "text-primary" : "text-muted-foreground/70")} />
+          <span className="flex-1 truncate">{folder.displayName}</span>
+          {(folder.unreadItemCount ?? 0) > 0 && (
+            <span className="text-[10px] font-medium text-muted-foreground/70 shrink-0">
+              {folder.unreadItemCount}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* Loading indicator for children */}
+      {childrenLoading && isExpanded && !searchActive && (
+        <div style={{ paddingLeft: (depth + 1) * 12 + 20 }} className="py-1">
+          <Loader2 className="w-3 h-3 animate-spin text-muted-foreground/50" />
+        </div>
+      )}
+
+      {/* Children */}
+      {isExpanded && !searchActive && children.length > 0 && depth < MAX_DEPTH && (
+        <div className="flex flex-col gap-0.5">
+          {children.map((child) => (
+            <FolderRow
+              key={child.id}
+              folder={child}
+              depth={depth + 1}
+              activeCustomFolderId={activeCustomFolderId}
+              onSelectLabel={onSelectLabel}
+              onSelectFolder={onSelectFolder}
+              expandedFolderIds={expandedFolderIds}
+              toggleExpanded={toggleExpanded}
+              searchActive={searchActive}
+            />
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 export function MailSidebar({
   activeTab,
   onSelectTab,
@@ -94,9 +210,19 @@ export function MailSidebar({
   const createLabel = useCreateEmailLabel();
 
   const [folderSearch, setFolderSearch] = useState("");
+  const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(new Set());
   const [newLabelOpen, setNewLabelOpen] = useState(false);
   const [newLabelName, setNewLabelName] = useState("");
   const [newLabelColor, setNewLabelColor] = useState("blue");
+
+  const toggleExpanded = (id: string) => {
+    setExpandedFolderIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const allFolders = (foldersData?.folders ?? []) as {
     id: string;
@@ -217,29 +343,19 @@ export function MailSidebar({
             <p className="text-[11px] text-muted-foreground/50 px-2.5 py-1 italic">Sin resultados</p>
           )}
           <div className="flex flex-col gap-0.5">
-            {filteredFolders.map((folder) => {
-              const active = activeCustomFolderId === folder.id;
-              return (
-                <button
-                  key={folder.id}
-                  onClick={() => { onSelectLabel(null); onSelectFolder(folder.id, folder.displayName); }}
-                  className={cn(
-                    "flex items-center gap-2 w-full h-8 px-2.5 rounded-md text-[12px] transition-colors text-left",
-                    active
-                      ? "bg-accent text-foreground font-semibold border-l-2 border-primary pl-[9px]"
-                      : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
-                  )}
-                >
-                  <Folder className={cn("w-[13px] h-[13px] shrink-0", active ? "text-primary" : "text-muted-foreground/70")} />
-                  <span className="flex-1 truncate">{folder.displayName}</span>
-                  {(folder.unreadItemCount ?? 0) > 0 && (
-                    <span className="text-[10px] font-medium text-muted-foreground/70 shrink-0">
-                      {folder.unreadItemCount}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+            {filteredFolders.map((folder) => (
+              <FolderRow
+                key={folder.id}
+                folder={folder}
+                depth={0}
+                activeCustomFolderId={activeCustomFolderId}
+                onSelectLabel={onSelectLabel}
+                onSelectFolder={onSelectFolder}
+                expandedFolderIds={expandedFolderIds}
+                toggleExpanded={toggleExpanded}
+                searchActive={!!folderSearch.trim()}
+              />
+            ))}
           </div>
         </div>
       </div>

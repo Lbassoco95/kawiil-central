@@ -904,6 +904,23 @@ export function useMailFolders() {
   });
 }
 
+export function useChildFolders(parentId: string | null) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["child-folders", parentId],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke("microsoft-api", {
+        body: { action: "child-folders", params: { parentId } },
+      });
+      if (error) throw error;
+      const folders = (data as any)?.folders ?? [];
+      return folders as { id: string; displayName: string; wellKnownFolderName?: string; unreadItemCount?: number; childFolderCount?: number; parentFolderId?: string }[];
+    },
+    enabled: !!user && !!parentId,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 export function useEmailConversation(conversationId: string | null) {
   const { user } = useAuth();
 

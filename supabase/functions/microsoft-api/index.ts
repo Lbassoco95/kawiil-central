@@ -1438,51 +1438,38 @@ Deno.serve(async (req) => {
       }
 
       case "mail-folders": {
-        type MailFoldersResult = {
-          folders: unknown[];
-          mailFoldersMeta?: {
-            truncated?: boolean;
-            partialChildErrors?: number;
-            usedRootOnlyFallback?: boolean;
-            rootOnlyFallbackReason?: string;
-          };
-        };
-        let out: MailFoldersResult;
-        try {
-          const { folders, meta } = await listAllMailFoldersRecursive(accessToken);
-          out = {
-            folders,
-            mailFoldersMeta: {
-              truncated: meta.truncated || undefined,
-              partialChildErrors: meta.partialChildErrors > 0 ? meta.partialChildErrors : undefined,
-            },
-          };
-        } catch (e) {
-          const errMsg = e instanceof Error ? e.message : String(e);
-          console.error(
-            "[microsoft-api] mail-folders recursive failed, using root-only fallback:",
-            e,
-          );
-          const rootOnly = await listMailFoldersRootOnlyLegacy(accessToken);
-          out = {
-            folders: rootOnly,
-            mailFoldersMeta: {
-              usedRootOnlyFallback: true,
-              rootOnlyFallbackReason: errMsg.slice(0, 2000),
-            },
-          };
+        // Only return root-level folders (fast, reliable — avoids timeout for users with many folders).
+        const rootFolders = await listMailFoldersRootOnlyLegacy(accessToken);
+        result = { folders: rootFolders };
+        break;
+      }
+
+      case "child-folders": {
+        const parentId = params?.parentId;
+        if (!parentId || typeof parentId !== "string") {
+          return new Response(JSON.stringify({ error: "parentId is required" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
         }
-        if (!Array.isArray(out.folders) || out.folders.length === 0) {
-          try {
-            const again = await listMailFoldersRootOnlyLegacy(accessToken);
-            if (Array.isArray(again) && again.length > 0) {
-              out = { folders: again, mailFoldersMeta: out.mailFoldersMeta };
-            }
-          } catch {
-            /* mantener out previo */
+        const all: unknown[] = [];
+        let path = `/me/mailFolders/${encodeURIComponent(parentId)}/childFolders?$select=${MAIL_FOLDER_LIST_SELECT}&$top=1000`;
+        const maxPages = 10;
+        for (let page = 0; page < maxPages; page++) {
+          const data = (await graphRequest(accessToken, path)) as {
+            value?: unknown[];
+            "@odata.nextLink"?: string;
+          };
+          if (Array.isArray(data?.value)) {
+            for (const v of data.value) all.push(v);
           }
+          const nl = data?.["@odata.nextLink"];
+          if (typeof nl !== "string" || !nl) break;
+          const next = nextLinkToPath(nl);
+          if (!next) break;
+          path = next;
         }
-        result = out;
+        result = { folders: all };
         break;
       }
 
