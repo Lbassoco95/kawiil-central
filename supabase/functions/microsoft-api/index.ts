@@ -1438,9 +1438,40 @@ Deno.serve(async (req) => {
       }
 
       case "mail-folders": {
-        // Only return root-level folders (fast, reliable — avoids timeout for users with many folders).
-        const rootFolders = await listMailFoldersRootOnlyLegacy(accessToken);
-        result = { folders: rootFolders };
+        // Fetch root folders first (fast).
+        const rootFolders = await listMailFoldersRootOnlyLegacy(accessToken) as Record<string, unknown>[];
+
+        // In Outlook, users commonly store custom folders as children of inbox.
+        // Fetch inbox children automatically so they appear alongside root folders.
+        const inboxFolder = rootFolders.find((f) => {
+          const wk = String(f.wellKnownFolderName || "").toLowerCase();
+          const dn = String(f.displayName || "").toLowerCase();
+          return wk === "inbox" || dn === "bandeja de entrada" || dn === "inbox";
+        });
+
+        let inboxChildren: unknown[] = [];
+        if (inboxFolder && typeof inboxFolder.id === "string") {
+          try {
+            const enc = encodeURIComponent(inboxFolder.id);
+            let path = `/me/mailFolders/${enc}/childFolders?$select=${MAIL_FOLDER_LIST_SELECT}&$top=1000`;
+            for (let page = 0; page < 10; page++) {
+              const data = (await graphRequest(accessToken, path)) as {
+                value?: unknown[];
+                "@odata.nextLink"?: string;
+              };
+              if (Array.isArray(data?.value)) inboxChildren = inboxChildren.concat(data.value);
+              const nl = data?.["@odata.nextLink"];
+              const next = typeof nl === "string" && nl ? nextLinkToPath(nl) : null;
+              if (!next) break;
+              path = next;
+            }
+          } catch (e) {
+            console.warn("[microsoft-api] mail-folders: no se pudieron cargar hijos de inbox", e);
+          }
+        }
+
+        // Merge: root + inbox children (inbox children have their own IDs, no duplicates).
+        result = { folders: [...rootFolders, ...inboxChildren] };
         break;
       }
 
