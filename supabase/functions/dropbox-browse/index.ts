@@ -574,9 +574,13 @@ serve(async (req) => {
       }
 
       const scoped = parseScopedPath(linkPath);
-      const scopedHeaders = linkUserId
+      const scopedHeaders: Record<string, string> = linkUserId
         ? { 'Authorization': `Bearer ${DROPBOX_ACCESS_TOKEN}`, 'Content-Type': 'application/json', 'Dropbox-API-Select-User': linkUserId }
         : getScopedDropboxHeaders(DROPBOX_ACCESS_TOKEN, adminMemberId, rootNamespaceId, scoped.namespaceId);
+      // Team namespace paths also need Path-Root so Dropbox can resolve /Kawiil Mx/...
+      if (linkUserId && rootNamespaceId && !scopedHeaders['Dropbox-API-Path-Root']) {
+        scopedHeaders['Dropbox-API-Path-Root'] = JSON.stringify({ '.tag': 'namespace_id', namespace_id: rootNamespaceId });
+      }
 
       let shareUrl = "";
       try {
