@@ -125,14 +125,15 @@ Deno.serve(async (req) => {
       const onBreak = lastEv?.event_type === "break_start";
 
       let status: Status = WORK_MODE[s.work_mode] ?? WORK_MODE.office;
+      // Comida/descanso/trayecto no expiran solos (0): los termina el usuario.
       let expiration = endOfDay;
 
       if (onLunch) {
-        status = LUNCH;
+        status = LUNCH; expiration = 0;
       } else if (onBreak) {
-        status = BREAK;
+        status = BREAK; expiration = 0;
       } else if (s.in_transit) {
-        status = TRANSIT;
+        status = TRANSIT; expiration = 0;
       } else {
         // ¿En reunión? (calendario de Outlook del usuario)
         const { data: msTok } = await admin

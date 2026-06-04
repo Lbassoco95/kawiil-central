@@ -59,7 +59,13 @@ async function syncSlackStatus(status: SlackStatus | null): Promise<void> {
       await invokeSlackApi({ action: "users.profile.set", clear_status: true });
       return;
     }
-    // Expira al final del día (medianoche local) para no dejar el estado pegado.
+    // Comida/descanso/trayecto NO expiran solos: el usuario los termina
+    // manualmente (p. ej. comida con cliente sigue ocupado). El resto expira
+    // al final del día para no dejar el estado pegado.
+    const noExpire =
+      status === PAUSE_SLACK_STATUS.lunch ||
+      status === PAUSE_SLACK_STATUS.break ||
+      status === TRANSIT_SLACK_STATUS;
     const endOfDay = new Date();
     endOfDay.setHours(23, 59, 0, 0);
     await invokeSlackApi({
@@ -67,7 +73,7 @@ async function syncSlackStatus(status: SlackStatus | null): Promise<void> {
       profile: {
         status_text: status.text,
         status_emoji: status.emoji,
-        status_expiration: Math.floor(endOfDay.getTime() / 1000),
+        status_expiration: noExpire ? 0 : Math.floor(endOfDay.getTime() / 1000),
       },
     });
   } catch {
