@@ -1439,49 +1439,37 @@ Deno.serve(async (req) => {
 
       case "mail-folders": {
         // Fetch root folders first (fast).
-        const rootFolders = await listMailFoldersRootOnlyLegacy(accessToken) as Record<string, unknown>[];
+        const rootFolders = await listMailFoldersRootOnlyLegacy(accessToken);
 
-        // In Outlook, users commonly store custom folders as children of inbox.
-        // Fetch inbox children automatically so they appear alongside root folders.
-        const inboxFolder = rootFolders.find((f) => {
-          const wk = String(f.wellKnownFolderName || "").toLowerCase();
-          const dn = String(f.displayName || "").toLowerCase();
-          return wk === "inbox" || dn === "bandeja de entrada" || dn === "inbox";
-        });
-
+        // Always fetch inbox children using the well-known alias "inbox" — works
+        // regardless of language/locale, no need to search by name or wellKnownFolderName.
+        // Users commonly keep all their custom folders inside Inbox in Outlook.
         let inboxChildren: unknown[] = [];
-        if (inboxFolder && typeof inboxFolder.id === "string") {
-          const enc = encodeURIComponent(inboxFolder.id);
-          const childPaths = [
-            `/me/mailFolders/${enc}/childFolders?$select=${MAIL_FOLDER_LIST_SELECT}&$top=1000&includeHiddenFolders=true`,
-            `/me/mailFolders/${enc}/childFolders?$select=${MAIL_FOLDER_LIST_SELECT}&$top=1000`,
-            `/me/mailFolders/${enc}/childFolders?$top=1000`,
-          ];
-          for (const firstPath of childPaths) {
-            try {
-              const fetched: unknown[] = [];
-              let path: string | null = firstPath;
-              for (let page = 0; page < 10 && path; page++) {
-                const data = (await graphRequest(accessToken, path)) as {
-                  value?: unknown[];
-                  "@odata.nextLink"?: string;
-                };
-                if (Array.isArray(data?.value)) for (const v of data.value) fetched.push(v);
-                const nl = data?.["@odata.nextLink"];
-                path = typeof nl === "string" && nl ? nextLinkToPath(nl) : null;
-              }
-              if (fetched.length > 0) {
-                inboxChildren = fetched;
-                console.log(`[microsoft-api] mail-folders: ${fetched.length} inbox children loaded`);
-                break;
-              }
-            } catch (e) {
-              console.warn("[microsoft-api] mail-folders: inbox children fetch failed, trying next strategy", String(e).slice(0, 200));
+        const inboxChildStrategies = [
+          `/me/mailFolders/inbox/childFolders?$top=1000&includeHiddenFolders=true`,
+          `/me/mailFolders/inbox/childFolders?$top=1000`,
+        ];
+        for (const firstPath of inboxChildStrategies) {
+          try {
+            const fetched: unknown[] = [];
+            let path: string | null = firstPath;
+            for (let page = 0; page < 10 && path; page++) {
+              const data = (await graphRequest(accessToken, path)) as {
+                value?: unknown[];
+                "@odata.nextLink"?: string;
+              };
+              if (Array.isArray(data?.value)) for (const v of data.value) fetched.push(v);
+              const nl = data?.["@odata.nextLink"];
+              path = typeof nl === "string" && nl ? nextLinkToPath(nl) : null;
             }
+            inboxChildren = fetched;
+            console.log(`[microsoft-api] mail-folders: inbox children=${fetched.length} (strategy=${firstPath.includes("Hidden") ? "withHidden" : "plain"})`);
+            break;
+          } catch (e) {
+            console.warn("[microsoft-api] mail-folders: inbox children strategy failed, trying next", String(e).slice(0, 300));
           }
         }
 
-        // Merge: root + inbox children (inbox children have their own IDs, no duplicates).
         result = { folders: [...rootFolders, ...inboxChildren] };
         break;
       }
