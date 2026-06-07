@@ -992,6 +992,31 @@ export function useUploadCandidateCv() {
   });
 }
 
+/** Sube el PDF del examen/psicométrico del candidato (bucket privado 'cv'). */
+export function useUploadCandidateExam() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ candidate, file }: { candidate: Candidate; file: File }) => {
+      const ext = file.name.split(".").pop()?.toLowerCase() || "pdf";
+      const path = `${candidate.organization_id}/${candidate.id}/examen_${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from(CV_BUCKET)
+        .upload(path, file, { upsert: true, contentType: file.type || undefined });
+      if (upErr) throw upErr;
+      const { error } = await db.from("rh_candidates").update({ assessment_file_path: path }).eq("id", candidate.id);
+      if (error) throw error;
+      await logActivity(candidate.organization_id, user!.id, candidate.id, "note", `Examen cargado: ${file.name}`);
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["rh-candidates", vars.candidate.process_id] });
+      qc.invalidateQueries({ queryKey: ["rh-candidate-activities", vars.candidate.id] });
+      toast.success("Examen cargado");
+    },
+    onError: (e: Error) => toast.error(e.message || "No se pudo cargar el examen"),
+  });
+}
+
 /** Sube el CV de un candidato recién creado (cuando ya tenemos su id). */
 export async function uploadCandidateCvByIds(orgId: string, candidateId: string, file: File): Promise<void> {
   const ext = file.name.split(".").pop()?.toLowerCase() || "pdf";
