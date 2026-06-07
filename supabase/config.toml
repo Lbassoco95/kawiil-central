@@ -1,6 +1,8 @@
 project_id = "qppfampapbxdgednkofc"
 
 [functions]
+  [functions.recruit-apply]
+    verify_jwt = false
   [functions.auth-email-hook]
     verify_jwt = false
   [functions.savio-webhook]
