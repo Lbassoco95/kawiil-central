@@ -20,6 +20,7 @@ import Configuracion from "./pages/Admin";
 import ClienteDetalle from "./pages/ClienteDetalle";
 import ProyectoDetalle from "./pages/ProyectoDetalle";
 import CambiarContrasena from "./pages/CambiarContrasena";
+import PostularVacante from "./pages/PostularVacante";
 import Microsoft365Calendario from "./pages/Microsoft365Calendario";
 import Microsoft365Correo from "./pages/Microsoft365Correo";
 import Hub from "./pages/Hub";
@@ -63,6 +64,7 @@ const App = () => (
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/cambiar-contrasena" element={<CambiarContrasena />} />
+              <Route path="/postular/:token" element={<PostularVacante />} />
               <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
               <Route path="/dashboard" element={<ProtectedRoute><Navigate to="/" replace /></ProtectedRoute>} />
               <Route path="/clientes" element={<ProtectedRoute><Clientes /></ProtectedRoute>} />

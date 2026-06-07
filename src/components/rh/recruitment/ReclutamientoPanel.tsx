@@ -28,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Plus, Loader2, Briefcase, UserPlus, Columns3, Tag, Upload, FileText, ClipboardList, Mail, FileUp, Users, UserCog, Eye } from "lucide-react";
+import { ArrowLeft, Plus, Loader2, Briefcase, UserPlus, Columns3, Tag, Upload, FileText, ClipboardList, Mail, FileUp, Users, UserCog, Eye, Share2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatMX } from "@/lib/dateUtils";
 import { toast } from "sonner";
@@ -334,6 +334,19 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
             <Button size="sm" variant="outline" onClick={() => setImportOpen(true)}>
               <FileUp className="mr-1.5 h-3.5 w-3.5" /> Importar
             </Button>
+            {process.apply_token && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  const url = `${window.location.origin}/postular/${process.apply_token}`;
+                  navigator.clipboard?.writeText(url);
+                  toast.success("Link de postulación copiado. Pégalo en Computrabajo, LinkedIn, etc.");
+                }}
+              >
+                <Share2 className="mr-1.5 h-3.5 w-3.5" /> Publicar
+              </Button>
+            )}
             {isRecruiter && (
               <>
                 <Button size="sm" variant="outline" onClick={() => setInterviewersOpen(true)}>

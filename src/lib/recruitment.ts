@@ -19,6 +19,8 @@ export interface RecruitmentProcess {
   status: RhProcessStatus;
   grade: string | null;
   budget: number | null;
+  apply_token: string | null;
+  apply_open: boolean;
   created_by: string | null;
   created_at: string;
   updated_at: string;
