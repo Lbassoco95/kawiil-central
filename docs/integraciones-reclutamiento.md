@@ -90,3 +90,41 @@ Para cada integración que decidamos activar, se necesita:
 > el ciclo completo (pipeline, comunicación, evaluación con rúbrica, panel CHRO,
 > onboarding). Las integraciones **automatizan la captación y el psicométrico**,
 > pero son aceleradores, no bloqueantes.
+
+---
+
+## 4. Decisiones acordadas (junio 2026)
+
+### Computrabajo → solo "traer la info" y contactar desde Kawiil
+No requiere API. El flujo realista y barato:
+1. Las **postulaciones de Computrabajo llegan por correo** a un buzón.
+2. Ese buzón se **conecta al módulo de Correo** de Kawiil (ya existe la
+   integración con Outlook/Microsoft) → ahí **se ven los correos** entrantes.
+3. Se **transcribe** el candidato a la vacante (alta manual; o, a futuro, un
+   parser/IA que prellene desde el correo).
+4. **El contacto y la comunicación se hacen desde la ficha del candidato**
+   (envío de correo + bitácora), ya disponible.
+
+> Resultado: comunicación centralizada en Kawiil, sin depender de la API de
+> Computrabajo (que no es abierta).
+
+### Correos para enviar — opción accesible o nula
+- **Recomendado (costo $0 si ya hay Microsoft 365):** crear un **buzón
+  compartido** `reclutamiento@kawiil.mx` en M365. Los buzones compartidos **no
+  consumen licencia** (gratis), reciben las postulaciones de Computrabajo y
+  permiten **enviar desde esa dirección** vía el módulo de Correo.
+- **Alternativas low‑cost** si no se usa M365:
+  - **Zoho Mail** — plan gratuito con dominio propio (límite de usuarios/envíos).
+  - **Resend / SendGrid** — capa gratuita para **envío** transaccional (ideal
+    para mensajes automáticos), requiere verificar el dominio.
+- Para **enviar a nombre del dominio** (cualquier proveedor) hay que configurar
+  **SPF, DKIM y DMARC** del dominio kawiil.mx (lo hace quien administre el DNS).
+
+### Psicométrico — Psicotest o manual + PDF
+- **Opción A — Psicotest** (u otro proveedor con API/webhook como Evalart):
+  pedir **cuenta + API key + webhook** para traer el resultado automático. Si
+  no, se queda manual.
+- **Opción B (ya implementada) — manual:** en la ficha del candidato se puede
+  **subir el PDF del examen/psicométrico** y pegar la **liga**; la **calificación
+  y scoring** se registran en la **rúbrica** (pestaña Evaluación). Cero costo,
+  sin integración.

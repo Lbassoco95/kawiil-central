@@ -59,6 +59,7 @@ export interface Candidate {
   source: string | null;
   resume_url: string | null;
   assessment_url: string | null;
+  assessment_file_path: string | null;
   rating: number;
   status: RhCandidateStatus;
   notes: string | null;

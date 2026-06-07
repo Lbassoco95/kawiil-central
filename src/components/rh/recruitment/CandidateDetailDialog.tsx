@@ -53,6 +53,7 @@ import {
   useDeleteCandidate,
   useLogCandidateEmail,
   useUploadCandidateCv,
+  useUploadCandidateExam,
   getCvSignedUrl,
 } from "@/hooks/useRecruitment";
 import { useSendNewEmail } from "@/hooks/useMicrosoft";
@@ -131,8 +132,10 @@ function CandidateDetailInner({
   const updateCandidate = useUpdateCandidate();
   const logEmail = useLogCandidateEmail();
   const uploadCv = useUploadCandidateCv();
+  const uploadExam = useUploadCandidateExam();
   const sendEmail = useSendNewEmail();
   const fileRef = useRef<HTMLInputElement>(null);
+  const examRef = useRef<HTMLInputElement>(null);
 
   const [note, setNote] = useState("");
   const [emailOpen, setEmailOpen] = useState(false);
@@ -215,6 +218,13 @@ function CandidateDetailInner({
     setOpeningCv(false);
     if (url) window.open(url, "_blank", "noopener");
     else toast.error("No se pudo abrir el CV.");
+  }
+
+  async function handleViewExam() {
+    if (!candidate.assessment_file_path) return;
+    const url = await getCvSignedUrl(candidate.assessment_file_path);
+    if (url) window.open(url, "_blank", "noopener");
+    else toast.error("No se pudo abrir el examen.");
   }
 
   return (
@@ -395,13 +405,29 @@ function CandidateDetailInner({
           </div>
 
           <div className="space-y-1.5">
-            <Label>Liga de examen / psicométrico</Label>
-            <Input value={form.assessment_url} onChange={(e) => setForm((f) => ({ ...f, assessment_url: e.target.value }))} placeholder="Tally, TypeForm, Evalart…" className="h-8 text-sm" />
-            {candidate.assessment_url && (
-              <a href={candidate.assessment_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline">
-                Abrir examen del candidato
-              </a>
-            )}
+            <Label>Examen / psicométrico</Label>
+            <Input value={form.assessment_url} onChange={(e) => setForm((f) => ({ ...f, assessment_url: e.target.value }))} placeholder="Liga (Tally, TypeForm, Psicotest…)" className="h-8 text-sm" />
+            <div className="flex flex-wrap items-center gap-2">
+              {candidate.assessment_url && (
+                <a href={candidate.assessment_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline">
+                  Abrir liga
+                </a>
+              )}
+              {candidate.assessment_file_path && (
+                <Button size="sm" variant="outline" onClick={handleViewExam}>
+                  <FileText className="mr-1.5 h-3.5 w-3.5" /> Ver examen (PDF)
+                </Button>
+              )}
+              <Button size="sm" variant="ghost" onClick={() => examRef.current?.click()} disabled={uploadExam.isPending}>
+                {uploadExam.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1.5 h-3.5 w-3.5" />}
+                {candidate.assessment_file_path ? "Reemplazar PDF" : "Subir PDF del examen"}
+              </Button>
+              <input
+                ref={examRef} type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/*" className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadExam.mutate({ candidate, file: f }); e.target.value = ""; }}
+              />
+            </div>
+            <p className="text-[10px] text-muted-foreground">La calificación va en la pestaña Evaluación (rúbrica).</p>
           </div>
 
           <div className="flex items-center justify-between gap-2">
