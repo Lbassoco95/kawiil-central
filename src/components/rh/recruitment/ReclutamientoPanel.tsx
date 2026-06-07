@@ -30,8 +30,10 @@ import {
 } from "@/components/ui/select";
 import { ArrowLeft, Plus, Loader2, Briefcase, UserPlus, Columns3, Tag, Upload, FileText, ClipboardList, Mail, FileUp, Users, UserCog, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatMX } from "@/lib/dateUtils";
 import { toast } from "sonner";
 import {
+  GRADES,
   PROCESS_STATUS_LABEL,
   PROCESS_STATUS_STYLE,
   STATE_COLOR_STYLE,
@@ -56,6 +58,7 @@ import {
   useOrgName,
   useIsRecruiter,
   useIsProcessOwner,
+  useLastContacts,
   uploadCandidateCvByIds,
 } from "@/hooks/useRecruitment";
 import { useCelulas } from "@/hooks/useCatalogs";
@@ -149,11 +152,15 @@ function NewProcessDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
   const [title, setTitle] = useState("");
   const [celulaId, setCelulaId] = useState("");
   const [description, setDescription] = useState("");
+  const [grade, setGrade] = useState("");
+  const [budget, setBudget] = useState("");
 
   function reset() {
     setTitle("");
     setCelulaId("");
     setDescription("");
+    setGrade("");
+    setBudget("");
   }
 
   return (
@@ -176,6 +183,21 @@ function NewProcessDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
               </SelectContent>
             </Select>
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Grado</Label>
+              <Select value={grade} onValueChange={setGrade}>
+                <SelectTrigger><SelectValue placeholder="G1–G4" /></SelectTrigger>
+                <SelectContent>
+                  {GRADES.map((g) => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Presupuesto ($/mes)</Label>
+              <Input type="number" min={0} value={budget} onChange={(e) => setBudget(e.target.value)} placeholder="10500" />
+            </div>
+          </div>
           <div className="space-y-1.5">
             <Label>Descripción (opcional)</Label>
             <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
@@ -186,7 +208,7 @@ function NewProcessDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
           <Button
             disabled={!title.trim() || !celulaId || create.isPending}
             onClick={() => create.mutate(
-              { title: title.trim(), celula_id: celulaId, description: description.trim() || null },
+              { title: title.trim(), celula_id: celulaId, description: description.trim() || null, grade: grade || null, budget: budget ? Number(budget) : null },
               { onSuccess: () => { onOpenChange(false); reset(); } },
             )}
           >
@@ -222,10 +244,14 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
   const [interviewersOpen, setInterviewersOpen] = useState(false);
   const [ownersOpen, setOwnersOpen] = useState(false);
   const [detail, setDetail] = useState<Candidate | null>(null);
+  const [filterSource, setFilterSource] = useState("all");
+  const [filterFrom, setFilterFrom] = useState("");
 
   const defaultStateId = states.find((s) => s.is_default)?.id ?? states[0]?.id ?? null;
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  const { data: lastContacts = {} } = useLastContacts(candidates.map((c) => c.id));
 
   const detailLive = useMemo(
     () => (detail ? candidates.find((c) => c.id === detail.id) ?? null : null),
@@ -234,14 +260,29 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
 
   const stateById = useMemo(() => new Map(states.map((s) => [s.id, s])), [states]);
 
+  // Canales disponibles (para el filtro).
+  const sources = useMemo(
+    () => [...new Set(candidates.map((c) => (c.source || "").trim()).filter(Boolean))].sort(),
+    [candidates],
+  );
+
+  const filtered = useMemo(
+    () => candidates.filter((c) => {
+      if (filterSource !== "all" && (c.source || "").trim() !== filterSource) return false;
+      if (filterFrom && new Date(c.created_at) < new Date(`${filterFrom}T00:00:00`)) return false;
+      return true;
+    }),
+    [candidates, filterSource, filterFrom],
+  );
+
   const byStage = useMemo(() => {
     const m = new Map<string, Candidate[]>();
     for (const s of stages) m.set(s.id, []);
-    for (const c of candidates) {
+    for (const c of filtered) {
       if (c.stage_id && m.has(c.stage_id)) m.get(c.stage_id)!.push(c);
     }
     return m;
-  }, [stages, candidates]);
+  }, [stages, filtered]);
 
   const handleDragEnd = (e: DragEndEvent) => {
     if (!canManage) return;
@@ -260,8 +301,13 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
           <ArrowLeft className="mr-1 h-4 w-4" /> Vacantes
         </Button>
         <div className="min-w-0 flex-1">
-          <h3 className="truncate text-base font-semibold">{process.title}</h3>
-          {celulaName && <p className="text-xs text-muted-foreground">{celulaName}</p>}
+          <h3 className="flex items-center gap-2 truncate text-base font-semibold">
+            {process.title}
+            {process.grade && <Badge variant="secondary" className="text-[10px]">{process.grade}</Badge>}
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            {[celulaName, process.budget != null ? `$${process.budget.toLocaleString("es-MX")}/mes` : null].filter(Boolean).join(" · ")}
+          </p>
         </div>
         {canManage ? (
           <>
@@ -314,6 +360,24 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
         )}
       </div>
 
+      {/* Filtros por canal y fecha */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Select value={filterSource} onValueChange={setFilterSource}>
+          <SelectTrigger className="h-8 w-[160px] text-sm"><SelectValue placeholder="Canal" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos los canales</SelectItem>
+            {sources.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-muted-foreground">Desde</span>
+          <Input type="date" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} className="h-8 w-[150px] text-sm" />
+        </div>
+        {(filterSource !== "all" || filterFrom) && (
+          <Button size="sm" variant="ghost" onClick={() => { setFilterSource("all"); setFilterFrom(""); }}>Limpiar</Button>
+        )}
+      </div>
+
       {isLoading ? (
         <div className="flex h-40 items-center justify-center">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -328,6 +392,7 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
                     key={c.id}
                     candidate={c}
                     state={c.state_id ? stateById.get(c.state_id) : undefined}
+                    lastContact={lastContacts[c.id] ?? null}
                     draggable={canManage}
                     onClick={() => setDetail(c)}
                   />
@@ -405,11 +470,13 @@ function DroppableColumn({ stage, count, children }: { stage: RecruitmentStage; 
 function DraggableCard({
   candidate,
   state,
+  lastContact,
   draggable,
   onClick,
 }: {
   candidate: Candidate;
   state: RecruitmentState | undefined;
+  lastContact: string | null;
   draggable: boolean;
   onClick: () => void;
 }) {
@@ -454,6 +521,13 @@ function DraggableCard({
             {candidate.email && <p className="min-w-0 truncate text-xs text-muted-foreground">{candidate.email}</p>}
             {candidate.resume_url && <FileText className="h-3 w-3 shrink-0 text-muted-foreground" />}
           </div>
+          {(lastContact || candidate.source) && (
+            <p className="text-[10px] text-muted-foreground">
+              {candidate.source ? candidate.source : ""}
+              {candidate.source && lastContact ? " · " : ""}
+              {lastContact ? `últ. contacto ${formatMX(lastContact, "dd MMM")}` : ""}
+            </p>
+          )}
         </CardContent>
       </Card>
     </div>
