@@ -68,6 +68,7 @@ import { EmailTemplateManagerDialog } from "./EmailTemplateManagerDialog";
 import { CandidateImportDialog } from "./CandidateImportDialog";
 import { InterviewerManagerDialog } from "./InterviewerManagerDialog";
 import { OwnerManagerDialog } from "./OwnerManagerDialog";
+import { RecruitmentCHROPanel } from "./RecruitmentCHROPanel";
 
 const PROCESS_STATUSES: RhProcessStatus[] = ["open", "paused", "closed", "filled"];
 
@@ -101,6 +102,8 @@ function ProcessList({ onOpen }: { onOpen: (p: RecruitmentProcess) => void }) {
           </Button>
         )}
       </div>
+
+      {isAdmin && <RecruitmentCHROPanel />}
 
       {isLoading ? (
         <div className="flex h-32 items-center justify-center">

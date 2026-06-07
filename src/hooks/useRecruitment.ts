@@ -602,6 +602,31 @@ export function useCandidates(processId: string | null) {
   });
 }
 
+/* ---------------- Panel CHRO: vistas org-wide (reclutador/G4) ---------------- */
+export function useAllCandidates(enabled: boolean) {
+  return useQuery({
+    queryKey: ["rh-all-candidates"],
+    queryFn: async (): Promise<Candidate[]> => {
+      const { data, error } = await db.from("rh_candidates").select("*").order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data as Candidate[]) ?? [];
+    },
+    enabled,
+  });
+}
+
+export function useAllCandidateActivities(enabled: boolean) {
+  return useQuery({
+    queryKey: ["rh-all-candidate-activities"],
+    queryFn: async (): Promise<{ candidate_id: string; activity_type: string; created_at: string }[]> => {
+      const { data, error } = await db.from("rh_candidate_activities").select("candidate_id, activity_type, created_at");
+      if (error) throw error;
+      return (data as { candidate_id: string; activity_type: string; created_at: string }[]) ?? [];
+    },
+    enabled,
+  });
+}
+
 export function useCreateCandidate() {
   const { user } = useAuth();
   const qc = useQueryClient();
