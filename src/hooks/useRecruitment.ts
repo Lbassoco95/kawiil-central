@@ -233,7 +233,7 @@ export function useCreateProcess() {
   const { user } = useAuth();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { title: string; celula_id: string; description?: string | null }) => {
+    mutationFn: async (input: { title: string; celula_id: string; description?: string | null; grade?: string | null; budget?: number | null }) => {
       const orgId = await getMyOrgId(user!.id);
       const { data, error } = await db
         .from("rh_recruitment_processes")
@@ -242,6 +242,8 @@ export function useCreateProcess() {
           title: input.title,
           description: input.description ?? null,
           celula_id: input.celula_id,
+          grade: input.grade ?? null,
+          budget: input.budget ?? null,
           created_by: user!.id,
         })
         .select("id")
@@ -599,6 +601,28 @@ export function useCandidates(processId: string | null) {
       return (data as Candidate[]) ?? [];
     },
     enabled: !!processId,
+  });
+}
+
+/** Fecha del último contacto/movimiento por candidato (para el pipeline). */
+export function useLastContacts(candidateIds: string[]) {
+  const key = candidateIds.slice().sort().join(",");
+  return useQuery({
+    queryKey: ["rh-last-contacts", key],
+    queryFn: async (): Promise<Record<string, string>> => {
+      if (candidateIds.length === 0) return {};
+      const { data, error } = await db
+        .from("rh_candidate_activities")
+        .select("candidate_id, created_at")
+        .in("candidate_id", candidateIds);
+      if (error) throw error;
+      const m: Record<string, string> = {};
+      for (const a of (data as { candidate_id: string; created_at: string }[]) ?? []) {
+        if (!m[a.candidate_id] || a.created_at > m[a.candidate_id]) m[a.candidate_id] = a.created_at;
+      }
+      return m;
+    },
+    enabled: candidateIds.length > 0,
   });
 }
 

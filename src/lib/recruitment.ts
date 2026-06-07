@@ -17,10 +17,15 @@ export interface RecruitmentProcess {
   celula_id: string | null;
   description: string | null;
   status: RhProcessStatus;
+  grade: string | null;
+  budget: number | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
 }
+
+/** Grados del modelo de talento (G1–G4). */
+export const GRADES = ["G1", "G2", "G3", "G4"];
 
 export interface RecruitmentStage {
   id: string;
@@ -53,6 +58,7 @@ export interface Candidate {
   phone: string | null;
   source: string | null;
   resume_url: string | null;
+  assessment_url: string | null;
   rating: number;
   status: RhCandidateStatus;
   notes: string | null;

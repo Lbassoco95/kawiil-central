@@ -153,6 +153,7 @@ function CandidateDetailInner({
     available_from: candidate.available_from ?? "",
     linkedin_url: candidate.linkedin_url ?? "",
     portfolio_url: candidate.portfolio_url ?? "",
+    assessment_url: candidate.assessment_url ?? "",
   });
 
   const currentState = states.find((s) => s.id === candidate.state_id);
@@ -188,6 +189,7 @@ function CandidateDetailInner({
         available_from: form.available_from || null,
         linkedin_url: form.linkedin_url.trim() || null,
         portfolio_url: form.portfolio_url.trim() || null,
+        assessment_url: form.assessment_url.trim() || null,
       },
     });
   }
@@ -392,6 +394,16 @@ function CandidateDetailInner({
             </div>
           </div>
 
+          <div className="space-y-1.5">
+            <Label>Liga de examen / psicométrico</Label>
+            <Input value={form.assessment_url} onChange={(e) => setForm((f) => ({ ...f, assessment_url: e.target.value }))} placeholder="Tally, TypeForm, Evalart…" className="h-8 text-sm" />
+            {candidate.assessment_url && (
+              <a href={candidate.assessment_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline">
+                Abrir examen del candidato
+              </a>
+            )}
+          </div>
+
           <div className="flex items-center justify-between gap-2">
             {confirmDelete ? (
               <div className="flex items-center gap-1.5">
@@ -548,6 +560,7 @@ function ProfileReadOnly({ candidate }: { candidate: Candidate }) {
     { label: "Software", value: candidate.skills?.length ? candidate.skills.join(", ") : null },
     { label: "LinkedIn", value: candidate.linkedin_url },
     { label: "Portafolio", value: candidate.portfolio_url },
+    { label: "Examen / psicométrico", value: candidate.assessment_url },
   ].filter((r) => r.value);
 
   if (rows.length === 0) {
