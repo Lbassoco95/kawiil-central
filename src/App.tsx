@@ -24,6 +24,7 @@ import PostularVacante from "./pages/PostularVacante";
 import Microsoft365Calendario from "./pages/Microsoft365Calendario";
 import Microsoft365Correo from "./pages/Microsoft365Correo";
 import Hub from "./pages/Hub";
+import RecursosHumanos from "./pages/RecursosHumanos";
 import Notificaciones from "./pages/Notificaciones";
 import Comunicacion from "./pages/Comunicacion";
 import AsistenteIA from "./pages/AsistenteIA";
@@ -97,6 +98,8 @@ const App = () => (
               <Route path="/microsoft365/correo" element={<ProtectedRoute><ModuleGate moduleKey="correo"><Microsoft365Correo /></ModuleGate></ProtectedRoute>} />
               <Route path="/documentos" element={<ProtectedRoute><ModuleGate moduleKey="documentos"><Documentos /></ModuleGate></ProtectedRoute>} />
               <Route path="/hub" element={<ProtectedRoute><ModuleGate moduleKey="hub"><Hub /></ModuleGate></ProtectedRoute>} />
+              <Route path="/rh" element={<ProtectedRoute><ModuleGate moduleKey="hub"><RecursosHumanos /></ModuleGate></ProtectedRoute>} />
+              <Route path="/reclutamiento" element={<Navigate to="/rh?rh=reclutamiento" replace />} />
               <Route path="/despacho" element={<Navigate to="/hub" replace />} />
               <Route path="/notificaciones" element={<ProtectedRoute><Notificaciones /></ProtectedRoute>} />
               <Route path="/comunicacion" element={<ProtectedRoute><Comunicacion /></ProtectedRoute>} />
