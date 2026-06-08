@@ -23,6 +23,7 @@ function fileToBase64(file: File): Promise<string> {
 export default function PostularVacante() {
   const { token = "" } = useParams();
   const [info, setInfo] = useState<Info | null>(null);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [done, setDone] = useState(false);
@@ -39,7 +40,9 @@ export default function PostularVacante() {
   useEffect(() => {
     (async () => {
       const { data, error } = await supabase.functions.invoke("recruit-apply", { body: { action: "info", token } });
-      if (error || (data as { error?: string })?.error) setInfo(null);
+      const dErr = (data as { error?: string })?.error;
+      if (error) setErrMsg("No se pudo conectar con el servidor. (¿La función recruit-apply está desplegada?)");
+      else if (dErr) setErrMsg(dErr);
       else setInfo(data as Info);
       setLoading(false);
     })();
@@ -77,7 +80,7 @@ export default function PostularVacante() {
           </CardContent>
         ) : !info ? (
           <CardContent className="py-12 text-center text-sm text-muted-foreground">
-            Esta vacante no está disponible.
+            {errMsg ?? "Esta vacante no está disponible."}
           </CardContent>
         ) : done ? (
           <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
