@@ -238,12 +238,17 @@ export const ACTIVITY_LABEL: Record<RhCandidateActivityType, string> = {
 };
 
 /** Fases por defecto al crear una vacante. */
+// Etapas del pipeline según el brief CHRO. El descarte/contratación se maneja
+// como ESTADO (ver DEFAULT_STATES), no como columna del Kanban.
 export const DEFAULT_STAGES = [
   "Postulado",
-  "Entrevista RH",
-  "Entrevista técnica",
+  "Revisión CV",
+  "Invitado",
+  "Entrevista",
+  "Examen",
+  "Decisión",
   "Oferta",
-  "Contratado",
+  "Onboarding",
 ];
 
 /** Estados por defecto al crear una vacante (el primero es el inicial). */

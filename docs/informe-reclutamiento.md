@@ -14,7 +14,7 @@ información **entra sola**. Lo único que queda fuera del alcance interno es la
 
 ### 1. Pipeline de candidatos (Kanban)
 - ✅ Kanban por vacante, tiempo real, arrastrar tarjetas.
-- ✅ Etapas **configurables** por vacante.
+- ✅ Etapas del brief por defecto: **Postulado → Revisión CV → Invitado → Entrevista → Examen → Decisión → Oferta → Onboarding** (configurables por vacante). El **descarte/contratación** se maneja como **estado/semáforo** (Descartado, Contratado, Declinó), no como columna.
 - ✅ Tarjeta: nombre, **canal de origen**, **score** (semáforo), pretensión, notas, **último contacto**, indicador de CV.
 - ✅ **Filtros** por canal y fecha (además de vacante/etapa).
 
@@ -33,7 +33,7 @@ información **entra sola**. Lo único que queda fuera del alcance interno es la
 - ✅ **Recordatorio 48 h**: digest diario a G4 con candidatos sin avance.
 
 ### 5. Evaluación y psicométricos
-- ✅ **Rúbrica** ponderada (1–5) con semáforo, resultado en la tarjeta.
+- ✅ **Rúbrica** ponderada (1–5) con semáforo, resultado en la tarjeta. Funciona como **score compuesto**: CV / técnico / psicométrico se cargan como criterios ponderados → un solo número de referencia.
 - ✅ **Liga y PDF** del examen/psicométrico por candidato (Tally/TypeForm/Psicotest, fase 0).
 - 🟡 API de Evalart (resultado automático): pendiente (externo, requiere cuenta/API key).
 
