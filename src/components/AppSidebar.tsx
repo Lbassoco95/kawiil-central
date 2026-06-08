@@ -16,6 +16,7 @@ import {
   Search,
   Settings,
   Sparkles,
+  UserCog,
   Users,
   Wallet,
   X,
@@ -70,6 +71,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Operación",
     items: [
       { title: "Pipeline", url: "/pipeline", icon: Kanban, view: "pipeline", moduleKey: "pipeline" },
+      { title: "Recursos Humanos", url: "/rh", icon: UserCog, view: "rh", moduleKey: "hub", tooltip: "Jornada, expediente, reclutamiento, cuestionarios y tablero CHRO" },
       { title: "Documentos", url: "/documentos", icon: FileText, view: "documentos" },
       { title: "Finanzas", url: "/finanzas", icon: Wallet, view: "finanzas", moduleKey: "finanzas" },
     ],
