@@ -24,7 +24,7 @@ Deno.serve(async (req) => {
 
     const { data: proc } = await admin
       .from("rh_recruitment_processes")
-      .select("id, organization_id, title, area, status, apply_open")
+      .select("id, organization_id, title, area, status, apply_open, grade, budget, location, description")
       .eq("apply_token", token)
       .maybeSingle();
 
@@ -32,7 +32,15 @@ Deno.serve(async (req) => {
     const open = proc.apply_open && proc.status === "open";
 
     if (body.action === "info") {
-      return json({ title: proc.title, area: proc.area, open });
+      return json({
+        title: proc.title,
+        area: proc.area,
+        grade: proc.grade,
+        budget: proc.budget,
+        location: proc.location,
+        description: proc.description,
+        open,
+      });
     }
 
     if (body.action === "apply") {

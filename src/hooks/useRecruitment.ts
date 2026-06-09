@@ -233,7 +233,7 @@ export function useCreateProcess() {
   const { user } = useAuth();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { title: string; celula_id: string; description?: string | null; grade?: string | null; budget?: number | null }) => {
+    mutationFn: async (input: { title: string; celula_id: string; description?: string | null; grade?: string | null; budget?: number | null; location?: string | null }) => {
       const orgId = await getMyOrgId(user!.id);
       const { data, error } = await db
         .from("rh_recruitment_processes")
@@ -244,6 +244,7 @@ export function useCreateProcess() {
           celula_id: input.celula_id,
           grade: input.grade ?? null,
           budget: input.budget ?? null,
+          location: input.location ?? null,
           created_by: user!.id,
         })
         .select("id")

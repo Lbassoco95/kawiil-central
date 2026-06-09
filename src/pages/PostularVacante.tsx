@@ -1,15 +1,28 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, CheckCircle2, Upload, Briefcase } from "lucide-react";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import { Loader2, CheckCircle2, Upload, MapPin, Wallet, Briefcase } from "lucide-react";
 import { toast } from "sonner";
 
-type Info = { title: string; area: string | null; open: boolean };
+type Info = {
+  title: string;
+  area: string | null;
+  grade: string | null;
+  budget: number | null;
+  location: string | null;
+  description: string | null;
+  open: boolean;
+};
+
+const SOURCES = ["LinkedIn", "Computrabajo", "Indeed", "Referido por alguien", "Otro"];
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((res, rej) => {
@@ -18,6 +31,10 @@ function fileToBase64(file: File): Promise<string> {
     r.onerror = rej;
     r.readAsDataURL(file);
   });
+}
+
+function isValidEmail(v: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
 }
 
 export default function PostularVacante() {
@@ -48,8 +65,12 @@ export default function PostularVacante() {
     })();
   }, [token]);
 
+  const emailOk = isValidEmail(email);
+  const canSubmit = fullName.trim().length > 0 && emailOk;
+
   async function submit() {
     if (!fullName.trim()) return toast.error("Escribe tu nombre.");
+    if (!emailOk) return toast.error("Escribe un correo válido para poder contactarte.");
     setSending(true);
     try {
       let cv_base64: string | undefined;
@@ -71,9 +92,18 @@ export default function PostularVacante() {
     }
   }
 
+  const meta = info
+    ? [
+        info.area,
+        info.grade,
+        info.location,
+        info.budget != null ? `$${info.budget.toLocaleString("es-MX")}/mes` : null,
+      ].filter(Boolean) as string[]
+    : [];
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
-      <Card className="w-full max-w-md">
+      <Card className="w-full max-w-lg">
         {loading ? (
           <CardContent className="flex h-48 items-center justify-center">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -93,39 +123,77 @@ export default function PostularVacante() {
             Esta vacante ya no recibe postulaciones.
           </CardContent>
         ) : (
-          <>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Briefcase className="h-5 w-5 text-primary" />
-                Postúlate: {info.title}
-              </CardTitle>
-              {info.area && <p className="text-sm text-muted-foreground">{info.area}</p>}
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="space-y-1.5">
-                <Label>Nombre completo *</Label>
-                <Input value={fullName} onChange={(e) => setFullName(e.target.value)} />
+          <CardContent className="space-y-5 p-5 sm:p-6">
+            {/* ---------- Contexto de la vacante ---------- */}
+            <div className="space-y-3 border-b pb-4">
+              <img
+                src="/images/kawiil-logo.png"
+                alt="Kawiil"
+                className="h-9 w-auto"
+                onError={(e) => { (e.currentTarget.style.display = "none"); }}
+              />
+              <div>
+                <h1 className="text-xl font-bold tracking-tight">{info.title}</h1>
+                {meta.length > 0 && (
+                  <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                    {info.area && <span className="inline-flex items-center gap-1"><Briefcase className="h-3.5 w-3.5" />{info.area}</span>}
+                    {info.location && <span className="inline-flex items-center gap-1"><MapPin className="h-3.5 w-3.5" />{info.location}</span>}
+                    {info.budget != null && <span className="inline-flex items-center gap-1"><Wallet className="h-3.5 w-3.5" />${info.budget.toLocaleString("es-MX")}/mes</span>}
+                    {info.grade && <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-medium">{info.grade}</span>}
+                  </div>
+                )}
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              {info.description && (
+                <p className="whitespace-pre-line text-sm leading-relaxed text-foreground/80">{info.description}</p>
+              )}
+            </div>
+
+            {/* ---------- Formulario ---------- */}
+            <div className="space-y-3">
+              <p className="text-sm font-medium">Postúlate a esta vacante</p>
+
+              <div className="space-y-1.5">
+                <Label>Nombre completo <span className="text-red-500">*</span></Label>
+                <Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="María Pérez García" />
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <Label>Correo</Label>
-                  <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+                  <Label>Correo <span className="text-red-500">*</span></Label>
+                  <Input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="tucorreo@ejemplo.com"
+                    aria-invalid={email.length > 0 && !emailOk}
+                  />
+                  {email.length > 0 && !emailOk && (
+                    <p className="text-xs text-red-500">Escribe un correo válido.</p>
+                  )}
                 </div>
                 <div className="space-y-1.5">
                   <Label>Teléfono</Label>
-                  <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
+                  <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="55 1234 5678" />
                 </div>
               </div>
+
               <div className="space-y-1.5">
                 <Label>¿Dónde viste la vacante?</Label>
-                <Input value={source} onChange={(e) => setSource(e.target.value)} placeholder="Computrabajo, LinkedIn, referido…" />
+                <Select value={source} onValueChange={setSource}>
+                  <SelectTrigger><SelectValue placeholder="Selecciona una opción" /></SelectTrigger>
+                  <SelectContent>
+                    {SOURCES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
+
               <div className="space-y-1.5">
                 <Label>Mensaje (opcional)</Label>
-                <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />
+                <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder="Cuéntanos brevemente por qué te interesa la vacante." />
               </div>
+
               <div className="space-y-1.5">
-                <Label>CV (opcional)</Label>
+                <Label>CV (recomendado)</Label>
                 <div className="flex items-center gap-2">
                   <Button type="button" size="sm" variant="outline" onClick={() => fileRef.current?.click()}>
                     <Upload className="mr-1.5 h-3.5 w-3.5" /> Adjuntar
@@ -135,14 +203,16 @@ export default function PostularVacante() {
                     onChange={(e) => setCv(e.target.files?.[0] ?? null)} />
                 </div>
               </div>
+
               {/* Honeypot oculto anti-spam */}
               <input type="text" value={company} onChange={(e) => setCompany(e.target.value)} className="hidden" tabIndex={-1} autoComplete="off" aria-hidden />
-              <Button className="w-full" onClick={submit} disabled={sending || !fullName.trim()}>
+
+              <Button className="w-full" size="lg" onClick={submit} disabled={sending || !canSubmit}>
                 {sending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Enviar postulación
               </Button>
-            </CardContent>
-          </>
+            </div>
+          </CardContent>
         )}
       </Card>
     </div>
