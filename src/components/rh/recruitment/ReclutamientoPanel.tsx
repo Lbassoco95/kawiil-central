@@ -154,6 +154,7 @@ function NewProcessDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
   const [description, setDescription] = useState("");
   const [grade, setGrade] = useState("");
   const [budget, setBudget] = useState("");
+  const [location, setLocation] = useState("");
 
   function reset() {
     setTitle("");
@@ -161,6 +162,7 @@ function NewProcessDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
     setDescription("");
     setGrade("");
     setBudget("");
+    setLocation("");
   }
 
   return (
@@ -199,8 +201,12 @@ function NewProcessDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
             </div>
           </div>
           <div className="space-y-1.5">
+            <Label>Ubicación (opcional)</Label>
+            <Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Roma Sur, CDMX · Presencial" />
+          </div>
+          <div className="space-y-1.5">
             <Label>Descripción (opcional)</Label>
-            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
+            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4} placeholder="Qué hará la persona, requisitos, modalidad… (se muestra en la página pública de postulación)" />
           </div>
         </div>
         <DialogFooter>
@@ -208,7 +214,7 @@ function NewProcessDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
           <Button
             disabled={!title.trim() || !celulaId || create.isPending}
             onClick={() => create.mutate(
-              { title: title.trim(), celula_id: celulaId, description: description.trim() || null, grade: grade || null, budget: budget ? Number(budget) : null },
+              { title: title.trim(), celula_id: celulaId, description: description.trim() || null, grade: grade || null, budget: budget ? Number(budget) : null, location: location.trim() || null },
               { onSuccess: () => { onOpenChange(false); reset(); } },
             )}
           >
