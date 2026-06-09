@@ -22,9 +22,11 @@ Deno.serve(async (req) => {
     const token = String(body.token ?? "").trim();
     if (!token) return json({ error: "Falta el token" }, 400);
 
+    // Usamos select("*") para no romper si la BD aún no tiene las columnas
+    // opcionales (grade/budget/location); las leemos con optional chaining.
     const { data: proc, error: procErr } = await admin
       .from("rh_recruitment_processes")
-      .select("id, organization_id, title, area, status, apply_open, grade, budget, location, description")
+      .select("*")
       .eq("apply_token", token)
       .maybeSingle();
 
@@ -35,11 +37,11 @@ Deno.serve(async (req) => {
     if (body.action === "info") {
       return json({
         title: proc.title,
-        area: proc.area,
-        grade: proc.grade,
-        budget: proc.budget,
-        location: proc.location,
-        description: proc.description,
+        area: proc.area ?? null,
+        grade: proc.grade ?? null,
+        budget: proc.budget ?? null,
+        location: proc.location ?? null,
+        description: proc.description ?? null,
         open,
       });
     }
