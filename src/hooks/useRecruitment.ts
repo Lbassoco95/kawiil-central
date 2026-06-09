@@ -815,6 +815,45 @@ export function useLogCandidateEmail() {
   });
 }
 
+/**
+ * Envía un correo al candidato desde el remitente corporativo (rh@kawiil.mx)
+ * vía la edge function `send-candidate-email`. El backend sustituye variables,
+ * envía con Resend y registra el envío en la bitácora SOLO si fue exitoso.
+ */
+export function useSendCandidateEmail() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      candidate,
+      subject,
+      body,
+    }: {
+      candidate: Candidate;
+      subject: string;
+      body: string;
+    }) => {
+      const { data, error } = await supabase.functions.invoke<{
+        message_id: string;
+        comunicacion_id: string | null;
+        error?: string;
+      }>("send-candidate-email", {
+        body: { candidate_id: candidate.id, subject, body },
+      });
+      // Las funciones devuelven el error en el cuerpo con status !=2xx.
+      const fnError = error
+        ? (await (error as { context?: Response }).context?.json?.().catch(() => null))?.error
+        : data?.error;
+      if (error || fnError) throw new Error(fnError || error?.message || "No se pudo enviar el correo.");
+      return data!;
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["rh-candidate-activities", vars.candidate.id] });
+      toast.success("Correo enviado");
+    },
+    onError: (e: Error) => toast.error(e.message || "No se pudo enviar el correo."),
+  });
+}
+
 /* ---------------- Importación masiva de candidatos (CSV/Excel) ---------------- */
 export type ImportCandidateRow = Partial<
   Pick<
