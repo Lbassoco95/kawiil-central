@@ -22,12 +22,13 @@ Deno.serve(async (req) => {
     const token = String(body.token ?? "").trim();
     if (!token) return json({ error: "Falta el token" }, 400);
 
-    const { data: proc } = await admin
+    const { data: proc, error: procErr } = await admin
       .from("rh_recruitment_processes")
       .select("id, organization_id, title, area, status, apply_open, grade, budget, location, description")
       .eq("apply_token", token)
       .maybeSingle();
 
+    if (procErr) return json({ error: `Error de base de datos: ${procErr.message}` }, 500);
     if (!proc) return json({ error: "Vacante no encontrada" }, 404);
     const open = proc.apply_open && proc.status === "open";
 
