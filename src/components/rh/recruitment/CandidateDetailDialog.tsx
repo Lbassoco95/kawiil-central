@@ -51,19 +51,11 @@ import {
   useSetCandidateScore,
   useUpdateCandidate,
   useDeleteCandidate,
-  useLogCandidateEmail,
+  useSendCandidateEmail,
   useUploadCandidateCv,
   useUploadCandidateExam,
   getCvSignedUrl,
 } from "@/hooks/useRecruitment";
-import { useSendNewEmail } from "@/hooks/useMicrosoft";
-
-function textToHtml(text: string): string {
-  return text
-    .split(/\n{2,}/)
-    .map((p) => `<p>${p.replace(/\n/g, "<br/>")}</p>`)
-    .join("");
-}
 
 interface Props {
   candidate: Candidate | null;
@@ -130,10 +122,9 @@ function CandidateDetailInner({
   const setState = useSetCandidateState();
   const setScore = useSetCandidateScore();
   const updateCandidate = useUpdateCandidate();
-  const logEmail = useLogCandidateEmail();
   const uploadCv = useUploadCandidateCv();
   const uploadExam = useUploadCandidateExam();
-  const sendEmail = useSendNewEmail();
+  const sendEmail = useSendCandidateEmail();
   const fileRef = useRef<HTMLInputElement>(null);
   const examRef = useRef<HTMLInputElement>(null);
 
@@ -201,8 +192,8 @@ function CandidateDetailInner({
     if (!candidate.email) return toast.error("El candidato no tiene correo.");
     if (!subject.trim() || !emailBody.trim()) return toast.error("Asunto y mensaje son obligatorios.");
     try {
-      await sendEmail.mutateAsync({ to: [candidate.email], subject, bodyHtml: textToHtml(emailBody) });
-      await logEmail.mutateAsync({ candidate, subject });
+      // Envía desde rh@kawiil.mx (Resend) y registra en la bitácora en el backend.
+      await sendEmail.mutateAsync({ candidate, subject, body: emailBody });
       setEmailOpen(false);
       setSubject("");
       setEmailBody("");
@@ -533,7 +524,7 @@ function CandidateDetailInner({
               <div className="flex justify-end">
                 <Button size="sm" onClick={handleSendEmail} disabled={sendEmail.isPending}>
                   {sendEmail.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}
-                  Enviar desde mi Outlook
+                  Enviar desde rh@kawiil.mx
                 </Button>
               </div>
             </div>
