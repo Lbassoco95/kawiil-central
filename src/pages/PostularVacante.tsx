@@ -57,10 +57,15 @@ export default function PostularVacante() {
   useEffect(() => {
     (async () => {
       const { data, error } = await supabase.functions.invoke("recruit-apply", { body: { action: "info", token } });
-      const dErr = (data as { error?: string })?.error;
-      if (error) setErrMsg("No se pudo conectar con el servidor. (¿La función recruit-apply está desplegada?)");
-      else if (dErr) setErrMsg(dErr);
-      else setInfo(data as Info);
+      if (error) {
+        // supabase-js marca como error cualquier 4xx/5xx; leemos el motivo real del cuerpo.
+        const body = await (error as { context?: Response }).context?.json?.().catch(() => null);
+        setErrMsg(body?.error ?? "No se pudo conectar con el servidor. Intenta de nuevo más tarde.");
+      } else {
+        const dErr = (data as { error?: string })?.error;
+        if (dErr) setErrMsg(dErr);
+        else setInfo(data as Info);
+      }
       setLoading(false);
     })();
   }, [token]);
