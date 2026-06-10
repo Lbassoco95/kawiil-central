@@ -1488,8 +1488,17 @@ Deno.serve(async (req) => {
           return [];
         }
 
+        // System well-known folder names that we never need to expand — their children
+        // (if any) are not custom user folders and would clutter the sidebar.
+        const SYSTEM_WELL_KNOWN = new Set([
+          "deleteditems", "sentitems", "junkemail", "outbox", "drafts",
+          "archive", "msgfolderroot", "recoverableitemsdeletions",
+          "conversationhistory", "scheduled",
+        ]);
+
         // Identify which root folders to fetch children for.
-        // Always include inbox (by wellKnownFolderName or alias), plus any folder advertising children.
+        // Always include inbox (by wellKnownFolderName or alias), plus any non-system folder
+        // that declares children. Skip system folders to avoid noise.
         const inboxFolder = rootFolders.find(
           (f) => String(f.wellKnownFolderName || "").toLowerCase() === "inbox"
         );
@@ -1504,10 +1513,12 @@ Deno.serve(async (req) => {
           parentIdsToFetch.add("__inbox_alias__");
         }
 
-        // Add any other root folder that has children.
+        // Add non-system root folders that have children.
         for (const f of rootFolders) {
           const id = typeof f.id === "string" ? f.id : null;
           if (!id) continue;
+          const wk = String(f.wellKnownFolderName || "").toLowerCase();
+          if (wk && SYSTEM_WELL_KNOWN.has(wk)) continue; // skip system folders
           const cc = typeof f.childFolderCount === "number" ? f.childFolderCount : -1;
           if (cc !== 0) parentIdsToFetch.add(id);
         }
