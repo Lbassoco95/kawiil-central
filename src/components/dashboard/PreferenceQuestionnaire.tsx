@@ -164,17 +164,24 @@ export function PreferenceQuestionnaire({ open, onClose, onCompleted }: Props) {
     if (!user) return;
     setSaving(true);
     try {
-      const { data: profile } = await supabase
+      const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("organization_id")
         .eq("user_id", user.id)
         .single();
 
+      if (profileError) throw profileError;
+      if (!profile?.organization_id) {
+        throw new Error(
+          "Tu perfil no tiene una organización asignada. Contacta a un administrador.",
+        );
+      }
+
       const now = new Date().toISOString();
       const { error } = await supabase.from("user_preferences").upsert(
         {
           user_id: user.id,
-          organization_id: profile?.organization_id,
+          organization_id: profile.organization_id,
           answers,
           completed_at: now,
           updated_at: now,
@@ -188,7 +195,13 @@ export function PreferenceQuestionnaire({ open, onClose, onCompleted }: Props) {
       onCompleted();
       onClose();
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Error desconocido";
+      // Supabase lanza objetos PostgrestError (no instancias de Error), así que
+      // `e instanceof Error` los descartaba y todo salía como "Error desconocido".
+      // Extraemos el mensaje real para poder diagnosticar.
+      const err = e as { message?: string; details?: string; hint?: string } | null;
+      const msg =
+        err?.message || err?.details || err?.hint || "Error desconocido";
+      console.error("[PreferenceQuestionnaire] Error al guardar preferencias:", e);
       toast.error("Error al guardar: " + msg);
     } finally {
       setSaving(false);
