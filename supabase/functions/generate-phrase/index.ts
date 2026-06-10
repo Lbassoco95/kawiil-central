@@ -170,19 +170,22 @@ function parsePhrase(rawPhrase: string): string {
 
 /**
  * Selecciona un campo del cuestionario disponible para usar como "foco" del día.
- * Rotamos por fecha para que la cita no termine siempre apoyándose en el mismo gusto.
+ * Rotamos por fecha + usuario para que cada persona reciba un foco distinto en el mismo día.
  */
 function pickPreferenceFocus(
   answers: Record<string, string>,
   phraseDate: string,
+  userId: string,
 ): { key: string; value: string } | null {
   const available = PREFERENCE_FOCUS_KEYS.filter((k) => {
     const v = answers[k];
     return typeof v === "string" && v.trim().length > 0 && !/no especificado|no leo|no tengo|otro$/i.test(v);
   });
   if (available.length === 0) return null;
-  const seed = phraseDate.split("-").reduce((acc, part) => acc + Number(part || 0), 0);
-  const key = available[seed % available.length];
+  const dateSeed = phraseDate.split("-").reduce((acc, part) => acc + Number(part || 0), 0);
+  // Incorporamos los primeros 8 chars del UUID del usuario para que el foco sea distinto por persona.
+  const userSeed = userId.replace(/-/g, "").slice(0, 8).split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  const key = available[(dateSeed + userSeed) % available.length];
   return { key, value: answers[key] };
 }
 
@@ -355,7 +358,7 @@ serve(async (req) => {
     const blockedGeneric = hasProfile ? GENERIC_QUOTES_BLOCKLIST : [];
     const blockedSet = new Set([...recentPhraseSet, ...blockedGeneric]);
 
-    const focus = hasProfile ? pickPreferenceFocus(answers, phraseDate) : null;
+    const focus = hasProfile ? pickPreferenceFocus(answers, phraseDate, userId) : null;
 
     let personalContext = "";
     if (hasProfile) {
@@ -544,17 +547,33 @@ Conecta con: [campo del perfil que inspiró la elección, o "general" si no hay 
       phrase = nonRepeatedFallback ?? phrase;
     }
 
-    await adminClient.from("personalized_phrases").upsert(
-      {
-        user_id: userId,
-        organization_id: profile?.organization_id,
-        phrase,
-        phrase_date: phraseDate,
-        time_of_day: cacheSlot,
-        mood_score: moodScore,
-      },
-      { onConflict: "user_id,phrase_date,time_of_day" }
-    );
+    // organization_id es NOT NULL en la tabla; si el perfil no lo tiene aún, buscamos
+    // el org del usuario directamente para no fallar silenciosamente al cachear la frase.
+    let orgId: string | null = profile?.organization_id ?? null;
+    if (!orgId) {
+      const { data: orgRow } = await adminClient
+        .from("profiles")
+        .select("organization_id")
+        .eq("user_id", userId)
+        .maybeSingle();
+      orgId = orgRow?.organization_id ?? null;
+    }
+
+    if (orgId) {
+      await adminClient.from("personalized_phrases").upsert(
+        {
+          user_id: userId,
+          organization_id: orgId,
+          phrase,
+          phrase_date: phraseDate,
+          time_of_day: cacheSlot,
+          mood_score: moodScore,
+        },
+        { onConflict: "user_id,phrase_date,time_of_day" }
+      );
+    } else {
+      console.warn("generate-phrase: skipping cache for user", userId, "— missing organization_id");
+    }
 
     return new Response(
       JSON.stringify({
