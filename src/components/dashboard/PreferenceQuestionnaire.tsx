@@ -137,12 +137,14 @@ export function PreferenceQuestionnaire({ open, onClose, onCompleted }: Props) {
         .eq("user_id", user.id)
         .single();
 
+      const now = new Date().toISOString();
       const { error } = await supabase.from("user_preferences").upsert(
         {
           user_id: user.id,
           organization_id: profile?.organization_id,
           answers,
-          completed_at: new Date().toISOString(),
+          completed_at: now,
+          updated_at: now,
         },
         { onConflict: "user_id" }
       );
