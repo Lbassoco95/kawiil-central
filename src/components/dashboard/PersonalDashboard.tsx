@@ -119,11 +119,11 @@ export function PersonalDashboard() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("user_preferences")
-        .select("completed_at, answers")
+        .select("completed_at, answers, public_answers")
         .eq("user_id", user!.id)
         .maybeSingle();
       if (error) throw error;
-      return data;
+      return data as { completed_at: string | null; answers: Record<string, unknown> | null; public_answers: string[] | null } | null;
     },
     enabled: !!user,
   });
@@ -458,6 +458,7 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
           overdueCount={overdueTasks}
           remindersCount={pendingReminders.length}
           userCelula={userCelula}
+          showQuote={hasCompletedQuestionnaire}
         />
       </div>
 
@@ -836,6 +837,7 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
       <PreferenceQuestionnaire
         open={showQuestionnaire}
         onClose={() => setShowQuestionnaire(false)}
+        initialPublicKeys={userPrefs?.public_answers ?? []}
         onCompleted={() => {
           refetchPrefs();
           qc.invalidateQueries({ queryKey: ["ai-hero-phrase"] });
