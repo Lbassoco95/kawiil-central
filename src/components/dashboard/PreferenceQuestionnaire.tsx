@@ -207,17 +207,24 @@ export function PreferenceQuestionnaire({ open, onClose, onCompleted, initialPub
         .single();
 
       const now = new Date().toISOString();
-      const { error } = await supabase.from("user_preferences").upsert(
-        {
-          user_id: user.id,
-          organization_id: profile?.organization_id,
-          answers,
-          public_answers: publicKeys,
-          completed_at: now,
-          updated_at: now,
-        } as any,
-        { onConflict: "user_id" }
-      );
+      const base = {
+        user_id: user.id,
+        organization_id: profile?.organization_id,
+        answers,
+        completed_at: now,
+        updated_at: now,
+      };
+
+      // Try with public_answers; fall back silently if column not migrated yet
+      let { error } = await supabase
+        .from("user_preferences")
+        .upsert({ ...base, public_answers: publicKeys } as any, { onConflict: "user_id" });
+
+      if (error && (error.code === "42703" || error.message?.includes("public_answers"))) {
+        ({ error } = await supabase
+          .from("user_preferences")
+          .upsert(base, { onConflict: "user_id" }));
+      }
 
       if (error) throw error;
 
@@ -225,7 +232,10 @@ export function PreferenceQuestionnaire({ open, onClose, onCompleted, initialPub
       onCompleted();
       onClose();
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Error desconocido";
+      const msg =
+        e instanceof Error
+          ? e.message
+          : (e as any)?.message ?? JSON.stringify(e) ?? "Error desconocido";
       toast.error("Error al guardar: " + msg);
     } finally {
       setSaving(false);

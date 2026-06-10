@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Heart } from "lucide-react";
 import { getMexicoTimeSlot, nowMX, toDateStringMX } from "@/lib/dateUtils";
+import { cn } from "@/lib/utils";
 
 const MOODS = [
   { value: 1, emoji: "😞", label: "Difícil" },
@@ -36,6 +37,21 @@ export function MoodCheckin({ userCelula }: MoodCheckinProps) {
         .maybeSingle();
       if (error) throw error;
       return data;
+    },
+    enabled: !!user,
+  });
+
+  // Has the user checked in at least once today (any slot)?
+  const { data: hasCheckedInToday } = useQuery({
+    queryKey: ["mood-checkin-today-any", user?.id, checkDate],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("mood_checkins" as any)
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user!.id)
+        .eq("check_date", checkDate);
+      if (error) throw error;
+      return (count ?? 0) > 0;
     },
     enabled: !!user,
   });
@@ -86,19 +102,18 @@ export function MoodCheckin({ userCelula }: MoodCheckinProps) {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["mood-checkin"] });
+      qc.invalidateQueries({ queryKey: ["mood-checkin-today-any"] });
       qc.invalidateQueries({ queryKey: ["mood-history"] });
       qc.invalidateQueries({ queryKey: ["mood-streak"] });
       qc.invalidateQueries({ queryKey: ["personal-week-moods"] });
       qc.invalidateQueries({ queryKey: ["ai-hero-mood"] });
-
-      // La frase del día es del slot (mañana/tarde) y se actualiza únicamente
-      // por el cron `refresh-weekday-phrases` (lun-vie 08:00 y 15:00 CDMX).
-      // El mood recién guardado se considerará en el próximo refresh programado.
-
       toast.success("Registrado");
     },
     onError: () => toast.error("Error al guardar"),
   });
+
+  // Pulse ring when user hasn't checked in at all today
+  const needsAttention = hasCheckedInToday === false;
 
   if (existingCheckin) {
     const mood = MOODS.find((m) => m.value === (existingCheckin as any).mood);
@@ -121,8 +136,20 @@ export function MoodCheckin({ userCelula }: MoodCheckinProps) {
   }
 
   return (
-    <div className="glass-card bg-gradient-to-r from-primary/5 to-accent/5 p-5 animate-scale-in">
-      <p className="text-sm font-medium text-foreground mb-3">¿Cómo va tu {timeLabel}?</p>
+    <div
+      className={cn(
+        "glass-card bg-gradient-to-r from-primary/5 to-accent/5 p-5 animate-scale-in transition-all",
+        needsAttention && "ring-2 ring-primary/40 ring-offset-2 ring-offset-background animate-pulse-ring",
+      )}
+    >
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-sm font-medium text-foreground">¿Cómo va tu {timeLabel}?</p>
+        {needsAttention && (
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-primary bg-primary/10 rounded-full px-2 py-0.5">
+            Pendiente
+          </span>
+        )}
+      </div>
       <div className="flex gap-1.5 justify-center">
         {MOODS.map((m) => (
           <button
