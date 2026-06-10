@@ -200,16 +200,18 @@ export function PreferenceQuestionnaire({ open, onClose, onCompleted, initialPub
     if (!user) return;
     setSaving(true);
     try {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("organization_id")
-        .eq("user_id", user.id)
-        .single();
+      // Resolve org_id: profile first, RPC as fallback so it's never null
+      const [{ data: profile }, orgRes] = await Promise.all([
+        supabase.from("profiles").select("organization_id").eq("user_id", user.id).single(),
+        supabase.rpc("get_user_org_id", { _user_id: user.id }),
+      ]);
+      const organization_id = profile?.organization_id ?? orgRes.data;
+      if (!organization_id) throw new Error("No se pudo obtener el organization_id del usuario.");
 
       const now = new Date().toISOString();
       const base = {
         user_id: user.id,
-        organization_id: profile?.organization_id,
+        organization_id,
         answers,
         completed_at: now,
         updated_at: now,
