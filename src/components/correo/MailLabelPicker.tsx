@@ -11,12 +11,18 @@ import {
 import { cn } from "@/lib/utils";
 
 export const LABEL_COLORS = [
-  { key: "blue", bg: "hsl(210 100% 47% / 0.15)", text: "hsl(210 100% 47%)", dot: "hsl(210 100% 47%)" },
-  { key: "green", bg: "hsl(142 71% 45% / 0.15)", text: "hsl(142 71% 45%)", dot: "hsl(142 71% 45%)" },
-  { key: "red", bg: "hsl(0 72% 51% / 0.15)", text: "hsl(0 72% 51%)", dot: "hsl(0 72% 51%)" },
-  { key: "orange", bg: "hsl(32 90% 48% / 0.15)", text: "hsl(32 90% 48%)", dot: "hsl(32 90% 48%)" },
-  { key: "purple", bg: "hsl(272 65% 55% / 0.15)", text: "hsl(272 65% 55%)", dot: "hsl(272 65% 55%)" },
-  { key: "teal", bg: "hsl(172 66% 40% / 0.15)", text: "hsl(172 66% 40%)", dot: "hsl(172 66% 40%)" },
+  { key: "blue",    bg: "hsl(210 100% 47% / 0.15)", text: "hsl(210 100% 47%)", dot: "hsl(210 100% 47%)" },
+  { key: "indigo",  bg: "hsl(239 84% 60% / 0.15)",  text: "hsl(239 84% 60%)",  dot: "hsl(239 84% 60%)" },
+  { key: "purple",  bg: "hsl(272 65% 55% / 0.15)",  text: "hsl(272 65% 55%)",  dot: "hsl(272 65% 55%)" },
+  { key: "pink",    bg: "hsl(330 80% 55% / 0.15)",  text: "hsl(330 80% 55%)",  dot: "hsl(330 80% 55%)" },
+  { key: "red",     bg: "hsl(0 72% 51% / 0.15)",    text: "hsl(0 72% 51%)",    dot: "hsl(0 72% 51%)" },
+  { key: "orange",  bg: "hsl(32 90% 48% / 0.15)",   text: "hsl(32 90% 48%)",   dot: "hsl(32 90% 48%)" },
+  { key: "yellow",  bg: "hsl(47 95% 48% / 0.15)",   text: "hsl(47 95% 48%)",   dot: "hsl(47 95% 48%)" },
+  { key: "lime",    bg: "hsl(84 70% 40% / 0.15)",   text: "hsl(84 70% 40%)",   dot: "hsl(84 70% 40%)" },
+  { key: "green",   bg: "hsl(142 71% 45% / 0.15)",  text: "hsl(142 71% 45%)",  dot: "hsl(142 71% 45%)" },
+  { key: "teal",    bg: "hsl(172 66% 40% / 0.15)",  text: "hsl(172 66% 40%)",  dot: "hsl(172 66% 40%)" },
+  { key: "cyan",    bg: "hsl(196 80% 45% / 0.15)",  text: "hsl(196 80% 45%)",  dot: "hsl(196 80% 45%)" },
+  { key: "slate",   bg: "hsl(215 20% 50% / 0.15)",  text: "hsl(215 20% 50%)",  dot: "hsl(215 20% 50%)" },
 ];
 
 export function getLabelStyle(color: string) {
@@ -98,11 +104,12 @@ export function MailLabelPicker({ emailMessageId, children }: Props) {
               placeholder="Nombre de etiqueta"
               className="w-full h-7 px-2 text-[12px] bg-muted/50 border border-border/50 rounded outline-none focus:border-primary/40"
             />
-            <div className="flex gap-1">
+            <div className="grid grid-cols-6 gap-1.5">
               {LABEL_COLORS.map(c => (
                 <button
                   key={c.key}
                   onClick={() => setNewColor(c.key)}
+                  title={c.key}
                   className={cn("w-5 h-5 rounded-full transition-transform", newColor === c.key && "scale-125 ring-2 ring-offset-1 ring-primary")}
                   style={{ background: c.dot }}
                 />

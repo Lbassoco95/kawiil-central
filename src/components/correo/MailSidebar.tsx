@@ -410,11 +410,12 @@ export function MailSidebar({
                 placeholder="Nombre…"
                 className="w-full h-6 px-2 text-[11.5px] bg-background border border-border/50 rounded outline-none focus:border-primary/40"
               />
-              <div className="flex gap-1">
+              <div className="grid grid-cols-6 gap-1.5">
                 {LABEL_COLORS.map((c) => (
                   <button
                     key={c.key}
                     onClick={() => setNewLabelColor(c.key)}
+                    title={c.key}
                     className={cn(
                       "w-4 h-4 rounded-full transition-transform",
                       newLabelColor === c.key && "scale-125 ring-2 ring-offset-1 ring-primary",
