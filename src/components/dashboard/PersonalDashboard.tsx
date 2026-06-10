@@ -487,6 +487,19 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
         </Alert>
       )}
 
+      {showQuestionnaireReminder && (
+        <div className="flex items-center gap-3 rounded-xl border border-primary/25 bg-primary/[0.04] px-4 py-3 animate-fade-in">
+          <Sparkles className="h-4 w-4 text-primary shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-foreground">Kawiil quiere conocerte mejor</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Responde 10 preguntas rápidas y tus frases del día serán únicas para ti.</p>
+          </div>
+          <Button size="sm" className="shrink-0" onClick={() => setShowQuestionnaire(true)}>
+            Responder
+          </Button>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-[1fr_minmax(280px,340px)] gap-6 min-w-0">
         {/* ═══ LEFT COLUMN ═══ */}
         <div className="space-y-4 min-w-0">
@@ -815,23 +828,6 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
           </p>
         </div>
 
-        {/* Questionnaire reminder */}
-        {showQuestionnaireReminder && (
-          <div className="glass-card p-4 animate-scale-in">
-            <div className="flex items-start gap-3">
-              <div className="p-2 rounded-xl bg-primary/10">
-                <Sparkles className="h-4 w-4 text-primary" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-foreground">Kawiil quiere conocerte</p>
-                <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">Responde un breve cuestionario para personalizar tu experiencia</p>
-                <div className="flex items-center gap-2 mt-2.5">
-                  <Button size="sm" variant="default" className="text-xs h-7" onClick={() => setShowQuestionnaire(true)}>Responder</Button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
 
         </div>{/* end right column */}
       </div>{/* end grid 2 cols */}
