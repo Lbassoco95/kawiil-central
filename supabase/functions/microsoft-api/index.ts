@@ -199,23 +199,37 @@ const MAIL_FOLDER_CHILD_LIST_QUERY =
 const MAIL_FOLDER_ROOT_LIST_QUERY_PLAIN = `?$select=${MAIL_FOLDER_LIST_SELECT}&$top=1000`;
 const MAIL_FOLDER_CHILD_LIST_QUERY_PLAIN = `?$select=${MAIL_FOLDER_LIST_SELECT}&$top=1000`;
 
-/** Listado plano solo nivel raíz (fallback si el recursivo falla o devuelve vacío por error Graph). */
+/** Listado plano solo nivel raíz, con $select para obtener wellKnownFolderName y childFolderCount. */
 async function listMailFoldersRootOnlyLegacy(accessToken: string): Promise<unknown[]> {
   const all: unknown[] = [];
-  let path = "/me/mailFolders?$top=1000";
-  const maxPages = 25;
-  for (let page = 0; page < maxPages; page++) {
-    const data = (await graphRequest(accessToken, path)) as {
-      value?: unknown[];
-      "@odata.nextLink"?: string;
-    };
-    if (Array.isArray(data?.value)) {
-      for (const v of data.value) all.push(v);
+  // Try with $select first (needed to get wellKnownFolderName and childFolderCount).
+  // Some tenants reject includeHiddenFolders, so we don't add it here.
+  const strategies = [
+    `/me/mailFolders?$select=${MAIL_FOLDER_LIST_SELECT}&$top=1000`,
+    `/me/mailFolders?$top=1000`,
+  ];
+  for (const startPath of strategies) {
+    all.length = 0;
+    let path: string | null = startPath;
+    const maxPages = 25;
+    let ok = true;
+    try {
+      for (let page = 0; page < maxPages && path; page++) {
+        const data = (await graphRequest(accessToken, path)) as {
+          value?: unknown[];
+          "@odata.nextLink"?: string;
+        };
+        if (Array.isArray(data?.value)) {
+          for (const v of data.value) all.push(v);
+        }
+        const nl = data?.["@odata.nextLink"];
+        path = typeof nl === "string" && nl ? nextLinkToPath(nl) : null;
+      }
+    } catch (e) {
+      console.warn("[microsoft-api] listMailFoldersRootOnlyLegacy strategy failed", String(e).slice(0, 200));
+      ok = false;
     }
-    const nl = data?.["@odata.nextLink"];
-    if (typeof nl !== "string" || !nl) break;
-    path = nextLinkToPath(nl);
-    if (!path) break;
+    if (ok && all.length > 0) break;
   }
   return all;
 }
@@ -1438,39 +1452,92 @@ Deno.serve(async (req) => {
       }
 
       case "mail-folders": {
-        // Fetch root folders first (fast).
-        const rootFolders = await listMailFoldersRootOnlyLegacy(accessToken);
+        // Fetch root folders first (with $select so we get wellKnownFolderName + childFolderCount).
+        const rootFolders = await listMailFoldersRootOnlyLegacy(accessToken) as Record<string, unknown>[];
+        console.log(`[microsoft-api] mail-folders: root=${rootFolders.length}`);
 
-        // Always fetch inbox children using the well-known alias "inbox" — works
-        // regardless of language/locale, no need to search by name or wellKnownFolderName.
-        // Users commonly keep all their custom folders inside Inbox in Outlook.
-        let inboxChildren: unknown[] = [];
-        const inboxChildStrategies = [
-          `/me/mailFolders/inbox/childFolders?$top=1000&includeHiddenFolders=true`,
-          `/me/mailFolders/inbox/childFolders?$top=1000`,
-        ];
-        for (const firstPath of inboxChildStrategies) {
-          try {
-            const fetched: unknown[] = [];
-            let path: string | null = firstPath;
-            for (let page = 0; page < 10 && path; page++) {
-              const data = (await graphRequest(accessToken, path)) as {
-                value?: unknown[];
-                "@odata.nextLink"?: string;
-              };
-              if (Array.isArray(data?.value)) for (const v of data.value) fetched.push(v);
-              const nl = data?.["@odata.nextLink"];
-              path = typeof nl === "string" && nl ? nextLinkToPath(nl) : null;
+        // Fetch children for every root folder that declares children, plus always inbox.
+        // This handles users (like vturcott) whose custom folders live inside inbox or any other
+        // root folder. We cap at 20 parent fetches to avoid timeouts.
+        const childrenByParent = new Map<string, unknown[]>();
+
+        /** Fetch all child folders for a given parent ID with two strategies (hidden / plain). */
+        async function fetchChildFolders(parentId: string): Promise<unknown[]> {
+          const strategies = [
+            `/me/mailFolders/${encodeURIComponent(parentId)}/childFolders?$select=${MAIL_FOLDER_LIST_SELECT}&$top=1000&includeHiddenFolders=true`,
+            `/me/mailFolders/${encodeURIComponent(parentId)}/childFolders?$select=${MAIL_FOLDER_LIST_SELECT}&$top=1000`,
+          ];
+          for (const firstPath of strategies) {
+            try {
+              const fetched: unknown[] = [];
+              let path: string | null = firstPath;
+              for (let page = 0; page < 10 && path; page++) {
+                const data = (await graphRequest(accessToken, path)) as {
+                  value?: unknown[];
+                  "@odata.nextLink"?: string;
+                };
+                if (Array.isArray(data?.value)) for (const v of data.value) fetched.push(v);
+                const nl = data?.["@odata.nextLink"];
+                path = typeof nl === "string" && nl ? nextLinkToPath(nl) : null;
+              }
+              return fetched;
+            } catch (e) {
+              console.warn(`[microsoft-api] mail-folders: childFolders(${parentId}) strategy failed`, String(e).slice(0, 200));
             }
-            inboxChildren = fetched;
-            console.log(`[microsoft-api] mail-folders: inbox children=${fetched.length} (strategy=${firstPath.includes("Hidden") ? "withHidden" : "plain"})`);
-            break;
-          } catch (e) {
-            console.warn("[microsoft-api] mail-folders: inbox children strategy failed, trying next", String(e).slice(0, 300));
+          }
+          return [];
+        }
+
+        // System well-known folder names that we never need to expand — their children
+        // (if any) are not custom user folders and would clutter the sidebar.
+        const SYSTEM_WELL_KNOWN = new Set([
+          "deleteditems", "sentitems", "junkemail", "outbox", "drafts",
+          "archive", "msgfolderroot", "recoverableitemsdeletions",
+          "conversationhistory", "scheduled",
+        ]);
+
+        // Identify which root folders to fetch children for.
+        // Always include inbox (by wellKnownFolderName or alias), plus any non-system folder
+        // that declares children. Skip system folders to avoid noise.
+        const inboxFolder = rootFolders.find(
+          (f) => String(f.wellKnownFolderName || "").toLowerCase() === "inbox"
+        );
+
+        const parentIdsToFetch = new Set<string>();
+
+        // Add inbox by actual ID (preferred) or fall back to well-known alias.
+        if (inboxFolder?.id && typeof inboxFolder.id === "string") {
+          parentIdsToFetch.add(inboxFolder.id);
+        } else {
+          // Alias fallback — treated as a special marker below.
+          parentIdsToFetch.add("__inbox_alias__");
+        }
+
+        // Add non-system root folders that have children.
+        for (const f of rootFolders) {
+          const id = typeof f.id === "string" ? f.id : null;
+          if (!id) continue;
+          const wk = String(f.wellKnownFolderName || "").toLowerCase();
+          if (wk && SYSTEM_WELL_KNOWN.has(wk)) continue; // skip system folders
+          const cc = typeof f.childFolderCount === "number" ? f.childFolderCount : -1;
+          if (cc !== 0) parentIdsToFetch.add(id);
+        }
+
+        let parentFetchCount = 0;
+        for (const parentId of parentIdsToFetch) {
+          if (parentFetchCount >= 20) break;
+          parentFetchCount++;
+          const resolvedId = parentId === "__inbox_alias__" ? "inbox" : parentId;
+          const children = await fetchChildFolders(resolvedId);
+          if (children.length > 0) {
+            childrenByParent.set(resolvedId, children);
+            console.log(`[microsoft-api] mail-folders: children(${resolvedId})=${children.length}`);
           }
         }
 
-        result = { folders: [...rootFolders, ...inboxChildren] };
+        const allChildren = Array.from(childrenByParent.values()).flat();
+        console.log(`[microsoft-api] mail-folders: total children=${allChildren.length}`);
+        result = { folders: [...rootFolders, ...allChildren] };
         break;
       }
 
