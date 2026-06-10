@@ -43,8 +43,8 @@ const GENERIC_QUOTES_BLOCKLIST = [
   "lo unico que tenemos que temer es al miedo mismo",
 ];
 
-/** Campos del cuestionario sobre los que rotamos el foco diario para evitar elegir siempre lo mismo. */
-const PREFERENCE_FOCUS_KEYS = [
+/** Campos del cuestionario v1 (legacy) sobre los que rotamos el foco diario. */
+const PREFERENCE_FOCUS_KEYS_V1 = [
   "personaje_inspirador",
   "libro_favorito",
   "musica_artista",
@@ -52,6 +52,16 @@ const PREFERENCE_FOCUS_KEYS = [
   "valor_importante",
   "hobby",
   "motivacion",
+] as const;
+
+/** Campos del cuestionario v2 (nuevo diseño 2026). */
+const PREFERENCE_FOCUS_KEYS_V2 = [
+  "figuras_inspiradoras",
+  "obra_favorita",
+  "deporte",
+  "equipo_artista",
+  "meta_anio",
+  "hobbies",
 ] as const;
 
 const MX_TZ = "America/Mexico_City";
@@ -157,36 +167,86 @@ function normalizePhrase(value: string): string {
     .trim();
 }
 
-function parsePhrase(rawPhrase: string): string {
+function parsePhrase(rawPhrase: string): { text: string; confidence: "alta" | "media" | "original" } {
   let cleaned = rawPhrase.trim();
   if (cleaned.startsWith("FRASE:")) {
     cleaned = cleaned.replace(/^FRASE:\s*/i, "").trim();
   }
-  // Removemos la línea de auditoría "Conecta con: ..." que pedimos al modelo;
-  // sirve solo para forzarlo a anclarse en una preferencia, no se muestra al usuario.
+  // Extraemos el nivel de confianza que pedimos al modelo; no se muestra al usuario pero se guarda en BD.
+  let confidence: "alta" | "media" | "original" = "media";
+  const confMatch = cleaned.match(/\nConfianza:\s*(alta|media|original)/i);
+  if (confMatch) {
+    confidence = confMatch[1].toLowerCase() as "alta" | "media" | "original";
+    cleaned = cleaned.replace(/\nConfianza:[^\n]*/i, "").trim();
+  }
   cleaned = cleaned.replace(/\n\s*Conecta con:[^\n]*$/i, "").trim();
-  return cleaned;
+  return { text: cleaned, confidence };
+}
+
+/** Convierte un valor de respuesta (string o array) a string para el prompt. */
+function answerStr(v: unknown): string {
+  if (Array.isArray(v)) return (v as string[]).join(", ");
+  return typeof v === "string" ? v : "";
+}
+
+/** Construye el bloque PERFIL CULTURAL según el formato del cuestionario (v1 legacy o v2 nuevo). */
+function buildPersonalContext(answers: Record<string, unknown>): string {
+  const isV2 = "hobbies" in answers || "figuras_inspiradoras" in answers;
+  if (isV2) {
+    const excluir = answerStr(answers.excluir_temas);
+    const tonoS = answerStr(answers.tono_serio_divertido) || "3";
+    const tonoL = answerStr(answers.tono_corto_largo) || "3";
+    return `
+PERFIL CULTURAL DEL USUARIO (v2):
+- Hobbies / actividades favoritas: ${answerStr(answers.hobbies) || "no especificado"}
+- Deporte o actividad física: ${answerStr(answers.deporte) || "no especificado"}
+- Equipo deportivo o artista favorito: ${answerStr(answers.equipo_artista) || "no especificado"}
+- Figuras que le inspiran: ${answerStr(answers.figuras_inspiradoras) || "no especificado"}
+- Obra favorita (libro/serie/podcast): ${answerStr(answers.obra_favorita) || "no especificado"}
+- Meta personal este año: ${answerStr(answers.meta_anio) || "no especificado"}
+- Tipo de mensaje preferido: ${answerStr(answers.tipo_mensaje) || "no especificado"}
+- Tono (1=muy serio, 5=muy divertido): ${tonoS}/5
+- Extensión (1=corto y directo, 5=con contexto): ${tonoL}/5${excluir ? `\n- ⚠️ TEMAS EXCLUIDOS (no incluir): ${excluir}` : ""}`;
+  }
+  // Formato legacy v1
+  return `
+PERFIL CULTURAL DEL USUARIO:
+- Género literario favorito: ${answerStr(answers.libro_genero) || "no especificado"}
+- Libro/autor favorito: ${answerStr(answers.libro_favorito) || "no especificado"}
+- Género musical favorito: ${answerStr(answers.musica_genero) || "no especificado"}
+- Artista/banda favorita: ${answerStr(answers.musica_artista) || "no especificado"}
+- Género de series/películas: ${answerStr(answers.tv_genero) || "no especificado"}
+- Serie/película favorita: ${answerStr(answers.tv_favorita) || "no especificado"}
+- Hobby o actividad favorita: ${answerStr(answers.hobby) || "no especificado"}
+- Qué le motiva más: ${answerStr(answers.motivacion) || "no especificado"}
+- Tipo de humor: ${answerStr(answers.humor) || "no especificado"}
+- Personaje inspirador: ${answerStr(answers.personaje_inspirador) || "no especificado"}
+- Lugar favorito: ${answerStr(answers.lugar_favorito) || "no especificado"}
+- Valor más importante: ${answerStr(answers.valor_importante) || "no especificado"}`;
 }
 
 /**
  * Selecciona un campo del cuestionario disponible para usar como "foco" del día.
  * Rotamos por fecha + usuario para que cada persona reciba un foco distinto en el mismo día.
+ * Soporta tanto el formato v1 (strings) como v2 (strings o arrays).
  */
 function pickPreferenceFocus(
-  answers: Record<string, string>,
+  answers: Record<string, unknown>,
   phraseDate: string,
   userId: string,
 ): { key: string; value: string } | null {
-  const available = PREFERENCE_FOCUS_KEYS.filter((k) => {
-    const v = answers[k];
-    return typeof v === "string" && v.trim().length > 0 && !/no especificado|no leo|no tengo|otro$/i.test(v);
+  const isV2 = "hobbies" in answers || "figuras_inspiradoras" in answers;
+  const keys: readonly string[] = isV2 ? PREFERENCE_FOCUS_KEYS_V2 : PREFERENCE_FOCUS_KEYS_V1;
+  const available = keys.filter((k) => {
+    const str = answerStr(answers[k]);
+    return str.trim().length > 0 && !/no especificado|no leo|no tengo|otro$/i.test(str);
   });
   if (available.length === 0) return null;
   const dateSeed = phraseDate.split("-").reduce((acc, part) => acc + Number(part || 0), 0);
-  // Incorporamos los primeros 8 chars del UUID del usuario para que el foco sea distinto por persona.
+  // UUID del usuario en el seed para que el foco sea distinto por persona en el mismo día.
   const userSeed = userId.replace(/-/g, "").slice(0, 8).split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
   const key = available[(dateSeed + userSeed) % available.length];
-  return { key, value: answers[key] };
+  return { key, value: answerStr(answers[key]) };
 }
 
 function describeMood(score: number): string {
@@ -341,11 +401,11 @@ serve(async (req) => {
         .select("phrase")
         .eq("user_id", userId)
         .order("created_at", { ascending: false })
-        .limit(5),
+        .limit(30),
     ]);
 
     const firstName = profile?.full_name?.split(" ")[0] || "compañero";
-    const answers = (prefs?.answers ?? {}) as Record<string, string>;
+    const answers = (prefs?.answers ?? {}) as Record<string, unknown>;
     const hasProfile = Object.keys(answers).length > 0;
 
     const recentPhraseList = (recentPhrases ?? [])
@@ -359,24 +419,7 @@ serve(async (req) => {
     const blockedSet = new Set([...recentPhraseSet, ...blockedGeneric]);
 
     const focus = hasProfile ? pickPreferenceFocus(answers, phraseDate, userId) : null;
-
-    let personalContext = "";
-    if (hasProfile) {
-      personalContext = `
-PERFIL CULTURAL DEL USUARIO:
-- Género literario favorito: ${answers.libro_genero || "no especificado"}
-- Libro/autor favorito: ${answers.libro_favorito || "no especificado"}
-- Género musical favorito: ${answers.musica_genero || "no especificado"}
-- Artista/banda favorita: ${answers.musica_artista || "no especificado"}
-- Género de series/películas: ${answers.tv_genero || "no especificado"}
-- Serie/película favorita: ${answers.tv_favorita || "no especificado"}
-- Hobby o actividad favorita: ${answers.hobby || "no especificado"}
-- Qué le motiva más: ${answers.motivacion || "no especificado"}
-- Tipo de humor: ${answers.humor || "no especificado"}
-- Personaje inspirador: ${answers.personaje_inspirador || "no especificado"}
-- Lugar favorito: ${answers.lugar_favorito || "no especificado"}
-- Valor más importante: ${answers.valor_importante || "no especificado"}`;
-    }
+    const personalContext = hasProfile ? buildPersonalContext(answers) : "";
 
     const moodContext =
       moodScore != null
@@ -410,10 +453,17 @@ La cita DEBE girar en torno a UNO de estos ejes: relaciones humanas, confianza, 
 Si la PREFERENCIA FOCAL del usuario no encaja con esos ejes para el módulo Clientes, IGNÓRALA y elige otra cita auténtica del eje del módulo.`
         : "";
 
+    // Ajuste de tono según preferencias v2 del usuario
+    const tonoS = parseInt(answerStr((answers as Record<string, unknown>).tono_serio_divertido) || "3", 10);
+    const tonoL = parseInt(answerStr((answers as Record<string, unknown>).tono_corto_largo) || "3", 10);
+    const toneHint = hasProfile && ("tono_serio_divertido" in answers)
+      ? `\nTONO SOLICITADO: ${tonoS <= 2 ? "serio y formal" : tonoS >= 4 ? "ligero y cercano, puede tener humor" : "equilibrado"}. Extensión: ${tonoL <= 2 ? "muy breve (máx 1 línea)" : tonoL >= 4 ? "puede incluir contexto de la obra o anécdota breve" : "normal (1-2 líneas)"}.`
+      : "";
+
     const basePrompt = `Selecciona UNA frase o cita REAL y EXISTENTE para ${firstName}.
 Momento del día: ${timeOfDay === "afternoon" ? "tarde" : "mañana"}.
 Fecha objetivo de frase (CDMX): ${phraseDate}.${moodContext}${journeyContext}
-${personalContext}${focusInstruction}${moduleInstruction}
+${personalContext}${toneHint}${focusInstruction}${moduleInstruction}
 
 INSTRUCCIONES:
 1. La frase DEBE SER una cita real, verificable, de un personaje, autor, músico, película, serie, libro o figura pública.
@@ -422,15 +472,16 @@ INSTRUCCIONES:
         ? "OBLIGATORIO: ancla la cita en la PREFERENCIA FOCAL DE HOY indicada arriba. Si no encuentras una cita auténtica de esa fuente, usa otra preferencia del PERFIL CULTURAL, NUNCA una cita genérica de motivación universal."
         : "Elige una cita célebre motivacional de alguna figura reconocida."
     }
-3. Máximo 2 líneas la cita.
+3. Ajusta la extensión al tono solicitado (si se especificó).
 4. Incluye atribución completa: quién lo dijo y de dónde viene (obra, álbum, película, entrevista).
-5. NO inventes frases ni atribuciones.
+5. Si no puedes verificar que la cita es real y está bien atribuida, crea una reflexión original en el estilo del perfil y usa "— Reflexión para hoy" como atribución (Confianza: original).
 6. Ajusta el TONO al ánimo y la jornada actual (no celebres si hay overload, no exijas si el ánimo es bajo).
 7. Evita repetir textualmente cualquiera de estas citas (recientes o genéricas vetadas):
 ${blockedQuotes}
 8. Formato EXACTO (sin texto adicional fuera de estas líneas):
 FRASE: [la cita textual]
 — [Autor/Personaje], [Fuente/Obra]
+Confianza: [alta (cita verificable en 2+ fuentes) | media (1 fuente conocida) | original (reflexión creada por ti)]
 Conecta con: [campo del perfil que inspiró la elección, o "general" si no hay perfil]`;
 
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
@@ -502,6 +553,7 @@ Conecta con: [campo del perfil que inspiró la elección, o "general" si no hay 
     }
 
     let phrase = "";
+    let confidence: "alta" | "media" | "original" = "media";
     let generated = false;
 
     try {
@@ -512,17 +564,19 @@ Conecta con: [campo del perfil que inspiró la elección, o "general" si no hay 
             : `${basePrompt}\n\nIMPORTANTE: En tu intento anterior elegiste una cita repetida o demasiado genérica. Elige otra distinta y, si hay PREFERENCIA FOCAL, ánclala ahí.`;
 
         const rawPhrase = await requestAiPhrase(attemptPrompt);
-        const parsedPhrase = parsePhrase(rawPhrase);
-        const normalized = normalizePhrase(parsedPhrase);
+        const parsed = parsePhrase(rawPhrase);
+        const normalized = normalizePhrase(parsed.text);
 
         const isBlockedGeneric = blockedGeneric.some((g) => normalized.includes(g));
         if (!blockedSet.has(normalized) && !isBlockedGeneric) {
-          phrase = parsedPhrase;
+          phrase = parsed.text;
+          confidence = parsed.confidence;
           generated = true;
           break;
         }
 
-        phrase = parsedPhrase;
+        phrase = parsed.text;
+        confidence = parsed.confidence;
       }
     } catch (phraseLoopErr) {
       const msg = phraseLoopErr instanceof Error ? phraseLoopErr.message : "";
@@ -534,6 +588,7 @@ Conecta con: [campo del perfil que inspiró la elección, o "general" si no hay 
           (candidate) => !blockedSet.has(normalizePhrase(candidate))
         );
         phrase = nonRepeatedFallback ?? FALLBACK_QUOTES[0] ?? phrase;
+        confidence = "alta";
         generated = true;
       } else {
         throw phraseLoopErr;
@@ -545,6 +600,7 @@ Conecta con: [campo del perfil que inspiró la elección, o "general" si no hay 
         (candidate) => !blockedSet.has(normalizePhrase(candidate))
       );
       phrase = nonRepeatedFallback ?? phrase;
+      confidence = "alta";
     }
 
     // organization_id es NOT NULL en la tabla; si el perfil no lo tiene aún, buscamos
@@ -568,6 +624,7 @@ Conecta con: [campo del perfil que inspiró la elección, o "general" si no hay 
           phrase_date: phraseDate,
           time_of_day: cacheSlot,
           mood_score: moodScore,
+          verification_confidence: confidence,
         },
         { onConflict: "user_id,phrase_date,time_of_day" }
       );
@@ -582,6 +639,7 @@ Conecta con: [campo del perfil que inspiró la elección, o "general" si no hay 
         phrase_date: phraseDate,
         time_of_day: timeOfDay,
         module: moduleName,
+        confidence,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
