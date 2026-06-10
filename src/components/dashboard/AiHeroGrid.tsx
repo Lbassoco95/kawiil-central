@@ -59,21 +59,31 @@ interface AiHeroGridProps {
 const PHRASE_FALLBACK =
   "La mejor manera de predecir el futuro es creándolo.\n— Peter Drucker, Managing for Results";
 
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/\*\*([^*]+)\*\*/g, “$1”)
+    .replace(/\*([^*]+)\*/g, “$1”)
+    .replace(/_([^_]+)_/g, “$1”)
+    .replace(/\n\s*---[\s\S]*/g, “”)  // cut off everything after ---
+    .trim();
+}
+
 function splitPhrase(raw: string, fallback: string): { quote: string; author: string | null } {
   if (!raw) {
     const lines = fallback.split(/\n+/);
     return {
       quote: lines[0] ?? fallback,
-      author: lines[1]?.replace(/^[—-]\s*/, "") ?? null,
+      author: lines[1]?.replace(/^[—-]\s*/, “”) ?? null,
     };
   }
-  const lines = raw.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+  const cleaned = stripMarkdown(raw);
+  const lines = cleaned.split(/\n+/).map((l) => l.trim()).filter(Boolean);
   if (lines.length >= 2 && /^[—-]/.test(lines[lines.length - 1])) {
-    const author = lines[lines.length - 1].replace(/^[—-]\s*/, "");
-    const quote = lines.slice(0, -1).join(" ").replace(/^["“]|["”]$/g, "");
+    const author = lines[lines.length - 1].replace(/^[—-]\s*/, “”);
+    const quote = lines.slice(0, -1).join(“ “).replace(/^[“”]|[“”]$/g, “”);
     return { quote, author };
   }
-  return { quote: raw, author: null };
+  return { quote: cleaned, author: null };
 }
 
 export function AiHeroGrid({
