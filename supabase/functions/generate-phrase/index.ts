@@ -172,15 +172,23 @@ function parsePhrase(rawPhrase: string): { text: string; confidence: "alta" | "m
   if (cleaned.startsWith("FRASE:")) {
     cleaned = cleaned.replace(/^FRASE:\s*/i, "").trim();
   }
-  // Extraemos el nivel de confianza que pedimos al modelo; no se muestra al usuario pero se guarda en BD.
+  // Strip anything after a --- separator (AI sometimes adds reflection paragraphs)
+  cleaned = cleaned.replace(/\n\s*---[\s\S]*/i, "").trim();
+  // Strip Confianza line anywhere it appears
+  cleaned = cleaned.replace(/\nConfianza:[^\n]*/gi, "").trim();
+  // Strip Conecta con line anywhere it appears
+  cleaned = cleaned.replace(/\nConecta con:[^\n]*/gi, "").trim();
+  // Strip markdown italics/bold: *text* → text, **text** → text
+  cleaned = cleaned.replace(/\*\*([^*]+)\*\*/g, "$1").replace(/\*([^*]+)\*/g, "$1");
+
   let confidence: "alta" | "media" | "original" = "media";
-  const confMatch = cleaned.match(/\nConfianza:\s*(alta|media|original)/i);
+  // Re-check for inline Confianza in case it was on the same line
+  const confMatch = rawPhrase.match(/Confianza:\s*(alta|media|original)/i);
   if (confMatch) {
     confidence = confMatch[1].toLowerCase() as "alta" | "media" | "original";
-    cleaned = cleaned.replace(/\nConfianza:[^\n]*/i, "").trim();
   }
-  cleaned = cleaned.replace(/\n\s*Conecta con:[^\n]*$/i, "").trim();
-  return { text: cleaned, confidence };
+
+  return { text: cleaned.trim(), confidence };
 }
 
 /** Convierte un valor de respuesta (string o array) a string para el prompt. */
@@ -457,7 +465,7 @@ Si la PREFERENCIA FOCAL del usuario no encaja con esos ejes para el módulo Clie
     const tonoS = parseInt(answerStr((answers as Record<string, unknown>).tono_serio_divertido) || "3", 10);
     const tonoL = parseInt(answerStr((answers as Record<string, unknown>).tono_corto_largo) || "3", 10);
     const toneHint = hasProfile && ("tono_serio_divertido" in answers)
-      ? `\nTONO SOLICITADO: ${tonoS <= 2 ? "serio y formal" : tonoS >= 4 ? "ligero y cercano, puede tener humor" : "equilibrado"}. Extensión: ${tonoL <= 2 ? "muy breve (máx 1 línea)" : tonoL >= 4 ? "puede incluir contexto de la obra o anécdota breve" : "normal (1-2 líneas)"}.`
+      ? `\nTONO SOLICITADO: ${tonoS <= 2 ? "serio y formal" : tonoS >= 4 ? "ligero y cercano, puede tener humor" : "equilibrado"}. Extensión de la CITA: ${tonoL <= 2 ? "muy breve (máx 1 línea)" : tonoL >= 4 ? "puede ser una cita un poco más larga, máx 3 líneas" : "normal (1-2 líneas)"}. NO añadas párrafos de reflexión ni contexto extra fuera del formato.`
       : "";
 
     const basePrompt = `Selecciona UNA frase o cita REAL y EXISTENTE para ${firstName}.
@@ -478,11 +486,11 @@ INSTRUCCIONES:
 6. Ajusta el TONO al ánimo y la jornada actual (no celebres si hay overload, no exijas si el ánimo es bajo).
 7. Evita repetir textualmente cualquiera de estas citas (recientes o genéricas vetadas):
 ${blockedQuotes}
-8. Formato EXACTO (sin texto adicional fuera de estas líneas):
-FRASE: [la cita textual]
-— [Autor/Personaje], [Fuente/Obra]
-Confianza: [alta (cita verificable en 2+ fuentes) | media (1 fuente conocida) | original (reflexión creada por ti)]
-Conecta con: [campo del perfil que inspiró la elección, o "general" si no hay perfil]`;
+8. Formato EXACTO. SOLO estas líneas, sin nada más — sin párrafos adicionales, sin separadores, sin markdown:
+FRASE: [la cita textual, sin asteriscos ni formato]
+— [Autor/Personaje], [Fuente/Obra, sin asteriscos]
+Confianza: [alta | media | original]
+Conecta con: [campo del perfil, o "general"]`;
 
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) {
