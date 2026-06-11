@@ -21,6 +21,7 @@ import {
   useDeleteInternalComunicado,
 } from "@/hooks/useInternalDespacho";
 import { ProcedureDetailDialog } from "@/components/hub/ProcedureDetailDialog";
+import { TeamDirectory } from "@/components/hub/TeamDirectory";
 import { RecursosHumanosPanel } from "@/components/rh/RecursosHumanosPanel";
 import { useUserRole } from "@/hooks/useUserRole";
 import { formatMX } from "@/lib/dateUtils";
@@ -36,6 +37,7 @@ import {
   Shield,
   Search,
   UserCog,
+  Users,
 } from "lucide-react";
 import { PageHeader, type PageHeaderStat } from "@/components/shared/PageHeader";
 import { FileDropzone } from "@/components/shared/FileDropzone";
@@ -44,7 +46,7 @@ import { Badge } from "@/components/ui/badge";
 import { KAWIIL_AI_GRADIENT, KAWIIL_AI_HEADER_BG } from "@/lib/kawiilAi";
 import { toast } from "sonner";
 
-const HUB_TABS = ["procedimientos", "comunicados", "biblioteca", "rh", "admin"] as const;
+const HUB_TABS = ["procedimientos", "comunicados", "biblioteca", "equipo", "rh", "admin"] as const;
 type HubTab = (typeof HUB_TABS)[number];
 
 export default function Hub() {
@@ -176,6 +178,7 @@ export default function Hub() {
             { key: "procedimientos" as const, label: "Procedimientos", icon: FileText },
             { key: "comunicados" as const, label: "Comunicados", icon: Megaphone },
             { key: "biblioteca" as const, label: "Mi biblioteca", icon: Library },
+            { key: "equipo" as const, label: "Equipo", icon: Users },
             { key: "rh" as const, label: "Recursos Humanos", icon: UserCog },
             ...(isAdminOrManager
               ? [{ key: "admin" as const, label: "Admin", icon: Shield }]
@@ -379,6 +382,15 @@ export default function Hub() {
                 </div>
               );
             })()}
+          </section>
+        )}
+
+        {tab === "equipo" && (
+          <section className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Conoce a tu equipo — las respuestas visibles son las que cada persona eligió compartir.
+            </p>
+            <TeamDirectory />
           </section>
         )}
 
