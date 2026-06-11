@@ -879,6 +879,8 @@ div[id*="lovable" i] {
 .kw-ai-quote {
   background: linear-gradient(135deg, hsl(var(--accent) / 0.06), hsl(var(--card)));
   border-color: hsl(var(--accent) / 0.22);
+  display: flex;
+  flex-direction: column;
 }
 .kw-ai-quote-text {
   margin: 0;
@@ -892,6 +894,9 @@ div[id*="lovable" i] {
   font-weight: 500;
   margin-bottom: 10px;
   white-space: pre-line;
+  max-height: 160px;
+  overflow-y: auto;
+  flex: 1;
 }
 .kw-ai-quote-foot {
   display: flex;

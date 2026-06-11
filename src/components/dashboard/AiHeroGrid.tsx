@@ -61,10 +61,13 @@ const PHRASE_FALLBACK =
 
 function stripMarkdown(text: string): string {
   return text
-    .replace(/\*\*([^*]+)\*\*/g, “$1”)
-    .replace(/\*([^*]+)\*/g, “$1”)
-    .replace(/_([^_]+)_/g, “$1”)
-    .replace(/\n\s*---[\s\S]*/g, “”)  // cut off everything after ---
+    .replace(/^FRASE:\s*/i, “”)                      // remove leading FRASE: prefix
+    .replace(/\n\s*---[\s\S]*/g, “”)                 // cut everything after --- separator
+    .replace(/\nConecta con:[^\n]*/gi, “”)           // remove Conecta con: lines
+    .replace(/\nConfianza:[^\n]*/gi, “”)             // remove Confianza: lines
+    .replace(/\*\*([^*]+)\*\*/g, “$1”)               // **bold** → text
+    .replace(/\*([^*]+)\*/g, “$1”)                   // *italic* → text
+    .replace(/_([^_]+)_/g, “$1”)                     // _italic_ → text
     .trim();
 }
 
