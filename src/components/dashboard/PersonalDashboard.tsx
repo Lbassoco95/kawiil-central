@@ -128,7 +128,14 @@ export function PersonalDashboard() {
     enabled: !!user,
   });
 
-  const hasCompletedQuestionnaire = !!userPrefs?.completed_at;
+  // Require the NEW v2 questionnaire (must contain hobbies or figuras_inspiradoras keys).
+  // Users with only v1 data are treated as not yet completed so they see the banner.
+  const isV2Questionnaire = !!(
+    userPrefs?.answers &&
+    ("hobbies" in (userPrefs.answers as Record<string, unknown>) ||
+      "figuras_inspiradoras" in (userPrefs.answers as Record<string, unknown>))
+  );
+  const hasCompletedQuestionnaire = !!userPrefs?.completed_at && isV2Questionnaire;
   const showQuestionnaireReminder = !hasCompletedQuestionnaire;
 
   const { data: proactiveTip } = useQuery({
