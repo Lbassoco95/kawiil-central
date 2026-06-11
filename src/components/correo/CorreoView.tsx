@@ -11,6 +11,10 @@ import { MailTaskDrawer } from "./MailTaskDrawer";
 import { MailTranslateDrawer } from "./MailTranslateDrawer";
 import { type MailTabId } from "./MailTabs";
 import { useEmailDetail, useMailFolders, useMarkEmailRead } from "@/hooks/useMicrosoft";
+import { useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 
 interface EmailShape {
   id?: string;
@@ -28,6 +32,8 @@ interface ForwardState {
 }
 
 export function CorreoView() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<MailTabId>("inbox");
   const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
   const [readingOpen, setReadingOpen] = useState(false);
@@ -48,6 +54,51 @@ export function CorreoView() {
   const folders = (foldersQueryData?.folders ?? []) as { id: string; displayName: string }[];
   const { data: selectedEmailDetail } = useEmailDetail(selectedEmailId);
   const markRead = useMarkEmailRead();
+
+  const handleAfterSendTemplate = useCallback(async (info: { templateCategory?: string; clientId?: string; clientName?: string }) => {
+    const declarationCategories = ["pagos_provisionales", "declaracion_ceros", "envio_anuales", "previos_provisionales", "isn_imss", "envio_nominas"];
+    if (!info.templateCategory || !declarationCategories.includes(info.templateCategory)) return;
+    if (!info.clientId) return;
+    try {
+      const { data: projects } = await supabase.from("projects").select("id").eq("client_id", info.clientId);
+      if (!projects?.length) return;
+      const now = new Date();
+      for (const project of projects) {
+        const { data: period } = await supabase
+          .from("accounting_periods")
+          .select("id, steps")
+          .eq("project_id", project.id)
+          .eq("year", now.getFullYear())
+          .eq("month", now.getMonth() + 1)
+          .maybeSingle();
+        if (!period) continue;
+        const steps = period.steps as Array<{ key: string; completed: boolean; label: string }>;
+        const step = steps.find((s) => s.key === "envio_acuses");
+        if (!step || step.completed) continue;
+        toast.success(`Plantilla enviada a ${info.clientName || "cliente"}. ¿Marcar "${step.label}" como completado?`, {
+          action: {
+            label: "Marcar completo",
+            onClick: async () => {
+              const updatedSteps = steps.map((s) =>
+                s.key === "envio_acuses"
+                  ? { ...s, completed: true, completed_at: new Date().toISOString(), completed_by: user?.id, step_status: "completado" }
+                  : s,
+              );
+              const { error } = await supabase.from("accounting_periods").update({ steps: updatedSteps as any }).eq("id", period.id);
+              if (!error) {
+                queryClient.invalidateQueries({ queryKey: ["accounting-periods", project.id] });
+                toast.success("Paso marcado como completado");
+              }
+            },
+          },
+          duration: 10000,
+        });
+        break;
+      }
+    } catch {
+      // silent — no interrumpir el flujo de correo
+    }
+  }, [user?.id, queryClient]);
 
   const handleSelectEmail = useCallback((id: string) => {
     setSelectedEmailId(id);
@@ -198,6 +249,7 @@ ${detail.body?.contentType === "html" ? origBody : `<pre style="font-family:inhe
         initialSubject={forwardState?.subject}
         initialBodyHtml={forwardState?.bodyHtml}
         showAccountingTemplates
+        onAfterSend={handleAfterSendTemplate}
       />
       <CreateMailRuleDialog
         open={ruleDialogOpen}

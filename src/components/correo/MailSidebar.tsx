@@ -57,21 +57,29 @@ const NAV_ITEMS: NavItem[] = [
   { id: "drafts", label: "Borradores", icon: <FileEdit className="w-[15px] h-[15px]" /> },
 ];
 
-// Only filter folders that are definitely system folders.
-// We only match by wellKnownFolderName (reliable Graph API field).
-// Display name matching is limited to "bandeja de entrada" / "inbox" since those
-// folders sometimes come back without wellKnownFolderName from Graph.
+// Well-known folder names from Graph API (wellKnownFolderName field).
 const WELL_KNOWN_IDS = new Set([
   "inbox", "drafts", "sentitems", "deleteditems", "junkemail",
   "outbox", "archive", "msgfolderroot", "recoverableitemsdeletions",
   "conversationhistory", "scheduled",
 ]);
-// Only exact inbox matches by display name — avoids false-positives on user folders
-const INBOX_DISPLAY_NAMES = new Set(["bandeja de entrada", "inbox"]);
+
+// Display name fallback: Graph API sometimes omits wellKnownFolderName for system folders
+// when they are returned as children of another folder. We filter these by known
+// Spanish and English display names to avoid duplicating nav items.
+const SYSTEM_DISPLAY_NAMES = new Set([
+  // Spanish (Microsoft 365 es-MX / es-ES)
+  "bandeja de entrada", "borradores", "elementos enviados", "enviados",
+  "elementos eliminados", "correo eliminado", "correo no deseado",
+  "archivo", "bandeja de salida", "historial de conversaciones",
+  // English
+  "inbox", "drafts", "sent items", "deleted items", "junk email",
+  "archive", "outbox", "conversation history", "scheduled",
+]);
 
 function isSystemFolder(f: { wellKnownFolderName?: string; displayName: string }): boolean {
   if (f.wellKnownFolderName && WELL_KNOWN_IDS.has(f.wellKnownFolderName.toLowerCase())) return true;
-  if (INBOX_DISPLAY_NAMES.has(f.displayName.toLowerCase())) return true;
+  if (SYSTEM_DISPLAY_NAMES.has(f.displayName.toLowerCase().trim())) return true;
   return false;
 }
 
@@ -402,11 +410,12 @@ export function MailSidebar({
                 placeholder="Nombre…"
                 className="w-full h-6 px-2 text-[11.5px] bg-background border border-border/50 rounded outline-none focus:border-primary/40"
               />
-              <div className="flex gap-1">
+              <div className="grid grid-cols-6 gap-1.5">
                 {LABEL_COLORS.map((c) => (
                   <button
                     key={c.key}
                     onClick={() => setNewLabelColor(c.key)}
+                    title={c.key}
                     className={cn(
                       "w-4 h-4 rounded-full transition-transform",
                       newLabelColor === c.key && "scale-125 ring-2 ring-offset-1 ring-primary",

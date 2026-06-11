@@ -234,10 +234,9 @@ export function PreferenceQuestionnaire({ open, onClose, onCompleted, initialPub
       onCompleted();
       onClose();
     } catch (e: unknown) {
-      const msg =
-        e instanceof Error
-          ? e.message
-          : (e as any)?.message ?? JSON.stringify(e) ?? "Error desconocido";
+      const err = e as { message?: string; details?: string; hint?: string } | null;
+      const msg = e instanceof Error ? e.message : (err?.message || err?.details || err?.hint || "Error desconocido");
+      console.error("[PreferenceQuestionnaire] Error al guardar preferencias:", e);
       toast.error("Error al guardar: " + msg);
     } finally {
       setSaving(false);
