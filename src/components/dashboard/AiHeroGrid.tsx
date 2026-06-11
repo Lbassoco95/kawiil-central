@@ -309,11 +309,13 @@ export function AiHeroGrid({
                 <Quote className="h-3 w-3" />
                 <span>Tu frase de hoy</span>
               </div>
-              <blockquote className="kw-ai-quote-text">
-                «{phrase.quote.replace(/^[«"]|[»"]$/g, "").trim()}»
-              </blockquote>
-              <div className="kw-ai-quote-foot">
-                <span className="truncate">{phrase.author ? `— ${phrase.author}` : "Curada para ti"}</span>
+              <div className="kw-ai-quote-scroll">
+                <blockquote className="kw-ai-quote-text">
+                  «{phrase.quote.replace(/^[«“«]|[»”»]$/g, "").trim()}»
+                </blockquote>
+                <div className="kw-ai-quote-foot">
+                  <span>{phrase.author ? `— ${phrase.author}` : "Curada para ti"}</span>
+                </div>
               </div>
             </div>
           )}
