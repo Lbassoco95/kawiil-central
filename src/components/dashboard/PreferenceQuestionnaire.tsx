@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { Sparkles, ChevronRight, ChevronLeft, Loader2, Check } from "lucide-react";
+import { Sparkles, ChevronRight, ChevronLeft, Loader2, Check, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type AnswerValue = string | string[];
@@ -19,12 +19,19 @@ interface BaseQuestion {
   label: string;
   description?: string;
   optional?: boolean;
+  /** If provided, question is only shown when this returns true */
+  showIf?: (answers: Answers) => boolean;
 }
 interface SelectQuestion extends BaseQuestion { type: "select"; options: string[]; }
 interface MultiSelectQuestion extends BaseQuestion { type: "multiselect"; options: string[]; }
 interface TextQuestion extends BaseQuestion { type: "text" | "textarea"; placeholder?: string; }
 interface ScaleQuestion extends BaseQuestion { type: "scale"; leftLabel: string; rightLabel: string; }
 type Question = SelectQuestion | MultiSelectQuestion | TextQuestion | ScaleQuestion;
+
+const hasHobbyDeporte = (answers: Answers) => {
+  const h = answers["hobbies"];
+  return Array.isArray(h) && h.includes("Deportes / ejercicio");
+};
 
 const QUESTIONS: Question[] = [
   {
@@ -46,10 +53,11 @@ const QUESTIONS: Question[] = [
   },
   {
     key: "deporte",
-    label: "Si practicas algún deporte o actividad física, ¿cuál es?",
+    label: "¿Qué deporte o actividad física practicas?",
     type: "text",
     optional: true,
     placeholder: "Ej: fútbol, correr, yoga, CrossFit, ciclismo...",
+    showIf: hasHobbyDeporte,
   },
   {
     key: "equipo_artista",
@@ -115,20 +123,39 @@ const QUESTIONS: Question[] = [
   },
 ];
 
+/** Keys whose visibility toggle is meaningful (skip internal tone prefs) */
+const VISIBILITY_ELIGIBLE_KEYS = new Set([
+  "hobbies",
+  "deporte",
+  "equipo_artista",
+  "figuras_inspiradoras",
+  "obra_favorita",
+  "meta_anio",
+]);
+
 interface Props {
   open: boolean;
   onClose: () => void;
   onCompleted: () => void;
+  initialPublicKeys?: string[];
 }
 
-export function PreferenceQuestionnaire({ open, onClose, onCompleted }: Props) {
+export function PreferenceQuestionnaire({ open, onClose, onCompleted, initialPublicKeys = [] }: Props) {
   const { user } = useAuth();
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<Answers>({});
+  const [publicKeys, setPublicKeys] = useState<string[]>(initialPublicKeys);
   const [saving, setSaving] = useState(false);
 
-  const currentQ = QUESTIONS[step];
-  const progress = ((step + 1) / QUESTIONS.length) * 100;
+  // Only show questions whose showIf condition (if any) is satisfied
+  const visibleQuestions = useMemo(
+    () => QUESTIONS.filter((q) => !q.showIf || q.showIf(answers)),
+    [answers],
+  );
+
+  const currentQ = visibleQuestions[step] ?? visibleQuestions[0];
+  const progress = ((step + 1) / visibleQuestions.length) * 100;
+  const isLastStep = step === visibleQuestions.length - 1;
 
   const getCurrentValue = (): AnswerValue =>
     answers[currentQ.key] ?? (currentQ.type === "multiselect" ? [] : "");
@@ -150,6 +177,11 @@ export function PreferenceQuestionnaire({ open, onClose, onCompleted }: Props) {
   const handleScaleAnswer = (value: number) =>
     setAnswers((prev) => ({ ...prev, [currentQ.key]: String(value) }));
 
+  const togglePublic = (key: string) =>
+    setPublicKeys((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key],
+    );
+
   const canProceed = (): boolean => {
     if (currentQ.optional) return true;
     const val = answers[currentQ.key];
@@ -157,37 +189,44 @@ export function PreferenceQuestionnaire({ open, onClose, onCompleted }: Props) {
     return typeof val === "string" && val.trim().length > 0;
   };
 
-  const handleNext = () => { if (step < QUESTIONS.length - 1) setStep(step + 1); };
-  const handleBack = () => { if (step > 0) setStep(step - 1); };
+  const handleNext = () => {
+    if (step < visibleQuestions.length - 1) setStep(step + 1);
+  };
+  const handleBack = () => {
+    if (step > 0) setStep(step - 1);
+  };
 
   const handleSubmit = async () => {
     if (!user) return;
     setSaving(true);
     try {
-      const { data: profile, error: profileError } = await supabase
-        .from("profiles")
-        .select("organization_id")
-        .eq("user_id", user.id)
-        .single();
-
-      if (profileError) throw profileError;
-      if (!profile?.organization_id) {
-        throw new Error(
-          "Tu perfil no tiene una organización asignada. Contacta a un administrador.",
-        );
-      }
+      // Resolve org_id: profile first, RPC as fallback so it's never null
+      const [{ data: profile }, orgRes] = await Promise.all([
+        supabase.from("profiles").select("organization_id").eq("user_id", user.id).single(),
+        supabase.rpc("get_user_org_id", { _user_id: user.id }),
+      ]);
+      const organization_id = profile?.organization_id ?? orgRes.data;
+      if (!organization_id) throw new Error("No se pudo obtener el organization_id del usuario.");
 
       const now = new Date().toISOString();
-      const { error } = await supabase.from("user_preferences").upsert(
-        {
-          user_id: user.id,
-          organization_id: profile.organization_id,
-          answers,
-          completed_at: now,
-          updated_at: now,
-        },
-        { onConflict: "user_id" }
-      );
+      const base = {
+        user_id: user.id,
+        organization_id,
+        answers,
+        completed_at: now,
+        updated_at: now,
+      };
+
+      // Try with public_answers; fall back silently if column not migrated yet
+      let { error } = await supabase
+        .from("user_preferences")
+        .upsert({ ...base, public_answers: publicKeys } as any, { onConflict: "user_id" });
+
+      if (error && (error.code === "42703" || error.message?.includes("public_answers"))) {
+        ({ error } = await supabase
+          .from("user_preferences")
+          .upsert(base, { onConflict: "user_id" }));
+      }
 
       if (error) throw error;
 
@@ -195,12 +234,8 @@ export function PreferenceQuestionnaire({ open, onClose, onCompleted }: Props) {
       onCompleted();
       onClose();
     } catch (e: unknown) {
-      // Supabase lanza objetos PostgrestError (no instancias de Error), así que
-      // `e instanceof Error` los descartaba y todo salía como "Error desconocido".
-      // Extraemos el mensaje real para poder diagnosticar.
       const err = e as { message?: string; details?: string; hint?: string } | null;
-      const msg =
-        err?.message || err?.details || err?.hint || "Error desconocido";
+      const msg = e instanceof Error ? e.message : (err?.message || err?.details || err?.hint || "Error desconocido");
       console.error("[PreferenceQuestionnaire] Error al guardar preferencias:", e);
       toast.error("Error al guardar: " + msg);
     } finally {
@@ -208,7 +243,8 @@ export function PreferenceQuestionnaire({ open, onClose, onCompleted }: Props) {
     }
   };
 
-  const isLastStep = step === QUESTIONS.length - 1;
+  const isPublicEligible = VISIBILITY_ELIGIBLE_KEYS.has(currentQ.key);
+  const isPublic = publicKeys.includes(currentQ.key);
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -223,7 +259,7 @@ export function PreferenceQuestionnaire({ open, onClose, onCompleted }: Props) {
 
         <div className="space-y-1">
           <div className="flex justify-between text-[11px] text-muted-foreground">
-            <span>Pregunta {step + 1} de {QUESTIONS.length}</span>
+            <span>Pregunta {step + 1} de {visibleQuestions.length}</span>
             <span>{Math.round(progress)}%</span>
           </div>
           <Progress value={progress} className="h-1.5" />
@@ -282,6 +318,24 @@ export function PreferenceQuestionnaire({ open, onClose, onCompleted }: Props) {
               rightLabel={(currentQ as ScaleQuestion).rightLabel}
               onSelect={handleScaleAnswer}
             />
+          )}
+
+          {isPublicEligible && (
+            <button
+              type="button"
+              onClick={() => togglePublic(currentQ.key)}
+              className={cn(
+                "flex items-center gap-1.5 text-xs transition-colors mt-1",
+                isPublic
+                  ? "text-primary font-medium"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {isPublic
+                ? <Eye className="h-3 w-3 shrink-0" />
+                : <EyeOff className="h-3 w-3 shrink-0" />}
+              {isPublic ? "Visible en mi perfil" : "Solo yo · toca para hacerlo público"}
+            </button>
           )}
         </div>
 

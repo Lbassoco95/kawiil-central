@@ -134,6 +134,10 @@ export default {
           "0%, 100%": { boxShadow: "0 0 8px 0 hsl(var(--primary) / 0.15)" },
           "50%": { boxShadow: "0 0 20px 4px hsl(var(--primary) / 0.25)" },
         },
+        "pulse-ring": {
+          "0%, 100%": { boxShadow: "0 0 0 0 hsl(var(--primary) / 0.35)" },
+          "50%": { boxShadow: "0 0 0 6px hsl(var(--primary) / 0)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -148,6 +152,7 @@ export default {
         float: "float 4s ease-in-out infinite",
         "gradient-shift": "gradient-shift 6s ease infinite",
         "glow-pulse": "glow-pulse 3s ease-in-out infinite",
+        "pulse-ring": "pulse-ring 2s ease-in-out infinite",
       },
     },
   },
