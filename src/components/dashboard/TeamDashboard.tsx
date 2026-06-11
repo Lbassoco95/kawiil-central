@@ -34,6 +34,15 @@ import { formatDateMX, nowMX } from "@/lib/dateUtils";
 import { SERVICE_LABELS } from "@/lib/serviceLabels";
 import { useUserRole } from "@/hooks/useUserRole";
 
+const PUBLIC_ANSWER_LABELS: Record<string, string> = {
+  hobbies: "Hobbies",
+  deporte: "Deporte / actividad",
+  equipo_artista: "Equipo / artista favorito",
+  figuras_inspiradoras: "Figuras inspiradoras",
+  obra_favorita: "Obra favorita",
+  meta_anio: "Meta de este año",
+};
+
 /** Separación entre llamadas IA en el mismo montaje (tabs pueden estar todas en DOM). */
 const TEAM_AI_STAGGER_MS = 700;
 
@@ -130,6 +139,20 @@ export function TeamDashboard() {
     () => (teamMemberSheetUserId ? teamWorkload.find((m) => m.userId === teamMemberSheetUserId) ?? null : null),
     [teamMemberSheetUserId, teamWorkload]
   );
+
+  const { data: memberPrefs } = useQuery({
+    queryKey: ["member-public-prefs", teamMemberSheetUserId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("user_preferences")
+        .select("answers, public_answers")
+        .eq("user_id", teamMemberSheetUserId!)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!teamMemberSheetUserId,
+  });
 
   const memberClientsPortfolio = useMemo(() => {
     if (!teamMemberSheetUserId || !orgUsers) return null;
@@ -752,6 +775,42 @@ Markdown: **negritas** para riesgo o acción; viñetas si varios clientes; emoji
                   </span>
                 </SheetDescription>
               </SheetHeader>
+
+              {(() => {
+                const publicKeys: string[] = memberPrefs?.public_answers ?? [];
+                const answers: Record<string, unknown> = (memberPrefs?.answers as Record<string, unknown>) ?? {};
+                const publicEntries = publicKeys.filter((k) => PUBLIC_ANSWER_LABELS[k] && answers[k]);
+                if (publicEntries.length === 0) return null;
+                return (
+                  <div className="px-6 py-4 border-b border-border/60">
+                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-3">
+                      Perfil personal
+                    </p>
+                    <div className="space-y-2.5">
+                      {publicEntries.map((key) => {
+                        const value = answers[key];
+                        const label = PUBLIC_ANSWER_LABELS[key];
+                        return (
+                          <div key={key}>
+                            <p className="text-[10px] text-muted-foreground mb-1">{label}</p>
+                            {Array.isArray(value) ? (
+                              <div className="flex flex-wrap gap-1">
+                                {(value as string[]).map((v) => (
+                                  <Badge key={v} variant="secondary" className="text-[11px] font-normal">
+                                    {v}
+                                  </Badge>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-[13px] text-foreground">{String(value)}</p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
 
               <ScrollArea className="flex-1 min-h-0 max-h-[calc(100dvh-11rem)] px-6">
                 <div className="py-4 space-y-6">
