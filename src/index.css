@@ -882,6 +882,12 @@ div[id*="lovable" i] {
   display: flex;
   flex-direction: column;
 }
+.kw-ai-quote-scroll {
+  overflow-y: auto;
+  max-height: 200px;
+  flex: 1;
+  padding-right: 2px;
+}
 .kw-ai-quote-text {
   margin: 0;
   padding: 0;
@@ -894,9 +900,6 @@ div[id*="lovable" i] {
   font-weight: 500;
   margin-bottom: 10px;
   white-space: pre-line;
-  max-height: 160px;
-  overflow-y: auto;
-  flex: 1;
 }
 .kw-ai-quote-foot {
   display: flex;
