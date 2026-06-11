@@ -169,15 +169,21 @@ function normalizePhrase(value: string): string {
 
 function parsePhrase(rawPhrase: string): { text: string; confidence: "alta" | "media" | "original" } {
   let cleaned = rawPhrase.trim();
-  if (cleaned.startsWith("FRASE:")) {
-    cleaned = cleaned.replace(/^FRASE:\s*/i, "").trim();
+
+  // If the model added a preamble ("Permíteme intentarlo...") or a first quote it
+  // later "corrected", keep only from the LAST "FRASE:" label onward.
+  const fraseMatches = [...cleaned.matchAll(/FRASE:/gi)];
+  if (fraseMatches.length > 0) {
+    cleaned = cleaned.slice(fraseMatches[fraseMatches.length - 1].index ?? 0);
   }
+  cleaned = cleaned.replace(/^FRASE:\s*/i, "").trim();
+
   // Strip anything after a --- separator (AI sometimes adds reflection paragraphs)
   cleaned = cleaned.replace(/\n\s*---[\s\S]*/i, "").trim();
-  // Strip Confianza line anywhere it appears
-  cleaned = cleaned.replace(/\nConfianza:[^\n]*/gi, "").trim();
-  // Strip Conecta con line anywhere it appears
-  cleaned = cleaned.replace(/\nConecta con:[^\n]*/gi, "").trim();
+  // Strip Confianza line anywhere it appears (tolerate leading whitespace)
+  cleaned = cleaned.replace(/\n\s*Confianza:[^\n]*/gi, "").trim();
+  // Strip Conecta con line anywhere it appears (tolerate leading whitespace)
+  cleaned = cleaned.replace(/\n\s*Conecta con:[^\n]*/gi, "").trim();
   // Strip markdown italics/bold: *text* → text, **text** → text
   cleaned = cleaned.replace(/\*\*([^*]+)\*\*/g, "$1").replace(/\*([^*]+)\*/g, "$1");
 
@@ -188,7 +194,10 @@ function parsePhrase(rawPhrase: string): { text: string; confidence: "alta" | "m
     confidence = confMatch[1].toLowerCase() as "alta" | "media" | "original";
   }
 
-  return { text: cleaned.trim(), confidence };
+  // Salvaguarda: si tras la limpieza no quedó nada (modelo devolvió solo meta),
+  // conserva el texto original para no mostrar una frase vacía.
+  const finalText = cleaned.trim();
+  return { text: finalText.length > 0 ? finalText : rawPhrase.trim(), confidence };
 }
 
 /** Convierte un valor de respuesta (string o array) a string para el prompt. */
@@ -521,7 +530,7 @@ Conecta con: [campo del perfil, o "general"]`;
             model: phraseAnthropicModel(),
             max_tokens: 512,
             system:
-              "Eres un curador cultural experto. Solo compartes citas auténticas, verificables y con atribución completa. Nunca inventas frases y no repites citas recientes del historial.",
+              "Eres un curador cultural experto. Solo compartes citas auténticas, verificables y con atribución completa. Nunca inventas frases y no repites citas recientes del historial. Responde ÚNICAMENTE con el bloque en el formato solicitado (FRASE / autor / Confianza / Conecta con), sin preámbulos, sin saludos, sin explicaciones ni párrafos antes o después, y sin proponer una cita para luego corregirla.",
             messages: [{ role: "user", content: prompt }],
           }),
         });
