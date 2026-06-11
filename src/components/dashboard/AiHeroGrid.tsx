@@ -61,13 +61,13 @@ const PHRASE_FALLBACK =
 
 function stripMarkdown(text: string): string {
   return text
-    .replace(/^FRASE:\s*/i, “”)                      // remove leading FRASE: prefix
-    .replace(/\n\s*---[\s\S]*/g, “”)                 // cut everything after --- separator
-    .replace(/\nConecta con:[^\n]*/gi, “”)           // remove Conecta con: lines
-    .replace(/\nConfianza:[^\n]*/gi, “”)             // remove Confianza: lines
-    .replace(/\*\*([^*]+)\*\*/g, “$1”)               // **bold** → text
-    .replace(/\*([^*]+)\*/g, “$1”)                   // *italic* → text
-    .replace(/_([^_]+)_/g, “$1”)                     // _italic_ → text
+    .replace(/^FRASE:\s*/i, "")                      // remove leading FRASE: prefix
+    .replace(/\n\s*---[\s\S]*/g, "")                 // cut everything after --- separator
+    .replace(/\nConecta con:[^\n]*/gi, "")           // remove Conecta con: lines
+    .replace(/\nConfianza:[^\n]*/gi, "")             // remove Confianza: lines
+    .replace(/\*\*([^*]+)\*\*/g, "$1")               // **bold** → text
+    .replace(/\*([^*]+)\*/g, "$1")                   // *italic* → text
+    .replace(/_([^_]+)_/g, "$1")                     // _italic_ → text
     .trim();
 }
 
@@ -76,14 +76,14 @@ function splitPhrase(raw: string, fallback: string): { quote: string; author: st
     const lines = fallback.split(/\n+/);
     return {
       quote: lines[0] ?? fallback,
-      author: lines[1]?.replace(/^[—-]\s*/, “”) ?? null,
+      author: lines[1]?.replace(/^[—-]\s*/, "") ?? null,
     };
   }
   const cleaned = stripMarkdown(raw);
   const lines = cleaned.split(/\n+/).map((l) => l.trim()).filter(Boolean);
   if (lines.length >= 2 && /^[—-]/.test(lines[lines.length - 1])) {
-    const author = lines[lines.length - 1].replace(/^[—-]\s*/, “”);
-    const quote = lines.slice(0, -1).join(“ “).replace(/^[“”]|[“”]$/g, “”);
+    const author = lines[lines.length - 1].replace(/^[—-]\s*/, "");
+    const quote = lines.slice(0, -1).join(" ").replace(/^["\u201C\u00AB]|["\u201D\u00BB]$/g, "");
     return { quote, author };
   }
   return { quote: cleaned, author: null };
