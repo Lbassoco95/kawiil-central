@@ -1,0 +1,83 @@
+name: Deploy Supabase
+
+# Despliega a Supabase lo que cambió en supabase/ al integrar a main:
+#   - Edge functions: solo las que cambiaron (respeta verify_jwt de config.toml).
+#   - Migraciones: aplica las pendientes con `supabase db push` (idempotente).
+#
+# También se puede ejecutar a mano (workflow_dispatch) para desplegar el estado
+# actual: opcionalmente indica una función a desplegar; las migraciones pendientes
+# se aplican siempre.
+#
+# Requiere estos secrets en el repo (Settings → Secrets and variables → Actions):
+#   SUPABASE_ACCESS_TOKEN  — token personal de acceso (supabase.com/dashboard/account/tokens)
+#   SUPABASE_PROJECT_REF   — ref del proyecto (qppfampapbxdgednkofc)
+#   SUPABASE_DB_PASSWORD   — contraseña de la base de datos del proyecto
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "supabase/functions/**"
+      - "supabase/migrations/**"
+      - "supabase/config.toml"
+  workflow_dispatch:
+    inputs:
+      function:
+        description: "Función específica a desplegar (vacío = solo las que cambiaron en el último commit)"
+        required: false
+        default: ""
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Deploy edge functions
+        run: |
+          set -euo pipefail
+
+          MANUAL_FN="${{ github.event.inputs.function }}"
+          if [ -n "$MANUAL_FN" ]; then
+            CHANGED="$MANUAL_FN"
+          else
+            # Rango de comparación: el commit anterior del push, o HEAD~1 como respaldo.
+            BEFORE="${{ github.event.before }}"
+            if ! git rev-parse --verify "${BEFORE}^{commit}" >/dev/null 2>&1; then BEFORE="HEAD~1"; fi
+            CHANGED=$(git diff --name-only "$BEFORE" HEAD -- 'supabase/functions/**' \
+              | sed -n 's#^supabase/functions/\([^/]*\)/.*#\1#p' | sort -u | grep -v '^_shared$' || true)
+          fi
+
+          if [ -z "${CHANGED}" ]; then
+            echo "Sin funciones que desplegar."
+          else
+            for fn in $CHANGED; do
+              echo "::group::Deploy $fn"
+              supabase functions deploy "$fn" --project-ref "$PROJECT_REF"
+              echo "::endgroup::"
+            done
+          fi
+
+      - name: Push migrations
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+            BEFORE="${{ github.event.before }}"
+            if ! git rev-parse --verify "${BEFORE}^{commit}" >/dev/null 2>&1; then BEFORE="HEAD~1"; fi
+            MIG=$(git diff --name-only "$BEFORE" HEAD -- 'supabase/migrations/**' || true)
+            if [ -z "$MIG" ]; then echo "Sin migraciones nuevas."; exit 0; fi
+          fi
+
+          supabase link --project-ref "$PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+          supabase db push --password "$SUPABASE_DB_PASSWORD"
