@@ -139,7 +139,7 @@ const now = useMemo(() => new Date(), []);
       .filter((b) => map[b].length > 0)
       .map((b) => ({
         bucket: b,
-        emails: map[b].sort((a, b) => b.ts.getTime() - a.ts.getTime()).map((x) => x.email),
+        emails: map[b].sort((x, y) => y.ts.getTime() - x.ts.getTime()).map((item) => item.email),
       }));
   }, [filtered, now]);
 
