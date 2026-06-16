@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, Send, Search, Hash, Lock, MessageCircle, Users, Sparkles } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchAllSlackConversations, SLACK_CONV_LIST_TIMEOUT_MS } from "@/lib/slackWorkspaceFetch";
+import { fetchSlackConversationsPaged, loadCachedSlackConversations, SLACK_CONV_LIST_TIMEOUT_MS } from "@/lib/slackWorkspaceFetch";
 import { useSlackConnection } from "@/hooks/useSlackConnection";
 import { useSlackUserProfiles } from "@/hooks/useSlackUserProfiles";
 import { invokeSlackApi, type SlackConversation } from "@/lib/slackApi";
@@ -114,7 +114,8 @@ export function SendEmailToSlackDialog({
   aiSummary,
   aiSuggestedAction,
 }: SendEmailToSlackDialogProps) {
-  const { isConnected } = useSlackConnection();
+  const { isConnected, connection } = useSlackConnection();
+  const connectionId = connection?.id ?? null;
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [message, setMessage] = useState<string>("");
@@ -123,14 +124,24 @@ export function SendEmailToSlackDialog({
   const [mentionAnchor, setMentionAnchor] = useState(-1);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const { data: conversations = [], isLoading } = useQuery({
-    queryKey: ["slack", "send-email-conversations"],
+  const cached = useMemo(
+    () => (open ? (loadCachedSlackConversations(connectionId) ?? []) : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [open, connectionId],
+  );
+
+  const { data: conversations = cached, isLoading } = useQuery({
+    queryKey: ["slack", "send-email-conversations", connectionId],
     queryFn: () =>
-      fetchAllSlackConversations({
+      fetchSlackConversationsPaged({
+        maxPages: 3,
         timeoutMs: SLACK_CONV_LIST_TIMEOUT_MS,
-      }),
+        cacheConnectionId: connectionId ?? undefined,
+        seedConversations: cached,
+      }).then((r) => r.conversations),
     enabled: open && isConnected,
     staleTime: 5 * 60 * 1000,
+    placeholderData: cached.length > 0 ? cached : undefined,
   });
 
   const { data: workspaceMembers = [] } = useQuery({
