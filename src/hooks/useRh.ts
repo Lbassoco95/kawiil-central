@@ -730,7 +730,7 @@ export function useCreateAbsenceRequest() {
   return useMutation({
     mutationFn: async (input: AbsenceRequestInput) => {
       const orgId = await getMyOrgId(user!.id);
-      const { error } = await db.from("rh_absence_requests").insert({
+      const { data, error } = await db.from("rh_absence_requests").insert({
         user_id: user!.id,
         organization_id: orgId,
         celula_id: input.celula_id,
@@ -740,8 +740,16 @@ export function useCreateAbsenceRequest() {
         day_part: input.day_part,
         reason: input.reason ?? null,
         status: "pending",
-      });
+      }).select("id").single();
       if (error) throw error;
+
+      // Aviso por Slack al G4 responsable (solo burnout y permiso). Best-effort:
+      // no bloquea ni revierte la solicitud si Slack falla.
+      if (data?.id && (input.absence_type === "burnout" || input.absence_type === "permiso")) {
+        db.functions
+          .invoke("rh-absence-slack-notify", { body: { request_id: data.id } })
+          .catch((e: unknown) => console.error("Slack RH notify failed:", e));
+      }
     },
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ["rh-my-absences"] });
