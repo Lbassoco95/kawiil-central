@@ -135,6 +135,25 @@ Deno.serve(async (req) => {
     if (!resendRes.ok || !resendJson?.id) {
       const msg = resendJson?.message || resendJson?.error || `Resend respondió ${resendRes.status}`;
       console.error("Resend error:", msg);
+      // Caso común: el dominio (kawiil.mx) aún no está verificado en Resend, por lo
+      // que solo se permite enviar a la dirección dueña de la cuenta. Damos un
+      // mensaje accionable en español en lugar del texto crudo en inglés.
+      const lower = String(msg).toLowerCase();
+      if (
+        lower.includes("verify a domain") ||
+        lower.includes("only send testing emails") ||
+        lower.includes("domain is not verified")
+      ) {
+        return json(
+          {
+            error:
+              "El dominio kawiil.mx aún no está verificado en Resend, por eso solo se " +
+              "puede enviar a la dirección dueña de la cuenta. Pide al administrador que " +
+              "verifique kawiil.mx en resend.com/domains (registros DKIM/SPF en el DNS).",
+          },
+          502,
+        );
+      }
       return json({ error: `No se pudo enviar el correo: ${msg}` }, 502);
     }
     const messageId = resendJson.id as string;
