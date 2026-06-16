@@ -67,7 +67,7 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
   const isAiTab = AI_TABS.includes(activeTab) && !customFolderOverride;
   const folderId = customFolderOverride ?? TAB_TO_FOLDER[activeTab] ?? "inbox";
 
-  const { data, isLoading, isFetching, fetchNextPage, hasNextPage, isFetchingNextPage } =
+  const { data, isLoading, isFetching, fetchNextPage, hasNextPage, isFetchingNextPage, refetch } =
     useOutlookEmails(folderId, debouncedSearch || undefined);
 
   const allEmails = useMemo(
@@ -122,6 +122,17 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
     el.addEventListener("scroll", handleScroll, { passive: true });
     return () => el.removeEventListener("scroll", handleScroll);
   }, [handleScroll]);
+
+  // When the filtered list is too short to be scrollable but there are more pages,
+  // auto-fetch the next page so the user doesn't get stuck with an empty-looking list.
+  useEffect(() => {
+    if (!hasNextPage || isFetchingNextPage) return;
+    const el = listRef.current;
+    if (!el) return;
+    if (el.scrollHeight <= el.clientHeight) {
+      fetchNextPage();
+    }
+  }, [filtered.length, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   const now = useMemo(() => new Date(), []);
   const groups = useMemo(() => {
@@ -213,6 +224,14 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
           Redactar
         </button>
         <div className="flex-1" />
+        <button
+          onClick={() => { void refetch(); }}
+          disabled={isFetching}
+          className="h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shrink-0 disabled:opacity-40"
+          title="Sincronizar con Outlook"
+        >
+          <RefreshCw className={cn("w-3.5 h-3.5", isFetching && "animate-spin")} />
+        </button>
         <button
           onClick={onOpenFolders}
           className="h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shrink-0"

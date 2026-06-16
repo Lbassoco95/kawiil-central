@@ -704,7 +704,8 @@ export function useOutlookEmails(folderId = "inbox", search?: string) {
       return undefined;
     },
     enabled: !!user,
-    refetchInterval: 60000,
+    refetchInterval: 30000,
+    refetchOnWindowFocus: true,
   });
 }
 
