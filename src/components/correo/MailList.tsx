@@ -126,16 +126,21 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
 const now = useMemo(() => new Date(), []);
   const groups = useMemo(() => {
     const order: DateBucket[] = ["hoy", "ayer", "semana", "anterior"];
-    const map: Record<DateBucket, Record<string, unknown>[]> = { hoy: [], ayer: [], semana: [], anterior: [] };
+    const map: Record<DateBucket, { email: Record<string, unknown>; ts: Date }[]> = { hoy: [], ayer: [], semana: [], anterior: [] };
     for (const email of filtered) {
       const ts = emailListTimestamp({
         receivedDateTime: email.receivedDateTime as string | undefined,
         sentDateTime: email.sentDateTime as string | undefined,
         createdDateTime: email.createdDateTime as string | undefined,
       });
-      map[getDateBucket(ts, now)].push(email);
+      map[getDateBucket(ts, now)].push({ email, ts });
     }
-    return order.filter((b) => map[b].length > 0).map((b) => ({ bucket: b, emails: map[b] }));
+    return order
+      .filter((b) => map[b].length > 0)
+      .map((b) => ({
+        bucket: b,
+        emails: map[b].sort((a, b) => b.ts.getTime() - a.ts.getTime()).map((x) => x.email),
+      }));
   }, [filtered, now]);
 
   // Date bucket label with weekday

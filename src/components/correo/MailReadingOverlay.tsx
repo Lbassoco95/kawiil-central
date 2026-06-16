@@ -63,7 +63,7 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onForwar
   return (
     <div
       className={cn(
-        "absolute inset-0 z-10 flex flex-col bg-card border-l border-border/30 transition-transform duration-200 ease-out",
+        "absolute inset-0 z-10 flex flex-col bg-card border-l border-border/30 transition-transform duration-200 ease-out overflow-hidden",
         open ? "translate-x-0" : "translate-x-full"
       )}
     >
@@ -182,7 +182,7 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onForwar
       </div>
 
       {/* Email body */}
-      <div className="flex-1 overflow-y-auto px-8 py-7 max-w-3xl">
+      <div className="flex-1 overflow-y-auto min-h-0 px-8 py-7 max-w-3xl w-full">
         {isLoading ? (
           <div className="space-y-3 animate-pulse">
             <div className="h-8 bg-muted/50 rounded w-3/4" />
