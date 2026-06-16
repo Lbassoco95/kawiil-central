@@ -123,18 +123,7 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
     return () => el.removeEventListener("scroll", handleScroll);
   }, [handleScroll]);
 
-  // When the filtered list is too short to be scrollable but there are more pages,
-  // auto-fetch the next page so the user doesn't get stuck with an empty-looking list.
-  useEffect(() => {
-    if (!hasNextPage || isFetchingNextPage) return;
-    const el = listRef.current;
-    if (!el) return;
-    if (el.scrollHeight <= el.clientHeight) {
-      fetchNextPage();
-    }
-  }, [filtered.length, hasNextPage, isFetchingNextPage, fetchNextPage]);
-
-  const now = useMemo(() => new Date(), []);
+const now = useMemo(() => new Date(), []);
   const groups = useMemo(() => {
     const order: DateBucket[] = ["hoy", "ayer", "semana", "anterior"];
     const map: Record<DateBucket, Record<string, unknown>[]> = { hoy: [], ayer: [], semana: [], anterior: [] };
@@ -342,6 +331,14 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
           <div className="flex items-center justify-center py-4 text-[12px] text-muted-foreground gap-1.5">
             <Loader2 className="w-3.5 h-3.5 animate-spin" /> Cargando más…
           </div>
+        )}
+        {hasNextPage && !isFetchingNextPage && (
+          <button
+            onClick={() => fetchNextPage()}
+            className="w-full py-3 text-[12px] text-primary hover:text-primary/80 hover:bg-primary/5 transition-colors font-medium"
+          >
+            Cargar más mensajes
+          </button>
         )}
       </div>
     </div>
