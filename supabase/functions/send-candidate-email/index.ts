@@ -1,12 +1,5 @@
-// Envío de correo a un candidato desde el remitente corporativo (rh@kawiil.mx)
-// vía Resend, con registro automático en la bitácora del candidato
-// (rh_candidate_activities, tipo 'email'). Reemplaza el flujo anterior que
-// enviaba desde el Outlook del usuario.
-//
-// Secrets requeridos en Edge Functions:
-//   RESEND_API_KEY  (re_...)
-//   FROM_EMAIL      (rh@kawiil.mx — dominio verificado en Resend)
-//   FROM_NAME       (Kawiil RH)
+// Envío de correo a un candidato usando Microsoft Graph (token del usuario que invoca).
+// Registro automático en la bitácora del candidato (rh_candidate_activities, tipo 'email').
 //
 // Contrato:
 //   POST { candidate_id, subject, body, overrides? }
@@ -21,6 +14,8 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
+
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -32,12 +27,53 @@ function renderTemplate(text: string, vars: Record<string, string>): string {
   return text.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, key) => vars[key] ?? "");
 }
 
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+async function getAccessToken(admin: any, userId: string): Promise<string> {
+  const { data: tokenRow } = await admin
+    .from("microsoft_tokens")
+    .select("access_token, refresh_token, expires_at")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (!tokenRow?.access_token) {
+    throw new Error("El usuario no tiene Microsoft conectado. Conecta tu cuenta en Configuración.");
+  }
+
+  const expiresAt = new Date(tokenRow.expires_at);
+  if (expiresAt.getTime() - Date.now() > 5 * 60 * 1000) {
+    return tokenRow.access_token;
+  }
+
+  // Refresh token
+  const clientId = Deno.env.get("MICROSOFT_CLIENT_ID")!.trim();
+  const clientSecret = Deno.env.get("MICROSOFT_CLIENT_SECRET")!.trim();
+  const tenantId = Deno.env.get("MICROSOFT_TENANT_ID")!.trim();
+
+  const res = await fetch(
+    `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: tokenRow.refresh_token,
+        grant_type: "refresh_token",
+      }),
+    }
+  );
+  const data = await res.json();
+  if (!res.ok) throw new Error(`No se pudo renovar el token de Microsoft: ${data?.error_description ?? res.status}`);
+
+  await admin
+    .from("microsoft_tokens")
+    .update({
+      access_token: data.access_token,
+      refresh_token: data.refresh_token || tokenRow.refresh_token,
+      expires_at: new Date(Date.now() + data.expires_in * 1000).toISOString(),
+    })
+    .eq("user_id", userId);
+
+  return data.access_token;
 }
 
 Deno.serve(async (req) => {
@@ -51,7 +87,6 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-    // Identidad del que llama.
     const callerClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
     });
@@ -64,7 +99,7 @@ Deno.serve(async (req) => {
     const candidateId = String(body.candidate_id ?? "").trim();
     if (!candidateId) return json({ error: "Falta candidate_id" }, 400);
 
-    // Candidato (recipiente desde el servidor; no se confía en el cliente).
+    // Candidato
     const { data: cand } = await admin
       .from("rh_candidates")
       .select("id, organization_id, full_name, email, stage_id, process_id")
@@ -73,7 +108,7 @@ Deno.serve(async (req) => {
     if (!cand) return json({ error: "Candidato no encontrado" }, 404);
     if (!cand.email) return json({ error: "El candidato no tiene correo registrado." }, 400);
 
-    // El que envía debe pertenecer a la misma organización que el candidato.
+    // Verificar que el que envía pertenece a la misma organización
     const { data: prof } = await admin
       .from("profiles")
       .select("organization_id")
@@ -83,7 +118,7 @@ Deno.serve(async (req) => {
       return json({ error: "No tienes acceso a este candidato." }, 403);
     }
 
-    // Variables para sustitución (red de seguridad; el frontend ya las resuelve).
+    // Variables para sustitución
     const [{ data: stage }, { data: proc }, { data: org }] = await Promise.all([
       cand.stage_id
         ? admin.from("rh_recruitment_stages").select("name").eq("id", cand.stage_id).maybeSingle()
@@ -109,37 +144,39 @@ Deno.serve(async (req) => {
     if (!subject || !rawBody.trim()) {
       return json({ error: "Asunto y mensaje son obligatorios." }, 400);
     }
-    const html = `<div style="font-family:system-ui,Segoe UI,Arial,sans-serif;font-size:14px;line-height:1.6;color:#1f2937">${escapeHtml(rawBody).replace(/\n/g, "<br>")}</div>`;
 
-    // --- Envío vía Resend ---
-    const apiKey = Deno.env.get("RESEND_API_KEY");
-    const fromEmail = Deno.env.get("FROM_EMAIL");
-    const fromName = Deno.env.get("FROM_NAME") || "Kawiil RH";
-    if (!apiKey || !fromEmail) {
-      return json({ error: "Email no configurado (faltan RESEND_API_KEY / FROM_EMAIL en Secrets)." }, 500);
-    }
+    const htmlBody = rawBody.replace(/\n/g, "<br>");
 
-    const resendRes = await fetch("https://api.resend.com/emails", {
+    // Obtener token de Microsoft del usuario
+    const accessToken = await getAccessToken(admin, caller.id);
+
+    // Enviar vía Microsoft Graph /me/sendMail
+    const graphRes = await fetch(`${GRAPH_BASE}/me/sendMail`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({
-        from: `${fromName} <${fromEmail}>`,
-        to: [cand.email],
-        subject,
-        html,
-        reply_to: fromEmail,
+        message: {
+          subject,
+          body: { contentType: "HTML", content: htmlBody },
+          toRecipients: [{ emailAddress: { address: cand.email, name: cand.full_name } }],
+        },
+        saveToSentItems: true,
       }),
     });
 
-    const resendJson = await resendRes.json().catch(() => ({}));
-    if (!resendRes.ok || !resendJson?.id) {
-      const msg = resendJson?.message || resendJson?.error || `Resend respondió ${resendRes.status}`;
-      console.error("Resend error:", msg);
-      return json({ error: `No se pudo enviar el correo: ${msg}` }, 502);
+    if (!graphRes.ok) {
+      const errText = await graphRes.text().catch(() => `HTTP ${graphRes.status}`);
+      console.error("Microsoft Graph sendMail error:", errText);
+      return json({ error: `No se pudo enviar el correo: ${errText.slice(0, 300)}` }, 502);
     }
-    const messageId = resendJson.id as string;
 
-    // --- Registro en bitácora SOLO si el envío fue exitoso ---
+    // messageId sintético (Graph /sendMail no devuelve ID del mensaje enviado)
+    const messageId = `graph-${Date.now()}`;
+
+    // Registro en bitácora SOLO si el envío fue exitoso
     const { data: activity, error: logErr } = await admin
       .from("rh_candidate_activities")
       .insert({
@@ -147,7 +184,7 @@ Deno.serve(async (req) => {
         candidate_id: cand.id,
         activity_type: "email",
         content: `Correo enviado: ${subject}`,
-        metadata: { subject, to: cand.email, message_id: messageId, provider: "resend" },
+        metadata: { subject, to: cand.email, message_id: messageId, provider: "microsoft-graph" },
         created_by: caller.id,
       })
       .select("id")
