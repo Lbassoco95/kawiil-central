@@ -7,6 +7,7 @@ import { MailFoldersSheet } from "./MailFoldersSheet";
 import { MailRulesSheet } from "./MailRulesSheet";
 import { ComposeEmailDialog } from "@/components/microsoft/ComposeEmailDialog";
 import { CreateMailRuleDialog } from "@/components/microsoft/CreateMailRuleDialog";
+import { SendEmailToSlackDialog } from "@/components/microsoft/SendEmailToSlackDialog";
 import { MailTaskDrawer } from "./MailTaskDrawer";
 import { MailTranslateDrawer } from "./MailTranslateDrawer";
 import { type MailTabId } from "./MailTabs";
@@ -49,6 +50,7 @@ export function CorreoView() {
   const [customFolderOverride, setCustomFolderOverride] = useState<string | null>(null);
   const [customFolderName, setCustomFolderName] = useState<string | null>(null);
   const [activeLabelId, setActiveLabelId] = useState<string | null>(null);
+  const [slackEmailOpen, setSlackEmailOpen] = useState(false);
 
   const { data: foldersQueryData } = useMailFolders();
   const folders = (foldersQueryData?.folders ?? []) as { id: string; displayName: string }[];
@@ -200,6 +202,7 @@ ${detail.body?.contentType === "html" ? origBody : `<pre style="font-family:inhe
           onForward={handleForward}
           onCreateTask={handleCreateTask}
           onCreateRule={handleCreateRule}
+          onSendToSlack={() => setSlackEmailOpen(true)}
         />
       </div>
 
@@ -267,6 +270,17 @@ ${detail.body?.contentType === "html" ? origBody : `<pre style="font-family:inhe
         open={!!translateEmail}
         email={translateEmail}
         onClose={() => setTranslateEmail(null)}
+      />
+      <SendEmailToSlackDialog
+        open={slackEmailOpen}
+        onOpenChange={setSlackEmailOpen}
+        subject={(selectedEmailDetail as any)?.subject || ""}
+        senderLabel={
+          (selectedEmailDetail as any)?.from?.emailAddress?.name ||
+          (selectedEmailDetail as any)?.from?.emailAddress?.address ||
+          ""
+        }
+        webLink={(selectedEmailDetail as any)?.webLink ?? null}
       />
     </div>
   );

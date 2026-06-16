@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -36,6 +36,14 @@ interface SendEmailToSlackDialogProps {
 }
 
 type ChannelKind = "channel" | "private" | "mpim" | "im";
+
+type SlackMember = {
+  id: string;
+  name: string;
+  deleted?: boolean;
+  is_bot?: boolean;
+  profile?: { display_name?: string; real_name?: string };
+};
 
 function classifyConversation(c: SlackConversation): ChannelKind {
   if (c.is_im) return "im";
@@ -111,6 +119,9 @@ export function SendEmailToSlackDialog({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [message, setMessage] = useState<string>("");
   const [sending, setSending] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionAnchor, setMentionAnchor] = useState(-1);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const { data: conversations = [], isLoading } = useQuery({
     queryKey: ["slack", "send-email-conversations"],
@@ -120,6 +131,21 @@ export function SendEmailToSlackDialog({
       }),
     enabled: open && isConnected,
     staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: workspaceMembers = [] } = useQuery({
+    queryKey: ["slack", "workspace-members"],
+    queryFn: async () => {
+      const data = await invokeSlackApi<{ ok: boolean; members?: SlackMember[] }>({
+        action: "users.list",
+        limit: 200,
+      });
+      return (data.members ?? []).filter(
+        (m) => !m.deleted && !m.is_bot && m.id !== "USLACKBOT",
+      );
+    },
+    enabled: open && isConnected,
+    staleTime: 10 * 60 * 1000,
   });
 
   const imUserIds = useMemo(
@@ -147,8 +173,47 @@ export function SendEmailToSlackDialog({
       );
       setSelectedId(null);
       setSearch("");
+      setMentionQuery(null);
+      setMentionAnchor(-1);
     }
   }, [open, subject, senderLabel, aiSummary, aiSuggestedAction, webLink]);
+
+  const mentionMatches = useMemo(() => {
+    if (mentionQuery === null) return [];
+    const q = mentionQuery.toLowerCase();
+    return workspaceMembers
+      .filter((m) => {
+        const dn = (m.profile?.display_name || m.name).toLowerCase();
+        const rn = (m.profile?.real_name || "").toLowerCase();
+        return dn.includes(q) || rn.includes(q);
+      })
+      .slice(0, 8);
+  }, [mentionQuery, workspaceMembers]);
+
+  const handleMessageChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    setMessage(val);
+    const cursor = e.target.selectionStart ?? val.length;
+    const beforeCursor = val.slice(0, cursor);
+    const match = beforeCursor.match(/@(\w*)$/);
+    if (match && typeof match.index === "number") {
+      setMentionQuery(match[1]);
+      setMentionAnchor(match.index);
+    } else {
+      setMentionQuery(null);
+      setMentionAnchor(-1);
+    }
+  };
+
+  const handleMentionSelect = (member: SlackMember) => {
+    const cursor = textareaRef.current?.selectionStart ?? message.length;
+    const before = message.slice(0, mentionAnchor);
+    const after = message.slice(cursor);
+    setMessage(`${before}<@${member.id}>${after}`);
+    setMentionQuery(null);
+    setMentionAnchor(-1);
+    setTimeout(() => textareaRef.current?.focus(), 0);
+  };
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -284,15 +349,42 @@ export function SendEmailToSlackDialog({
               </p>
             </div>
             <div className="flex min-h-0 flex-1 flex-col px-4 pb-3">
-              <Textarea
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                rows={10}
-                className="flex-1 min-h-[180px] resize-none text-sm font-mono"
-                placeholder="Escribe el mensaje a enviar…"
-              />
+              <div className="relative flex-1">
+                <Textarea
+                  ref={textareaRef as React.RefObject<HTMLTextAreaElement>}
+                  value={message}
+                  onChange={handleMessageChange}
+                  rows={10}
+                  className="min-h-[180px] resize-none text-sm font-mono w-full"
+                  placeholder="Escribe el mensaje a enviar…"
+                />
+                {mentionQuery !== null && mentionMatches.length > 0 && (
+                  <div className="absolute bottom-full left-0 right-0 mb-1 bg-popover border border-border rounded-lg shadow-lg z-50 overflow-hidden">
+                    {mentionMatches.map((member) => {
+                      const displayName = member.profile?.display_name || member.name;
+                      const realName = member.profile?.real_name;
+                      return (
+                        <button
+                          key={member.id}
+                          type="button"
+                          onMouseDown={(e) => { e.preventDefault(); handleMentionSelect(member); }}
+                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-accent transition-colors"
+                        >
+                          <span className="w-5 h-5 rounded-full bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-200 flex items-center justify-center text-[10px] font-bold shrink-0">
+                            {displayName.slice(0, 1).toUpperCase()}
+                          </span>
+                          <span className="font-medium truncate">{displayName}</span>
+                          {realName && realName !== displayName && (
+                            <span className="ml-auto text-[10.5px] text-muted-foreground shrink-0">{realName}</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
               <p className="mt-1.5 text-[10.5px] text-muted-foreground">
-                Soporta mrkdwn de Slack (*negritas*, _cursiva_, &lt;url|texto&gt;).
+                Soporta mrkdwn de Slack (*negritas*, _cursiva_, &lt;url|texto&gt;). Escribe @ para mencionar a alguien.
               </p>
             </div>
           </section>

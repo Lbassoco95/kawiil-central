@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { ArrowLeft, Reply, Forward, Archive, Trash2, CheckSquare, Filter, Tag, FolderInput, ChevronRight } from "lucide-react";
+import { ArrowLeft, Reply, Forward, Archive, Trash2, CheckSquare, Filter, Tag, FolderInput, ChevronRight, MessageSquare } from "lucide-react";
 import { useEmailDetail, useArchiveEmail, useDeleteEmail, useMoveEmail, useMailFolders } from "@/hooks/useMicrosoft";
 import { useResolvedEmailHtml } from "@/hooks/useResolvedEmailHtml";
 import { useEmailAttachments } from "@/hooks/useMicrosoft";
@@ -27,9 +27,10 @@ interface Props {
   onForward?: () => void;
   onCreateTask: (email: EmailShape) => void;
   onCreateRule?: () => void;
+  onSendToSlack?: () => void;
 }
 
-export function MailReadingOverlay({ emailId, open, onClose, onCompose, onForward, onCreateTask, onCreateRule }: Props) {
+export function MailReadingOverlay({ emailId, open, onClose, onCompose, onForward, onCreateTask, onCreateRule, onSendToSlack }: Props) {
   const { data: emailDetail, isLoading } = useEmailDetail(emailId);
   const { data: attachments = [] } = useEmailAttachments(emailId ?? undefined);
   const { html: resolvedHtml } = useResolvedEmailHtml(
@@ -169,6 +170,13 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onForwar
             onClick={() => emailDetail && onCreateTask(emailDetail as EmailShape)}
           >
             <CheckSquare className="w-3.5 h-3.5" />
+          </button>
+          <button
+            className="h-[30px] w-[30px] flex items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+            title="Enviar a Slack"
+            onClick={onSendToSlack}
+          >
+            <MessageSquare className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
