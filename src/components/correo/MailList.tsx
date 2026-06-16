@@ -67,7 +67,7 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
   const isAiTab = AI_TABS.includes(activeTab) && !customFolderOverride;
   const folderId = customFolderOverride ?? TAB_TO_FOLDER[activeTab] ?? "inbox";
 
-  const { data, isLoading, isFetching, fetchNextPage, hasNextPage, isFetchingNextPage } =
+  const { data, isLoading, isFetching, fetchNextPage, hasNextPage, isFetchingNextPage, refetch } =
     useOutlookEmails(folderId, debouncedSearch || undefined);
 
   const allEmails = useMemo(
@@ -123,7 +123,7 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
     return () => el.removeEventListener("scroll", handleScroll);
   }, [handleScroll]);
 
-  const now = useMemo(() => new Date(), []);
+const now = useMemo(() => new Date(), []);
   const groups = useMemo(() => {
     const order: DateBucket[] = ["hoy", "ayer", "semana", "anterior"];
     const map: Record<DateBucket, Record<string, unknown>[]> = { hoy: [], ayer: [], semana: [], anterior: [] };
@@ -213,6 +213,14 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
           Redactar
         </button>
         <div className="flex-1" />
+        <button
+          onClick={() => { void refetch(); }}
+          disabled={isFetching}
+          className="h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shrink-0 disabled:opacity-40"
+          title="Sincronizar con Outlook"
+        >
+          <RefreshCw className={cn("w-3.5 h-3.5", isFetching && "animate-spin")} />
+        </button>
         <button
           onClick={onOpenFolders}
           className="h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shrink-0"
@@ -323,6 +331,14 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
           <div className="flex items-center justify-center py-4 text-[12px] text-muted-foreground gap-1.5">
             <Loader2 className="w-3.5 h-3.5 animate-spin" /> Cargando más…
           </div>
+        )}
+        {hasNextPage && !isFetchingNextPage && (
+          <button
+            onClick={() => fetchNextPage()}
+            className="w-full py-3 text-[12px] text-primary hover:text-primary/80 hover:bg-primary/5 transition-colors font-medium"
+          >
+            Cargar más mensajes
+          </button>
         )}
       </div>
     </div>
