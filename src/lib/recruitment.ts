@@ -76,9 +76,35 @@ export interface Candidate {
   available_from: string | null;
   linkedin_url: string | null;
   portfolio_url: string | null;
+  // Análisis de "Fit Kawiil" con IA (Fase C)
+  ai_fit_score: number | null;
+  ai_analysis: CandidateAiAnalysis | null;
+  ai_analyzed_at: string | null;
+  ai_analyzed_by: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/** Puntaje de rúbrica sugerido por la IA para un criterio. */
+export interface SuggestedRubricScore {
+  criterion_id: string;
+  criterion_name?: string;
+  score: number;
+  rationale?: string;
+}
+
+/** Resultado estructurado del análisis de IA del examen psicométrico. */
+export interface CandidateAiAnalysis {
+  fit_score: number | null;
+  summary: string;
+  strengths: string[];
+  risks: string[];
+  interview_questions: string[];
+  suggested_rubric_scores: SuggestedRubricScore[];
+  model?: string;
+  used_manuals?: boolean;
+  analyzed_at?: string;
 }
 
 export type EducationStatus = "titulado" | "pasante" | "trunco";

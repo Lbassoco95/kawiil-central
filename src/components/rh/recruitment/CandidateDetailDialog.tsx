@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Mail, StickyNote, Send, FileText, Upload, UserCheck, Trash2 } from "lucide-react";
+import { Loader2, Mail, StickyNote, Send, FileText, Upload, UserCheck, Trash2, Sparkles, CheckCircle2, AlertTriangle, HelpCircle } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { formatMX } from "@/lib/dateUtils";
@@ -54,6 +54,7 @@ import {
   useSendCandidateEmail,
   useUploadCandidateCv,
   useUploadCandidateExam,
+  useAnalyzeCandidateFit,
   getCvSignedUrl,
 } from "@/hooks/useRecruitment";
 
@@ -124,6 +125,7 @@ function CandidateDetailInner({
   const updateCandidate = useUpdateCandidate();
   const uploadCv = useUploadCandidateCv();
   const uploadExam = useUploadCandidateExam();
+  const analyzeFit = useAnalyzeCandidateFit();
   const sendEmail = useSendCandidateEmail();
   const fileRef = useRef<HTMLInputElement>(null);
   const examRef = useRef<HTMLInputElement>(null);
@@ -238,9 +240,10 @@ function CandidateDetailInner({
       </DialogHeader>
 
       <Tabs defaultValue="perfil" className="mt-1">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="perfil">Perfil</TabsTrigger>
           <TabsTrigger value="eval">Evaluación</TabsTrigger>
+          <TabsTrigger value="ai">Fit IA</TabsTrigger>
           <TabsTrigger value="track">Seguimiento</TabsTrigger>
         </TabsList>
 
@@ -497,6 +500,120 @@ function CandidateDetailInner({
               </div>
             </>
           )}
+        </TabsContent>
+
+        {/* ---------------- FIT IA ---------------- */}
+        <TabsContent value="ai" className="space-y-3 pt-2">
+          {(() => {
+            const ai = candidate.ai_analysis;
+            const score = candidate.ai_fit_score;
+            const scoreColor =
+              score == null ? "text-muted-foreground"
+                : score >= 70 ? "text-emerald-600"
+                : score >= 40 ? "text-amber-600"
+                : "text-red-600";
+            const canAnalyze = !!candidate.assessment_file_path;
+            return (
+              <>
+                <div className="flex items-center justify-between gap-2 rounded-lg border bg-muted/30 px-3 py-2">
+                  <div>
+                    <p className="text-sm font-medium">Fit con Kawiil</p>
+                    {candidate.ai_analyzed_at && (
+                      <p className="text-[10px] text-muted-foreground">
+                        Analizado {formatMX(candidate.ai_analyzed_at)}
+                        {ai?.used_manuals ? " · con manuales" : ""}
+                      </p>
+                    )}
+                  </div>
+                  <span className={cn("text-2xl font-bold tabular-nums", scoreColor)}>
+                    {score != null ? `${score}` : "—"}
+                    <span className="text-sm font-normal text-muted-foreground">/100</span>
+                  </span>
+                </div>
+
+                {!canAnalyze && (
+                  <p className="rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
+                    Sube el PDF del examen / psicométrico en la pestaña <b>Perfil</b> para poder analizarlo.
+                  </p>
+                )}
+
+                <Button
+                  size="sm"
+                  className="w-full"
+                  disabled={!canAnalyze || analyzeFit.isPending}
+                  onClick={() => analyzeFit.mutate({ candidate })}
+                >
+                  {analyzeFit.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}
+                  {ai ? "Volver a analizar con IA" : "Analizar con IA"}
+                </Button>
+
+                {ai && (
+                  <div className="space-y-3">
+                    {ai.summary && <p className="text-sm text-muted-foreground">{ai.summary}</p>}
+
+                    {ai.strengths?.length > 0 && (
+                      <div className="space-y-1">
+                        <p className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5" /> Fortalezas</p>
+                        <ul className="space-y-1 pl-1 text-sm">
+                          {ai.strengths.map((s, i) => <li key={i} className="flex gap-1.5"><span className="text-emerald-600">·</span><span>{s}</span></li>)}
+                        </ul>
+                      </div>
+                    )}
+
+                    {ai.risks?.length > 0 && (
+                      <div className="space-y-1">
+                        <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-700"><AlertTriangle className="h-3.5 w-3.5" /> Riesgos / a explorar</p>
+                        <ul className="space-y-1 pl-1 text-sm">
+                          {ai.risks.map((s, i) => <li key={i} className="flex gap-1.5"><span className="text-amber-600">·</span><span>{s}</span></li>)}
+                        </ul>
+                      </div>
+                    )}
+
+                    {ai.interview_questions?.length > 0 && (
+                      <div className="space-y-1">
+                        <p className="flex items-center gap-1.5 text-xs font-semibold text-sky-700"><HelpCircle className="h-3.5 w-3.5" /> Preguntas para entrevista</p>
+                        <ul className="space-y-1 pl-1 text-sm">
+                          {ai.interview_questions.map((s, i) => <li key={i} className="flex gap-1.5"><span className="text-sky-600">·</span><span>{s}</span></li>)}
+                        </ul>
+                      </div>
+                    )}
+
+                    {ai.suggested_rubric_scores?.length > 0 && criteria.length > 0 && (
+                      <div className="space-y-1.5">
+                        <p className="text-xs font-semibold">Puntajes sugeridos para la rúbrica</p>
+                        {ai.suggested_rubric_scores.map((sug, i) => {
+                          const crit = criteria.find((c) => c.id === sug.criterion_id);
+                          if (!crit) return null;
+                          const applied = scoreById.get(crit.id) === sug.score;
+                          return (
+                            <div key={i} className="rounded-md border px-2.5 py-2">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-sm font-medium">{crit.name}</span>
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="secondary" className="text-[10px]">sugerido {sug.score}/5</Badge>
+                                  <Button
+                                    size="sm"
+                                    variant={applied ? "secondary" : "outline"}
+                                    className="h-7 px-2 text-xs"
+                                    disabled={applied || setScore.isPending}
+                                    onClick={() => setScore.mutate({ candidate, criterionId: crit.id, score: sug.score })}
+                                  >
+                                    {applied ? "Aplicado" : "Aplicar"}
+                                  </Button>
+                                </div>
+                              </div>
+                              {sug.rationale && <p className="mt-1 text-xs text-muted-foreground">{sug.rationale}</p>}
+                            </div>
+                          );
+                        })}
+                        <p className="text-[10px] text-muted-foreground">Sugerencias de IA — confirma cada puntaje; quedan registrados en la pestaña Evaluación.</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </TabsContent>
 
         {/* ---------------- SEGUIMIENTO ---------------- */}

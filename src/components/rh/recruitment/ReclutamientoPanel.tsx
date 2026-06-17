@@ -28,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Plus, Loader2, Briefcase, UserPlus, Columns3, Tag, Upload, FileText, ClipboardList, Mail, FileUp, Users, UserCog, Eye, Share2 } from "lucide-react";
+import { ArrowLeft, Plus, Loader2, Briefcase, UserPlus, Columns3, Tag, Upload, FileText, ClipboardList, Mail, FileUp, Users, UserCog, Eye, Share2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatMX } from "@/lib/dateUtils";
 import { toast } from "sonner";
@@ -71,6 +71,7 @@ import { EmailTemplateManagerDialog } from "./EmailTemplateManagerDialog";
 import { CandidateImportDialog } from "./CandidateImportDialog";
 import { InterviewerManagerDialog } from "./InterviewerManagerDialog";
 import { OwnerManagerDialog } from "./OwnerManagerDialog";
+import { KawiilProfileDialog } from "./KawiilProfileDialog";
 import { RecruitmentCHROPanel } from "./RecruitmentCHROPanel";
 
 const PROCESS_STATUSES: RhProcessStatus[] = ["open", "paused", "closed", "filled"];
@@ -249,6 +250,7 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
   const [importOpen, setImportOpen] = useState(false);
   const [interviewersOpen, setInterviewersOpen] = useState(false);
   const [ownersOpen, setOwnersOpen] = useState(false);
+  const [kawiilProfileOpen, setKawiilProfileOpen] = useState(false);
   const [detail, setDetail] = useState<Candidate | null>(null);
   const [filterSource, setFilterSource] = useState("all");
   const [filterFrom, setFilterFrom] = useState("");
@@ -361,6 +363,9 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
                 <Button size="sm" variant="outline" onClick={() => setOwnersOpen(true)}>
                   <UserCog className="mr-1.5 h-3.5 w-3.5" /> Responsables
                 </Button>
+                <Button size="sm" variant="outline" onClick={() => setKawiilProfileOpen(true)}>
+                  <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Perfil Kawiil
+                </Button>
               </>
             )}
             <Button size="sm" onClick={() => setAddOpen(true)}>
@@ -445,6 +450,7 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
       <EmailTemplateManagerDialog open={templatesOpen} onOpenChange={setTemplatesOpen} />
       <InterviewerManagerDialog open={interviewersOpen} onOpenChange={setInterviewersOpen} processId={process.id} />
       <OwnerManagerDialog open={ownersOpen} onOpenChange={setOwnersOpen} processId={process.id} />
+      <KawiilProfileDialog open={kawiilProfileOpen} onOpenChange={setKawiilProfileOpen} />
       <CandidateDetailDialog
         candidate={detailLive}
         stages={stages}
