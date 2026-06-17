@@ -126,7 +126,7 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
 const now = useMemo(() => new Date(), []);
   const groups = useMemo(() => {
     const order: DateBucket[] = ["hoy", "ayer", "semana", "anterior"];
-    const map: Record<DateBucket, { email: Record<string, unknown>; ts: Date }[]> = { hoy: [], ayer: [], semana: [], anterior: [] };
+    const map: Record<DateBucket, { email: Record<string, unknown>; ts: string }[]> = { hoy: [], ayer: [], semana: [], anterior: [] };
     for (const email of filtered) {
       const ts = emailListTimestamp({
         receivedDateTime: email.receivedDateTime as string | undefined,
@@ -139,7 +139,7 @@ const now = useMemo(() => new Date(), []);
       .filter((b) => map[b].length > 0)
       .map((b) => ({
         bucket: b,
-        emails: map[b].sort((x, y) => y.ts.getTime() - x.ts.getTime()).map((item) => item.email),
+        emails: map[b].sort((x, y) => (y.ts > x.ts ? 1 : -1)).map((item) => item.email),
       }));
   }, [filtered, now]);
 
