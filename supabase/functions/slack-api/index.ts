@@ -392,6 +392,52 @@ async function slackUnreadSnapshot(
   };
 }
 
+/**
+ * Estado de lectura AUTORITATIVO de Slack para canales concretos.
+ * `unread_count_display` refleja lo que el usuario ya leyó (incluido en la app nativa).
+ * Escanea conversations.list hasta cubrir todos los `targetIds` o agotar `maxPages`.
+ * Devuelve solo los canales encontrados (puede incluir 0 = leído).
+ */
+async function slackUnreadDisplayForChannels(
+  token: string,
+  targetIds: string[],
+  maxPages = 8,
+): Promise<{ unread: Record<string, number>; slackError?: string }> {
+  const targets = new Set(targetIds.map(String).filter(Boolean));
+  const out: Record<string, number> = {};
+  if (targets.size === 0) return { unread: out };
+  let cursor: string | undefined;
+
+  for (let i = 0; i < maxPages && targets.size > 0; i++) {
+    const data = await slackCall(token, "conversations.list", {
+      types: "public_channel,private_channel,mpim,im",
+      limit: 1000,
+      cursor,
+    }) as {
+      ok?: boolean;
+      error?: string;
+      channels?: Array<{ id?: string; unread_count?: number; unread_count_display?: number }>;
+      response_metadata?: { next_cursor?: string };
+    };
+    if (!data.ok) {
+      return { unread: out, slackError: typeof data.error === "string" ? data.error : undefined };
+    }
+
+    for (const ch of data.channels || []) {
+      const id = ch?.id;
+      if (!id || !targets.has(id)) continue;
+      const unread = Number(ch.unread_count_display ?? ch.unread_count ?? 0);
+      out[id] = Number.isFinite(unread) && unread > 0 ? unread : 0;
+      targets.delete(id);
+    }
+
+    cursor = data.response_metadata?.next_cursor || undefined;
+    if (!cursor) break;
+  }
+
+  return { unread: out };
+}
+
 /** Estima no leídos por canal con conversations.history (oldest = último ts visto en Kawiil). */
 async function slackUnreadHistoryBatch(
   token: string,
@@ -629,28 +675,38 @@ Deno.serve(async (req) => {
           : {};
       if (Array.isArray(rawIds) && rawIds.length > 0) {
         const channelIds = [...new Set(rawIds.map((x) => String(x)).filter(Boolean))].slice(0, 18);
-        /** Secuencial: menos ráfagas concurrentes a Slack (rate limits / cierres de sesión). */
-        const fromHist = await slackUnreadHistoryBatch(conn.access_token, readState, channelIds);
-        /** Pocas páginas: el merge con `unread_count` no debe duplicar un barrido tipo sidebar (8+ páginas). */
-        const listSnap = await slackUnreadSnapshot(conn.access_token, 2);
+        /**
+         * AUTORITATIVO: `unread_count_display` de conversations.list refleja lo que el usuario
+         * ya leyó en Slack (incluida la app nativa). Es la verdad del estado de lectura.
+         */
+        const display = await slackUnreadDisplayForChannels(conn.access_token, channelIds, 8);
         const tokenFatal = new Set([
           "invalid_auth",
           "token_revoked",
           "account_inactive",
           "not_allowed_token",
         ]);
-        if (listSnap.ok === false && listSnap.slack_error && tokenFatal.has(listSnap.slack_error)) {
+        if (display.slackError && tokenFatal.has(display.slackError)) {
           return jsonOk({
             ok: false,
-            error: listSnap.slack_error,
+            error: display.slackError,
             message: "El acceso de Slack dejó de ser válido. Vuelve a conectar desde Comunicación.",
             unread_by_channel: {},
           });
         }
-        const merged: Record<string, number> = { ...fromHist };
-        for (const [k, v] of Object.entries(listSnap.unread_by_channel)) {
-          merged[k] = Math.max(merged[k] || 0, v);
-        }
+        const displayMap = display.unread;
+        /**
+         * Fallback solo para canales que el escaneo de la lista no cubrió: estimación por
+         * conversations.history con el cursor local de Kawiil. Limitar a los faltantes evita
+         * la ráfaga de ~24 conversations.history por sondeo (saturaba el rate limit y hacía
+         * que el historial del canal abierto «no cargara»).
+         */
+        const missing = channelIds.filter((id) => !(id in displayMap));
+        const fromHist = missing.length
+          ? await slackUnreadHistoryBatch(conn.access_token, readState, missing)
+          : {};
+        // Slack manda donde lo conocemos; el estimado local solo cubre los huecos.
+        const merged: Record<string, number> = { ...fromHist, ...displayMap };
         return jsonOk({
           ok: true,
           unread_by_channel: merged,
