@@ -235,9 +235,12 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
     refetchInterval: (query) => {
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return false;
       if (query.state.fetchStatus === "fetching") return false;
+      // Sondea el canal abierto para reflejar mensajes nuevos de Slack aunque no generen
+      // notificación dirigida al usuario (canal donde solo es miembro, mensajes propios desde
+      // la app nativa, etc.). Antes se apagaba para siempre tras cargar páginas viejas.
       const pages = query.state.data?.pages?.length ?? 0;
-      if (pages !== 1) return false;
-      return 60_000;
+      if (pages > 3) return false; // canal con scroll profundo: evita refetch costoso de muchas páginas
+      return 20_000;
     },
     refetchIntervalInBackground: false,
     placeholderData: () => {
