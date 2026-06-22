@@ -1032,7 +1032,9 @@ export default function Comunicacion() {
       }
       return merged;
     },
-    enabled: isConnected && mpimIds.length > 0 && conversationsQuery.isSuccess && slackMpimPrefetchOk,
+    // Desactivado: solo alimentaba JSX que ya no se renderiza (la UI la dibuja SlackView).
+    // Evita conversations.members.batch redundante contra Slack en cada carga.
+    enabled: false,
     staleTime: 300_000,
   });
 
@@ -1236,7 +1238,9 @@ export default function Comunicacion() {
       }
       return [...new Set(acc)];
     },
-    enabled: isConnected && !!selectedChannel && slackSecondaryFetchOk,
+    // Desactivado: solo alimentaba JSX que ya no se renderiza (la UI la dibuja SlackView).
+    // Evita hasta 12 páginas de conversations.members por canal abierto contra Slack.
+    enabled: false,
     staleTime: 120_000,
   });
 
@@ -1249,7 +1253,9 @@ export default function Comunicacion() {
       }, { timeoutMs: 25_000 });
       return d.ok ? d.channel : null;
     },
-    enabled: isConnected && !!selectedChannel,
+    // Desactivado: solo alimentaba JSX que ya no se renderiza (la UI la dibuja SlackView).
+    // Evita conversations.info redundante (sin esperar al historial) en cada canal abierto.
+    enabled: false,
     staleTime: 120_000,
   });
 
