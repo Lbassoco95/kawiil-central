@@ -3,18 +3,18 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 /**
  * Búho Legal — proxy seguro entre el frontend y la API de expedientes.
  *
- * Búho Legal expone DOS hosts (confirmado en sus Swagger live):
- *   - AUTH_BASE  (default https://monitoreo.buholegal.com)
- *       · Login/sesión:  POST /api/v1/users/login/  {username, password} -> {access, refresh}
- *       · Catálogos:     /api/v1/circuitos-federales/, /api/v1/fuentes/,
- *                        /api/v1/juzgados/{entidad}, /api/v1/tipos/expedientes/{entidad}
- *   - EXP_BASE   (default https://miscasos-expedientes.buholegal.com)
- *       · Alertas:       /api/v1/info/alertas[...]/{entidad}[/{id}]
- *       · Acuerdos:      /api/v1/info/acuerdos/{entidad}/{id}, .../nuevos/{entidad}[/{id}]
+ * Producto "Manejo de alertas" (NO requiere autorización extra) — todo en un
+ * solo host: https://miscasos-expedientes.buholegal.com
+ *   · Login/sesión:  POST /api/v1/users/login/  {username, password} -> {access, refresh}
+ *   · Catálogos:     /api/v1/info/circuitos, /api/v1/info/juzgados/{entidad},
+ *                    /api/v1/info/tipos/expedientes/{entidad}, /api/v1/info/tiposEntidades
+ *   · Alertas:       /api/v1/info/alertas[...]/{entidad}[/{id}]
+ *   · Acuerdos:      /api/v1/info/acuerdos/{entidad}/{id}, .../nuevos/{entidad}[/{id}]
  *
- * El JWT obtenido en AUTH_BASE se usa como Bearer en ambos hosts (misma cuenta).
- * Las dos bases son configurables por secret (BUHOLEGAL_AUTH_BASE,
- * BUHOLEGAL_EXPEDIENTES_BASE) por si Búho Legal mueve los hosts.
+ * Los productos de Monitoreo/Expedientes y Cédulas SÍ requieren autorización y
+ * viven en otros hosts (p. ej. monitoreo.buholegal.com con otras rutas). Por eso
+ * AUTH_BASE / EXP_BASE / BUHOLEGAL_LOGIN_PATH son configurables por secret, para
+ * apuntarlos sin redeploy cuando se habiliten.
  *
  * Las credenciales (BUHOLEGAL_USERNAME / BUHOLEGAL_PASSWORD) viven como secrets de
  * Supabase Edge Functions y NUNCA llegan al cliente. El cliente sólo manda un
@@ -35,14 +35,21 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const stripSlash = (s: string) => s.replace(/\/$/, "");
 
-// Host de autenticación + catálogos.
+// El producto "Manejo de alertas" (no requiere autorización extra) vive entero
+// en miscasos-expedientes.buholegal.com: login + catálogos + alertas + acuerdos,
+// todo con prefijo /api/v1/info/ (salvo el login).
+//
+// AUTH_BASE es configurable por si más adelante se habilita el producto de
+// Monitoreo/Expedientes (monitoreo.buholegal.com), que usa otros hosts/paths.
+const ALERTAS_HOST = "https://miscasos-expedientes.buholegal.com";
+
+// Host de autenticación + catálogos (por defecto, el mismo host de alertas).
 const AUTH_BASE = stripSlash(
-  Deno.env.get("BUHOLEGAL_AUTH_BASE") ?? "https://monitoreo.buholegal.com",
+  Deno.env.get("BUHOLEGAL_AUTH_BASE") ?? ALERTAS_HOST,
 );
-// Host de alertas + acuerdos (expedientes).
+// Host de alertas + acuerdos.
 const EXP_BASE = stripSlash(
-  Deno.env.get("BUHOLEGAL_EXPEDIENTES_BASE") ??
-    "https://miscasos-expedientes.buholegal.com",
+  Deno.env.get("BUHOLEGAL_EXPEDIENTES_BASE") ?? ALERTAS_HOST,
 );
 
 const corsHeaders: Record<string, string> = {
@@ -65,11 +72,20 @@ async function getToken(): Promise<string> {
       "buholegal_not_configured: configura BUHOLEGAL_USERNAME y BUHOLEGAL_PASSWORD en los secrets de Edge Functions.",
     );
   }
-  const res = await fetch(`${AUTH_BASE}/api/v1/users/login/`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password }),
-  });
+  // Django/DRF puede o no exigir la barra final; probamos con barra y, si da 404,
+  // reintentamos sin barra. La ruta también es configurable por secret.
+  const loginPath = Deno.env.get("BUHOLEGAL_LOGIN_PATH") ?? "/api/v1/users/login/";
+  const body = JSON.stringify({ username, password });
+  const doLogin = (path: string) =>
+    fetch(`${AUTH_BASE}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+    });
+  let res = await doLogin(loginPath);
+  if (res.status === 404 && loginPath.endsWith("/")) {
+    res = await doLogin(loginPath.replace(/\/$/, ""));
+  }
   if (!res.ok) {
     const err = await res.text();
     throw new Error(`BuhoLegal login error ${res.status}: ${err.slice(0, 500)}`);
@@ -161,23 +177,23 @@ Deno.serve(async (req) => {
     let result: unknown;
 
     switch (body.action) {
-      // ── Catálogos (host de monitoreo) ──
+      // ── Catálogos (host de alertas, prefijo /api/v1/info/) ──
       case "get_circuitos":
-        result = await bhl(AUTH_BASE, "/api/v1/circuitos-federales/");
+        result = await bhl(AUTH_BASE, "/api/v1/info/circuitos");
         break;
-      case "get_entidades":
-        // Catálogo de fuentes/entidades disponibles.
-        result = await bhl(AUTH_BASE, "/api/v1/fuentes/");
+      case "get_tipos_entidades":
+        // Entidades que requieren tipo_expediente.
+        result = await bhl(AUTH_BASE, "/api/v1/info/tiposEntidades");
         break;
       case "get_juzgados":
         if (!body.entidad) throw new Error("entidad requerida");
-        result = await bhl(AUTH_BASE, `/api/v1/juzgados/${enc(body.entidad)}`);
+        result = await bhl(AUTH_BASE, `/api/v1/info/juzgados/${enc(body.entidad)}`);
         break;
       case "get_tipos_expediente":
         if (!body.entidad) throw new Error("entidad requerida");
         result = await bhl(
           AUTH_BASE,
-          `/api/v1/tipos/expedientes/${enc(body.entidad)}`,
+          `/api/v1/info/tipos/expedientes/${enc(body.entidad)}`,
         );
         break;
       // ── Alertas y acuerdos (host de expedientes) ──
