@@ -8,6 +8,9 @@
  * sat_rfc: revisa logs `moffin_webhook_sat_rfc_payload_shape`. PDF opcional vía MOFFIN_SAT_RFC_EXTRA_PDF_FIELD_NAMES.
  *
  * URL: https://<ref>.supabase.co/functions/v1/moffin-webhook · verify_jwt = false (supabase/config.toml)
+ *
+ * Nota: usa el timeout compartido de _shared/moffinSolutionsClient.ts (60s por defecto);
+ * redesplegar al cambiar ese helper.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import {

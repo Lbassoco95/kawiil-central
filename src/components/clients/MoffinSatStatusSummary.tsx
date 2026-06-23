@@ -10,7 +10,9 @@ import {
 import { MoffinPdfActions } from "@/components/clients/MoffinPdfActions";
 import { format, differenceInMinutes } from "date-fns";
 import { es } from "date-fns/locale";
-import { Landmark, Loader2, RefreshCw } from "lucide-react";
+import { Landmark, Loader2, RefreshCw, ExternalLink, KeyRound } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import type { Tables } from "@/integrations/supabase/types";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -46,15 +48,35 @@ interface Props {
   /** Título de la tarjeta (mismo contenido en cliente vs contabilidad) */
   title?: string;
   className?: string;
+  /**
+   * Cliente y proyectos: cuando se pasan (vista Detalle de Cliente), se muestra un pie
+   * con RFC, nota de custodia e.firma y accesos a las consultas del proyecto.
+   * En la pestaña Contabilidad del proyecto se omiten (ahí ya hay panel completo).
+   */
+  client?: Tables<"clients">;
+  projects?: Tables<"projects">[];
 }
 
 export function MoffinSatStatusSummary({
   clientId,
   title = "SAT (Moffin)",
   className,
+  client,
+  projects,
 }: Props) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const accountingProjects = useMemo(
+    () =>
+      (projects ?? []).filter(
+        (p) =>
+          (p.area === "contabilidad" || p.area === "softlanding") && p.status !== "cancelado",
+      ),
+    [projects],
+  );
+  const showFiscalFooter = !!client;
+  const managedByFirm = client?.sat_fiel_managed_by_firm !== false;
   const { data: rows = [], isLoading } = useMoffinConsultsByClient(clientId);
   const [syncBusy, setSyncBusy] = useState(false);
   const byType = pickLatestMoffinByType(rows);
@@ -309,6 +331,56 @@ export function MoffinSatStatusSummary({
         ) : null}
         </>
       )}
+      {showFiscalFooter ? (
+        <div className="mt-4 pt-4 border-t border-border/60 space-y-2.5 text-[12px] text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-2">
+            <span>RFC:</span>
+            {client?.rfc ? (
+              <code className="text-[11px] bg-muted/60 px-1.5 py-0.5 rounded">{client.rfc}</code>
+            ) : (
+              <span className="text-amber-700 dark:text-amber-400">Agrega el RFC en Editar cliente.</span>
+            )}
+            {managedByFirm ? (
+              <Badge variant="secondary" className="text-[10px] gap-1 font-normal">
+                <KeyRound className="h-3 w-3" />
+                e.firma custodiada por el despacho
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="text-[10px] font-normal">
+                e.firma no marcada como custodia del despacho
+              </Badge>
+            )}
+          </div>
+          {client?.sat_fiel_location_hint ? (
+            <p className="border-l-2 border-primary/30 pl-3">
+              <span>Referencia interna: </span>
+              <span className="text-foreground whitespace-pre-wrap">{client.sat_fiel_location_hint}</span>
+            </p>
+          ) : null}
+          {accountingProjects.length === 0 ? (
+            <p className="text-amber-700 dark:text-amber-400">
+              No hay proyecto de contabilidad (o softlanding) activo para este cliente. Activa el servicio o crea el
+              proyecto para ejecutar las consultas SAT.
+            </p>
+          ) : (
+            <div className="flex flex-wrap gap-2 pt-0.5">
+              {accountingProjects.map((p) => (
+                <Button
+                  key={p.id}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 text-[12px]"
+                  onClick={() => navigate(`/proyectos/${p.id}?tab=contabilidad`)}
+                >
+                  Ir a consultas — {p.name}
+                  <ExternalLink className="h-3 w-3 opacity-70" />
+                </Button>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : null}
     </section>
   );
 }
