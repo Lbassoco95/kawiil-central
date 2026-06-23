@@ -603,6 +603,7 @@ const ProyectoDetalle = () => {
         {tab === "juicio" && isLawsuit && (
           <LawsuitDashboard
             projectId={project.id}
+            projectName={project.name}
             lawsuitDetails={lawsuitDetails}
             dropboxInitialPath={effectiveDropboxPath}
             lockDropboxToInitialPath={lockDropboxToInitialPath}

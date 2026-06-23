@@ -60,6 +60,7 @@ import { TaskFormDialog } from "@/components/tasks/TaskFormDialog";
 import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { UserOrTextMulti } from "./UserOrTextInput";
+import { BuhoLegalPanel } from "./BuhoLegalPanel";
 
 interface StageAttachment {
   id: string;
@@ -113,6 +114,7 @@ interface LawsuitDetails {
 
 interface LawsuitDashboardProps {
   projectId: string;
+  projectName?: string;
   lawsuitDetails: LawsuitDetails;
   dropboxInitialPath?: string | null;
   lockDropboxToInitialPath?: boolean;
@@ -163,7 +165,7 @@ const STAGE_STATUS_TO_STEP: Record<string, StepStatus> = {
   no_aplica: "completado",
 };
 
-export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath, lockDropboxToInitialPath = false, clientId }: LawsuitDashboardProps) {
+export function LawsuitDashboard({ projectId, projectName, lawsuitDetails, dropboxInitialPath, lockDropboxToInitialPath = false, clientId }: LawsuitDashboardProps) {
   const { user } = useAuth();
   const { canDeleteTasks } = useUserRole();
   const updateTask = useUpdateTask();
@@ -889,6 +891,13 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
           )}
         </CardContent>
       </Card>
+
+      {/* Búho Legal — expediente digital y monitoreo de acuerdos */}
+      <BuhoLegalPanel
+        projectId={projectId}
+        projectName={projectName || localDetails.case_number || "Expediente"}
+        numeroExpediente={localDetails.case_number || undefined}
+      />
 
       {/* Add stage dialog */}
       <Dialog open={stageDialogOpen} onOpenChange={setStageDialogOpen}>
