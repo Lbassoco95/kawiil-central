@@ -12,9 +12,10 @@ create table if not exists email_inbox_rules (
 
 alter table email_inbox_rules enable row level security;
 
+drop policy if exists "Users manage their own email rules" on email_inbox_rules;
 create policy "Users manage their own email rules"
   on email_inbox_rules for all
   using (user_id = auth.uid())
   with check (user_id = auth.uid());
 
-create index email_inbox_rules_user_id_idx on email_inbox_rules(user_id);
+create index if not exists email_inbox_rules_user_id_idx on email_inbox_rules(user_id);
