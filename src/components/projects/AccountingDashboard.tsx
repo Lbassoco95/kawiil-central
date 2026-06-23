@@ -70,6 +70,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { MoffinSatCiecSection } from "./MoffinSatCiecSection";
+import { MoffinFacturasDialog } from "./MoffinFacturasDialog";
 import { MoffinSatStatusSummary } from "@/components/clients/MoffinSatStatusSummary";
 import { MOFFIN_USE_SOLUTIONS } from "@/lib/moffinUseSolutions";
 import { ComposeEmailDialog } from "@/components/microsoft/ComposeEmailDialog";
@@ -893,6 +894,17 @@ export function AccountingDashboard({
                   </Button>
                 );
               })}
+              {MOFFIN_USE_SOLUTIONS ? (
+                <MoffinFacturasDialog
+                  projectId={projectId}
+                  disabled={!!moffinBusy || !moffinCiecStatus?.configured}
+                  disabledReason={
+                    !moffinCiecStatus?.configured
+                      ? "Guarda la CIEC del cliente antes de consultar facturas"
+                      : undefined
+                  }
+                />
+              ) : null}
             </div>
           )}
           {clientId && moffinStalePending ? (
