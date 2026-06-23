@@ -757,7 +757,14 @@ export function useSetCandidateState() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ candidate, stateId, stateName }: { candidate: Candidate; stateId: string; stateName: string }) => {
-      const { error } = await db.from("rh_candidates").update({ state_id: stateId }).eq("id", candidate.id);
+      // Sincroniza el status real del candidato con el estado elegido para que la ficha lo refleje.
+      const patch: Record<string, unknown> = { state_id: stateId };
+      const n = stateName.toLowerCase();
+      if (n.includes("contratad")) patch.status = "hired";
+      else if (n.includes("descartad") || n.includes("rechazad")) patch.status = "rejected";
+      else if (n.includes("declin")) patch.status = "withdrawn";
+      else patch.status = "active";
+      const { error } = await db.from("rh_candidates").update(patch).eq("id", candidate.id);
       if (error) throw error;
       await logActivity(candidate.organization_id, user!.id, candidate.id, "status_change", stateName);
     },

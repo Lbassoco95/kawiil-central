@@ -55,6 +55,7 @@ import {
   useCandidates,
   useCreateCandidate,
   useMoveCandidateStage,
+  useSetCandidateState,
   useOrgName,
   useIsRecruiter,
   useIsProcessOwner,
@@ -72,6 +73,8 @@ import { CandidateImportDialog } from "./CandidateImportDialog";
 import { InterviewerManagerDialog } from "./InterviewerManagerDialog";
 import { OwnerManagerDialog } from "./OwnerManagerDialog";
 import { KawiilProfileDialog } from "./KawiilProfileDialog";
+import { HireCandidateDialog } from "./HireCandidateDialog";
+import { useUserRole } from "@/hooks/useUserRole";
 import { RecruitmentCHROPanel } from "./RecruitmentCHROPanel";
 
 const PROCESS_STATUSES: RhProcessStatus[] = ["open", "paused", "closed", "filled"];
@@ -239,6 +242,8 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
   const celulaName = celulas.find((c) => c.id === process.celula_id)?.name ?? null;
   const updateStatus = useUpdateProcessStatus();
   const moveStage = useMoveCandidateStage();
+  const setState = useSetCandidateState();
+  const { isTransformador } = useUserRole();
   const isRecruiter = useIsRecruiter();
   const isOwner = useIsProcessOwner(process.id);
   const canManage = isRecruiter || isOwner;
@@ -252,6 +257,7 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
   const [ownersOpen, setOwnersOpen] = useState(false);
   const [kawiilProfileOpen, setKawiilProfileOpen] = useState(false);
   const [detail, setDetail] = useState<Candidate | null>(null);
+  const [hireCandidate, setHireCandidate] = useState<Candidate | null>(null);
   const [filterSource, setFilterSource] = useState("all");
   const [filterFrom, setFilterFrom] = useState("");
 
@@ -300,6 +306,16 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
     const stage = stages.find((s) => s.id === over.id);
     if (!cand || !stage || cand.stage_id === stage.id) return;
     moveStage.mutate({ candidate: cand, stageId: stage.id, stageName: stage.name });
+
+    // Mover a la columna "Contratado" refleja el estado en la ficha e inicia el onboarding.
+    if (stage.name.toLowerCase().includes("contratad") && !cand.hired_user_id) {
+      const contratadoState = states.find((s) => s.name.toLowerCase().includes("contratad"));
+      if (contratadoState && cand.state_id !== contratadoState.id) {
+        setState.mutate({ candidate: cand, stateId: contratadoState.id, stateName: contratadoState.name });
+      }
+      // G4 puede crear la cuenta y mandar accesos; otros solo dejan marcado "Contratado".
+      if (isTransformador) setHireCandidate(cand);
+    }
   };
 
   return (
@@ -451,6 +467,12 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
       <InterviewerManagerDialog open={interviewersOpen} onOpenChange={setInterviewersOpen} processId={process.id} />
       <OwnerManagerDialog open={ownersOpen} onOpenChange={setOwnersOpen} processId={process.id} />
       <KawiilProfileDialog open={kawiilProfileOpen} onOpenChange={setKawiilProfileOpen} />
+      <HireCandidateDialog
+        candidate={hireCandidate}
+        states={states}
+        open={!!hireCandidate}
+        onOpenChange={(v) => { if (!v) setHireCandidate(null); }}
+      />
       <CandidateDetailDialog
         candidate={detailLive}
         stages={stages}

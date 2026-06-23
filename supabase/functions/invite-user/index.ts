@@ -36,7 +36,7 @@ serve(async (req) => {
     const { data: isAdmin } = await adminClient.rpc('is_admin_or_manager', { _user_id: callerUser.id });
     if (!isAdmin) throw new Error('Only admins and managers can invite users');
 
-    const { email, full_name, role, area, phone } = await req.json();
+    const { email, full_name, role, area, phone, celula_id } = await req.json();
     if (!email || !full_name || !role) {
       throw new Error('Email, full_name, and role are required');
     }
@@ -92,6 +92,17 @@ serve(async (req) => {
       .upsert({ user_id: newUserId, role }, { onConflict: 'user_id,role' });
 
     if (roleError) console.error('Role assignment error:', roleError);
+
+    // Vincular a la célula asignada (onboarding del colaborador).
+    if (celula_id) {
+      const { error: celulaError } = await adminClient
+        .from('user_celulas')
+        .upsert(
+          { user_id: newUserId, celula_id, organization_id: orgId },
+          { onConflict: 'user_id,celula_id' },
+        );
+      if (celulaError) console.error('Celula assignment error:', celulaError);
+    }
 
     const { error: resetError } = await adminClient.auth.resetPasswordForEmail(email, {
       redirectTo,

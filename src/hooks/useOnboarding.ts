@@ -167,16 +167,26 @@ export function useConvertCandidate() {
     mutationFn: async ({
       candidate,
       role,
+      celulaId,
+      contratadoStateId,
     }: {
       candidate: { id: string; process_id: string; full_name: string; email: string | null; phone: string | null };
       role: string;
+      celulaId?: string | null;
+      contratadoStateId?: string | null;
     }) => {
       if (!candidate.email) throw new Error("El candidato no tiene correo; agrégalo antes de convertirlo.");
       const orgId = await getMyOrgId(user!.id);
 
-      // 1) Invitar/crear la cuenta del colaborador (envía correo de acceso).
+      // 1) Invitar/crear la cuenta del colaborador (envía correo de acceso) y vincular célula.
       const { data, error } = await supabase.functions.invoke("invite-user", {
-        body: { email: candidate.email, full_name: candidate.full_name, role, phone: candidate.phone ?? undefined },
+        body: {
+          email: candidate.email,
+          full_name: candidate.full_name,
+          role,
+          phone: candidate.phone ?? undefined,
+          celula_id: celulaId ?? undefined,
+        },
       });
       if (error) throw new Error(error.message || "No se pudo invitar al colaborador.");
       const newUserId = (data as { user_id?: string })?.user_id;
@@ -184,11 +194,10 @@ export function useConvertCandidate() {
       // 2) Sembrar el checklist de bienvenida.
       if (newUserId) await seedOnboardingForUser(orgId, newUserId);
 
-      // 3) Marcar al candidato como contratado y vincularlo.
-      await db
-        .from("rh_candidates")
-        .update({ status: "hired", hired_user_id: newUserId ?? null })
-        .eq("id", candidate.id);
+      // 3) Marcar al candidato como contratado, vincularlo y fijar el estado "Contratado".
+      const patch: Record<string, unknown> = { status: "hired", hired_user_id: newUserId ?? null };
+      if (contratadoStateId) patch.state_id = contratadoStateId;
+      await db.from("rh_candidates").update(patch).eq("id", candidate.id);
 
       return newUserId;
     },

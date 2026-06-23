@@ -81,6 +81,8 @@ export interface Candidate {
   ai_analysis: CandidateAiAnalysis | null;
   ai_analyzed_at: string | null;
   ai_analyzed_by: string | null;
+  // Vínculo al colaborador creado al contratar (onboarding)
+  hired_user_id: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
