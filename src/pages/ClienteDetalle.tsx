@@ -11,7 +11,6 @@ import {
 import { ClientProjectsTab } from "@/components/clients/ClientProjectsTab";
 import { ClientEditDialog } from "@/components/clients/ClientEditDialog";
 import { ClientHealthScoreCard } from "@/components/clients/ClientHealthScoreCard";
-import { ClientSatFiscalSection } from "@/components/clients/ClientSatFiscalSection";
 import { ClientSatCertificatesSection } from "@/components/clients/ClientSatCertificatesSection";
 import { MoffinSatStatusSummary } from "@/components/clients/MoffinSatStatusSummary";
 import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
@@ -262,7 +261,12 @@ const ClienteDetalle = () => {
                 documents={documents as any}
               />
             </div>
-            <MoffinSatStatusSummary clientId={client.id} className="glass-card md:col-span-2" />
+            <MoffinSatStatusSummary
+              clientId={client.id}
+              client={client}
+              projects={projects}
+              className="glass-card md:col-span-2"
+            />
 
             <section className="glass-card p-5">
               <h2 className="text-sm font-medium text-muted-foreground mb-3">Contacto</h2>
@@ -331,8 +335,6 @@ const ClienteDetalle = () => {
                 </p>
               )}
             </section>
-
-            <ClientSatFiscalSection client={client} projects={projects} />
 
             <ClientSatCertificatesSection
               clientId={client.id}

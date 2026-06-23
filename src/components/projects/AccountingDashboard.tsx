@@ -70,7 +70,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { MoffinSatCiecSection } from "./MoffinSatCiecSection";
-import { MoffinSatStatusSummary } from "@/components/clients/MoffinSatStatusSummary";
+import { MoffinFacturasDialog } from "./MoffinFacturasDialog";
 import { MOFFIN_USE_SOLUTIONS } from "@/lib/moffinUseSolutions";
 import { ComposeEmailDialog } from "@/components/microsoft/ComposeEmailDialog";
 
@@ -754,26 +754,9 @@ export function AccountingDashboard({
           ) : null}
           {clientId ? (
             <p className="text-[10px] text-muted-foreground leading-snug">
-              {MOFFIN_USE_SOLUTIONS ? (
-                <>
-                  Por defecto, CSF y 32D usan la API Moffin Solutions (perfil SAT con CIEC). Lista 69-B sigue en la API legacy
-                  en <code className="text-[9px]">MOFFIN_LEGACY_BASE_URL</code> si aplica.
-                </>
-              ) : (
-                <>
-                  «CSF» y «32D» aquí usan FIEL (build con <code className="text-[9px]">VITE_MOFFIN_API_FLAVOR=legacy</code>).
-                </>
-              )}
+              CSF y opinión 32D se descargan con la CIEC del cliente (Moffin Solutions). La descarga mensual
+              automática (días 1-5) cubre a los clientes con CIEC registrada.
             </p>
-          ) : null}
-          {clientId ? (
-            <>
-              <MoffinSatStatusSummary
-                clientId={clientId}
-                title="Resumen para este cliente"
-                className="bg-muted/15 border-border/70"
-              />
-            </>
           ) : null}
           {clientId ? (
             <div className="space-y-3">
@@ -893,15 +876,23 @@ export function AccountingDashboard({
                   </Button>
                 );
               })}
+              {MOFFIN_USE_SOLUTIONS ? (
+                <MoffinFacturasDialog
+                  projectId={projectId}
+                  disabled={!!moffinBusy || !moffinCiecStatus?.configured}
+                  disabledReason={
+                    !moffinCiecStatus?.configured
+                      ? "Guarda la CIEC del cliente antes de consultar facturas"
+                      : undefined
+                  }
+                />
+              ) : null}
             </div>
           )}
           {clientId && moffinStalePending ? (
-            <p className="text-[11px] text-amber-900 dark:text-amber-100 rounded-md border border-amber-500/35 bg-amber-500/10 px-2 py-2 leading-snug">
-              Consultas SAT en <strong className="font-medium">pendiente</strong> desde hace varios minutos: mientras
-              Moffin responda con el patrón de cola, el estado correcto es pendiente (aún no hay PDF). Revisa que el
-              webhook de Moffin (Svix) entregue el resultado final; si no llega, usa{" "}
-              <strong className="font-medium">Sincronizar pendientes</strong> para leer el estado en la API cuando ya
-              haya resultado.
+            <p className="text-[11px] text-amber-900 dark:text-amber-100 rounded-md border border-amber-500/35 bg-amber-500/10 px-2 py-1.5 leading-snug">
+              Hay consultas en <strong className="font-medium">pendiente</strong> (en cola de Moffin). Usa «Sincronizar
+              pendientes» cuando ya haya resultado.
             </p>
           ) : null}
           {clientId && hasPendingMoffinSync ? (
@@ -919,88 +910,79 @@ export function AccountingDashboard({
                 ) : (
                   <RefreshCw className="h-3.5 w-3.5" />
                 )}
-                Sincronizar pendientes (Moffin API)
+                Sincronizar pendientes
               </Button>
-              <p className="text-[10px] text-muted-foreground text-right max-w-md leading-snug">
-                Pendiente = en cola en Moffin; el PDF solo aplica cuando el estado pase a éxito y tu plan/API lo
-                entreguen. Sin webhook, los cambios se verán al pulsar sincronizar cuando el resultado esté listo.
-              </p>
             </div>
           ) : null}
-          <p className="text-[10px] text-muted-foreground font-medium">Vista rápida (última consulta por tipo)</p>
-          <div className="rounded-md border border-border/60 overflow-hidden">
-            <table className="w-full text-left text-[11px]">
-              <thead className="bg-muted/40 text-muted-foreground">
-                <tr>
-                  <th className="p-2 font-medium">Tipo</th>
-                  <th className="p-2 font-medium">Último estado</th>
-                  <th className="p-2 font-medium">Resumen</th>
-                  <th className="p-2 font-medium">Fecha</th>
-                  <th className="p-2 font-medium min-w-[140px]">PDF</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(Object.keys(MOFFIN_CONSULT_META) as MoffinConsultType[]).map((key) => {
-                  const row = latestMoffinByType.get(key);
-                  const doc = row?.documents as { file_path?: string | null; name?: string | null } | null;
-                  const statusBadgeVariant =
-                    row?.status === "success"
-                      ? "default"
-                      : row?.status === "fail" || row?.status === "error"
-                        ? "destructive"
-                        : "secondary";
-                  return (
-                    <tr key={key} className="border-t border-border/50">
-                      <td className="p-2 font-medium">{MOFFIN_CONSULT_META[key].label}</td>
-                      <td className="p-2">
-                        {row ? (
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <Badge variant={statusBadgeVariant} className="text-[10px]">
-                              {row.status}
-                            </Badge>
-                            {(row.status === "fail" || row.status === "error") &&
-                            row.error_message?.trim().startsWith("Origen:") ? (
-                              <span className="text-[9px] font-medium text-muted-foreground rounded border border-border/60 px-1 py-0">
-                                Moffin
-                              </span>
-                            ) : null}
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </td>
-                      <td className="p-2 text-muted-foreground max-w-[260px]">
-                        <div className="truncate" title={row?.summary ?? undefined}>
-                          {row?.summary ?? "—"}
-                        </div>
-                        {row?.error_message ? (
-                          <div className="text-[10px] text-destructive mt-0.5 leading-tight line-clamp-2">
-                            {row.error_message}
-                          </div>
-                        ) : null}
-                      </td>
-                      <td className="p-2 text-muted-foreground whitespace-nowrap">
-                        {row?.created_at ? new Date(row.created_at).toLocaleString("es-MX") : "—"}
-                      </td>
-                      <td className="p-2 align-top">
-                        {doc?.file_path ? (
-                          <MoffinPdfActions filePath={doc.file_path} fileName={doc.name} />
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <div className="grid gap-2 sm:grid-cols-3">
+            {(Object.keys(MOFFIN_CONSULT_META) as MoffinConsultType[]).map((key) => {
+              const row = latestMoffinByType.get(key);
+              const doc = row?.documents as { file_path?: string | null; name?: string | null } | null;
+              const st = row?.status;
+              const isOk = st === "success";
+              const isErr = st === "fail" || st === "error";
+              const isPending = st === "pending";
+              const dotClass = isOk
+                ? "bg-emerald-500"
+                : isErr
+                  ? "bg-destructive"
+                  : isPending
+                    ? "bg-amber-500"
+                    : "bg-muted-foreground/40";
+              const stLabel = isOk
+                ? "Listo"
+                : isErr
+                  ? "Error"
+                  : isPending
+                    ? "Pendiente"
+                    : "Sin consultar";
+              return (
+                <div key={key} className="rounded-md border border-border/60 bg-background/40 p-2.5 space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-foreground">{MOFFIN_CONSULT_META[key].short}</span>
+                    <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                      <span className={`h-1.5 w-1.5 rounded-full ${dotClass}`} />
+                      {stLabel}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    {row?.created_at
+                      ? new Date(row.created_at).toLocaleDateString("es-MX", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                        })
+                      : "Aún sin consultar"}
+                  </p>
+                  {isErr && row?.error_message ? (
+                    <p
+                      className="text-[10px] text-destructive leading-tight line-clamp-2"
+                      title={row.error_message}
+                    >
+                      {row.error_message}
+                    </p>
+                  ) : null}
+                  {doc?.file_path ? (
+                    <MoffinPdfActions filePath={doc.file_path} fileName={doc.name} />
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
           {clientId && moffinRows.length > 0 ? (
-            <div className="space-y-1.5">
-              <p className="text-[10px] text-muted-foreground font-medium pt-2">
-                Historial de consultas (cada fila es una ejecución; conserva PDFs previos)
-              </p>
-              <div className="rounded-md border border-border/60 overflow-hidden max-h-72 overflow-y-auto">
+            <Collapsible className="space-y-1.5">
+              <CollapsibleTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-[11px] text-muted-foreground gap-1"
+                >
+                  <ChevronDown className="h-3.5 w-3.5" />
+                  Ver historial completo ({moffinRows.length})
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="rounded-md border border-border/60 overflow-hidden max-h-72 overflow-y-auto">
                 <table className="w-full text-left text-[11px]">
                   <thead className="bg-muted/40 text-muted-foreground sticky top-0 z-[1]">
                     <tr>
@@ -1067,8 +1049,8 @@ export function AccountingDashboard({
                     })}
                   </tbody>
                 </table>
-              </div>
-            </div>
+              </CollapsibleContent>
+            </Collapsible>
           ) : null}
         </CardContent>
       </Card>

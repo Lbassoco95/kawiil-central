@@ -106,6 +106,9 @@ const corsHeaders: Record<string, string> = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// Nota: depende del timeout compartido en _shared/moffinSolutionsClient.ts (60s por
+// defecto). Redesplegar esta función cuando ese helper cambie: el 32D/opinión tarda
+// más que la CSF en devolver el acuse en cola y con 25s se abortaba ("Signal timed out").
 type ConsultType = "lista_69b" | "constancia_situacion_fiscal" | "opinion_cumplimiento";
 
 function inferAccountTypeFromRfc(rfc: string): "PM" | "PF" {
