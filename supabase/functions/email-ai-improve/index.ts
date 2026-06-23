@@ -35,7 +35,7 @@ function normalizeClaudeModel(raw: string | undefined, fallback: string): string
   return m;
 }
 const DEFAULT_MODEL = normalizeClaudeModel(
-  Deno.env.get("KAWIIL_AI_MODEL") || Deno.env.get("KAWIIL_AI_FAST_MODEL"),
+  Deno.env.get("KAWIIL_AI_FAST_MODEL"),
   "claude-haiku-4-5",
 );
 
