@@ -7,12 +7,18 @@ export type MoffinSolutionsJson =
   | { ok: true; json: Record<string, unknown>; status: number }
   | { ok: false; message: string; status: number; bodySample?: string };
 
-/** Evita que la Edge se quede colgada si Moffin no responde (sync manual / refresh). */
+/**
+ * Evita que la Edge se quede colgada si Moffin no responde (sync manual / refresh).
+ * Default 60s: la opinión 32D (cadena Nubarium) tarda más que la CSF en devolver el
+ * acuse en cola; con 25s el POST se abortaba ("Signal timed out") antes de obtener el
+ * queryId y quedaba como error irrecuperable. Ajustable hasta 120s con
+ * MOFFIN_SOLUTIONS_FETCH_TIMEOUT_MS.
+ */
 function moffinSolutionsFetchTimeoutMs(): number {
   const raw = Deno.env.get("MOFFIN_SOLUTIONS_FETCH_TIMEOUT_MS")?.trim();
   const n = raw ? parseInt(raw, 10) : NaN;
   if (Number.isFinite(n) && n >= 5_000 && n <= 120_000) return n;
-  return 25_000;
+  return 60_000;
 }
 
 export function moffinSolutionsFetchSignal(): AbortSignal {
@@ -94,7 +100,7 @@ export async function moffinSolutionsPostJson(
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    const timedOut = /abort|timeout/i.test(msg);
+    const timedOut = /abort|timeout|timed\s*out/i.test(msg);
     return {
       ok: false,
       message: timedOut
@@ -143,7 +149,7 @@ export async function moffinSolutionsGetJson(
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    const timedOut = /abort|timeout/i.test(msg);
+    const timedOut = /abort|timeout|timed\s*out/i.test(msg);
     return {
       ok: false,
       message: timedOut
