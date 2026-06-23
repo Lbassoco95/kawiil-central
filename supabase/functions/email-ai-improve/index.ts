@@ -25,7 +25,19 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
  */
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
-const DEFAULT_MODEL = Deno.env.get("KAWIIL_AI_MODEL")?.trim() || Deno.env.get("KAWIIL_AI_FAST_MODEL")?.trim() || "claude-haiku-4-5";
+
+function normalizeClaudeModel(raw: string | undefined, fallback: string): string {
+  const m = raw?.trim() || "";
+  if (!m) return fallback;
+  if (m.toLowerCase().includes("opus")) return "claude-opus-4-8";
+  if (m.toLowerCase().includes("sonnet")) return "claude-sonnet-4-6";
+  if (m.toLowerCase().includes("haiku")) return "claude-haiku-4-5";
+  return m;
+}
+const DEFAULT_MODEL = normalizeClaudeModel(
+  Deno.env.get("KAWIIL_AI_MODEL") || Deno.env.get("KAWIIL_AI_FAST_MODEL"),
+  "claude-haiku-4-5",
+);
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
