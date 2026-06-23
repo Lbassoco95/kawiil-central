@@ -115,3 +115,5 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = true
   [functions.list-agents]
     verify_jwt = true
+  [functions.analyze-candidate-fit]
+    verify_jwt = true
