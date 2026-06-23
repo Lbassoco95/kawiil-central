@@ -10,6 +10,7 @@ import {
   DEFAULT_STATES,
   type Candidate,
   type CandidateActivity,
+  type CandidateAiAnalysis,
   type CandidateScore,
   type EmailTemplate,
   type RecruitmentCriterion,
@@ -756,7 +757,14 @@ export function useSetCandidateState() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ candidate, stateId, stateName }: { candidate: Candidate; stateId: string; stateName: string }) => {
-      const { error } = await db.from("rh_candidates").update({ state_id: stateId }).eq("id", candidate.id);
+      // Sincroniza el status real del candidato con el estado elegido para que la ficha lo refleje.
+      const patch: Record<string, unknown> = { state_id: stateId };
+      const n = stateName.toLowerCase();
+      if (n.includes("contratad")) patch.status = "hired";
+      else if (n.includes("descartad") || n.includes("rechazad")) patch.status = "rejected";
+      else if (n.includes("declin")) patch.status = "withdrawn";
+      else patch.status = "active";
+      const { error } = await db.from("rh_candidates").update(patch).eq("id", candidate.id);
       if (error) throw error;
       await logActivity(candidate.organization_id, user!.id, candidate.id, "status_change", stateName);
     },
@@ -1067,6 +1075,73 @@ export async function uploadCandidateCvByIds(orgId: string, candidateId: string,
   if (upErr) throw upErr;
   const { error } = await db.from("rh_candidates").update({ resume_url: path }).eq("id", candidateId);
   if (error) throw error;
+}
+
+/** Lanza el análisis de "Fit Kawiil" con IA sobre el examen del candidato. */
+export function useAnalyzeCandidateFit() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ candidate }: { candidate: Candidate }) => {
+      const { data, error } = await supabase.functions.invoke<{
+        ok?: boolean;
+        analysis?: CandidateAiAnalysis;
+        error?: string;
+      }>("analyze-candidate-fit", { body: { candidate_id: candidate.id } });
+      if (error) throw new Error(error.message || "No se pudo analizar el examen");
+      if (data?.error) throw new Error(data.error);
+      return data?.analysis ?? null;
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["rh-candidates", vars.candidate.process_id] });
+      qc.invalidateQueries({ queryKey: ["rh-candidate-activities", vars.candidate.id] });
+      toast.success("Análisis de IA completado");
+    },
+    onError: (e: Error) => toast.error(e.message || "No se pudo analizar el examen"),
+  });
+}
+
+/** Lee el perfil cultural de Kawiil guardado en organizations.settings. */
+export function useOrgCulturalProfile() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["rh-cultural-profile", user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const orgId = await getMyOrgId(user!.id);
+      const { data, error } = await db
+        .from("organizations")
+        .select("settings")
+        .eq("id", orgId)
+        .maybeSingle();
+      if (error) throw error;
+      const settings = (data?.settings ?? {}) as Record<string, unknown>;
+      return typeof settings.rh_cultural_profile === "string" ? settings.rh_cultural_profile : "";
+    },
+  });
+}
+
+/** Guarda el perfil cultural de Kawiil (fusionado en organizations.settings). */
+export function useSetOrgCulturalProfile() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (text: string) => {
+      const orgId = await getMyOrgId(user!.id);
+      const { data: row } = await db
+        .from("organizations")
+        .select("settings")
+        .eq("id", orgId)
+        .maybeSingle();
+      const settings = { ...((row?.settings ?? {}) as Record<string, unknown>), rh_cultural_profile: text };
+      const { error } = await db.from("organizations").update({ settings }).eq("id", orgId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["rh-cultural-profile"] });
+      toast.success("Perfil de Kawiil guardado");
+    },
+    onError: (e: Error) => toast.error(e.message || "No se pudo guardar el perfil"),
+  });
 }
 
 /** Genera una URL firmada temporal para ver/descargar el CV. */
