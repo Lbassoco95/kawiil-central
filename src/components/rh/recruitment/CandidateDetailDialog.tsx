@@ -63,12 +63,13 @@ interface Props {
   states: RecruitmentState[];
   criteria: RecruitmentCriterion[];
   processTitle: string;
+  processGrade?: string | null;
   orgName: string;
   isAdmin: boolean;
   onOpenChange: (v: boolean) => void;
 }
 
-export function CandidateDetailDialog({ candidate, stages, states, criteria, processTitle, orgName, isAdmin, onOpenChange }: Props) {
+export function CandidateDetailDialog({ candidate, stages, states, criteria, processTitle, processGrade, orgName, isAdmin, onOpenChange }: Props) {
   const open = !!candidate;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -81,6 +82,7 @@ export function CandidateDetailDialog({ candidate, stages, states, criteria, pro
             states={states}
             criteria={criteria}
             processTitle={processTitle}
+            processGrade={processGrade}
             orgName={orgName}
             isAdmin={isAdmin}
             onClose={() => onOpenChange(false)}
@@ -97,6 +99,7 @@ function CandidateDetailInner({
   states,
   criteria,
   processTitle,
+  processGrade,
   orgName,
   isAdmin,
   onClose,
@@ -106,6 +109,7 @@ function CandidateDetailInner({
   states: RecruitmentState[];
   criteria: RecruitmentCriterion[];
   processTitle: string;
+  processGrade?: string | null;
   orgName: string;
   isAdmin: boolean;
   onClose: () => void;
@@ -650,7 +654,7 @@ function CandidateDetailInner({
         </TabsContent>
       </Tabs>
 
-      <HireCandidateDialog candidate={candidate} states={states} open={hireOpen} onOpenChange={setHireOpen} />
+      <HireCandidateDialog candidate={candidate} states={states} defaultGrade={processGrade} open={hireOpen} onOpenChange={setHireOpen} />
     </>
   );
 }

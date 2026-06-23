@@ -58,6 +58,17 @@ export function gradoLabel(grado: string): string {
   return config ? `${config.emoji} ${config.shortLabel}` : grado;
 }
 
+/** Convierte el grado de una vacante ("G1".."G4") al grado/rol Kawiil. */
+export function gradoFromGrade(grade: string | null | undefined): AppGrado | null {
+  switch ((grade ?? "").trim().toUpperCase()) {
+    case "G1": return "en_formacion";
+    case "G2": return "ejecutor";
+    case "G3": return "referente";
+    case "G4": return "transformador";
+    default: return null;
+  }
+}
+
 /** Quick badge class lookup */
 export function gradoBadgeClass(grado: string): string {
   return GRADO_CONFIG[grado as AppGrado]?.badgeClass ?? "bg-muted text-muted-foreground";

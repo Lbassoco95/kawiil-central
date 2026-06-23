@@ -470,6 +470,7 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
       <HireCandidateDialog
         candidate={hireCandidate}
         states={states}
+        defaultGrade={process.grade}
         open={!!hireCandidate}
         onOpenChange={(v) => { if (!v) setHireCandidate(null); }}
       />
@@ -479,6 +480,7 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
         states={states}
         criteria={criteria}
         processTitle={process.title}
+        processGrade={process.grade}
         orgName={orgName}
         isAdmin={canManage}
         onOpenChange={(v) => !v && setDetail(null)}
