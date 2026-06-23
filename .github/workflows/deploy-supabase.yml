@@ -80,4 +80,7 @@ jobs:
           fi
 
           supabase link --project-ref "$PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
-          supabase db push --password "$SUPABASE_DB_PASSWORD"
+          # --include-all aplica también migraciones con timestamp anterior a la última
+          # ya aplicada en remoto (ramas en paralelo dejan huecos). Las migraciones son
+          # idempotentes (IF NOT EXISTS), así que es seguro.
+          supabase db push --include-all --password "$SUPABASE_DB_PASSWORD"

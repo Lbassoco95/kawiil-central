@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -19,7 +19,7 @@ import {
 import { Loader2, UserCheck } from "lucide-react";
 import { useConvertCandidate } from "@/hooks/useOnboarding";
 import { useCelulas } from "@/hooks/useCatalogs";
-import { CONVERT_ROLES } from "@/lib/onboarding";
+import { GRADO_SELECT_OPTIONS, gradoFromGrade } from "@/lib/gradoLabels";
 import type { Candidate, RecruitmentState } from "@/lib/recruitment";
 
 /**
@@ -29,18 +29,26 @@ import type { Candidate, RecruitmentState } from "@/lib/recruitment";
 export function HireCandidateDialog({
   candidate,
   states,
+  defaultGrade,
   open,
   onOpenChange,
 }: {
   candidate: Candidate | null;
   states: RecruitmentState[];
+  /** Grado de la vacante ("G1".."G4") para predefinir el grado del colaborador. */
+  defaultGrade?: string | null;
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
   const convert = useConvertCandidate();
   const { data: celulas = [], isLoading: loadingCelulas } = useCelulas();
-  const [role, setRole] = useState("ejecutor");
+  const [role, setRole] = useState<string>("ejecutor");
   const [celulaId, setCelulaId] = useState<string>("");
+
+  // Al abrir, predefine el grado según la vacante (G1→En formación, etc.).
+  useEffect(() => {
+    if (open) setRole(gradoFromGrade(defaultGrade) ?? "ejecutor");
+  }, [open, defaultGrade]);
 
   const activeCelulas = celulas.filter((c) => c.is_active);
   const contratadoStateId = states.find((s) => s.name.toLowerCase().includes("contratad"))?.id ?? null;
@@ -68,11 +76,11 @@ export function HireCandidateDialog({
 
         <div className="space-y-3 py-1">
           <div className="space-y-1.5">
-            <Label className="text-xs">Rol inicial</Label>
+            <Label className="text-xs">Grado inicial (Kawiiler)</Label>
             <Select value={role} onValueChange={setRole}>
               <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {CONVERT_ROLES.map((r) => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
+                {GRADO_SELECT_OPTIONS.map((r) => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
