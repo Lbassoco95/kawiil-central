@@ -101,18 +101,16 @@ export function MoffinFacturasDialog({
   const [result, setResult] = useState<FacturasResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const cfdis = result?.cfdis ?? [];
   const counters = result?.counters ?? null;
 
-  const sortedCfdis = useMemo(
-    () =>
-      [...cfdis].sort((a, b) => {
-        const ta = a.fechaCFDI ? new Date(a.fechaCFDI).getTime() : 0;
-        const tb = b.fechaCFDI ? new Date(b.fechaCFDI).getTime() : 0;
-        return tb - ta;
-      }),
-    [cfdis],
-  );
+  const sortedCfdis = useMemo(() => {
+    const list = result?.cfdis ?? [];
+    return [...list].sort((a, b) => {
+      const ta = a.fechaCFDI ? new Date(a.fechaCFDI).getTime() : 0;
+      const tb = b.fechaCFDI ? new Date(b.fechaCFDI).getTime() : 0;
+      return tb - ta;
+    });
+  }, [result]);
 
   const handleConsultar = async () => {
     setLoading(true);
