@@ -72,9 +72,10 @@ async function getToken(): Promise<string> {
       "buholegal_not_configured: configura BUHOLEGAL_USERNAME y BUHOLEGAL_PASSWORD en los secrets de Edge Functions.",
     );
   }
-  // Django/DRF puede o no exigir la barra final; probamos con barra y, si da 404,
-  // reintentamos sin barra. La ruta también es configurable por secret.
-  const loginPath = Deno.env.get("BUHOLEGAL_LOGIN_PATH") ?? "/api/v1/users/login/";
+  // Ruta confirmada en vivo: /api/v1/users/login (sin barra final) responde 401
+  // con allow: POST,OPTIONS. Configurable por secret; si diera 404 reintentamos
+  // alternando la barra final por si el entorno la exige.
+  const loginPath = Deno.env.get("BUHOLEGAL_LOGIN_PATH") ?? "/api/v1/users/login";
   const body = JSON.stringify({ username, password });
   const doLogin = (path: string) =>
     fetch(`${AUTH_BASE}${path}`, {
@@ -83,8 +84,11 @@ async function getToken(): Promise<string> {
       body,
     });
   let res = await doLogin(loginPath);
-  if (res.status === 404 && loginPath.endsWith("/")) {
-    res = await doLogin(loginPath.replace(/\/$/, ""));
+  if (res.status === 404) {
+    const toggled = loginPath.endsWith("/")
+      ? loginPath.replace(/\/$/, "")
+      : `${loginPath}/`;
+    res = await doLogin(toggled);
   }
   if (!res.ok) {
     const err = await res.text();
