@@ -2,8 +2,19 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 /**
  * Búho Legal — proxy seguro entre el frontend y la API de expedientes.
- *   Base: https://miscasos-expedientes.buholegal.com
- *   Auth Búho Legal: JWT vía POST /api/v1/users/login {username, password} -> {access, refresh}
+ *
+ * Búho Legal expone DOS hosts (confirmado en sus Swagger live):
+ *   - AUTH_BASE  (default https://monitoreo.buholegal.com)
+ *       · Login/sesión:  POST /api/v1/users/login/  {username, password} -> {access, refresh}
+ *       · Catálogos:     /api/v1/circuitos-federales/, /api/v1/fuentes/,
+ *                        /api/v1/juzgados/{entidad}, /api/v1/tipos/expedientes/{entidad}
+ *   - EXP_BASE   (default https://miscasos-expedientes.buholegal.com)
+ *       · Alertas:       /api/v1/info/alertas[...]/{entidad}[/{id}]
+ *       · Acuerdos:      /api/v1/info/acuerdos/{entidad}/{id}, .../nuevos/{entidad}[/{id}]
+ *
+ * El JWT obtenido en AUTH_BASE se usa como Bearer en ambos hosts (misma cuenta).
+ * Las dos bases son configurables por secret (BUHOLEGAL_AUTH_BASE,
+ * BUHOLEGAL_EXPEDIENTES_BASE) por si Búho Legal mueve los hosts.
  *
  * Las credenciales (BUHOLEGAL_USERNAME / BUHOLEGAL_PASSWORD) viven como secrets de
  * Supabase Edge Functions y NUNCA llegan al cliente. El cliente sólo manda un
@@ -22,7 +33,17 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
  *   delete_alerta         { entidad, id_alerta }
  */
 
-const BUHOLEGAL_BASE = "https://miscasos-expedientes.buholegal.com";
+const stripSlash = (s: string) => s.replace(/\/$/, "");
+
+// Host de autenticación + catálogos.
+const AUTH_BASE = stripSlash(
+  Deno.env.get("BUHOLEGAL_AUTH_BASE") ?? "https://monitoreo.buholegal.com",
+);
+// Host de alertas + acuerdos (expedientes).
+const EXP_BASE = stripSlash(
+  Deno.env.get("BUHOLEGAL_EXPEDIENTES_BASE") ??
+    "https://miscasos-expedientes.buholegal.com",
+);
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -44,7 +65,7 @@ async function getToken(): Promise<string> {
       "buholegal_not_configured: configura BUHOLEGAL_USERNAME y BUHOLEGAL_PASSWORD en los secrets de Edge Functions.",
     );
   }
-  const res = await fetch(`${BUHOLEGAL_BASE}/api/v1/users/login`, {
+  const res = await fetch(`${AUTH_BASE}/api/v1/users/login/`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username, password }),
@@ -62,9 +83,9 @@ async function getToken(): Promise<string> {
   return data.access;
 }
 
-async function bhl(path: string, options: RequestInit = {}) {
+async function bhl(base: string, path: string, options: RequestInit = {}) {
   const token = await getToken();
-  const res = await fetch(`${BUHOLEGAL_BASE}${path}`, {
+  const res = await fetch(`${base}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -140,23 +161,32 @@ Deno.serve(async (req) => {
     let result: unknown;
 
     switch (body.action) {
+      // ── Catálogos (host de monitoreo) ──
       case "get_circuitos":
-        result = await bhl("/api/v1/info/circuitos");
+        result = await bhl(AUTH_BASE, "/api/v1/circuitos-federales/");
+        break;
+      case "get_entidades":
+        // Catálogo de fuentes/entidades disponibles.
+        result = await bhl(AUTH_BASE, "/api/v1/fuentes/");
         break;
       case "get_juzgados":
         if (!body.entidad) throw new Error("entidad requerida");
-        result = await bhl(`/api/v1/info/juzgados/${enc(body.entidad)}`);
+        result = await bhl(AUTH_BASE, `/api/v1/juzgados/${enc(body.entidad)}`);
         break;
       case "get_tipos_expediente":
         if (!body.entidad) throw new Error("entidad requerida");
-        result = await bhl(`/api/v1/info/tipos/expedientes/${enc(body.entidad)}`);
+        result = await bhl(
+          AUTH_BASE,
+          `/api/v1/tipos/expedientes/${enc(body.entidad)}`,
+        );
         break;
+      // ── Alertas y acuerdos (host de expedientes) ──
       case "create_alerta":
         if (!body.entidad) throw new Error("entidad requerida");
         if (!body.payload?.nombre_alerta || !body.payload?.numero_expediente) {
           throw new Error("payload requiere nombre_alerta y numero_expediente");
         }
-        result = await bhl(`/api/v1/info/alertas/create/${enc(body.entidad)}`, {
+        result = await bhl(EXP_BASE, `/api/v1/info/alertas/create/${enc(body.entidad)}`, {
           method: "POST",
           body: JSON.stringify(body.payload),
         });
@@ -166,6 +196,7 @@ Deno.serve(async (req) => {
           throw new Error("entidad e id_alerta requeridos");
         }
         result = await bhl(
+          EXP_BASE,
           `/api/v1/info/acuerdos/${enc(body.entidad)}/${body.id_alerta}`,
         );
         break;
@@ -175,7 +206,7 @@ Deno.serve(async (req) => {
           body.id_alerta != null
             ? `/api/v1/info/acuerdos/nuevos/${enc(body.entidad)}/${body.id_alerta}`
             : `/api/v1/info/acuerdos/nuevos/${enc(body.entidad)}`;
-        result = await bhl(path);
+        result = await bhl(EXP_BASE, path);
         break;
       }
       case "delete_alerta":
@@ -183,6 +214,7 @@ Deno.serve(async (req) => {
           throw new Error("entidad e id_alerta requeridos");
         }
         result = await bhl(
+          EXP_BASE,
           `/api/v1/info/alertas/delete/${enc(body.entidad)}/${body.id_alerta}`,
           { method: "DELETE" },
         );
