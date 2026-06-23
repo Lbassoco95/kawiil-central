@@ -199,12 +199,16 @@ export function useConvertCandidate() {
       if (contratadoStateId) patch.state_id = contratadoStateId;
       await db.from("rh_candidates").update(patch).eq("id", candidate.id);
 
+      // 4) Marcar la vacante como cubierta.
+      await db.from("rh_recruitment_processes").update({ status: "filled" }).eq("id", candidate.process_id);
+
       return newUserId;
     },
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ["rh-candidates", vars.candidate.process_id] });
+      qc.invalidateQueries({ queryKey: ["rh-processes"] });
       qc.invalidateQueries({ queryKey: ["org-users"] });
-      toast.success("Colaborador creado. Se envió el correo de acceso y se inició su bienvenida.");
+      toast.success("Colaborador creado. Se envió el correo de acceso, se inició su bienvenida y la vacante quedó cubierta.");
     },
     onError: (e: Error) => toast.error(e.message || "No se pudo convertir el candidato"),
   });
