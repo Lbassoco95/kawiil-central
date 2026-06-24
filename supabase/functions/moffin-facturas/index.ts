@@ -18,7 +18,12 @@
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { decryptFielSecret } from "../_shared/moffinFielCrypto.ts";
-import { getMoffinApiFlavor, moffinSolutionsBaseUrl } from "../_shared/moffinApiFlavor.ts";
+import {
+  getMoffinApiFlavor,
+  moffinLegacyApiKey,
+  moffinLegacyBaseUrl,
+  moffinSolutionsBaseUrl,
+} from "../_shared/moffinApiFlavor.ts";
 import { resolveMoffinSolutionsBearer } from "../_shared/moffinSolutionsAuth.ts";
 import {
   extractMoffinProfileId,
@@ -30,6 +35,7 @@ import { moffinSolutionsProfilePath } from "../_shared/moffinQueryPaths.ts";
 import {
   computeCfdiCounters,
   extractCfdiArray,
+  moffinLegacyCfdiPathCandidates,
   moffinSolutionsCfdiPathCandidates,
   normalizeCfdi,
 } from "../_shared/moffinCfdi.ts";
@@ -182,18 +188,20 @@ Deno.serve(async (req) => {
       400,
     );
   }
+  // Descifra la CIEC una vez: se usa para crear el perfil SAT (Solutions) y, como fallback,
+  // en el body del API legacy. NUNCA se registra en logs.
+  let ciecPlain: string;
+  try {
+    ciecPlain = await decryptFielSecret(ciecRow.ciec_ciphertext, ciecSecret);
+  } catch (e) {
+    return jsonResponse(
+      { error: "ciec_decrypt_failed", message: e instanceof Error ? e.message : String(e) },
+      500,
+    );
+  }
   let profileId: number | null =
     typeof ciecRow.moffin_profile_id === "number" ? ciecRow.moffin_profile_id : null;
   if (profileId == null) {
-    let ciecPlain: string;
-    try {
-      ciecPlain = await decryptFielSecret(ciecRow.ciec_ciphertext, ciecSecret);
-    } catch (e) {
-      return jsonResponse(
-        { error: "ciec_decrypt_failed", message: e instanceof Error ? e.message : String(e) },
-        500,
-      );
-    }
     const profRes = await moffinSolutionsPostJson(
       solutionsBase,
       solutionsBearer,
@@ -257,15 +265,53 @@ Deno.serve(async (req) => {
     }
   }
 
+  // ── Fallback: API legacy (app.moffin.mx), patrón documentado de facturas ──
+  // Solo si Solutions no tiene el endpoint. Aquí la CIEC SÍ va en el body (patrón legacy
+  // que documenta Moffin: {externalId, rfc, CIEC, startdate, enddate}); nunca se loguea.
+  if (!chosen) {
+    const legacyBase = moffinLegacyBaseUrl();
+    const legacyToken = moffinLegacyApiKey().trim();
+    if (legacyToken) {
+      const externalId = `kawiil-facturas-${projectId}-${Date.now()}`;
+      for (const p of moffinLegacyCfdiPathCandidates()) {
+        const r = await moffinSolutionsPostJson(
+          legacyBase,
+          legacyToken,
+          p,
+          { externalId, rfc, CIEC: ciecPlain, startdate, enddate },
+          "Token",
+        );
+        if (r.ok) {
+          chosen = r;
+          usedPath = `legacy:${p}`;
+          break;
+        }
+        probe.push({ path: `legacy:${p}`, status: r.status, message: r.message });
+        const pathMissing = r.status === 404 || /no es JSON/i.test(r.message);
+        if (!pathMissing) {
+          chosen = r;
+          usedPath = `legacy:${p}`;
+          break;
+        }
+      }
+    } else {
+      probe.push({
+        path: "legacy",
+        status: 0,
+        message: "Sin MOFFIN_API_KEY / MOFFIN_LEGACY_API_KEY para intentar el API legacy.",
+      });
+    }
+  }
+
   if (!chosen) {
     console.warn(`moffin-facturas: ningún path respondió. Probados: ${probe.map((x) => `${x.path}=${x.status}`).join(", ")}`);
     return jsonResponse(
       {
         error: "facturas_not_enabled",
         message:
-          `Ningún endpoint de Facturas SAT (CFDI) respondió en Moffin Solutions (probados: ${probe
+          `Ningún endpoint de Facturas SAT (CFDI) respondió en Moffin (probados Solutions y legacy: ${probe
             .map((x) => `${x.path} → ${x.status}`)
-            .join(", ")}). Es probable que la consulta de facturas no esté habilitada para tu cuenta/credenciales, o que el path sea distinto. Confirma con Moffin el endpoint exacto y configúralo en el secreto MOFFIN_SOLUTIONS_PATH_CFDI.`,
+            .join(", ")}). Es probable que la consulta de facturas no esté habilitada para tu cuenta/credenciales, o que el path sea distinto. Confirma con Moffin el endpoint exacto y configúralo en MOFFIN_SOLUTIONS_PATH_CFDI (Solutions) o MOFFIN_LEGACY_PATH_CFDI (legacy).`,
         probed: probe,
       },
       422,
@@ -275,7 +321,7 @@ Deno.serve(async (req) => {
     return jsonResponse(
       {
         error: chosen.status === 403 ? "facturas_not_enabled" : "moffin_api_error",
-        message: `Origen: Moffin Solutions (API) en ${usedPath}. ${chosen.message}`,
+        message: `Origen: Moffin API en ${usedPath}. ${chosen.message}`,
         statusCode: chosen.status,
         path: usedPath,
       },

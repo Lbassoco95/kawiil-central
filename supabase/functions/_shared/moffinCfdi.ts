@@ -41,7 +41,32 @@ export function moffinSolutionsCfdiPathCandidates(): string[] {
   return out;
 }
 
-/** CFDI normalizado para el frontend (no se persiste el detalle, solo se muestra). */
+/**
+ * Candidatos de path para facturas en el API legacy (app.moffin.mx, la misma de 69-B).
+ * Patrón legacy: body {externalId, rfc, CIEC, startdate, enddate} con auth `Token`.
+ * Configurable con MOFFIN_LEGACY_PATH_CFDI (se intenta primero).
+ */
+export function moffinLegacyCfdiPathCandidates(): string[] {
+  const configured = Deno.env.get("MOFFIN_LEGACY_PATH_CFDI")?.trim();
+  const defaults = [
+    "/query/sat_invoices",
+    "/query/sat_cfdi",
+    "/query/cfdi",
+    "/query/facturas",
+    "/queries",
+  ];
+  const list = configured ? [configured, ...defaults] : defaults;
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const p of list) {
+    const norm = p.startsWith("/") ? p : `/${p}`;
+    if (!seen.has(norm)) {
+      seen.add(norm);
+      out.push(norm);
+    }
+  }
+  return out;
+}
 export type MoffinCfdiNormalized = {
   id: string | null;
   uuid: string | null;
