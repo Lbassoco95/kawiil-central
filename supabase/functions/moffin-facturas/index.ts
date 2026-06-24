@@ -30,7 +30,7 @@ import { moffinSolutionsProfilePath } from "../_shared/moffinQueryPaths.ts";
 import {
   computeCfdiCounters,
   extractCfdiArray,
-  moffinSolutionsCfdiPath,
+  moffinSolutionsCfdiPathCandidates,
   normalizeCfdi,
 } from "../_shared/moffinCfdi.ts";
 
@@ -227,33 +227,64 @@ Deno.serve(async (req) => {
   }
 
   // ── Consulta de facturas (CFDI) — CIEC NO va en el body ──
-  const cfdiPath = moffinSolutionsCfdiPath();
-  const cfdiRes = await moffinSolutionsPostJson(
-    solutionsBase,
-    solutionsBearer,
-    cfdiPath,
-    // Estilo Solutions: el perfil (CIEC) ya quedó asociado al RFC arriba; la consulta usa RFC + rango.
-    { rfc, startdate, enddate },
-    solutionsAuthScheme,
-  );
+  // Estilo Solutions: el perfil (CIEC) ya quedó asociado al RFC arriba; la consulta usa RFC + rango.
+  // El path de facturas no está documentado públicamente; probamos candidatos. Un 404 / HTML
+  // (no-JSON) = ese path no existe → siguiente (sin cargo). El primero que responde JSON es el bueno.
+  const cfdiCandidates = moffinSolutionsCfdiPathCandidates();
+  const probe: Array<{ path: string; status: number; message: string }> = [];
+  let chosen: Awaited<ReturnType<typeof moffinSolutionsPostJson>> | null = null;
+  let usedPath = "";
+  for (const p of cfdiCandidates) {
+    const r = await moffinSolutionsPostJson(
+      solutionsBase,
+      solutionsBearer,
+      p,
+      { rfc, startdate, enddate },
+      solutionsAuthScheme,
+    );
+    if (r.ok) {
+      chosen = r;
+      usedPath = p;
+      break;
+    }
+    probe.push({ path: p, status: r.status, message: r.message });
+    const pathMissing = r.status === 404 || /no es JSON/i.test(r.message);
+    if (!pathMissing) {
+      // El endpoint existe pero rechazó la consulta: ese es el error real, deja de probar.
+      chosen = r;
+      usedPath = p;
+      break;
+    }
+  }
 
-  if (!cfdiRes.ok) {
-    const notEnabled = cfdiRes.status === 403 || cfdiRes.status === 404;
+  if (!chosen) {
+    console.warn(`moffin-facturas: ningún path respondió. Probados: ${probe.map((x) => `${x.path}=${x.status}`).join(", ")}`);
     return jsonResponse(
       {
-        error: notEnabled ? "facturas_not_enabled" : "moffin_api_error",
-        message: notEnabled
-          ? `Moffin respondió ${cfdiRes.status} en ${cfdiPath}. Es probable que la consulta de Facturas SAT (CFDI) no esté habilitada para tu cuenta/credenciales Solutions. Detalle: ${cfdiRes.message}`
-          : `Origen: Moffin Solutions (API). ${cfdiRes.message}`,
-        statusCode: cfdiRes.status,
-        path: cfdiPath,
+        error: "facturas_not_enabled",
+        message:
+          `Ningún endpoint de Facturas SAT (CFDI) respondió en Moffin Solutions (probados: ${probe
+            .map((x) => `${x.path} → ${x.status}`)
+            .join(", ")}). Es probable que la consulta de facturas no esté habilitada para tu cuenta/credenciales, o que el path sea distinto. Confirma con Moffin el endpoint exacto y configúralo en el secreto MOFFIN_SOLUTIONS_PATH_CFDI.`,
+        probed: probe,
+      },
+      422,
+    );
+  }
+  if (!chosen.ok) {
+    return jsonResponse(
+      {
+        error: chosen.status === 403 ? "facturas_not_enabled" : "moffin_api_error",
+        message: `Origen: Moffin Solutions (API) en ${usedPath}. ${chosen.message}`,
+        statusCode: chosen.status,
+        path: usedPath,
       },
       422,
     );
   }
 
   // ── Posible respuesta asíncrona: si trae queryId pero aún no el arreglo, intenta un GET ──
-  let json = cfdiRes.json;
+  let json = chosen.json;
   let cfdiRaw = extractCfdiArray(json);
   if (!cfdiRaw) {
     const queryId = extractSolutionsQueryId(json);

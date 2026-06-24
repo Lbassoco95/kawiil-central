@@ -12,6 +12,35 @@ export function moffinSolutionsCfdiPath(): string {
   return path.startsWith("/") ? path : `/${path}`;
 }
 
+/**
+ * Candidatos de path para facturas (CFDI) en Solutions. El endpoint no está
+ * documentado públicamente; probamos los nombres más probables. Si Moffin confirma
+ * el correcto, fíjalo en MOFFIN_SOLUTIONS_PATH_CFDI y se intenta primero.
+ * Un 404 / HTML no-JSON indica que ese path no existe (no genera cargo); el primero
+ * que responde JSON (éxito o error real) es el endpoint correcto.
+ */
+export function moffinSolutionsCfdiPathCandidates(): string[] {
+  const configured = Deno.env.get("MOFFIN_SOLUTIONS_PATH_CFDI")?.trim();
+  const defaults = [
+    "/query/sat/cfdi",
+    "/query/sat/cfdis",
+    "/query/sat/invoices",
+    "/query/sat/facturas",
+    "/query/sat/comprobantes",
+  ];
+  const list = configured ? [configured, ...defaults] : defaults;
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const p of list) {
+    const norm = p.startsWith("/") ? p : `/${p}`;
+    if (!seen.has(norm)) {
+      seen.add(norm);
+      out.push(norm);
+    }
+  }
+  return out;
+}
+
 /** CFDI normalizado para el frontend (no se persiste el detalle, solo se muestra). */
 export type MoffinCfdiNormalized = {
   id: string | null;
