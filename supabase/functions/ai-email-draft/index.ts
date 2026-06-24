@@ -11,7 +11,20 @@ const corsHeaders = {
 };
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
-const MODEL = Deno.env.get("KAWIIL_AI_MODEL")?.trim() || Deno.env.get("KAWIIL_AI_FAST_MODEL")?.trim() || "claude-haiku-4-5";
+
+function normalizeClaudeModel(raw: string | undefined, fallback: string): string {
+  const m = raw?.trim() || "";
+  if (!m) return fallback;
+  if (m.toLowerCase().includes("opus")) return "claude-opus-4-8";
+  if (m.toLowerCase().includes("sonnet")) return "claude-sonnet-4-6";
+  if (m.toLowerCase().includes("haiku")) return "claude-haiku-4-5";
+  return m; // pass through if unrecognized — let Anthropic return the error
+}
+
+const MODEL = normalizeClaudeModel(
+  Deno.env.get("KAWIIL_AI_FAST_MODEL"),
+  "claude-haiku-4-5",
+);
 
 const SYSTEM_DRAFT =
   "Eres un asistente de redacción de correos profesionales en español para Kawiil, un despacho de servicios legales y contables. Redacta correos claros, concisos y profesionales. Responde SOLO con el cuerpo del correo, sin saludos iniciales duplicados ni firmas.";
