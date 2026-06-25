@@ -110,7 +110,7 @@ export function MoffinPdfActions({ filePath, fileName, className }: Props) {
       </div>
 
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-w-5xl w-[95vw] h-[90vh] p-0 gap-0 overflow-hidden flex flex-col">
+        <DialogContent className="max-w-[1600px] w-[96vw] h-[94vh] p-0 gap-0 overflow-hidden flex flex-col">
           <DialogHeader className="px-4 py-3 border-b shrink-0 flex flex-row items-center justify-between gap-3 space-y-0">
             <DialogTitle className="text-sm font-medium truncate flex-1">
               {displayName}
