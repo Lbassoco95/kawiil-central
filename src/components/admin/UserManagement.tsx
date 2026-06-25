@@ -4,13 +4,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { UserAvatar } from "@/components/shared/UserAvatar";
-import { Users, Plus, Loader2, Mail, Phone, UserX, UserCheck, ChevronDown, ChevronUp, Calendar, KeyRound, Shield, MapPin, Pencil, RefreshCw, Send, Link2, KeySquare, CheckCircle2, ImageDown } from "lucide-react";
+import { Users, Plus, Loader2, Mail, Phone, UserX, UserCheck, ChevronDown, ChevronUp, Calendar, KeyRound, Shield, MapPin, Pencil, RefreshCw, Send, Link2, KeySquare, CheckCircle2, ImageDown, AtSign } from "lucide-react";
 import { useBackfillOrgPhotos } from "@/hooks/useMicrosoft";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { formatMX } from "@/lib/dateUtils";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { UserFormDialog } from "@/components/admin/UserFormDialog";
 import { UserEditDialog } from "@/components/admin/UserEditDialog";
+import { ChangeUserEmailDialog } from "@/components/admin/ChangeUserEmailDialog";
 import { useUserModulePermissions, MODULE_LABELS, MODULE_KEYS } from "@/hooks/useModulePermissions";
 import type { OrgUser, OnboardingStatus } from "@/hooks/useOrgUsers";
 import { useAreaOptions, formatCelulaLabel } from "@/hooks/useAreaOptions";
@@ -155,6 +156,7 @@ export function UserManagement() {
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
   const [deactivateTarget, setDeactivateTarget] = useState<{ userId: string; name: string; isActive: boolean } | null>(null);
   const [editTarget, setEditTarget] = useState<OrgUser | null>(null);
+  const [emailTarget, setEmailTarget] = useState<OrgUser | null>(null);
   const { data: users, isLoading } = useOrgUsers();
   const { areaLabelMap } = useAreaOptions();
   const toggleActive = useToggleUserActive();
@@ -398,6 +400,18 @@ export function UserManagement() {
                           <Pencil className="h-3.5 w-3.5 mr-1" />
                           Editar
                         </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-xs"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEmailTarget(user);
+                          }}
+                        >
+                          <AtSign className="h-3.5 w-3.5 mr-1" />
+                          Cambiar correo
+                        </Button>
                         {(user.onboarding_status || (user.invitation_accepted ? 'active' : 'invited')) !== 'active' && (
                           <Button
                             variant="ghost"
@@ -502,6 +516,7 @@ export function UserManagement() {
 
       <UserFormDialog open={dialogOpen} onOpenChange={setDialogOpen} />
       <UserEditDialog user={editTarget} open={!!editTarget} onOpenChange={(open) => !open && setEditTarget(null)} />
+      <ChangeUserEmailDialog user={emailTarget} open={!!emailTarget} onOpenChange={(open) => !open && setEmailTarget(null)} />
 
       <AlertDialog open={!!deactivateTarget} onOpenChange={(open) => !open && setDeactivateTarget(null)}>
         <AlertDialogContent>
