@@ -175,6 +175,7 @@ type MoffinConsultDbRow = {
   document_id: string | null;
   requested_by: string | null;
   raw_response: unknown;
+  created_at?: string | null;
 };
 
 type MoffinPersistUploadOpts = {
@@ -283,6 +284,19 @@ function resolvedMoffinConsultUiStatus(
   return st;
 }
 
+/** Horas máximas que una consulta SAT (CSF/32D) puede quedarse en PENDING antes de declararla vencida. */
+function moffinPendingTimeoutHours(): number {
+  const raw = Deno.env.get("MOFFIN_PENDING_TIMEOUT_HOURS")?.trim();
+  const n = raw ? Number(raw) : NaN;
+  return Number.isFinite(n) && n > 0 ? n : 2;
+}
+
+/** Edad de la consulta (ms) desde created_at; null si no hay fecha válida. */
+function consultAgeMs(row: MoffinConsultDbRow, nowMs: number): number | null {
+  const t = row.created_at ? Date.parse(row.created_at) : NaN;
+  return Number.isFinite(t) ? nowMs - t : null;
+}
+
 async function persistMoffinReportToConsult(
   admin: ReturnType<typeof createClient>,
   row: MoffinConsultDbRow,
@@ -296,6 +310,47 @@ async function persistMoffinReportToConsult(
   }
   const ct = row.consult_type as ConsultType;
   const st = resolvedMoffinConsultUiStatus(ct, report);
+
+  // Timeout de PENDING (CSF/32D): si Moffin deja la consulta en cola más de lo razonable,
+  // dejamos de mostrarla "Pendiente" indefinidamente y la marcamos como error reintentable.
+  // El 32D (Opinión de Cumplimiento) es el caso típico: Moffin acepta el job y responde
+  // PENDING con response:{}, pero su proceso SAT nunca termina.
+  if (st === "pending" && (ct === "constancia_situacion_fiscal" || ct === "opinion_cumplimiento")) {
+    const ageMs = consultAgeMs(row, Date.now());
+    const hrs = moffinPendingTimeoutHours();
+    if (ageMs != null && ageMs >= hrs * 60 * 60 * 1000) {
+      const label =
+        ct === "opinion_cumplimiento"
+          ? "Opinión de Cumplimiento (32D)"
+          : "Constancia de Situación Fiscal";
+      const prevRaw =
+        row.raw_response && typeof row.raw_response === "object" && !Array.isArray(row.raw_response)
+          ? (row.raw_response as Record<string, unknown>)
+          : {};
+      const merged = {
+        ...prevRaw,
+        moffinGetReportSnapshot: report,
+        _pendingTimedOutAt: new Date().toISOString(),
+        _pendingTimeoutHours: hrs,
+      };
+      const { error: upErr } = await admin
+        .from("moffin_consults")
+        .update({
+          status: "error",
+          error_message:
+            `Moffin no resolvió la ${label} en el tiempo esperado (más de ${hrs} h en PENDING). ` +
+            `Vuelve a solicitarla; si persiste, valida con Moffin la CIEC del perfil SAT.`,
+          summary: `Sin respuesta de Moffin tras ${hrs} h en cola. Reintentar.`,
+          raw_response: merged,
+        })
+        .eq("id", row.id);
+      if (upErr) return { error: upErr.message };
+      console.log(
+        `moffin_pending_timeout: consult=${row.id} type=${ct} ageMs=${ageMs} thresholdH=${hrs}`,
+      );
+      return {};
+    }
+  }
 
   // Reintento Nubarium (Solutions CSF/32D · FAIL upstream transitorio).
   if (ct === "constancia_situacion_fiscal" || ct === "opinion_cumplimiento") {
@@ -589,7 +644,7 @@ Deno.serve(async (req) => {
     if (cronBody.refreshAllPending) {
       const admin = createClient(supabaseUrl, serviceKey);
       const consultSelect =
-        "id, organization_id, project_id, client_id, consult_type, rfc, moffin_query_id, moffin_service, document_id, requested_by, raw_response";
+        "id, organization_id, project_id, client_id, consult_type, rfc, moffin_query_id, moffin_service, document_id, requested_by, raw_response, created_at";
       const { data: pendingRows, error: pre } = await admin
         .from("moffin_consults")
         .select(consultSelect)

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import {
-  BookOpen, Building2, FolderKanban, Bot, BarChart3, Users, Lightbulb,
+  BookOpen, Building2, FolderKanban, Bot, BarChart3, Users, Lightbulb, ShieldCheck,
 } from "lucide-react";
 import { KAWIIL_AI_GRADIENT } from "@/lib/kawiilAi";
 import { KnowledgeKawiilCard } from "@/components/knowledge/KnowledgeKawiilCard";
@@ -16,10 +16,11 @@ import { CelulasLearningTab } from "@/components/knowledge/CelulasLearningTab";
 import { AgentsTab } from "@/components/knowledge/AgentsTab";
 import { StatsTab } from "@/components/knowledge/StatsTab";
 import { SuggestionsTab } from "@/components/knowledge/SuggestionsTab";
+import { SatCoverageTab } from "@/components/knowledge/SatCoverageTab";
 
-type TabKey = "clientes" | "proyectos" | "celulas" | "agentes" | "estadisticas" | "sugerencias";
+type TabKey = "clientes" | "proyectos" | "celulas" | "agentes" | "estadisticas" | "sugerencias" | "sat";
 
-const VALID_TABS: TabKey[] = ["clientes", "proyectos", "celulas", "agentes", "estadisticas", "sugerencias"];
+const VALID_TABS: TabKey[] = ["clientes", "proyectos", "celulas", "agentes", "estadisticas", "sugerencias", "sat"];
 
 const tabs: { key: TabKey; label: string; icon: typeof Building2 }[] = [
   { key: "clientes", label: "Por Cliente", icon: Building2 },
@@ -28,6 +29,7 @@ const tabs: { key: TabKey; label: string; icon: typeof Building2 }[] = [
   { key: "agentes", label: "Agentes", icon: Bot },
   { key: "estadisticas", label: "Estadísticas", icon: BarChart3 },
   { key: "sugerencias", label: "Sugerencias", icon: Lightbulb },
+  { key: "sat", label: "SAT", icon: ShieldCheck },
 ];
 
 const BaseConocimiento = () => {
@@ -93,6 +95,7 @@ const BaseConocimiento = () => {
           {activeTab === "agentes" && <AgentsTab />}
           {activeTab === "estadisticas" && <StatsTab />}
           {activeTab === "sugerencias" && <SuggestionsTab />}
+          {activeTab === "sat" && <SatCoverageTab />}
         </div>
       </div>
     </AppLayout>

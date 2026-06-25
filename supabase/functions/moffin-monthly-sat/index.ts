@@ -267,11 +267,80 @@ Deno.serve(async (req) => {
   }
 
   console.log(`moffin-monthly-sat: ${consultsDone} consultas disparadas, ${results.length} resultados.`);
+
+  // ── Clientes SIN CIEC: avisar al contador responsable (in-app, 1 vez por mes) ──
+  // Para que el responsable capture la CIEC y el cliente entre a la descarga automática.
+  const ciecClientIds = new Set((ciecRows ?? []).map((r) => r.client_id));
+  const { data: projClientRows } = await admin
+    .from("projects")
+    .select("client_id")
+    .not("client_id", "is", null);
+  const clientIdsWithProject = new Set(
+    (projClientRows ?? []).map((r) => (r as { client_id: string }).client_id),
+  );
+
+  const missingResults: Array<Record<string, unknown>> = [];
+  let ciecMissingNotified = 0;
+  const { data: clientRows, error: clientErr } = await admin
+    .from("clients")
+    .select("id, name, organization_id, responsible_user_id")
+    .eq("status", "activo")
+    .not("responsible_user_id", "is", null);
+  if (clientErr) {
+    console.error("moffin-monthly-sat: clients select:", clientErr.message);
+  } else {
+    for (const c of (clientRows ?? []) as Array<{
+      id: string;
+      name: string | null;
+      organization_id: string;
+      responsible_user_id: string;
+    }>) {
+      if (ciecClientIds.has(c.id)) continue; // ya tiene CIEC
+      if (!clientIdsWithProject.has(c.id)) continue; // sin proyecto → fuera de alcance
+
+      // Idempotencia: ¿ya se notificó este mes para este cliente?
+      const { count: already } = await admin
+        .from("notifications")
+        .select("id", { count: "exact", head: true })
+        .eq("type", "moffin_ciec_missing")
+        .eq("entity_id", c.id)
+        .gte("created_at", monthStart);
+      if ((already ?? 0) > 0) {
+        missingResults.push({ clientId: c.id, skipped: "ya_notificado_este_mes" });
+        continue;
+      }
+
+      const clientName = c.name?.trim() || "el cliente";
+      const { error: notifErr } = await admin.from("notifications").insert({
+        user_id: c.responsible_user_id,
+        organization_id: c.organization_id,
+        type: "moffin_ciec_missing",
+        title: "Falta CIEC para descarga SAT automática",
+        body:
+          `${clientName} no tiene CIEC registrada, por lo que el sistema no puede descargar ` +
+          `automáticamente su Constancia de Situación Fiscal ni su Opinión de Cumplimiento (32D) ` +
+          `este mes. Captura la CIEC del cliente para activar la descarga mensual.`,
+        entity_type: "client",
+        entity_id: c.id,
+        is_read: false,
+      });
+      if (notifErr) {
+        missingResults.push({ clientId: c.id, error: notifErr.message });
+        continue;
+      }
+      ciecMissingNotified += 1;
+      missingResults.push({ clientId: c.id, notified: c.responsible_user_id });
+    }
+  }
+  console.log(`moffin-monthly-sat: ${ciecMissingNotified} avisos de CIEC faltante enviados.`);
+
   return jsonResponse({
     source: "cron-monthly",
     triggered: consultsDone,
     clientsWithCiec: ciecRows?.length ?? 0,
+    ciecMissingNotified,
     cappedAt: MAX_CONSULTS_PER_RUN,
     results,
+    missingCiec: missingResults,
   });
 });
