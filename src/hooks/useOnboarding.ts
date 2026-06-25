@@ -169,19 +169,23 @@ export function useConvertCandidate() {
       role,
       celulaId,
       contratadoStateId,
+      loginEmail,
     }: {
       candidate: { id: string; process_id: string; full_name: string; email: string | null; phone: string | null };
       role: string;
       celulaId?: string | null;
       contratadoStateId?: string | null;
+      /** Correo empresarial con el que se crea la cuenta y se envía el acceso. */
+      loginEmail: string;
     }) => {
-      if (!candidate.email) throw new Error("El candidato no tiene correo; agrégalo antes de convertirlo.");
+      if (!loginEmail) throw new Error("Indica el correo empresarial para crear la cuenta.");
       const orgId = await getMyOrgId(user!.id);
 
       // 1) Invitar/crear la cuenta del colaborador (envía correo de acceso) y vincular célula.
+      //    Se usa el correo empresarial; el personal del candidato queda solo como contacto.
       const { data, error } = await supabase.functions.invoke("invite-user", {
         body: {
-          email: candidate.email,
+          email: loginEmail,
           full_name: candidate.full_name,
           role,
           phone: candidate.phone ?? undefined,
