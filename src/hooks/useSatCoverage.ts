@@ -10,14 +10,19 @@ import { useAuth } from "@/contexts/AuthContext";
  * Por mes se marca si la CSF y la opinión 32D quedaron en `success`.
  */
 
+export type SatDoc = { filePath: string; name: string | null };
+
 export type SatCoverageClient = {
   clientId: string;
   name: string;
+  projectId: string | null;
   responsibleUserId: string | null;
   responsibleName: string | null;
   hasCiec: boolean;
   csfDownloaded: boolean;
   opinionDownloaded: boolean;
+  csfDoc: SatDoc | null;
+  opinionDoc: SatDoc | null;
 };
 
 export type SatCoverageData = {
@@ -51,15 +56,16 @@ export function useSatCoverage(year: number, month0: number) {
 
       const [clientsRes, projectsRes, ciecRes, consultsRes, profilesRes] = await Promise.all([
         supabase.from("clients").select("id, name, responsible_user_id").eq("status", "activo"),
-        supabase.from("projects").select("client_id, area, status"),
+        supabase.from("projects").select("id, client_id, area, status"),
         supabase.from("moffin_client_sat_ciec").select("client_id, ciec_ciphertext"),
         supabase
           .from("moffin_consults")
-          .select("client_id, consult_type, status, created_at")
+          .select("client_id, consult_type, status, created_at, documents(file_path, name)")
           .in("consult_type", ["constancia_situacion_fiscal", "opinion_cumplimiento"])
           .eq("status", "success")
           .gte("created_at", start)
-          .lt("created_at", end),
+          .lt("created_at", end)
+          .order("created_at", { ascending: false }),
         supabase.from("profiles").select("id, full_name"),
       ]);
 
@@ -71,12 +77,18 @@ export function useSatCoverage(year: number, month0: number) {
 
       // Clientes con proyecto de contabilidad/softlanding no cancelado → con acceso a SAT.
       const accessClientIds = new Set<string>();
+      const projectIdByClient = new Map<string, string>();
       for (const p of projectsRes.data ?? []) {
         const area = (p as { area: string | null }).area ?? "";
         const status = (p as { status: string | null }).status ?? "";
         const clientId = (p as { client_id: string | null }).client_id;
+        const projectId = (p as { id: string }).id;
         if (clientId && SAT_PROJECT_AREAS.includes(area) && status !== "cancelado") {
           accessClientIds.add(clientId);
+          // Prioriza un proyecto de contabilidad como representativo para disparar consultas.
+          if (!projectIdByClient.has(clientId) || area === "contabilidad") {
+            projectIdByClient.set(clientId, projectId);
+          }
         }
       }
 
@@ -88,12 +100,27 @@ export function useSatCoverage(year: number, month0: number) {
 
       const csfClientIds = new Set<string>();
       const opinionClientIds = new Set<string>();
+      const csfDocByClient = new Map<string, SatDoc>();
+      const opinionDocByClient = new Map<string, SatDoc>();
+      const pickDoc = (c: unknown): SatDoc | null => {
+        const d = (c as { documents?: unknown }).documents;
+        const rec = Array.isArray(d) ? d[0] : d;
+        const fp = (rec as { file_path?: string } | null)?.file_path;
+        return fp ? { filePath: fp, name: (rec as { name?: string | null }).name ?? null } : null;
+      };
+      // Ordenado por created_at desc → el primero por cliente+tipo es el más reciente.
       for (const c of consultsRes.data ?? []) {
         const clientId = (c as { client_id: string | null }).client_id;
         const type = (c as { consult_type: string }).consult_type;
         if (!clientId) continue;
-        if (type === "constancia_situacion_fiscal") csfClientIds.add(clientId);
-        else if (type === "opinion_cumplimiento") opinionClientIds.add(clientId);
+        const doc = pickDoc(c);
+        if (type === "constancia_situacion_fiscal") {
+          csfClientIds.add(clientId);
+          if (doc && !csfDocByClient.has(clientId)) csfDocByClient.set(clientId, doc);
+        } else if (type === "opinion_cumplimiento") {
+          opinionClientIds.add(clientId);
+          if (doc && !opinionDocByClient.has(clientId)) opinionDocByClient.set(clientId, doc);
+        }
       }
 
       const profileName = new Map<string, string>();
@@ -111,11 +138,14 @@ export function useSatCoverage(year: number, month0: number) {
           return {
             clientId,
             name: (c as { name: string }).name,
+            projectId: projectIdByClient.get(clientId) ?? null,
             responsibleUserId,
             responsibleName: responsibleUserId ? profileName.get(responsibleUserId) ?? null : null,
             hasCiec: ciecClientIds.has(clientId),
             csfDownloaded: csfClientIds.has(clientId),
             opinionDownloaded: opinionClientIds.has(clientId),
+            csfDoc: csfDocByClient.get(clientId) ?? null,
+            opinionDoc: opinionDocByClient.get(clientId) ?? null,
           };
         })
         .sort((a, b) => a.name.localeCompare(b.name, "es"));
