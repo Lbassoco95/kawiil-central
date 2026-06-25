@@ -86,6 +86,36 @@ export function useInviteUser() {
   });
 }
 
+interface UpdateUserEmailParams {
+  user_id: string;
+  new_email: string;
+  /** Si true (default), envía el enlace de acceso al nuevo correo. */
+  send_link?: boolean;
+}
+
+export function useUpdateUserEmail() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (params: UpdateUserEmailParams) => {
+      const { data, error } = await supabase.functions.invoke("update-user-email", {
+        body: params,
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data as { success: boolean; link_sent?: boolean; message?: string };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["org-users"] });
+      queryClient.invalidateQueries({ queryKey: ["org-profiles"] });
+      toast.success(data.message || "Correo actualizado");
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Error al cambiar el correo");
+    },
+  });
+}
+
 interface CreateUserParams {
   email: string;
   full_name: string;
