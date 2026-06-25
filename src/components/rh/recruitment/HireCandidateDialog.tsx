@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -21,6 +22,33 @@ import { useConvertCandidate } from "@/hooks/useOnboarding";
 import { useCelulas } from "@/hooks/useCatalogs";
 import { GRADO_SELECT_OPTIONS, gradoFromGrade } from "@/lib/gradoLabels";
 import type { Candidate, RecruitmentState } from "@/lib/recruitment";
+
+/** Dominio empresarial obligatorio para la cuenta del colaborador. */
+const CORP_DOMAIN = "kawiil.mx";
+
+/** Quita acentos y deja solo letras minúsculas. */
+function normalizeName(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z]/g, "");
+}
+
+/** Sugiere un correo empresarial (inicial del nombre + apellido) a partir del nombre completo. */
+function suggestCorporateEmail(fullName: string): string {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "";
+  const initial = normalizeName(parts[0]).charAt(0);
+  const lastName = normalizeName(parts[parts.length - 1]);
+  if (!initial || !lastName) return "";
+  return `${initial}${lastName}@${CORP_DOMAIN}`;
+}
+
+/** Valida que sea un correo del dominio empresarial. */
+function isValidCorporateEmail(email: string): boolean {
+  return new RegExp(`^[^\\s@]+@${CORP_DOMAIN.replace(/\./g, "\\.")}$`, "i").test(email.trim());
+}
 
 /**
  * Contrata a un candidato e inicia su onboarding: crea la cuenta en kawiil-central,
@@ -44,11 +72,18 @@ export function HireCandidateDialog({
   const { data: celulas = [], isLoading: loadingCelulas } = useCelulas();
   const [role, setRole] = useState<string>("ejecutor");
   const [celulaId, setCelulaId] = useState<string>("");
+  const [corporateEmail, setCorporateEmail] = useState<string>("");
 
-  // Al abrir, predefine el grado según la vacante (G1→En formación, etc.).
+  // Al abrir, predefine el grado según la vacante (G1→En formación, etc.) y
+  // sugiere el correo empresarial a partir del nombre del candidato.
   useEffect(() => {
-    if (open) setRole(gradoFromGrade(defaultGrade) ?? "ejecutor");
-  }, [open, defaultGrade]);
+    if (open) {
+      setRole(gradoFromGrade(defaultGrade) ?? "ejecutor");
+      setCorporateEmail(suggestCorporateEmail(candidate?.full_name ?? ""));
+    }
+  }, [open, defaultGrade, candidate?.full_name]);
+
+  const corpEmailValid = isValidCorporateEmail(corporateEmail);
 
   const activeCelulas = celulas.filter((c) => c.is_active);
   const contratadoStateId = states.find((s) => s.name.toLowerCase().includes("contratad"))?.id ?? null;
@@ -63,18 +98,34 @@ export function HireCandidateDialog({
             <UserCheck className="h-4 w-4" /> Contratar e iniciar onboarding
           </DialogTitle>
           <DialogDescription>
-            Se creará la cuenta de <strong>{candidate.full_name}</strong> ({candidate.email ?? "sin correo"}),
-            se le enviará el correo con sus accesos a kawiil-central y se iniciará su lista de bienvenida.
+            Se creará la cuenta de <strong>{candidate.full_name}</strong> con su correo empresarial,
+            se le enviará ahí el enlace de acceso a kawiil-central y se iniciará su lista de bienvenida.
           </DialogDescription>
         </DialogHeader>
 
-        {!candidate.email && (
-          <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">
-            El candidato no tiene correo. Agrégalo en la ficha antes de contratarlo.
-          </p>
-        )}
-
         <div className="space-y-3 py-1">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Correo empresarial (cuenta de acceso)</Label>
+            <Input
+              type="email"
+              value={corporateEmail}
+              onChange={(e) => setCorporateEmail(e.target.value)}
+              placeholder={`nombre@${CORP_DOMAIN}`}
+              className="h-9 text-sm"
+              autoComplete="off"
+            />
+            {corporateEmail && !corpEmailValid ? (
+              <p className="text-[10px] text-destructive">
+                Debe ser un correo válido del dominio @{CORP_DOMAIN}.
+              </p>
+            ) : (
+              <p className="text-[10px] text-muted-foreground">
+                Con este correo se crea la cuenta y se manda el acceso.
+                {candidate.email ? ` El personal (${candidate.email}) queda solo como contacto.` : ""}
+              </p>
+            )}
+          </div>
+
           <div className="space-y-1.5">
             <Label className="text-xs">Grado inicial (Kawiiler)</Label>
             <Select value={role} onValueChange={setRole}>
@@ -102,10 +153,16 @@ export function HireCandidateDialog({
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
           <Button
-            disabled={!candidate.email || convert.isPending}
+            disabled={!corpEmailValid || convert.isPending}
             onClick={() =>
               convert.mutate(
-                { candidate, role, celulaId: celulaId || null, contratadoStateId },
+                {
+                  candidate,
+                  role,
+                  celulaId: celulaId || null,
+                  contratadoStateId,
+                  loginEmail: corporateEmail.trim().toLowerCase(),
+                },
                 { onSuccess: () => onOpenChange(false) },
               )
             }
