@@ -294,6 +294,26 @@ const ProyectoDetalle = () => {
   const profileMap = useMemo(() => new Map(profiles.map(p => [p.user_id, p.full_name])), [profiles]);
   const profilesByUserId = useMemo(() => new Map(profiles.map((p) => [p.user_id, p])), [profiles]);
 
+  const [assigningResponsible, setAssigningResponsible] = useState(false);
+  const assignResponsible = useCallback(async (userId: string) => {
+    if (!project) return;
+    setAssigningResponsible(true);
+    try {
+      const { error } = await supabase
+        .from("projects")
+        .update({ responsible_user_id: userId } as any)
+        .eq("id", project.id);
+      if (error) throw error;
+      toast.success("Responsable del proyecto actualizado");
+      queryClient.invalidateQueries({ queryKey: ["project", id] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo asignar el responsable");
+    } finally {
+      setAssigningResponsible(false);
+    }
+  }, [project, id, queryClient]);
+
   const { data: clientDeclaredCollaboratorIds = [], isLoading: loadingClientDeclaredCollab } =
     useClientCollaboratorIds(project?.client_id ?? undefined, !!project?.client_id);
 
@@ -508,6 +528,9 @@ const ProyectoDetalle = () => {
                 : undefined
             }
             profilesByUserId={profilesByUserId}
+            assignableProfiles={profiles}
+            onAssignResponsible={assignResponsible}
+            assigningResponsible={assigningResponsible}
             collaboratorUserIds={proyectoCollaboratorUserIds}
             collaboratorsLoading={
               (loadingProjectTaskAssignees && openProjectTaskIds.length > 0) ||
