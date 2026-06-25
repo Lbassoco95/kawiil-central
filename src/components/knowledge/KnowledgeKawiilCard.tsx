@@ -7,6 +7,7 @@ import {
   Bot,
   BarChart3,
   Lightbulb,
+  ShieldCheck,
   ArrowRight,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -19,7 +20,8 @@ export type KnowledgeTab =
   | "celulas"
   | "agentes"
   | "estadisticas"
-  | "sugerencias";
+  | "sugerencias"
+  | "sat";
 
 interface Props {
   activeTab: KnowledgeTab;
@@ -51,6 +53,10 @@ export function KnowledgeKawiilCard({ activeTab, onGoToTab }: Props) {
         return "Métricas de adopción: cuánto se está usando Kawiil AI, qué módulos consumen más contexto y cuáles necesitan más datos.";
       case "sugerencias":
         return "Sugerencias automáticas para enriquecer el conocimiento: documentos pendientes de indexar, fichas incompletas y patrones detectados.";
+      case "sat":
+        return "Cobertura SAT (Moffin): qué clientes activos con contabilidad tienen acceso a CSF y opinión 32D, cuántos tienen responsable y CIEC, y si ya se descargaron sus documentos del mes.";
+      default:
+        return "Dashboard de inteligencia de Kawiil: explora qué está aprendiendo el sistema por cliente, proyecto y célula.";
     }
   }, [activeTab]);
 
@@ -68,6 +74,10 @@ export function KnowledgeKawiilCard({ activeTab, onGoToTab }: Props) {
         return { label: "Ver sugerencias", tab: "sugerencias", reason: "atender lo que falta indexar" };
       case "sugerencias":
         return { label: "Ver por cliente", tab: "clientes", reason: "regresar al detalle por cliente" };
+      case "sat":
+        return { label: "Ver por cliente", tab: "clientes", reason: "revisar el detalle de cada cliente" };
+      default:
+        return { label: "Ver por cliente", tab: "clientes", reason: "ir al detalle por cliente" };
     }
   }, [activeTab]);
 
@@ -78,6 +88,7 @@ export function KnowledgeKawiilCard({ activeTab, onGoToTab }: Props) {
     { key: "agentes", label: "Agentes", icon: Bot },
     { key: "estadisticas", label: "Estadísticas", icon: BarChart3 },
     { key: "sugerencias", label: "Sugerencias", icon: Lightbulb },
+    { key: "sat", label: "SAT", icon: ShieldCheck },
   ];
 
   return (
