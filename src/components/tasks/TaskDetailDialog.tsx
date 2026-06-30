@@ -790,9 +790,12 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
                   </Button>
                 )}
                 {canDeleteTasks && (
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => setShowDeleteConfirm(true)} title="Eliminar tarea">
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <>
+                    <span className="dr-action-divider" aria-hidden="true" />
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => setShowDeleteConfirm(true)} title="Eliminar tarea">
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </>
                 )}
               </div>
             </div>
