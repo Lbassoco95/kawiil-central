@@ -236,6 +236,21 @@ export function useJornada() {
 
       if (action.type === "check_in") {
         const expected = plannedModeForToday(schedule);
+        // Evita duplicados: no permitir abrir una jornada nueva si ya hay una
+        // de HOY (día calendario MX, vía work_date) sin cerrar. Iniciar "otra
+        // jornada" (turno adicional) sí se permite una vez cerrada la anterior.
+        const { data: openToday, error: openErr } = await db
+          .from("rh_attendance")
+          .select("id")
+          .eq("user_id", user!.id)
+          .eq("work_date", todayKey())
+          .is("check_out_at", null)
+          .limit(1)
+          .maybeSingle();
+        if (openErr) throw openErr;
+        if (openToday) {
+          throw new Error("Ya tienes una jornada abierta hoy. Ciérrala antes de iniciar otra.");
+        }
         // ¿Ya hubo una jornada hoy? Entonces este es un turno adicional (sin comida).
         const { count } = await db
           .from("rh_attendance")

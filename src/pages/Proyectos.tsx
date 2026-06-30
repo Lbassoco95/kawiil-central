@@ -18,7 +18,6 @@ import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import {
-  formatDateMX,
   toDateStringMX,
   mexicoDayRangeISO,
   nowMX,
@@ -560,11 +559,7 @@ const Proyectos = () => {
                     </div>
                     <span className="progress-num">{pct}%</span>
                   </div>
-                  <div className={limit.className}>
-                    {project.end_date
-                      ? formatLimitCell(project.end_date, todayYmd).label
-                      : formatDateMX(project.end_date ?? "") || "—"}
-                  </div>
+                  <div className={limit.className}>{limit.label}</div>
                   {isAdminOrManager ? (
                     <button
                       type="button"
