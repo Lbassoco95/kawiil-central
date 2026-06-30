@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, Fragment } from "react";
-import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams, Navigate } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { useProjectDetail } from "@/hooks/useProjects";
 import { Badge } from "@/components/ui/badge";
@@ -396,6 +396,13 @@ const ProyectoDetalle = () => {
     const ok = ["general", "cumplimiento", "tareas", "comentarios", "firmas"];
     return ok.includes(tab) ? tab : "cumplimiento";
   }, [tab]);
+
+  // Guard defensivo: "nuevo" no es un UUID válido (la ruta estática en App.tsx
+  // normalmente lo intercepta antes; esto evita el falso "Proyecto no encontrado"
+  // si se llega aquí directamente). Va tras los hooks para no romper su orden.
+  if (id === "nuevo") {
+    return <Navigate to="/proyectos" replace />;
+  }
 
   if (isLoading) {
     return (
