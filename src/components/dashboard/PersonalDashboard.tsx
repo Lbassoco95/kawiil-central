@@ -32,7 +32,9 @@ import {
   mexicoWeekRangeISOContaining,
   mondayYmdContaining,
   addDaysToYmd,
+  isPastDueCalendarMX,
 } from "@/lib/dateUtils";
+import { isTaskClosedStatus } from "@/lib/taskStatusGroups";
 import { useMexicoToday } from "@/hooks/useMexicoToday";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { PreferenceQuestionnaire } from "@/components/dashboard/PreferenceQuestionnaire";
@@ -192,13 +194,15 @@ export function PersonalDashboard() {
   const myTasks = boardPendingSorted.slice(0, 15);
 
   const openTasksForKpi = useMemo(
-    () => allMyTasks.filter((t) => t.status !== "completada" && t.status !== "cancelada"),
+    () => allMyTasks.filter((t) => !isTaskClosedStatus(t.status)),
     [allMyTasks],
   );
 
   const operativeStats = useMemo(() => {
     const todayTasks = openTasksForKpi.filter((t) => t.due_date?.slice(0, 10) === todayYmd);
-    const overdueKpi = openTasksForKpi.filter((t) => t.due_date && t.due_date.slice(0, 10) < todayYmd);
+    // Mismo criterio de "vencida" que el módulo Tareas (calendario CDMX), para que el conteo
+    // del hero personal sea coherente. El alcance sigue siendo personal vs. equipo a propósito.
+    const overdueKpi = openTasksForKpi.filter((t) => t.due_date && isPastDueCalendarMX(t.due_date));
     const waitingClient = openTasksForKpi.filter((t) => t.status === "en_revision");
     const activeClients = clients.filter((c) => c.status === "activo");
     return {
