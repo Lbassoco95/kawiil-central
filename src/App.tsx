@@ -71,6 +71,8 @@ const App = () => (
               <Route path="/clientes" element={<ProtectedRoute><Clientes /></ProtectedRoute>} />
               <Route path="/clientes/:id" element={<ProtectedRoute><ClienteDetalle /></ProtectedRoute>} />
               <Route path="/proyectos" element={<ProtectedRoute><Proyectos /></ProtectedRoute>} />
+              {/* Ruta estática antes de la dinámica: "nuevo" no es un UUID */}
+              <Route path="/proyectos/nuevo" element={<Navigate to="/proyectos" replace />} />
               <Route path="/proyectos/:id" element={<ProtectedRoute><ProyectoDetalle /></ProtectedRoute>} />
               <Route path="/tareas" element={<ProtectedRoute><Tareas /></ProtectedRoute>} />
               <Route
