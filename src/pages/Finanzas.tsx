@@ -152,6 +152,15 @@ export default function Finanzas() {
 
     if (canViewSavioIncome) {
       const k = financeData.kpis;
+      // Los KPIs de Savio (cartera, cobrado, facturado) dependen de una query remota.
+      // Mientras carga o si falla, mostrar el estado en vez de $0 silencioso (que se
+      // confunde con "no hay datos"). "Gastos mes" sale de gastos locales y siempre aplica.
+      const savioLoading = financeData.isLoading;
+      const savioErrored = !savioLoading && !!(financeData.savioError || financeData.reactQueryError);
+      const savioValue = (formatted: string) =>
+        savioLoading ? "…" : savioErrored ? "—" : formatted;
+      const savioSub = (normalSub: string) =>
+        savioLoading ? "cargando ingresos…" : savioErrored ? "datos no disponibles" : normalSub;
       return [
         {
           label: "Gastos mes",
@@ -164,29 +173,32 @@ export default function Finanzas() {
         },
         {
           label: "Pendiente cobro",
-          value: fmtMoneyShort(k.cartera.sum),
-          sub:
+          value: savioValue(fmtMoneyShort(k.cartera.sum)),
+          sub: savioSub(
             k.cartera.count > 0
               ? `${k.cartera.count} factura${k.cartera.count === 1 ? "" : "s"}`
               : "cartera al día",
+          ),
           tone: k.cartera.sum > 0 ? ("warning" as const) : ("default" as const),
         },
         {
           label: "Ingresos mes",
-          value: fmtMoneyShort(k.cobradoMes.sum),
-          sub:
+          value: savioValue(fmtMoneyShort(k.cobradoMes.sum)),
+          sub: savioSub(
             k.cobradoMes.count > 0
               ? `${k.cobradoMes.count} pago${k.cobradoMes.count === 1 ? "" : "s"} cobrado${k.cobradoMes.count === 1 ? "" : "s"}`
               : "sin cobros",
+          ),
           tone: "success" as const,
         },
         {
           label: "Facturación mes",
-          value: fmtMoneyShort(k.facturadoMes.sum),
-          sub:
+          value: savioValue(fmtMoneyShort(k.facturadoMes.sum)),
+          sub: savioSub(
             k.facturadoMes.count > 0
               ? `${k.facturadoMes.count} factura${k.facturadoMes.count === 1 ? "" : "s"} emitida${k.facturadoMes.count === 1 ? "" : "s"}`
               : "sin emisión",
+          ),
           tone: "primary" as const,
         },
       ];
@@ -212,7 +224,15 @@ export default function Finanzas() {
         tone: totals.pendingCount > 0 ? ("warning" as const) : ("default" as const),
       },
     ];
-  }, [hasFinanceAccess, canViewSavioIncome, financeData.kpis, totals]);
+  }, [
+    hasFinanceAccess,
+    canViewSavioIncome,
+    financeData.kpis,
+    financeData.isLoading,
+    financeData.savioError,
+    financeData.reactQueryError,
+    totals,
+  ]);
 
   const gastosSection = (
     <div className="space-y-4 mt-0">

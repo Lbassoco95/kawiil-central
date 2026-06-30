@@ -1108,11 +1108,28 @@ Deno.serve(async (req) => {
             const data = await slackCall(conn.access_token, "users.info", { user: slackUserId });
             if (data.ok && data.user) {
               const u = data.user as {
-                profile?: { display_name?: string; real_name?: string; image_72?: string };
+                name?: string;
+                profile?: {
+                  display_name?: string;
+                  display_name_normalized?: string;
+                  real_name?: string;
+                  real_name_normalized?: string;
+                  image_72?: string;
+                };
                 real_name?: string;
               };
-              const dn = u.profile?.display_name?.trim() || null;
-              const rn = u.profile?.real_name?.trim() || u.real_name?.trim() || null;
+              const dn =
+                u.profile?.display_name?.trim() ||
+                u.profile?.display_name_normalized?.trim() ||
+                null;
+              // Fallback hasta el @handle (`u.name`) para que ningún usuario válido quede
+              // como ID crudo (U0…) en la UI: bots, perfiles mínimos o sin display name.
+              const rn =
+                u.profile?.real_name?.trim() ||
+                u.profile?.real_name_normalized?.trim() ||
+                u.real_name?.trim() ||
+                u.name?.trim() ||
+                null;
               users[slackUserId] = {
                 display_name: dn,
                 real_name: rn,

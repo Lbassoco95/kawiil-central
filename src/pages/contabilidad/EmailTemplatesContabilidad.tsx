@@ -1,5 +1,9 @@
 import { useMemo, useRef, useState } from "react";
 import { Plus, Pencil, Trash2, Mail } from "lucide-react";
+import { AppLayout } from "@/components/AppLayout";
+import { PageHeader, type PageHeaderStat } from "@/components/shared/PageHeader";
+import { KAWIIL_AI_GRADIENT } from "@/lib/kawiilAi";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -61,6 +65,24 @@ export default function EmailTemplatesContabilidad() {
   const variablesForCategory = useMemo<AccountingTemplateVariable[]>(() => {
     return DEFAULT_VARIABLES_BY_CATEGORY[category] ?? [];
   }, [category]);
+
+  const heroStats = useMemo<PageHeaderStat[]>(() => {
+    const categoriesUsed = new Set(templates.map((t) => t.category)).size;
+    return [
+      {
+        label: "Plantillas",
+        value: templates.length,
+        sub: templates.length === 1 ? "configurada" : "configuradas",
+        tone: "primary",
+      },
+      {
+        label: "Categorías",
+        value: categoriesUsed,
+        sub: `de ${ACCOUNTING_TEMPLATE_CATEGORIES.length} disponibles`,
+        tone: "default",
+      },
+    ];
+  }, [templates]);
 
   const reset = () => {
     setEditId(null);
@@ -130,39 +152,21 @@ export default function EmailTemplatesContabilidad() {
     }
   };
 
-  if (isLoading) {
-    return <p className="text-sm text-muted-foreground">Cargando…</p>;
-  }
-
-  return (
-    <div className="space-y-4 p-4 md:p-6">
-      <div className="flex items-center justify-between gap-2">
-        <div>
-          <h1 className="text-xl font-semibold flex items-center gap-2">
-            <Mail className="h-5 w-5" />
-            Plantillas de correo – Contabilidad
-          </h1>
-          <p className="text-xs text-muted-foreground mt-1">
-            Estas plantillas aparecen en el compositor de Microsoft 365 al
-            redactar un correo. Usa variables como{" "}
-            <code className="text-[11px]">{"{{razon_social}}"}</code>,{" "}
-            <code className="text-[11px]">{"{{monto_isn}}"}</code>, etc.
-          </p>
-        </div>
-        <Dialog
-          open={open}
-          onOpenChange={(o) => {
-            setOpen(o);
-            if (!o) reset();
-          }}
-        >
-          <DialogTrigger asChild>
-            <Button size="sm" onClick={openNew}>
-              <Plus className="h-4 w-4 mr-1" />
-              Nueva plantilla
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-3xl max-h-[92vh] overflow-y-auto">
+  const newTemplateDialog = (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) reset();
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button size="sm" onClick={openNew}>
+          <Plus className="h-4 w-4 mr-1" />
+          Nueva plantilla
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-3xl max-h-[92vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>
                 {editId ? "Editar plantilla" : "Nueva plantilla"}
@@ -285,17 +289,37 @@ export default function EmailTemplatesContabilidad() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      </div>
+  );
 
-      {templates.length === 0 ? (
-        <Card>
-          <CardContent className="py-8 text-center text-sm text-muted-foreground">
-            Aún no hay plantillas contables. Crea la primera con «Nueva
-            plantilla».
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid gap-3 md:grid-cols-2">
+  return (
+    <AppLayout>
+      <div className="space-y-6 animate-fade-in">
+        <PageHeader
+          variant="hero"
+          breadcrumb={["Kawiil OS", "Contabilidad", "Plantillas de correo"]}
+          title="Plantillas de correo"
+          description="Estas plantillas aparecen en el compositor de Microsoft 365 al redactar un correo. Usa variables como {{razon_social}}, {{monto_isn}}, etc."
+          icon={<Mail />}
+          iconAccent={KAWIIL_AI_GRADIENT}
+          stats={heroStats}
+          actions={newTemplateDialog}
+        />
+
+        {isLoading ? (
+          <div className="grid gap-3 md:grid-cols-2">
+            {[1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} className="h-40 rounded-2xl" />
+            ))}
+          </div>
+        ) : templates.length === 0 ? (
+          <Card>
+            <CardContent className="py-8 text-center text-sm text-muted-foreground">
+              Aún no hay plantillas contables. Crea la primera con «Nueva
+              plantilla».
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2">
           {templates.map((t) => {
             const cat = isAccountingTemplateCategory(t.category)
               ? ACCOUNTING_TEMPLATE_CATEGORY_LABELS[t.category]
@@ -357,9 +381,10 @@ export default function EmailTemplatesContabilidad() {
                 </CardContent>
               </Card>
             );
-          })}
-        </div>
-      )}
-    </div>
+              })}
+          </div>
+        )}
+      </div>
+    </AppLayout>
   );
 }

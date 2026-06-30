@@ -36,8 +36,10 @@ export function formatMX(date: string | Date, pattern: string): string {
  * Formatea una fecha en formato corto localizado es-MX con zona CDMX.
  * Reemplaza todos los `new Date(x).toLocaleDateString("es-MX")`.
  */
-export function formatDateMX(date: string | Date): string {
+export function formatDateMX(date: string | Date | null | undefined): string {
+  if (date == null || (typeof date === "string" && date.trim() === "")) return "—";
   const d = typeof date === "string" ? new Date(date) : date;
+  if (isNaN(d.getTime())) return "—";
   return d.toLocaleDateString("es-MX", { timeZone: CDMX_TZ });
 }
 
