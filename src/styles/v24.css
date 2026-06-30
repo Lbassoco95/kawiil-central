@@ -607,7 +607,9 @@
 }
 .kwv24 .dr-head {
   display: flex; align-items: center; gap: 14px;
-  padding: 14px 22px; border-bottom: 1px solid hsl(var(--border));
+  /* padding-right reserva el espacio del botón de cerrar (X) del Dialog (absolute right-3),
+     para que el botón de eliminar no quede debajo y se confunda con cerrar. */
+  padding: 14px 56px 14px 22px; border-bottom: 1px solid hsl(var(--border));
   background: hsl(var(--card));
   min-height: 54px;
 }
@@ -620,6 +622,12 @@
 .kwv24 .dr-head .bc strong { color: hsl(var(--foreground)); font-weight: 600; }
 .kwv24 .dr-head .actions {
   display: flex; gap: 6px; align-items: center;
+}
+/* Separador que aísla visualmente el botón de eliminar del resto de acciones,
+   para reforzar que es una acción destructiva distinta a cerrar/completar. */
+.kwv24 .dr-head .actions .dr-action-divider {
+  width: 1px; height: 22px; margin: 0 2px;
+  background: hsl(var(--border)); flex: none;
 }
 .kwv24 .dr-close {
   width: 30px; height: 30px; border-radius: 8px; border: 0;
