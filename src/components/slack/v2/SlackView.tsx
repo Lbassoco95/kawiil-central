@@ -466,13 +466,11 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
       if (m.user) ids.add(m.user);
       if (m.reply_users) m.reply_users.forEach((u) => ids.add(u));
     }
-    // Solo los primeros 50 DMs del sidebar (nombres/avatares en lista)
-    let dmCount = 0;
+    // Todos los DMs (is_im) del sidebar, para resolver su nombre/avatar.
+    // useSlackUserProfiles ya acota el total (600) y cachea por id, así que
+    // incluirlos todos es seguro y evita que algún DM quede con el ID crudo.
     for (const c of conversations) {
-      if (c.is_im && c.user && dmCount < 50) {
-        ids.add(c.user);
-        dmCount++;
-      }
+      if (c.is_im && c.user) ids.add(c.user);
     }
     return [...ids];
   }, [messages, conversations]);
@@ -580,7 +578,7 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
     if (!currentConv) return selectedChannel;
     if (currentConv.is_im && currentConv.user) {
       const u = userMap[currentConv.user];
-      return u?.display_name || u?.real_name || currentConv.user;
+      return u?.display_name || u?.real_name || `@${currentConv.user}`;
     }
     return currentConv.name || selectedChannel;
   }, [currentConv, selectedChannel, userMap]);

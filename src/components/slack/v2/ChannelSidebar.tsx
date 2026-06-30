@@ -12,7 +12,8 @@ function channelIcon(conv: SlackConversation): string {
 function convTitle(conv: SlackConversation, userMap: Record<string, { display_name?: string; real_name?: string }> = {}): string {
   if (conv.is_im && conv.user) {
     const u = userMap[conv.user];
-    return u?.display_name || u?.real_name || conv.user;
+    // display_name → real_name → "@id" (nunca el ID crudo sin prefijo)
+    return u?.display_name || u?.real_name || `@${conv.user}`;
   }
   if (conv.is_mpim && conv.name) {
     return conv.name.replace(/^mpdm-|--\d+$/g, "").replace(/-/g, ", ");
