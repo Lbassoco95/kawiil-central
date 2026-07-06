@@ -33,6 +33,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
 import { createNotifications } from "@/lib/notificationHelpers";
 import { UserAvatar } from "@/components/shared/UserAvatar";
+import { DocumentChecklistButton } from "@/components/shared/DocumentChecklistButton";
 
 import { STEP_STATUS_CONFIG } from "@/lib/statusStyles";
 
@@ -529,13 +530,19 @@ export function UnifiedStepRow({
 
               {/* Subtareas */}
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
                   <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
                     <ListChecks className="h-3 w-3" /> Subtareas
                     {localChecklist.length > 0 && (
                       <span className="text-xs font-normal ml-1">{completedCount}/{localChecklist.length}</span>
                     )}
                   </label>
+                  <DocumentChecklistButton
+                    className="h-6 text-[10px] px-2"
+                    checklist={localChecklist}
+                    assignedTo={localAssignee}
+                    onInsert={(updated) => { setLocalChecklist(updated); onSave({ checklist: updated }); }}
+                  />
                 </div>
                 {localChecklist.length > 0 && (
                   <div className="h-1 rounded-full bg-muted overflow-hidden">

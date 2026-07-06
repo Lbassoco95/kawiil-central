@@ -1,4 +1,5 @@
 import type { AccountingStep, ChecklistItem } from "@/hooks/useAccountingPeriods";
+import { REQUIRED_DOCUMENTS_CHECKLIST } from "@/lib/documentChecklist";
 
 /**
  * Fuente única de verdad para los pasos del proceso de Constitución
@@ -33,33 +34,11 @@ function seedChecklist(stepKey: string, items: string[], assignedTo: string | nu
   }));
 }
 
-/** Checklist de intake (info + documentación) que se precarga en el paso 1. */
-const DOCUMENTACION_SOCIOS_CHECKLIST = [
-  // Información personal de cada socio
-  "Datos — Nombre completo",
-  "Datos — Lugar de nacimiento",
-  "Datos — Ocupación",
-  "Datos — Estado civil",
-  "Datos — Correo electrónico",
-  "Datos — Número de contacto",
-  // Documentación de cada socio
-  "Doc — Acta de nacimiento",
-  "Doc — CURP",
-  "Doc — Constancia de Situación Fiscal (CSF)",
-  "Doc — Identificación oficial vigente (INE o pasaporte)",
-  "Doc — Comprobante de domicilio (antigüedad no mayor a 3 meses)",
-  "Doc — Acta de matrimonio (solo si es casado)",
-  "Doc — Identificación oficial del cónyuge (solo si es casado)",
-  // Información de la empresa
-  "Empresa — Objeto social o actividad principal (idea breve)",
-  "Empresa — Domicilio de la sociedad (CDMX, Edo. Méx., etc.)",
-  "Empresa — Participación accionaria de cada socio",
-  "Empresa — Estimación de operaciones mensuales",
-  "Empresa — Tipo de clientes (B2B / B2C, nacional / internacional)",
-  "Empresa — Capital social",
-  "Empresa — ¿Admitirán socios extranjeros?",
-  "Empresa — Forma de administración (Admin. único o Consejo: Presidente/a y Secretario/a)",
-];
+/**
+ * Checklist de intake (info + documentación) que se precarga en el paso 1.
+ * Reutiliza la fuente única de documentos requeridos.
+ */
+const DOCUMENTACION_SOCIOS_CHECKLIST = REQUIRED_DOCUMENTS_CHECKLIST;
 
 /** Checklist del nuevo paso de solicitud de denominación / razón social. */
 const DENOMINACION_CHECKLIST = [
