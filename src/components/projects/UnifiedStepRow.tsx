@@ -532,7 +532,7 @@ export function UnifiedStepRow({
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                    <ListChecks className="h-3 w-3" /> Subtareas
+                    <ListChecks className="h-3 w-3" /> Checklist
                     {localChecklist.length > 0 && (
                       <span className="text-xs font-normal ml-1">{completedCount}/{localChecklist.length}</span>
                     )}
@@ -598,7 +598,7 @@ export function UnifiedStepRow({
                   <Input
                     value={newSubtask}
                     onChange={(e) => setNewSubtask(e.target.value)}
-                    placeholder="Nueva subtarea..."
+                    placeholder="Agregar ítem al checklist..."
                     className="h-7 text-xs"
                     onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addChecklistItem(); } }}
                   />

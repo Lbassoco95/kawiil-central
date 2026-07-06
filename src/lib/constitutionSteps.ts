@@ -1,5 +1,5 @@
 import type { AccountingStep, ChecklistItem } from "@/hooks/useAccountingPeriods";
-import { REQUIRED_DOCUMENTS_CHECKLIST } from "@/lib/documentChecklist";
+import { buildCompanyInfoItems } from "@/lib/documentChecklist";
 
 /**
  * Fuente única de verdad para los pasos del proceso de Constitución
@@ -33,12 +33,6 @@ function seedChecklist(stepKey: string, items: string[], assignedTo: string | nu
     task_id: null,
   }));
 }
-
-/**
- * Checklist de intake (info + documentación) que se precarga en el paso 1.
- * Reutiliza la fuente única de documentos requeridos.
- */
-const DOCUMENTACION_SOCIOS_CHECKLIST = REQUIRED_DOCUMENTS_CHECKLIST;
 
 /** Checklist del nuevo paso de solicitud de denominación / razón social. */
 const DENOMINACION_CHECKLIST = [
@@ -82,9 +76,11 @@ export function buildDefaultConstitutionSteps(responsibleId: string | null): Con
     base(
       "documentacion_socios",
       "Recopilación de documentación de socios",
-      "Integrar documentos de identidad, poderes y datos de los socios/accionistas, así como la información de la empresa.",
+      "Integrar documentos de identidad, poderes y datos de los socios/accionistas, así como la información de la empresa. Los documentos por socio se rastrean desde el panel de Socios.",
       "FileText",
-      { checklist: seedChecklist("documentacion_socios", DOCUMENTACION_SOCIOS_CHECKLIST, responsibleId) },
+      // Arranca con la información de empresa (una vez). Los documentos por
+      // socio se agregan al dar de alta socios en el panel del tablero.
+      { checklist: buildCompanyInfoItems() },
     ),
     base(
       "denominacion_social",

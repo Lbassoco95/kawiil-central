@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
-import { Building2, Globe, Save, CalendarClock } from "lucide-react";
+import { Building2, Globe, Save, CalendarClock, Users, Plus, X, UserCheck } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -15,12 +15,25 @@ import {
   reconcileConstitutionSteps,
   type ConstitutionStep,
 } from "@/lib/constitutionSteps";
+import {
+  buildSociosChecklist,
+  partnerDocProgress,
+  type ConstitutionPartner,
+} from "@/lib/documentChecklist";
+import { Badge } from "@/components/ui/badge";
 
 const DEFAULT_STEPS: ConstitutionStep[] = buildDefaultConstitutionSteps(null);
+const DOCS_STEP_KEY = "documentacion_socios";
+
+interface ConstitutionDetails {
+  steps: ConstitutionStep[];
+  has_foreign_partners: boolean;
+  socios?: ConstitutionPartner[];
+}
 
 interface Props {
   projectId: string;
-  constitutionDetails: { steps: ConstitutionStep[]; has_foreign_partners: boolean } | null;
+  constitutionDetails: ConstitutionDetails | null;
   responsibleUserId?: string | null;
   clientDropboxPath?: string;
   clientId?: string;
@@ -45,13 +58,21 @@ export function ConstitutionDashboard({ projectId, constitutionDetails, responsi
   const reconciledRef = useRef(false);
   useEffect(() => {
     if (!constitutionDetails || reconciledRef.current) return;
-    const { steps: reconciled, changed } = reconcileConstitutionSteps(
-      (constitutionDetails.steps as ConstitutionStep[]) ?? [],
-      responsibleUserId ?? null,
+    const existingSteps = (constitutionDetails.steps as ConstitutionStep[]) ?? [];
+    const currentSocios = constitutionDetails.socios ?? [];
+    const { steps: reconciled } = reconcileConstitutionSteps(existingSteps, responsibleUserId ?? null);
+    // Migrar el checklist del paso de documentación al modelo por socio
+    // (reconstruye info de empresa + bloques por socio, quita la semilla plana).
+    const migrated = reconciled.map((s) =>
+      s.key === DOCS_STEP_KEY ? { ...s, checklist: buildSociosChecklist(currentSocios, s.checklist ?? []) } : s,
     );
-    if (!changed) return;
+    if (JSON.stringify(existingSteps) === JSON.stringify(migrated)) return;
     reconciledRef.current = true;
-    const payload = { steps: reconciled, has_foreign_partners: constitutionDetails.has_foreign_partners };
+    const payload: ConstitutionDetails = {
+      steps: migrated,
+      has_foreign_partners: constitutionDetails.has_foreign_partners,
+      socios: currentSocios,
+    };
     setLocalConstitution(payload);
     supabase
       .from("projects")
@@ -72,13 +93,23 @@ export function ConstitutionDashboard({ projectId, constitutionDetails, responsi
     step_status: s.step_status || (s.status === "en_progreso" ? "en_progreso" : s.status === "completado" ? "completado" : "pendiente"),
   }));
   const hasForeignPartners = localConstitution?.has_foreign_partners ?? true;
+  const socios: ConstitutionPartner[] = localConstitution?.socios ?? [];
+  const docsStep = steps.find((s) => s.key === DOCS_STEP_KEY);
+  const docsChecklist = docsStep?.checklist ?? [];
   const visibleSteps = steps.filter((s) => !s.conditional || hasForeignPartners);
   const completedCount = visibleSteps.filter((s) => s.status === "completado").length;
   const progressPct = visibleSteps.length > 0 ? Math.round((completedCount / visibleSteps.length) * 100) : 0;
 
+  const [newSocioName, setNewSocioName] = useState("");
+  const [newSocioMarried, setNewSocioMarried] = useState(false);
+
   const saveMutation = useMutation({
     mutationFn: async (updatedSteps: ConstitutionStep[]) => {
-      const payload = { steps: updatedSteps, has_foreign_partners: localConstitution?.has_foreign_partners ?? hasForeignPartners };
+      const payload: ConstitutionDetails = {
+        steps: updatedSteps,
+        has_foreign_partners: localConstitution?.has_foreign_partners ?? hasForeignPartners,
+        socios: localConstitution?.socios ?? [],
+      };
       setLocalConstitution(payload);
       const { error } = await supabase
         .from("projects")
@@ -94,16 +125,54 @@ export function ConstitutionDashboard({ projectId, constitutionDetails, responsi
     onError: (e: Error) => toast.error("Error: " + e.message),
   });
 
-  const toggleForeignPartners = () => {
-    const currentSteps = localConstitution?.steps ?? steps;
-    const newHasForeign = !hasForeignPartners;
-    const payload = { steps: currentSteps, has_foreign_partners: newHasForeign };
+  /** Persiste constitution_details manteniendo steps, socios y has_foreign_partners. */
+  const persistDetails = (partial: Partial<ConstitutionDetails>, successMsg?: string) => {
+    const payload: ConstitutionDetails = {
+      steps: partial.steps ?? localConstitution?.steps ?? steps,
+      has_foreign_partners: partial.has_foreign_partners ?? (localConstitution?.has_foreign_partners ?? hasForeignPartners),
+      socios: partial.socios ?? (localConstitution?.socios ?? []),
+    };
     setLocalConstitution(payload);
     supabase.from("projects").update({ constitution_details: payload } as any).eq("id", projectId)
       .then(({ error }) => {
         if (error) toast.error(error.message);
-        else { queryClient.invalidateQueries({ queryKey: ["project", projectId] }); toast.success(newHasForeign ? "RNIE habilitado" : "RNIE deshabilitado"); }
+        else {
+          queryClient.invalidateQueries({ queryKey: ["project", projectId] });
+          queryClient.invalidateQueries({ queryKey: ["assigned-steps"] });
+          if (successMsg) toast.success(successMsg);
+        }
       });
+  };
+
+  /** Reconstruye el checklist del paso 1 a partir de la lista de socios. */
+  const applySocios = (nextSocios: ConstitutionPartner[], successMsg?: string) => {
+    const currentSteps = localConstitution?.steps ?? steps;
+    const nextSteps = currentSteps.map((s) =>
+      s.key === DOCS_STEP_KEY ? { ...s, checklist: buildSociosChecklist(nextSocios, s.checklist ?? []) } : s,
+    );
+    persistDetails({ steps: nextSteps, socios: nextSocios }, successMsg);
+  };
+
+  const addSocio = () => {
+    const name = newSocioName.trim();
+    if (!name) return;
+    const socio: ConstitutionPartner = { id: `socio-${Date.now()}`, name, married: newSocioMarried };
+    applySocios([...socios, socio], `Socio "${name}" agregado`);
+    setNewSocioName("");
+    setNewSocioMarried(false);
+  };
+
+  const removeSocio = (id: string) => {
+    applySocios(socios.filter((s) => s.id !== id), "Socio eliminado");
+  };
+
+  const toggleSocioMarried = (id: string) => {
+    applySocios(socios.map((s) => (s.id === id ? { ...s, married: !s.married } : s)));
+  };
+
+  const toggleForeignPartners = () => {
+    const newHasForeign = !hasForeignPartners;
+    persistDetails({ has_foreign_partners: newHasForeign }, newHasForeign ? "RNIE habilitado" : "RNIE deshabilitado");
   };
 
   const updateStep = (key: string, updates: Partial<ConstitutionStep>) => {
@@ -159,6 +228,68 @@ export function ConstitutionDashboard({ projectId, constitutionDetails, responsi
               <Checkbox checked={hasForeignPartners} onCheckedChange={toggleForeignPartners} />
               <span>Socios extranjeros (incluir RNIE)</span>
             </label>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Socios: registro por socio de documentos requeridos */}
+      <Card>
+        <CardContent className="pt-6 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-foreground flex items-center gap-2">
+              <Users className="h-4 w-4" /> Socios
+            </h3>
+            <span className="text-sm font-medium text-muted-foreground">{socios.length} socio(s)</span>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Da de alta a cada socio para generar y rastrear su checklist de documentos dentro del paso «Recopilación de documentación de socios».
+          </p>
+
+          {socios.length > 0 && (
+            <div className="space-y-2">
+              {socios.map((s) => {
+                const prog = partnerDocProgress(s, docsChecklist);
+                const done = prog.total > 0 && prog.completed === prog.total;
+                return (
+                  <div key={s.id} className="flex items-center gap-2 rounded-md border px-3 py-2">
+                    <UserCheck className={`h-4 w-4 shrink-0 ${done ? "text-emerald-600" : "text-muted-foreground"}`} />
+                    <span className="text-sm font-medium flex-1 min-w-0 truncate">{s.name}</span>
+                    <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer shrink-0">
+                      <Checkbox checked={!!s.married} onCheckedChange={() => toggleSocioMarried(s.id)} />
+                      <span>Casado/a</span>
+                    </label>
+                    <Badge variant={done ? "default" : "outline"} className="text-[10px] shrink-0">
+                      {prog.completed}/{prog.total} docs
+                    </Badge>
+                    <button
+                      type="button"
+                      className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                      onClick={() => removeSocio(s.id)}
+                      aria-label={`Eliminar socio ${s.name}`}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="flex items-center gap-2 flex-wrap rounded-md border border-dashed p-2">
+            <Input
+              value={newSocioName}
+              onChange={(e) => setNewSocioName(e.target.value)}
+              placeholder="Nombre del socio..."
+              className="h-8 text-sm flex-1 min-w-[160px]"
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addSocio(); } }}
+            />
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+              <Checkbox checked={newSocioMarried} onCheckedChange={(v) => setNewSocioMarried(!!v)} />
+              <span>Casado/a</span>
+            </label>
+            <Button size="sm" className="h-8" onClick={addSocio} disabled={!newSocioName.trim()}>
+              <Plus className="h-3.5 w-3.5 mr-1" /> Agregar socio
+            </Button>
           </div>
         </CardContent>
       </Card>
