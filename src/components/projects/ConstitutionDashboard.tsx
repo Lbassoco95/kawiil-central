@@ -1,45 +1,22 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
-import {
-  FileText, Building2, Stamp, PenLine, Home, Receipt, KeyRound,
-  Landmark, BookOpen, Globe, Save, Phone, CalendarClock,
-} from "lucide-react";
+import { Building2, Globe, Save, CalendarClock } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { UnifiedStepRow } from "./UnifiedStepRow";
 import { CriticalityDelayCard } from "./CriticalityDelayCard";
+import {
+  buildDefaultConstitutionSteps,
+  reconcileConstitutionSteps,
+  type ConstitutionStep,
+} from "@/lib/constitutionSteps";
 
-import type { AccountingStep } from "@/hooks/useAccountingPeriods";
-
-interface ConstitutionStep extends AccountingStep {
-  description: string;
-  icon: string;
-  status: "pendiente" | "en_progreso" | "completado";
-  conditional?: boolean;
-  appointment_date?: string | null;
-}
-
-const DEFAULT_STEPS: ConstitutionStep[] = [
-  { key: "documentacion_socios", label: "Recopilación de documentación de socios", description: "Integrar documentos de identidad, poderes y datos de los socios/accionistas.", icon: "FileText", status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", assigned_to: null, due_date: null, document_ids: [], collaborators: [] },
-  { key: "envio_notaria", label: "Envío de información a notaría", description: "Enviar la documentación completa de socios a la notaría.", icon: "Building2", status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", assigned_to: null, due_date: null, document_ids: [], collaborators: [] },
-  { key: "proyecto_constitucion", label: "Proyecto de constitución", description: "La notaría prepara el proyecto de acta constitutiva para revisión.", icon: "Stamp", status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", assigned_to: null, due_date: null, document_ids: [], collaborators: [] },
-  { key: "firma_socios", label: "Firma de socios", description: "Los socios firman el acta constitutiva ante notario.", icon: "PenLine", status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", assigned_to: null, due_date: null, document_ids: [], collaborators: [] },
-  { key: "contratacion_linea", label: "Contratación de línea telefónica", description: "Contratar línea telefónica a nombre de la empresa para comprobante de domicilio.", icon: "Phone", status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", assigned_to: null, due_date: null, document_ids: [], collaborators: [] },
-  { key: "recibo_comprobante", label: "Comprobante de domicilio generado", description: "Verificar que ya se generó el recibo de la línea contratada.", icon: "Home", status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", assigned_to: null, due_date: null, document_ids: [], collaborators: [] },
-  { key: "cita_rfc", label: "Agendar cita ante el SAT (RFC)", description: "El gestor solicita cita en el SAT para la inscripción al RFC.", icon: "CalendarClock", status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", appointment_date: null, assigned_to: null, due_date: null, document_ids: [], collaborators: [] },
-  { key: "obtencion_rfc", label: "Obtención del RFC", description: "Acudir a la cita y completar la inscripción al RFC.", icon: "Receipt", status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", assigned_to: null, due_date: null, document_ids: [], collaborators: [] },
-  { key: "cita_efirma", label: "Agendar cita ante el SAT (e.firma)", description: "El gestor solicita cita para obtener la firma electrónica.", icon: "CalendarClock", status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", appointment_date: null, assigned_to: null, due_date: null, document_ids: [], collaborators: [] },
-  { key: "firma_electronica", label: "Obtención de e.firma (FIEL)", description: "Acudir a la cita y completar el trámite de firma electrónica avanzada.", icon: "KeyRound", status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", assigned_to: null, due_date: null, document_ids: [], collaborators: [] },
-  { key: "cuenta_bancaria", label: "Alta de cuenta bancaria", description: "Apertura de cuenta bancaria corporativa.", icon: "Landmark", status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", assigned_to: null, due_date: null, document_ids: [], collaborators: [] },
-  { key: "registro_rpc", label: "Registro ante el RPC (boleta)", description: "Inscripción en el Registro Público de Comercio.", icon: "BookOpen", status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", assigned_to: null, due_date: null, document_ids: [], collaborators: [] },
-  { key: "inscripcion_rnie", label: "Inscripción al RNIE", description: "Registro Nacional de Inversiones Extranjeras (socios extranjeros).", icon: "Globe", status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", conditional: true, assigned_to: null, due_date: null, document_ids: [], collaborators: [] },
-];
+const DEFAULT_STEPS: ConstitutionStep[] = buildDefaultConstitutionSteps(null);
 
 interface Props {
   projectId: string;
@@ -61,6 +38,32 @@ export function ConstitutionDashboard({ projectId, constitutionDetails, responsi
       setLocalConstitution(constitutionDetails);
     }
   }, [constitutionDetails]);
+
+  // Reconciliación de proyectos YA creados: al abrir el tablero inserta pasos
+  // faltantes (p. ej. denominación social) y precarga checklists de la plantilla
+  // vigente, conservando el progreso capturado. Se persiste una sola vez.
+  const reconciledRef = useRef(false);
+  useEffect(() => {
+    if (!constitutionDetails || reconciledRef.current) return;
+    const { steps: reconciled, changed } = reconcileConstitutionSteps(
+      (constitutionDetails.steps as ConstitutionStep[]) ?? [],
+      responsibleUserId ?? null,
+    );
+    if (!changed) return;
+    reconciledRef.current = true;
+    const payload = { steps: reconciled, has_foreign_partners: constitutionDetails.has_foreign_partners };
+    setLocalConstitution(payload);
+    supabase
+      .from("projects")
+      .update({ constitution_details: payload } as any)
+      .eq("id", projectId)
+      .then(({ error }) => {
+        if (!error) {
+          queryClient.invalidateQueries({ queryKey: ["project", projectId] });
+          queryClient.invalidateQueries({ queryKey: ["assigned-steps"] });
+        }
+      });
+  }, [constitutionDetails, projectId, responsibleUserId, queryClient]);
 
   const steps: ConstitutionStep[] = (localConstitution?.steps ?? DEFAULT_STEPS).map((s) => ({
     ...s,
@@ -123,11 +126,7 @@ export function ConstitutionDashboard({ projectId, constitutionDetails, responsi
   };
 
   const initializeSteps = () => {
-    const stepsWithResponsible = DEFAULT_STEPS.map((s) => ({
-      ...s,
-      assigned_to: responsibleUserId || null,
-    }));
-    saveMutation.mutate(stepsWithResponsible);
+    saveMutation.mutate(buildDefaultConstitutionSteps(responsibleUserId || null));
   };
 
   if (!constitutionDetails) {

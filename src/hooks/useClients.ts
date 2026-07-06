@@ -8,6 +8,7 @@ import { logActivity } from "@/lib/activityLog";
 import { invokeSavioFinanceWrite } from "@/lib/savioFinanceWriteInvoke";
 import { extractSavioIdFromWriteData } from "@/lib/clientSavioLink";
 import { syncComplianceProjectDescription } from "@/lib/ensureComplianceProject";
+import { buildDefaultConstitutionSteps } from "@/lib/constitutionSteps";
 
 export type Client = Tables<"clients">;
 export type ClientInsert = TablesInsert<"clients">;
@@ -122,22 +123,8 @@ export function useCreateClient() {
       const isSoftlanding = services.includes("softlanding");
       const responsibleId = clientRow.responsible_user_id || user!.id;
 
-      // Default constitution steps for auto-initialization
-      const DEFAULT_CONSTITUTION_STEPS = [
-        { key: "documentacion_socios", label: "Recopilación de documentación de socios", description: "Integrar documentos de identidad, poderes y datos de los socios/accionistas.", icon: "FileText", status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", assigned_to: responsibleId, due_date: null, document_ids: [], collaborators: [] },
-        { key: "envio_notaria", label: "Envío de información a notaría", description: "Enviar la documentación completa de socios a la notaría.", icon: "Building2", status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", assigned_to: responsibleId, due_date: null, document_ids: [], collaborators: [] },
-        { key: "proyecto_constitucion", label: "Proyecto de constitución", description: "La notaría prepara el proyecto de acta constitutiva para revisión.", icon: "Stamp", status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", assigned_to: responsibleId, due_date: null, document_ids: [], collaborators: [] },
-        { key: "firma_socios", label: "Firma de socios", description: "Los socios firman el acta constitutiva ante notario.", icon: "PenLine", status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", assigned_to: responsibleId, due_date: null, document_ids: [], collaborators: [] },
-        { key: "contratacion_linea", label: "Contratación de línea telefónica", description: "Contratar línea telefónica a nombre de la empresa para comprobante de domicilio.", icon: "Phone", status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", assigned_to: responsibleId, due_date: null, document_ids: [], collaborators: [] },
-        { key: "recibo_comprobante", label: "Comprobante de domicilio generado", description: "Verificar que ya se generó el recibo de la línea contratada.", icon: "Home", status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", assigned_to: responsibleId, due_date: null, document_ids: [], collaborators: [] },
-        { key: "cita_rfc", label: "Agendar cita ante el SAT (RFC)", description: "El gestor solicita cita en el SAT para la inscripción al RFC.", icon: "CalendarClock", status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", appointment_date: null, assigned_to: responsibleId, due_date: null, document_ids: [], collaborators: [] },
-        { key: "obtencion_rfc", label: "Obtención del RFC", description: "Acudir a la cita y completar la inscripción al RFC.", icon: "Receipt", status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", assigned_to: responsibleId, due_date: null, document_ids: [], collaborators: [] },
-        { key: "cita_efirma", label: "Agendar cita ante el SAT (e.firma)", description: "El gestor solicita cita para obtener la firma electrónica.", icon: "CalendarClock", status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", appointment_date: null, assigned_to: responsibleId, due_date: null, document_ids: [], collaborators: [] },
-        { key: "firma_electronica", label: "Obtención de e.firma (FIEL)", description: "Acudir a la cita y completar el trámite de firma electrónica avanzada.", icon: "KeyRound", status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", assigned_to: responsibleId, due_date: null, document_ids: [], collaborators: [] },
-        { key: "cuenta_bancaria", label: "Alta de cuenta bancaria", description: "Apertura de cuenta bancaria corporativa.", icon: "Landmark", status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", assigned_to: responsibleId, due_date: null, document_ids: [], collaborators: [] },
-        { key: "registro_rpc", label: "Registro ante el RPC (boleta)", description: "Inscripción en el Registro Público de Comercio.", icon: "BookOpen", status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", assigned_to: responsibleId, due_date: null, document_ids: [], collaborators: [] },
-        { key: "inscripcion_rnie", label: "Inscripción al RNIE", description: "Registro Nacional de Inversiones Extranjeras (socios extranjeros).", icon: "Globe", status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", conditional: true, assigned_to: responsibleId, due_date: null, document_ids: [], collaborators: [] },
-      ];
+      // Default constitution steps for auto-initialization (fuente única en @/lib/constitutionSteps)
+      const DEFAULT_CONSTITUTION_STEPS = buildDefaultConstitutionSteps(responsibleId);
 
       if (data) {
         const projectsToCreate: Array<{ name: string; area: string; constitution_details?: any }> = [];
