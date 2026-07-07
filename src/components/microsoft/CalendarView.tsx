@@ -51,6 +51,7 @@ import { Link } from "react-router-dom";
 import { CalendarKawiilCard } from "@/components/microsoft/CalendarKawiilCard";
 import { CreateTaskFromEventDialog } from "@/components/microsoft/CreateTaskFromEventDialog";
 import { useLinkedAccounts, useGoogleConnection, useGoogleCalendarEvents } from "@/hooks/useLinkedAccounts";
+import { ColorPickerPopover, paletteColorFor, hexAlpha } from "@/components/microsoft/ColorPickerPopover";
 
 type ViewMode = "day" | "3days" | "week" | "month" | "agenda";
 
@@ -168,38 +169,6 @@ const PRIORITY_COLORS: Record<string, string> = {
   baja: "bg-green-500",
 };
 
-const CATEGORY_COLORS = [
-  "bg-blue-500/20 text-blue-700 dark:text-blue-300 border-blue-500/30",
-  "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
-  "bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/30",
-  "bg-purple-500/20 text-purple-700 dark:text-purple-300 border-purple-500/30",
-  "bg-pink-500/20 text-pink-700 dark:text-pink-300 border-pink-500/30",
-  "bg-sky-500/20 text-sky-700 dark:text-sky-300 border-sky-500/30",
-];
-
-function getCategoryClasses(name?: string | null) {
-  if (!name) return CATEGORY_COLORS[0];
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = (hash + name.charCodeAt(i)) % 2147483647;
-  return CATEGORY_COLORS[hash % CATEGORY_COLORS.length];
-}
-
-const CATEGORY_DOT_COLORS = [
-  "bg-blue-500 border-blue-600/40",
-  "bg-emerald-500 border-emerald-600/40",
-  "bg-amber-500 border-amber-600/40",
-  "bg-purple-500 border-purple-600/40",
-  "bg-pink-500 border-pink-600/40",
-  "bg-sky-500 border-sky-600/40",
-];
-
-function catColorPreview(name?: string | null) {
-  if (!name) return CATEGORY_DOT_COLORS[0];
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = (hash + name.charCodeAt(i)) % 2147483647;
-  return CATEGORY_DOT_COLORS[hash % CATEGORY_DOT_COLORS.length];
-}
-
 function taskDetailHref(taskId: string) {
   return `/tareas?taskId=${encodeURIComponent(taskId)}`;
 }
@@ -244,6 +213,27 @@ export function CalendarView({
     if (typeof window === "undefined") return;
     try { window.localStorage.setItem("kawiil-cal-hidden-calendars", JSON.stringify(hiddenCalendarIds)); } catch { /* ignore */ }
   }, [hiddenCalendarIds]);
+
+  // Overrides de color elegidos por el usuario (calendarios y categorías), persistidos.
+  const [calendarColors, setCalendarColors] = useState<Record<string, string>>(() => {
+    if (typeof window === "undefined") return {};
+    try { return JSON.parse(window.localStorage.getItem("kawiil-cal-calendar-colors") || "{}"); } catch { return {}; }
+  });
+  useEffect(() => {
+    try { window.localStorage.setItem("kawiil-cal-calendar-colors", JSON.stringify(calendarColors)); } catch { /* ignore */ }
+  }, [calendarColors]);
+  const [categoryColors, setCategoryColors] = useState<Record<string, string>>(() => {
+    if (typeof window === "undefined") return {};
+    try { return JSON.parse(window.localStorage.getItem("kawiil-cal-category-colors") || "{}"); } catch { return {}; }
+  });
+  useEffect(() => {
+    try { window.localStorage.setItem("kawiil-cal-category-colors", JSON.stringify(categoryColors)); } catch { /* ignore */ }
+  }, [categoryColors]);
+  const setCalendarColor = (id: string, color: string) => setCalendarColors((p) => ({ ...p, [id]: color }));
+  const resetCalendarColor = (id: string) => setCalendarColors((p) => { const n = { ...p }; delete n[id]; return n; });
+  const setCategoryColor = (name: string, color: string) => setCategoryColors((p) => ({ ...p, [name]: color }));
+  const resetCategoryColor = (name: string) => setCategoryColors((p) => { const n = { ...p }; delete n[name]; return n; });
+
   const [activeCategoryFilters, setActiveCategoryFilters] = useState<string[]>(() => {
     if (typeof window === "undefined") return [];
     try {
@@ -436,13 +426,21 @@ export function CalendarView({
   const { data: kawiilTasks = [] } = useTasksForCalendar(rangeStart, rangeEnd);
 
   const calendarById = useMemo(() => {
-    const m = new Map<string, { name: string; color: string }>();
-    calendars.forEach((c, i) => m.set(c.id, { name: c.name, color: calendarAccentColor(c.id, i) }));
+    const m = new Map<string, { name: string; color: string; hexColor?: string }>();
+    calendars.forEach((c, i) => m.set(c.id, { name: c.name, color: calendarAccentColor(c.id, i), hexColor: c.hexColor }));
     return m;
   }, [calendars]);
   const showCalendarColors = calendars.length > 1 || hasGoogle;
-  const calendarColorFor = (id?: string | null) =>
-    id ? (calendarById.get(id)?.color || calendarAccentColor(id)) : undefined;
+  // Color de un calendario: 1) override del usuario, 2) color real de Outlook, 3) hash de respaldo.
+  const calendarColorFor = (id?: string | null) => {
+    if (!id) return undefined;
+    if (calendarColors[id]) return calendarColors[id];
+    const cal = calendarById.get(id);
+    const hx = cal?.hexColor;
+    return (hx && /^#[0-9a-fA-F]{6}$/.test(hx) ? hx : undefined) || cal?.color || calendarAccentColor(id);
+  };
+  // Color de una categoría: override del usuario o color determinista de la paleta.
+  const categoryColorFor = (name?: string | null) => categoryColors[name || ""] || paletteColorFor(name);
   const calendarNameFor = (event: any) =>
     (event?.calendarId ? calendarById.get(event.calendarId)?.name : null) || event?.calendarName || null;
   const toggleCalendar = (id: string) => {
@@ -936,22 +934,25 @@ export function CalendarView({
                               const startStr = formatMX(event._parsedStart, "HH:mm");
                               const endStr = endDt ? formatMX(endDt, "HH:mm") : "";
                               const primaryCategory: string | undefined = event.categories?.[0];
-                              const catClasses = getCategoryClasses(primaryCategory);
+                              const catHex = primaryCategory ? categoryColorFor(primaryCategory) : undefined;
                               const meetingUrl = event.onlineMeeting?.joinUrl || event.onlineMeetingUrl;
                               const accent = showCalendarColors ? calendarColorFor(event.calendarId) : undefined;
                               // Contenido adaptativo según la altura del evento (evita recortes ilegibles):
                               // compacto = eventos cortos (~30 min) → solo el título.
                               const compact = height < 46;
                               const showLocation = height >= 64 && !!event.location?.displayName;
+                              const innerStyle: Record<string, string | number> = {};
+                              if (catHex) { innerStyle.backgroundColor = hexAlpha(catHex, 0.15); innerStyle.borderColor = hexAlpha(catHex, 0.45); }
+                              if (accent) { innerStyle.borderLeftWidth = 3; innerStyle.borderLeftColor = accent; }
 
                               return (
                                 <div key={event.id} className={cn("absolute px-0.5", draggedEvent?.id === event.id && "opacity-40")}
                                   style={{ top, height, left: `${leftPct}%`, width: `${widthPct}%` }} draggable
                                   onDragStart={(e) => { e.stopPropagation(); setDraggedEvent(event); e.dataTransfer.effectAllowed = "move"; }}
                                   onDragEnd={() => setDraggedEvent(null)}>
-                                  <div style={accent ? { borderLeftWidth: 3, borderLeftColor: accent } : undefined}
+                                  <div style={innerStyle}
                                     className={cn("h-full rounded-md px-1.5 py-0.5 text-xs overflow-hidden group relative shadow-sm cursor-grab active:cursor-grabbing transition-all duration-150 hover:shadow-md border",
-                                    primaryCategory ? catClasses : "bg-primary/15 text-primary border-primary/20")}
+                                    catHex ? "text-foreground" : "bg-primary/15 text-primary border-primary/20")}
                                     title={`${startStr}${endStr ? " - " + endStr : ""} ${event.subject}`}
                                     onClick={(e) => { e.stopPropagation(); setSelectedEventId(event.id); }}>
                                     <div className="flex items-start gap-1 h-full pr-3">
@@ -1254,27 +1255,33 @@ export function CalendarView({
                   <div className="space-y-0.5">
                     {calendars.map((cal) => {
                       const visible = !hiddenCalendarIds.includes(cal.id);
-                      const color = calendarById.get(cal.id)?.color;
+                      const color = calendarColorFor(cal.id) || "#3b82f6";
                       return (
-                        <button
+                        <div
                           key={cal.id}
-                          type="button"
-                          onClick={() => toggleCalendar(cal.id)}
                           className={cn(
-                            "w-full flex items-center gap-2 rounded-md px-2 py-1 text-left transition-colors hover:bg-accent",
+                            "w-full flex items-center gap-2 rounded-md px-2 py-1 transition-colors hover:bg-accent",
                             !visible && "opacity-40",
                           )}
-                          title={visible ? "Ocultar calendario" : "Mostrar calendario"}
                         >
-                          <span
-                            className="h-3 w-3 rounded-[4px] border shrink-0"
-                            style={{ backgroundColor: visible ? color : "transparent", borderColor: color }}
+                          <ColorPickerPopover
+                            value={color}
+                            onChange={(c) => setCalendarColor(cal.id, c)}
+                            onReset={calendarColors[cal.id] ? () => resetCalendarColor(cal.id) : undefined}
+                            ariaLabel={`Color de ${cal.name}`}
                           />
-                          <span className="text-xs text-foreground truncate">{cal.name}</span>
-                          {cal.isDefaultCalendar && (
-                            <span className="ml-auto text-[9px] text-muted-foreground shrink-0">principal</span>
-                          )}
-                        </button>
+                          <button
+                            type="button"
+                            onClick={() => toggleCalendar(cal.id)}
+                            className="flex-1 min-w-0 flex items-center gap-2 text-left"
+                            title={visible ? "Ocultar calendario" : "Mostrar calendario"}
+                          >
+                            <span className="text-xs text-foreground truncate">{cal.name}</span>
+                            {cal.isDefaultCalendar && (
+                              <span className="ml-auto text-[9px] text-muted-foreground shrink-0">principal</span>
+                            )}
+                          </button>
+                        </div>
                       );
                     })}
                   </div>
@@ -1300,28 +1307,36 @@ export function CalendarView({
                     {(outlookCategories as any[]).map((cat: any) => {
                       const name: string = cat.displayName;
                       const active = activeCategoryFilters.includes(name);
-                      const dot = catColorPreview(name);
+                      const color = categoryColorFor(name);
                       return (
-                        <button
+                        <div
                           key={name}
-                          type="button"
-                          onClick={() =>
-                            setActiveCategoryFilters((prev) =>
-                              prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name],
-                            )
-                          }
                           className={cn(
-                            "w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-[11px] transition-colors",
+                            "w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-[11px] transition-colors",
                             active ? "bg-primary/10 text-foreground" : "hover:bg-accent/50 text-muted-foreground",
                           )}
                         >
-                          <span
-                            className={cn("inline-block h-2.5 w-2.5 rounded-full border", dot)}
-                            aria-hidden
+                          <ColorPickerPopover
+                            value={color}
+                            onChange={(c) => setCategoryColor(name, c)}
+                            onReset={categoryColors[name] ? () => resetCategoryColor(name) : undefined}
+                            ariaLabel={`Color de ${name}`}
+                            size={11}
                           />
-                          <span className="truncate flex-1">{name}</span>
-                          {active && <span className="text-primary text-[10px]">●</span>}
-                        </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setActiveCategoryFilters((prev) =>
+                                prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name],
+                              )
+                            }
+                            className="flex-1 min-w-0 flex items-center gap-2 text-left"
+                            title="Filtrar por esta categoría"
+                          >
+                            <span className="truncate flex-1">{name}</span>
+                            {active && <span className="text-primary text-[10px]">●</span>}
+                          </button>
+                        </div>
                       );
                     })}
                   </div>
