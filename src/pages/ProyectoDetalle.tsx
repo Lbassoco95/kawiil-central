@@ -17,6 +17,7 @@ import {
   PenTool,
   Loader2,
   MessageSquare,
+  BookOpen,
   Sparkles,
   Trash2,
   AlertTriangle,
@@ -25,6 +26,7 @@ import {
   FolderKanban,
 } from "lucide-react";
 import { ProjectCommentsTab } from "@/components/projects/ProjectCommentsTab";
+import { ProjectLogTab } from "@/components/projects/ProjectLogTab";
 import { MeetingMinutesDialog } from "@/components/projects/MeetingMinutesDialog";
 import { LawsuitDashboard } from "@/components/projects/LawsuitDashboard";
 import { AccountingDashboard } from "@/components/projects/AccountingDashboard";
@@ -393,7 +395,7 @@ const ProyectoDetalle = () => {
   }, [searchParams]);
 
   const complianceSiblingNavigateTab = useMemo(() => {
-    const ok = ["general", "cumplimiento", "tareas", "comentarios", "firmas"];
+    const ok = ["general", "cumplimiento", "tareas", "bitacora", "comentarios", "firmas"];
     return ok.includes(tab) ? tab : "cumplimiento";
   }, [tab]);
 
@@ -453,6 +455,7 @@ const ProyectoDetalle = () => {
         ? `Tareas (${openTaskCount} · ${closedTaskCount} cerr.)`
         : `Tareas (${openTaskCount})`,
   });
+  projectTabs.push({ key: "bitacora", label: "Bitácora", icon: BookOpen });
   projectTabs.push({ key: "comentarios", label: "Comentarios", icon: MessageSquare });
   projectTabs.push({ key: "firmas", label: "Firmas", icon: PenTool });
 
@@ -735,6 +738,10 @@ const ProyectoDetalle = () => {
               defaultPhaseKey={taskFormPhaseKey}
             />
           </div>
+        )}
+
+        {tab === "bitacora" && (
+          <ProjectLogTab projectId={project.id} />
         )}
 
         {tab === "comentarios" && (
