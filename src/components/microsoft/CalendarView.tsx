@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import {
   useCalendarEvents,
+  useCalendars,
   useCreateCalendarEvent,
   useDeleteCalendarEvent,
   useEventDetail,
@@ -50,7 +51,26 @@ import { Link } from "react-router-dom";
 import { CalendarKawiilCard } from "@/components/microsoft/CalendarKawiilCard";
 import { CreateTaskFromEventDialog } from "@/components/microsoft/CreateTaskFromEventDialog";
 
-type ViewMode = "day" | "3days" | "week" | "month";
+type ViewMode = "day" | "3days" | "week" | "month" | "agenda";
+
+/** Colores de acento por calendario (barra lateral izquierda del evento). */
+const CALENDAR_ACCENT_COLORS = [
+  "#3b82f6", // blue
+  "#10b981", // emerald
+  "#f59e0b", // amber
+  "#a855f7", // purple
+  "#ec4899", // pink
+  "#0ea5e9", // sky
+  "#ef4444", // red
+  "#14b8a6", // teal
+];
+
+function calendarAccentColor(calendarId?: string | null, index = 0): string {
+  if (!calendarId) return CALENDAR_ACCENT_COLORS[index % CALENDAR_ACCENT_COLORS.length];
+  let hash = 0;
+  for (let i = 0; i < calendarId.length; i++) hash = (hash + calendarId.charCodeAt(i)) % 2147483647;
+  return CALENDAR_ACCENT_COLORS[hash % CALENDAR_ACCENT_COLORS.length];
+}
 
 const START_HOUR = 6;
 const END_HOUR = 23;
@@ -212,6 +232,17 @@ export function CalendarView({
   const [showTaskFromEvent, setShowTaskFromEvent] = useState(false);
   const [showKawiilTasks, setShowKawiilTasks] = useState(true);
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
+  const [hiddenCalendarIds, setHiddenCalendarIds] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = window.localStorage.getItem("kawiil-cal-hidden-calendars");
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try { window.localStorage.setItem("kawiil-cal-hidden-calendars", JSON.stringify(hiddenCalendarIds)); } catch { /* ignore */ }
+  }, [hiddenCalendarIds]);
   const [activeCategoryFilters, setActiveCategoryFilters] = useState<string[]>(() => {
     if (typeof window === "undefined") return [];
     try {
@@ -348,12 +379,13 @@ export function CalendarView({
 
   const rangeStart = useMemo(() => {
     if (viewMode === "month") return format(startOfMonth(currentDate), "yyyy-MM-dd");
-    if (viewMode === "day") return format(currentDate, "yyyy-MM-dd");
+    if (viewMode === "day" || viewMode === "agenda") return format(currentDate, "yyyy-MM-dd");
     return format(viewDays[0] || currentDate, "yyyy-MM-dd");
   }, [viewMode, currentDate, viewDays]);
 
   const rangeEnd = useMemo(() => {
     if (viewMode === "month") return format(endOfMonth(currentDate), "yyyy-MM-dd");
+    if (viewMode === "agenda") return format(addDays(currentDate, 30), "yyyy-MM-dd");
     if (viewMode === "day") return format(addDays(currentDate, 1), "yyyy-MM-dd");
     const last = viewDays[viewDays.length - 1] || currentDate;
     return format(addDays(last, 1), "yyyy-MM-dd");
@@ -362,7 +394,19 @@ export function CalendarView({
   const rangeStartISO = useMemo(() => `${rangeStart}T00:00:00.000Z`, [rangeStart]);
   const rangeEndISO = useMemo(() => `${rangeEnd}T23:59:59.999Z`, [rangeEnd]);
 
-  const { data: eventsData, isLoading } = useCalendarEvents(rangeStartISO, rangeEndISO);
+  const { data: calendars = [] } = useCalendars();
+  const visibleCalendarIds = useMemo(
+    () => calendars.filter((c) => !hiddenCalendarIds.includes(c.id)).map((c) => c.id),
+    [calendars, hiddenCalendarIds],
+  );
+  // Solo pasamos IDs si el usuario ocultó alguno; con todos visibles usamos la
+  // vista por defecto (más barata) salvo que haya varios calendarios.
+  const calendarIdsForQuery = useMemo(() => {
+    if (calendars.length <= 1) return undefined;
+    return visibleCalendarIds;
+  }, [calendars, visibleCalendarIds]);
+
+  const { data: eventsData, isLoading } = useCalendarEvents(rangeStartISO, rangeEndISO, calendarIdsForQuery);
   const allEvents = Array.isArray(eventsData) ? eventsData : [];
   const events = useMemo(() => {
     if (activeCategoryFilters.length === 0) return allEvents;
@@ -376,6 +420,16 @@ export function CalendarView({
   const deleteEvent = useDeleteCalendarEvent();
 
   const { data: kawiilTasks = [] } = useTasksForCalendar(rangeStart, rangeEnd);
+
+  const calendarById = useMemo(() => {
+    const m = new Map<string, { name: string; color: string }>();
+    calendars.forEach((c, i) => m.set(c.id, { name: c.name, color: calendarAccentColor(c.id, i) }));
+    return m;
+  }, [calendars]);
+  const showCalendarColors = calendars.length > 1;
+  const toggleCalendar = (id: string) => {
+    setHiddenCalendarIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
 
   const cachedEvent = useMemo(
     () => (selectedEventId ? events.find((e: any) => e.id === selectedEventId) : null),
@@ -534,6 +588,7 @@ export function CalendarView({
         return `${format(ws, "d MMM", { locale: es })} – ${format(we, "d MMM yyyy", { locale: es })}`;
       }
       case "month": return format(currentDate, "MMMM yyyy", { locale: es });
+      case "agenda": return `Agenda · desde ${format(currentDate, "d MMM", { locale: es })}`;
     }
   }, [viewMode, currentDate]);
 
@@ -547,6 +602,7 @@ export function CalendarView({
         return `${format(ws, "d")} – ${format(we, "d MMM", { locale: es })}`;
       }
       case "month": return format(currentDate, "MMM yyyy", { locale: es });
+      case "agenda": return `Agenda · ${format(currentDate, "d MMM", { locale: es })}`;
     }
   }, [viewMode, currentDate]);
 
@@ -651,7 +707,7 @@ export function CalendarView({
         {/* View mode tabs */}
         {!isMobile && (
           <div className="flex items-center ml-2 shrink-0">
-            {(["day", "3days", "week", "month"] as const).map((v) => (
+            {(["day", "3days", "week", "month", "agenda"] as const).map((v) => (
               <button
                 key={v}
                 onClick={() => setViewMode(v)}
@@ -662,7 +718,7 @@ export function CalendarView({
                     : "text-muted-foreground border-b-transparent hover:text-foreground"
                 )}
               >
-                {v === "day" ? "Día" : v === "3days" ? "3 Días" : v === "week" ? "Semana" : "Mes"}
+                {v === "day" ? "Día" : v === "3days" ? "3 Días" : v === "week" ? "Semana" : v === "month" ? "Mes" : "Agenda"}
               </button>
             ))}
           </div>
@@ -703,7 +759,7 @@ export function CalendarView({
           )}
 
           {/* Day/3days/Week grid */}
-          {viewMode !== "month" && (
+          {viewMode !== "month" && viewMode !== "agenda" && (
             <div className="overflow-x-auto">
               <div className={getMinWidth()}>
                 {/* Day headers */}
@@ -862,13 +918,15 @@ export function CalendarView({
                               const primaryCategory: string | undefined = event.categories?.[0];
                               const catClasses = getCategoryClasses(primaryCategory);
                               const meetingUrl = event.onlineMeeting?.joinUrl || event.onlineMeetingUrl;
+                              const accent = showCalendarColors && event.calendarId ? calendarById.get(event.calendarId)?.color : undefined;
 
                               return (
                                 <div key={event.id} className={cn("absolute px-0.5", draggedEvent?.id === event.id && "opacity-40")}
                                   style={{ top, height, left: `${leftPct}%`, width: `${widthPct}%` }} draggable
                                   onDragStart={(e) => { e.stopPropagation(); setDraggedEvent(event); e.dataTransfer.effectAllowed = "move"; }}
                                   onDragEnd={() => setDraggedEvent(null)}>
-                                  <div className={cn("h-full rounded-md px-1.5 py-0.5 text-xs truncate group relative shadow-sm cursor-grab active:cursor-grabbing transition-all duration-150 hover:shadow-md border",
+                                  <div style={accent ? { borderLeftWidth: 3, borderLeftColor: accent } : undefined}
+                                    className={cn("h-full rounded-md px-1.5 py-0.5 text-xs truncate group relative shadow-sm cursor-grab active:cursor-grabbing transition-all duration-150 hover:shadow-md border",
                                     primaryCategory ? catClasses : "bg-primary/15 text-primary border-primary/20")}
                                     title={`${startStr}${endStr ? " - " + endStr : ""} ${event.subject}`}
                                     onClick={(e) => { e.stopPropagation(); setSelectedEventId(event.id); }}>
@@ -965,6 +1023,93 @@ export function CalendarView({
               </div>
             </div>
           )}
+
+          {/* Agenda (lista cronológica) */}
+          {viewMode === "agenda" && (
+            <div className="max-w-3xl mx-auto p-3 sm:p-4">
+              {(() => {
+                const days = eachDayOfInterval({ start: currentDate, end: addDays(currentDate, 30) });
+                const rows = days
+                  .map((day) => ({
+                    day,
+                    events: getEventsForDay(day),
+                    tasks: showKawiilTasks ? getTasksForDay(day) : [],
+                  }))
+                  .filter((r) => r.events.length > 0 || r.tasks.length > 0);
+
+                if (rows.length === 0) {
+                  return (
+                    <div className="flex flex-col items-center justify-center py-16 text-center gap-2">
+                      <CalendarDays className="h-8 w-8 text-muted-foreground/50" />
+                      <p className="text-sm text-muted-foreground">Sin eventos ni actividades en los próximos 30 días.</p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-4">
+                    {rows.map(({ day, events: dayEvts, tasks: dayTasks }) => (
+                      <div key={day.toISOString()} className="flex gap-3">
+                        <div className={cn(
+                          "w-14 shrink-0 text-right pt-1",
+                          isToday(day) ? "text-primary" : "text-muted-foreground"
+                        )}>
+                          <div className="text-[10px] uppercase font-semibold tracking-wide">{format(day, "EEE", { locale: es })}</div>
+                          <div className={cn("text-xl leading-none font-bold", isToday(day) && "text-primary")}>{format(day, "d")}</div>
+                          <div className="text-[10px]">{format(day, "MMM", { locale: es })}</div>
+                        </div>
+                        <div className="flex-1 min-w-0 space-y-1.5 border-l border-border pl-3">
+                          {dayEvts.map((event: any) => {
+                            const time = event._isAllDay ? "Todo el día" : formatMX(event._parsedStart, "HH:mm");
+                            const endDt = event.end?.dateTime ? parseEventTime(event.end.dateTime) : null;
+                            const endStr = !event._isAllDay && endDt ? `–${formatMX(endDt, "HH:mm")}` : "";
+                            const accent = showCalendarColors && event.calendarId ? calendarById.get(event.calendarId)?.color : undefined;
+                            const calName = event.calendarId ? calendarById.get(event.calendarId)?.name : null;
+                            return (
+                              <button key={event.id} type="button"
+                                onClick={() => setSelectedEventId(event.id)}
+                                style={accent ? { borderLeftWidth: 3, borderLeftColor: accent } : undefined}
+                                className="w-full text-left flex items-start gap-3 rounded-lg border border-border bg-card hover:bg-accent/40 transition-colors p-2.5">
+                                <div className="text-[11px] font-medium text-muted-foreground w-20 shrink-0 tabular-nums pt-0.5">
+                                  {time}{endStr}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-medium text-foreground truncate">{event.subject || "(sin título)"}</p>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    {event.location?.displayName && (
+                                      <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground truncate">
+                                        <MapPin className="h-3 w-3 shrink-0" />{event.location.displayName}
+                                      </span>
+                                    )}
+                                    {showCalendarColors && calName && (
+                                      <span className="text-[10px] text-muted-foreground">{calName}</span>
+                                    )}
+                                  </div>
+                                </div>
+                                {(event.onlineMeeting?.joinUrl || event.onlineMeetingUrl) && (
+                                  <Video className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
+                                )}
+                              </button>
+                            );
+                          })}
+                          {dayTasks.map((task: any) => (
+                            <Link key={task.id} to={taskDetailHref(task.id)}
+                              className="flex items-start gap-3 rounded-lg border border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10 transition-colors p-2.5">
+                              <div className="w-20 shrink-0 pt-0.5"><CheckSquare className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" /></div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium text-foreground truncate">{task.title}</p>
+                                {task.clients?.name && <p className="text-[11px] text-muted-foreground truncate">{task.clients.name}</p>}
+                              </div>
+                            </Link>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
         </div>
 
         {/* Right panel — collapsible */}
@@ -1037,6 +1182,40 @@ export function CalendarView({
                   })}
                 </div>
               </div>
+
+              {/* Calendarios (cuenta M365 conectada) */}
+              {calendars.length > 1 && (
+                <div className="border-t border-border/30 pt-3">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Calendarios</p>
+                  <div className="space-y-0.5">
+                    {calendars.map((cal) => {
+                      const visible = !hiddenCalendarIds.includes(cal.id);
+                      const color = calendarById.get(cal.id)?.color;
+                      return (
+                        <button
+                          key={cal.id}
+                          type="button"
+                          onClick={() => toggleCalendar(cal.id)}
+                          className={cn(
+                            "w-full flex items-center gap-2 rounded-md px-2 py-1 text-left transition-colors hover:bg-accent",
+                            !visible && "opacity-40",
+                          )}
+                          title={visible ? "Ocultar calendario" : "Mostrar calendario"}
+                        >
+                          <span
+                            className="h-3 w-3 rounded-[4px] border shrink-0"
+                            style={{ backgroundColor: visible ? color : "transparent", borderColor: color }}
+                          />
+                          <span className="text-xs text-foreground truncate">{cal.name}</span>
+                          {cal.isDefaultCalendar && (
+                            <span className="ml-auto text-[9px] text-muted-foreground shrink-0">principal</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Category filters */}
               {outlookCategories.length > 0 && (
