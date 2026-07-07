@@ -48,6 +48,7 @@ import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Link } from "react-router-dom";
 import { CalendarKawiilCard } from "@/components/microsoft/CalendarKawiilCard";
+import { CreateTaskFromEventDialog } from "@/components/microsoft/CreateTaskFromEventDialog";
 
 type ViewMode = "day" | "3days" | "week" | "month";
 
@@ -77,6 +78,66 @@ function minutesToLabel(totalMinutes: number) {
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
+}
+
+type PositionedEvent = {
+  event: any;
+  startMin: number;
+  endMin: number;
+  col: number;
+  cols: number;
+};
+
+/**
+ * Reparte los eventos con hora de un día en carriles (columnas) para que los
+ * que se solapan se dibujen lado a lado en vez de encimarse. Agrupa en
+ * "clusters" de eventos que se traslapan de forma transitiva y, dentro de cada
+ * cluster, asigna cada evento al primer carril libre.
+ */
+function layoutDayEvents(dayEvents: any[]): PositionedEvent[] {
+  const items = dayEvents
+    .map((event) => {
+      const startTotal = event._parsedStart.getHours() * 60 + event._parsedStart.getMinutes();
+      const endDt = event.end?.dateTime ? parseEventTime(event.end.dateTime) : null;
+      const endTotal = endDt ? endDt.getHours() * 60 + endDt.getMinutes() : startTotal + SLOT_MINUTES;
+      return { event, startMin: startTotal, endMin: Math.max(endTotal, startTotal + SLOT_MINUTES) };
+    })
+    .sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin);
+
+  const positioned: PositionedEvent[] = [];
+  let cluster: typeof items = [];
+  let clusterEnd = -1;
+
+  const flush = () => {
+    if (cluster.length === 0) return;
+    const columnEnds: number[] = []; // minuto de fin del último evento de cada carril
+    const assigned: Array<{ item: (typeof cluster)[number]; col: number }> = [];
+    for (const it of cluster) {
+      let col = columnEnds.findIndex((end) => it.startMin >= end);
+      if (col === -1) {
+        col = columnEnds.length;
+        columnEnds.push(it.endMin);
+      } else {
+        columnEnds[col] = it.endMin;
+      }
+      assigned.push({ item: it, col });
+    }
+    const cols = columnEnds.length;
+    for (const a of assigned) {
+      positioned.push({ event: a.item.event, startMin: a.item.startMin, endMin: a.item.endMin, col: a.col, cols });
+    }
+    cluster = [];
+    clusterEnd = -1;
+  };
+
+  for (const it of items) {
+    if (cluster.length > 0 && it.startMin >= clusterEnd) flush();
+    cluster.push(it);
+    clusterEnd = Math.max(clusterEnd, it.endMin);
+  }
+  flush();
+
+  return positioned;
 }
 
 const PRIORITY_COLORS: Record<string, string> = {
@@ -148,6 +209,7 @@ export function CalendarView({
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [showCreate, setShowCreate] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [showTaskFromEvent, setShowTaskFromEvent] = useState(false);
   const [showKawiilTasks, setShowKawiilTasks] = useState(true);
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [activeCategoryFilters, setActiveCategoryFilters] = useState<string[]>(() => {
@@ -783,18 +845,18 @@ export function CalendarView({
                               />
                             ))}
 
-                            {dayEvents.map((event: any) => {
-                              const startTotal = event._parsedStart.getHours() * 60 + event._parsedStart.getMinutes();
+                            {layoutDayEvents(dayEvents).map(({ event, startMin, endMin, col, cols }) => {
                               const endDt = event.end?.dateTime ? parseEventTime(event.end.dateTime) : null;
-                              const endTotal = endDt ? endDt.getHours() * 60 + endDt.getMinutes() : startTotal + SLOT_MINUTES;
                               const dayStart = START_HOUR * 60;
                               const dayEnd = END_HOUR * 60;
-                              const clampedStart = Math.max(startTotal, dayStart);
-                              const clampedEnd = Math.min(endTotal, dayEnd);
+                              const clampedStart = Math.max(startMin, dayStart);
+                              const clampedEnd = Math.min(endMin, dayEnd);
                               if (clampedEnd <= clampedStart) return null;
 
                               const top = ((clampedStart - dayStart) / SLOT_MINUTES) * SLOT_HEIGHT + 2;
                               const height = Math.max(SLOT_HEIGHT, ((clampedEnd - clampedStart) / SLOT_MINUTES) * SLOT_HEIGHT - 4);
+                              const widthPct = 100 / cols;
+                              const leftPct = col * widthPct;
                               const startStr = formatMX(event._parsedStart, "HH:mm");
                               const endStr = endDt ? formatMX(endDt, "HH:mm") : "";
                               const primaryCategory: string | undefined = event.categories?.[0];
@@ -802,8 +864,8 @@ export function CalendarView({
                               const meetingUrl = event.onlineMeeting?.joinUrl || event.onlineMeetingUrl;
 
                               return (
-                                <div key={event.id} className={cn("absolute inset-x-0 px-0.5", draggedEvent?.id === event.id && "opacity-40")}
-                                  style={{ top, height }} draggable
+                                <div key={event.id} className={cn("absolute px-0.5", draggedEvent?.id === event.id && "opacity-40")}
+                                  style={{ top, height, left: `${leftPct}%`, width: `${widthPct}%` }} draggable
                                   onDragStart={(e) => { e.stopPropagation(); setDraggedEvent(event); e.dataTransfer.effectAllowed = "move"; }}
                                   onDragEnd={() => setDraggedEvent(null)}>
                                   <div className={cn("h-full rounded-md px-1.5 py-0.5 text-xs truncate group relative shadow-sm cursor-grab active:cursor-grabbing transition-all duration-150 hover:shadow-md border",
@@ -1208,11 +1270,14 @@ export function CalendarView({
               </div>
             </div>
           ) : null}
-          <DialogFooter>
+          <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:items-center">
             <Button variant="destructive" onClick={() => { if (selectedEventId) deleteEvent.mutate(selectedEventId, { onSuccess: () => setSelectedEventId(null) }); }} disabled={deleteEvent.isPending}>
               {deleteEvent.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Eliminar
             </Button>
-            <div className="flex-1" />
+            <div className="hidden sm:block sm:flex-1" />
+            <Button variant="outline" onClick={() => setShowTaskFromEvent(true)} disabled={!cachedEvent && !eventDetail}>
+              <CheckSquare className="mr-1.5 h-4 w-4" /> Crear tarea
+            </Button>
             <Button variant="outline" onClick={() => setSelectedEventId(null)}>Cerrar</Button>
             <Button onClick={handleUpdateEvent} disabled={updateEvent.isPending || !editForm.subject}>
               {updateEvent.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Guardar
@@ -1220,6 +1285,13 @@ export function CalendarView({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Crear tarea/actividad desde el evento seleccionado */}
+      <CreateTaskFromEventDialog
+        open={showTaskFromEvent}
+        onOpenChange={setShowTaskFromEvent}
+        event={(eventDetail || cachedEvent) ?? null}
+      />
     </div>
   );
 }
