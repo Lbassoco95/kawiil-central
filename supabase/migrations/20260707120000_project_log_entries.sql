@@ -3,7 +3,7 @@
 -- project_comments (chat libre), la bitácora es un histórico estructurado de
 -- entradas: qué pasó, si hubo atraso y de quién fue la responsabilidad
 -- (cliente / nosotros / autoridad / externo). Sirve como expediente del cliente.
-CREATE TABLE public.project_log_entries (
+CREATE TABLE IF NOT EXISTS public.project_log_entries (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id uuid NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
   user_id uuid NOT NULL,
