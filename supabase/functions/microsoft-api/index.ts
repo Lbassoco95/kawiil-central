@@ -848,17 +848,61 @@ Deno.serve(async (req) => {
     let result;
 
     switch (action) {
+      case "calendars": {
+        // Lista los calendarios disponibles dentro de la cuenta M365 conectada
+        // (calendario principal, calendarios adicionales y compartidos).
+        const res = await graphMailFetchWithRetry(
+          accessToken,
+          `/me/calendars?$select=id,name,color,hexColor,isDefaultCalendar,canEdit,owner&$top=100`,
+          {},
+        );
+        result = await res.json();
+        break;
+      }
+
       case "calendar-events": {
         const start = params?.start || new Date().toISOString();
         const end = params?.end || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+        const qs = `startDateTime=${start}&endDateTime=${end}&$orderby=start/dateTime&$top=100`;
+        const prefHeaders = { headers: { Prefer: 'outlook.timezone="America/Mexico_City"' } };
+
+        // Si el frontend pide calendarios específicos, consultamos cada uno y
+        // fusionamos, etiquetando cada evento con su calendario de origen.
+        const calendarIds: string[] = Array.isArray(params?.calendarIds)
+          ? params.calendarIds.filter((id: unknown) => typeof id === "string" && id.length > 0)
+          : [];
+
+        if (calendarIds.length > 0) {
+          const perCalendar = await Promise.all(
+            calendarIds.map(async (calId: string) => {
+              try {
+                const r = await graphMailFetchWithRetry(
+                  accessToken,
+                  `/me/calendars/${encodeURIComponent(calId)}/calendarView?${qs}`,
+                  prefHeaders,
+                );
+                const json = await r.json();
+                const items = Array.isArray(json?.value) ? json.value : [];
+                return items.map((ev: Record<string, unknown>) => ({ ...ev, calendarId: calId }));
+              } catch (_) {
+                return [];
+              }
+            }),
+          );
+          const merged = perCalendar.flat();
+          merged.sort((a: any, b: any) => {
+            const sa = a?.start?.dateTime || a?.start?.date || "";
+            const sb = b?.start?.dateTime || b?.start?.date || "";
+            return String(sa).localeCompare(String(sb));
+          });
+          result = { value: merged };
+          break;
+        }
+
         const res = await graphMailFetchWithRetry(
           accessToken,
-          `/me/calendarview?startDateTime=${start}&endDateTime=${end}&$orderby=start/dateTime&$top=100`,
-          {
-            headers: {
-              Prefer: 'outlook.timezone="America/Mexico_City"',
-            },
-          },
+          `/me/calendarview?${qs}`,
+          prefHeaders,
         );
         result = await res.json();
         break;

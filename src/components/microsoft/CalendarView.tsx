@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import {
   useCalendarEvents,
+  useCalendars,
   useCreateCalendarEvent,
   useDeleteCalendarEvent,
   useEventDetail,
@@ -48,8 +49,29 @@ import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Link } from "react-router-dom";
 import { CalendarKawiilCard } from "@/components/microsoft/CalendarKawiilCard";
+import { CreateTaskFromEventDialog } from "@/components/microsoft/CreateTaskFromEventDialog";
+import { useLinkedAccounts, useGoogleConnection, useGoogleCalendarEvents } from "@/hooks/useLinkedAccounts";
 
-type ViewMode = "day" | "3days" | "week" | "month";
+type ViewMode = "day" | "3days" | "week" | "month" | "agenda";
+
+/** Colores de acento por calendario (barra lateral izquierda del evento). */
+const CALENDAR_ACCENT_COLORS = [
+  "#3b82f6", // blue
+  "#10b981", // emerald
+  "#f59e0b", // amber
+  "#a855f7", // purple
+  "#ec4899", // pink
+  "#0ea5e9", // sky
+  "#ef4444", // red
+  "#14b8a6", // teal
+];
+
+function calendarAccentColor(calendarId?: string | null, index = 0): string {
+  if (!calendarId) return CALENDAR_ACCENT_COLORS[index % CALENDAR_ACCENT_COLORS.length];
+  let hash = 0;
+  for (let i = 0; i < calendarId.length; i++) hash = (hash + calendarId.charCodeAt(i)) % 2147483647;
+  return CALENDAR_ACCENT_COLORS[hash % CALENDAR_ACCENT_COLORS.length];
+}
 
 const START_HOUR = 6;
 const END_HOUR = 23;
@@ -77,6 +99,66 @@ function minutesToLabel(totalMinutes: number) {
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
+}
+
+type PositionedEvent = {
+  event: any;
+  startMin: number;
+  endMin: number;
+  col: number;
+  cols: number;
+};
+
+/**
+ * Reparte los eventos con hora de un día en carriles (columnas) para que los
+ * que se solapan se dibujen lado a lado en vez de encimarse. Agrupa en
+ * "clusters" de eventos que se traslapan de forma transitiva y, dentro de cada
+ * cluster, asigna cada evento al primer carril libre.
+ */
+function layoutDayEvents(dayEvents: any[]): PositionedEvent[] {
+  const items = dayEvents
+    .map((event) => {
+      const startTotal = event._parsedStart.getHours() * 60 + event._parsedStart.getMinutes();
+      const endDt = event.end?.dateTime ? parseEventTime(event.end.dateTime) : null;
+      const endTotal = endDt ? endDt.getHours() * 60 + endDt.getMinutes() : startTotal + SLOT_MINUTES;
+      return { event, startMin: startTotal, endMin: Math.max(endTotal, startTotal + SLOT_MINUTES) };
+    })
+    .sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin);
+
+  const positioned: PositionedEvent[] = [];
+  let cluster: typeof items = [];
+  let clusterEnd = -1;
+
+  const flush = () => {
+    if (cluster.length === 0) return;
+    const columnEnds: number[] = []; // minuto de fin del último evento de cada carril
+    const assigned: Array<{ item: (typeof cluster)[number]; col: number }> = [];
+    for (const it of cluster) {
+      let col = columnEnds.findIndex((end) => it.startMin >= end);
+      if (col === -1) {
+        col = columnEnds.length;
+        columnEnds.push(it.endMin);
+      } else {
+        columnEnds[col] = it.endMin;
+      }
+      assigned.push({ item: it, col });
+    }
+    const cols = columnEnds.length;
+    for (const a of assigned) {
+      positioned.push({ event: a.item.event, startMin: a.item.startMin, endMin: a.item.endMin, col: a.col, cols });
+    }
+    cluster = [];
+    clusterEnd = -1;
+  };
+
+  for (const it of items) {
+    if (cluster.length > 0 && it.startMin >= clusterEnd) flush();
+    cluster.push(it);
+    clusterEnd = Math.max(clusterEnd, it.endMin);
+  }
+  flush();
+
+  return positioned;
 }
 
 const PRIORITY_COLORS: Record<string, string> = {
@@ -148,8 +230,20 @@ export function CalendarView({
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [showCreate, setShowCreate] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [showTaskFromEvent, setShowTaskFromEvent] = useState(false);
   const [showKawiilTasks, setShowKawiilTasks] = useState(true);
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
+  const [hiddenCalendarIds, setHiddenCalendarIds] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = window.localStorage.getItem("kawiil-cal-hidden-calendars");
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try { window.localStorage.setItem("kawiil-cal-hidden-calendars", JSON.stringify(hiddenCalendarIds)); } catch { /* ignore */ }
+  }, [hiddenCalendarIds]);
   const [activeCategoryFilters, setActiveCategoryFilters] = useState<string[]>(() => {
     if (typeof window === "undefined") return [];
     try {
@@ -176,39 +270,38 @@ export function CalendarView({
     if (isMobile) setViewMode("day");
   }, [isMobile]);
 
-  // Scroll to current time on load/view change
+  // Al abrir / cambiar de vista: centrar en la hora actual si hoy está a la vista.
+  // Así el usuario siempre aterriza en "ahora". Si hoy no está en la vista
+  // (p. ej. navegó a otra semana), se restaura la última posición guardada.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const anchor = scrollAreaRef.current;
     if (!anchor) return;
 
     const key = `kawiil-cal-scroll-${viewMode}`;
-    let restored = false;
-    try {
-      const saved = window.sessionStorage.getItem(key);
-      if (saved) {
-        anchor.scrollTop = parseInt(saved, 10) || 0;
-        restored = true;
-      }
-    } catch { /* ignore */ }
-
     let cancelInitialScroll = false;
-    if (!restored) {
-      const t = window.setTimeout(() => {
-        if (cancelInitialScroll) return;
-        const indicator = nowIndicatorRef.current;
-        if (!indicator) return;
+    const t = window.setTimeout(() => {
+      if (cancelInitialScroll) return;
+      const indicator = nowIndicatorRef.current;
+      if (indicator) {
+        // Centrar en la hora actual (indicador ~1/3 desde arriba).
         const containerRect = anchor.getBoundingClientRect();
         const indicatorRect = indicator.getBoundingClientRect();
         const top = anchor.scrollTop + (indicatorRect.top - containerRect.top) - anchor.clientHeight / 3;
         anchor.scrollTop = Math.max(0, top);
-      }, 120);
-      const onUserScrollOnce = () => {
-        cancelInitialScroll = true;
-        window.clearTimeout(t);
-      };
-      anchor.addEventListener("scroll", onUserScrollOnce, { passive: true, once: true });
-    }
+      } else {
+        // Hoy no está en la vista: restaurar posición previa si existe.
+        try {
+          const saved = window.sessionStorage.getItem(key);
+          if (saved) anchor.scrollTop = parseInt(saved, 10) || 0;
+        } catch { /* ignore */ }
+      }
+    }, 120);
+    const onUserScrollOnce = () => {
+      cancelInitialScroll = true;
+      window.clearTimeout(t);
+    };
+    anchor.addEventListener("scroll", onUserScrollOnce, { passive: true, once: true });
 
     const onScroll = () => {
       try { window.sessionStorage.setItem(key, String(anchor.scrollTop)); } catch { /* ignore */ }
@@ -217,6 +310,7 @@ export function CalendarView({
     return () => {
       cancelInitialScroll = true;
       anchor.removeEventListener("scroll", onScroll);
+      anchor.removeEventListener("scroll", onUserScrollOnce);
     };
   }, [viewMode]);
 
@@ -225,12 +319,13 @@ export function CalendarView({
     location: "", description: "", isOnlineMeeting: false, isAllDay: false, categories: [] as string[],
   });
 
+  const isGoogleEvent = !!selectedEventId && selectedEventId.startsWith("google:");
   const {
     data: eventDetail,
     isLoading: eventDetailLoading,
     isError: eventDetailFailed,
     error: eventDetailError,
-  } = useEventDetail(selectedEventId);
+  } = useEventDetail(isGoogleEvent ? null : selectedEventId);
   const updateEvent = useUpdateCalendarEvent();
   const { data: outlookCategories = [] } = useOutlookCategories();
   const [draggedEvent, setDraggedEvent] = useState<any>(null);
@@ -286,12 +381,13 @@ export function CalendarView({
 
   const rangeStart = useMemo(() => {
     if (viewMode === "month") return format(startOfMonth(currentDate), "yyyy-MM-dd");
-    if (viewMode === "day") return format(currentDate, "yyyy-MM-dd");
+    if (viewMode === "day" || viewMode === "agenda") return format(currentDate, "yyyy-MM-dd");
     return format(viewDays[0] || currentDate, "yyyy-MM-dd");
   }, [viewMode, currentDate, viewDays]);
 
   const rangeEnd = useMemo(() => {
     if (viewMode === "month") return format(endOfMonth(currentDate), "yyyy-MM-dd");
+    if (viewMode === "agenda") return format(addDays(currentDate, 30), "yyyy-MM-dd");
     if (viewMode === "day") return format(addDays(currentDate, 1), "yyyy-MM-dd");
     const last = viewDays[viewDays.length - 1] || currentDate;
     return format(addDays(last, 1), "yyyy-MM-dd");
@@ -300,8 +396,32 @@ export function CalendarView({
   const rangeStartISO = useMemo(() => `${rangeStart}T00:00:00.000Z`, [rangeStart]);
   const rangeEndISO = useMemo(() => `${rangeEnd}T23:59:59.999Z`, [rangeEnd]);
 
-  const { data: eventsData, isLoading } = useCalendarEvents(rangeStartISO, rangeEndISO);
-  const allEvents = Array.isArray(eventsData) ? eventsData : [];
+  const { data: calendars = [] } = useCalendars();
+  const visibleCalendarIds = useMemo(
+    () => calendars.filter((c) => !hiddenCalendarIds.includes(c.id)).map((c) => c.id),
+    [calendars, hiddenCalendarIds],
+  );
+  // Solo pasamos IDs si el usuario ocultó alguno; con todos visibles usamos la
+  // vista por defecto (más barata) salvo que haya varios calendarios.
+  const calendarIdsForQuery = useMemo(() => {
+    if (calendars.length <= 1) return undefined;
+    return visibleCalendarIds;
+  }, [calendars, visibleCalendarIds]);
+
+  const { data: eventsData, isLoading } = useCalendarEvents(rangeStartISO, rangeEndISO, calendarIdsForQuery);
+
+  // Cuentas vinculadas (Microsoft/Google/IMAP) y eventos de Google.
+  const { data: linkedAccounts = [] } = useLinkedAccounts();
+  const { connect: connectGoogle, isConnecting: googleConnecting, disconnect: disconnectGoogle } = useGoogleConnection();
+  const hasGoogle = linkedAccounts.some((a) => a.provider === "google" && a.status === "connected" && a.calendar_enabled);
+  const { data: googleEventsData } = useGoogleCalendarEvents(rangeStartISO, rangeEndISO, hasGoogle);
+
+  const allEvents = useMemo(() => {
+    const m365 = Array.isArray(eventsData) ? eventsData : [];
+    const google = Array.isArray(googleEventsData) ? googleEventsData : [];
+    return [...m365, ...google];
+  }, [eventsData, googleEventsData]);
+
   const events = useMemo(() => {
     if (activeCategoryFilters.length === 0) return allEvents;
     return allEvents.filter((e: any) => {
@@ -314,6 +434,20 @@ export function CalendarView({
   const deleteEvent = useDeleteCalendarEvent();
 
   const { data: kawiilTasks = [] } = useTasksForCalendar(rangeStart, rangeEnd);
+
+  const calendarById = useMemo(() => {
+    const m = new Map<string, { name: string; color: string }>();
+    calendars.forEach((c, i) => m.set(c.id, { name: c.name, color: calendarAccentColor(c.id, i) }));
+    return m;
+  }, [calendars]);
+  const showCalendarColors = calendars.length > 1 || hasGoogle;
+  const calendarColorFor = (id?: string | null) =>
+    id ? (calendarById.get(id)?.color || calendarAccentColor(id)) : undefined;
+  const calendarNameFor = (event: any) =>
+    (event?.calendarId ? calendarById.get(event.calendarId)?.name : null) || event?.calendarName || null;
+  const toggleCalendar = (id: string) => {
+    setHiddenCalendarIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
 
   const cachedEvent = useMemo(
     () => (selectedEventId ? events.find((e: any) => e.id === selectedEventId) : null),
@@ -472,6 +606,7 @@ export function CalendarView({
         return `${format(ws, "d MMM", { locale: es })} – ${format(we, "d MMM yyyy", { locale: es })}`;
       }
       case "month": return format(currentDate, "MMMM yyyy", { locale: es });
+      case "agenda": return `Agenda · desde ${format(currentDate, "d MMM", { locale: es })}`;
     }
   }, [viewMode, currentDate]);
 
@@ -485,6 +620,7 @@ export function CalendarView({
         return `${format(ws, "d")} – ${format(we, "d MMM", { locale: es })}`;
       }
       case "month": return format(currentDate, "MMM yyyy", { locale: es });
+      case "agenda": return `Agenda · ${format(currentDate, "d MMM", { locale: es })}`;
     }
   }, [viewMode, currentDate]);
 
@@ -589,7 +725,7 @@ export function CalendarView({
         {/* View mode tabs */}
         {!isMobile && (
           <div className="flex items-center ml-2 shrink-0">
-            {(["day", "3days", "week", "month"] as const).map((v) => (
+            {(["day", "3days", "week", "month", "agenda"] as const).map((v) => (
               <button
                 key={v}
                 onClick={() => setViewMode(v)}
@@ -600,7 +736,7 @@ export function CalendarView({
                     : "text-muted-foreground border-b-transparent hover:text-foreground"
                 )}
               >
-                {v === "day" ? "Día" : v === "3days" ? "3 Días" : v === "week" ? "Semana" : "Mes"}
+                {v === "day" ? "Día" : v === "3days" ? "3 Días" : v === "week" ? "Semana" : v === "month" ? "Mes" : "Agenda"}
               </button>
             ))}
           </div>
@@ -641,11 +777,12 @@ export function CalendarView({
           )}
 
           {/* Day/3days/Week grid */}
-          {viewMode !== "month" && (
-            <div className="overflow-x-auto">
-              <div className={getMinWidth()}>
+          {viewMode !== "month" && viewMode !== "agenda" && (
+            <div className={getMinWidth()}>
+                {/* Cabecera fija: fechas + "Todo el día" quedan visibles al hacer scroll */}
+                <div className="sticky top-0 z-20 bg-card shadow-sm">
                 {/* Day headers */}
-                <div className="grid border-b border-border sticky top-0 z-10 bg-card"
+                <div className="grid border-b border-border"
                   style={{ gridTemplateColumns: `56px repeat(${colCount}, 1fr)` }}>
                   <div className="p-2 text-[10px] text-muted-foreground text-center border-r border-border flex items-center justify-center">
                     CDMX
@@ -716,6 +853,7 @@ export function CalendarView({
                     );
                   })}
                 </div>
+                </div>
 
                 {/* Time grid */}
                 {(() => {
@@ -734,7 +872,7 @@ export function CalendarView({
                       {showNow && (
                         <div
                           ref={nowIndicatorRef}
-                          className="pointer-events-none absolute z-30 flex items-center"
+                          className="pointer-events-none absolute z-10 flex items-center"
                           style={{ top: nowTop - 10, left: 48, right: 0, height: 20 }}
                           aria-label={`Hora actual: ${nowLabel}`}
                         >
@@ -783,41 +921,55 @@ export function CalendarView({
                               />
                             ))}
 
-                            {dayEvents.map((event: any) => {
-                              const startTotal = event._parsedStart.getHours() * 60 + event._parsedStart.getMinutes();
+                            {layoutDayEvents(dayEvents).map(({ event, startMin, endMin, col, cols }) => {
                               const endDt = event.end?.dateTime ? parseEventTime(event.end.dateTime) : null;
-                              const endTotal = endDt ? endDt.getHours() * 60 + endDt.getMinutes() : startTotal + SLOT_MINUTES;
                               const dayStart = START_HOUR * 60;
                               const dayEnd = END_HOUR * 60;
-                              const clampedStart = Math.max(startTotal, dayStart);
-                              const clampedEnd = Math.min(endTotal, dayEnd);
+                              const clampedStart = Math.max(startMin, dayStart);
+                              const clampedEnd = Math.min(endMin, dayEnd);
                               if (clampedEnd <= clampedStart) return null;
 
                               const top = ((clampedStart - dayStart) / SLOT_MINUTES) * SLOT_HEIGHT + 2;
                               const height = Math.max(SLOT_HEIGHT, ((clampedEnd - clampedStart) / SLOT_MINUTES) * SLOT_HEIGHT - 4);
+                              const widthPct = 100 / cols;
+                              const leftPct = col * widthPct;
                               const startStr = formatMX(event._parsedStart, "HH:mm");
                               const endStr = endDt ? formatMX(endDt, "HH:mm") : "";
                               const primaryCategory: string | undefined = event.categories?.[0];
                               const catClasses = getCategoryClasses(primaryCategory);
                               const meetingUrl = event.onlineMeeting?.joinUrl || event.onlineMeetingUrl;
+                              const accent = showCalendarColors ? calendarColorFor(event.calendarId) : undefined;
+                              // Contenido adaptativo según la altura del evento (evita recortes ilegibles):
+                              // compacto = eventos cortos (~30 min) → solo el título.
+                              const compact = height < 46;
+                              const showLocation = height >= 64 && !!event.location?.displayName;
 
                               return (
-                                <div key={event.id} className={cn("absolute inset-x-0 px-0.5", draggedEvent?.id === event.id && "opacity-40")}
-                                  style={{ top, height }} draggable
+                                <div key={event.id} className={cn("absolute px-0.5", draggedEvent?.id === event.id && "opacity-40")}
+                                  style={{ top, height, left: `${leftPct}%`, width: `${widthPct}%` }} draggable
                                   onDragStart={(e) => { e.stopPropagation(); setDraggedEvent(event); e.dataTransfer.effectAllowed = "move"; }}
                                   onDragEnd={() => setDraggedEvent(null)}>
-                                  <div className={cn("h-full rounded-md px-1.5 py-0.5 text-xs truncate group relative shadow-sm cursor-grab active:cursor-grabbing transition-all duration-150 hover:shadow-md border",
+                                  <div style={accent ? { borderLeftWidth: 3, borderLeftColor: accent } : undefined}
+                                    className={cn("h-full rounded-md px-1.5 py-0.5 text-xs overflow-hidden group relative shadow-sm cursor-grab active:cursor-grabbing transition-all duration-150 hover:shadow-md border",
                                     primaryCategory ? catClasses : "bg-primary/15 text-primary border-primary/20")}
                                     title={`${startStr}${endStr ? " - " + endStr : ""} ${event.subject}`}
                                     onClick={(e) => { e.stopPropagation(); setSelectedEventId(event.id); }}>
-                                    <div className="flex items-start gap-1 pr-4">
+                                    <div className="flex items-start gap-1 h-full pr-3">
                                       <div className="flex-1 min-w-0">
-                                        <div className="text-[10px] opacity-70">{endStr ? `${startStr}–${endStr}` : startStr}</div>
-                                        <div className="font-medium truncate leading-tight">{event.subject}</div>
-                                        {event.location?.displayName && <div className="text-[9px] opacity-70 truncate">{event.location.displayName}</div>}
+                                        {compact ? (
+                                          <div className="font-semibold leading-[1.15] break-words line-clamp-2">
+                                            <span className="font-normal opacity-70 mr-1">{startStr}</span>{event.subject}
+                                          </div>
+                                        ) : (
+                                          <>
+                                            <div className="text-[10px] opacity-70 leading-tight">{endStr ? `${startStr}–${endStr}` : startStr}</div>
+                                            <div className="font-semibold leading-[1.15] break-words line-clamp-3">{event.subject}</div>
+                                            {showLocation && <div className="text-[9px] opacity-70 truncate mt-0.5">{event.location.displayName}</div>}
+                                          </>
+                                        )}
                                       </div>
                                       {meetingUrl && (
-                                        <button type="button" className="ml-auto p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                                        <button type="button" className="ml-auto p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
                                           onClick={(e) => { e.stopPropagation(); window.open(meetingUrl, "_blank"); }} title="Unirse a reunión">
                                           <Video className="h-3 w-3" />
                                         </button>
@@ -837,7 +989,6 @@ export function CalendarView({
                     </div>
                   );
                 })()}
-              </div>
             </div>
           )}
 
@@ -903,6 +1054,93 @@ export function CalendarView({
               </div>
             </div>
           )}
+
+          {/* Agenda (lista cronológica) */}
+          {viewMode === "agenda" && (
+            <div className="max-w-3xl mx-auto p-3 sm:p-4">
+              {(() => {
+                const days = eachDayOfInterval({ start: currentDate, end: addDays(currentDate, 30) });
+                const rows = days
+                  .map((day) => ({
+                    day,
+                    events: getEventsForDay(day),
+                    tasks: showKawiilTasks ? getTasksForDay(day) : [],
+                  }))
+                  .filter((r) => r.events.length > 0 || r.tasks.length > 0);
+
+                if (rows.length === 0) {
+                  return (
+                    <div className="flex flex-col items-center justify-center py-16 text-center gap-2">
+                      <CalendarDays className="h-8 w-8 text-muted-foreground/50" />
+                      <p className="text-sm text-muted-foreground">Sin eventos ni actividades en los próximos 30 días.</p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-4">
+                    {rows.map(({ day, events: dayEvts, tasks: dayTasks }) => (
+                      <div key={day.toISOString()} className="flex gap-3">
+                        <div className={cn(
+                          "w-14 shrink-0 text-right pt-1",
+                          isToday(day) ? "text-primary" : "text-muted-foreground"
+                        )}>
+                          <div className="text-[10px] uppercase font-semibold tracking-wide">{format(day, "EEE", { locale: es })}</div>
+                          <div className={cn("text-xl leading-none font-bold", isToday(day) && "text-primary")}>{format(day, "d")}</div>
+                          <div className="text-[10px]">{format(day, "MMM", { locale: es })}</div>
+                        </div>
+                        <div className="flex-1 min-w-0 space-y-1.5 border-l border-border pl-3">
+                          {dayEvts.map((event: any) => {
+                            const time = event._isAllDay ? "Todo el día" : formatMX(event._parsedStart, "HH:mm");
+                            const endDt = event.end?.dateTime ? parseEventTime(event.end.dateTime) : null;
+                            const endStr = !event._isAllDay && endDt ? `–${formatMX(endDt, "HH:mm")}` : "";
+                            const accent = showCalendarColors ? calendarColorFor(event.calendarId) : undefined;
+                            const calName = calendarNameFor(event);
+                            return (
+                              <button key={event.id} type="button"
+                                onClick={() => setSelectedEventId(event.id)}
+                                style={accent ? { borderLeftWidth: 3, borderLeftColor: accent } : undefined}
+                                className="w-full text-left flex items-start gap-3 rounded-lg border border-border bg-card hover:bg-accent/40 transition-colors p-2.5">
+                                <div className="text-[11px] font-medium text-muted-foreground w-20 shrink-0 tabular-nums pt-0.5">
+                                  {time}{endStr}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-medium text-foreground truncate">{event.subject || "(sin título)"}</p>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    {event.location?.displayName && (
+                                      <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground truncate">
+                                        <MapPin className="h-3 w-3 shrink-0" />{event.location.displayName}
+                                      </span>
+                                    )}
+                                    {showCalendarColors && calName && (
+                                      <span className="text-[10px] text-muted-foreground">{calName}</span>
+                                    )}
+                                  </div>
+                                </div>
+                                {(event.onlineMeeting?.joinUrl || event.onlineMeetingUrl) && (
+                                  <Video className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
+                                )}
+                              </button>
+                            );
+                          })}
+                          {dayTasks.map((task: any) => (
+                            <Link key={task.id} to={taskDetailHref(task.id)}
+                              className="flex items-start gap-3 rounded-lg border border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10 transition-colors p-2.5">
+                              <div className="w-20 shrink-0 pt-0.5"><CheckSquare className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" /></div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium text-foreground truncate">{task.title}</p>
+                                {task.clients?.name && <p className="text-[11px] text-muted-foreground truncate">{task.clients.name}</p>}
+                              </div>
+                            </Link>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
         </div>
 
         {/* Right panel — collapsible */}
@@ -911,9 +1149,9 @@ export function CalendarView({
           rightPanelOpen && !isMobile ? "w-[260px]" : "w-0"
         )}>
           <div className="w-[260px] flex-1 overflow-y-auto">
-            <div className="p-3 space-y-4">
+            <div className="p-3 flex flex-col gap-4">
               {/* Mini calendar */}
-              <div>
+              <div className="order-6 border-t border-border/30 pt-3">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground capitalize">
                     {format(currentDate, "MMMM yyyy", { locale: es })}
@@ -976,9 +1214,76 @@ export function CalendarView({
                 </div>
               </div>
 
+              {/* Cuentas conectadas (multi-proveedor) */}
+              <div className="order-5 border-t border-border/30 pt-3">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Cuentas</p>
+                <div className="space-y-1">
+                  {linkedAccounts.filter((a) => a.provider === "google").map((acc) => (
+                    <div key={acc.id} className="group flex items-center gap-2 rounded-md px-2 py-1 hover:bg-accent">
+                      <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: acc.status === "connected" ? "#22c55e" : "#ef4444" }} />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs text-foreground truncate">{acc.email || acc.display_name || "Google"}</p>
+                        <p className="text-[9px] text-muted-foreground">Google Calendar</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => disconnectGoogle(acc.id)}
+                        className="text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity shrink-0"
+                        title="Desconectar"
+                      >
+                        Quitar
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => connectGoogle()}
+                    disabled={googleConnecting}
+                    className="w-full flex items-center gap-2 rounded-md border border-dashed border-border px-2 py-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                  >
+                    {googleConnecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                    <span>Conectar cuenta de Google</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Calendarios (cuenta M365 conectada) */}
+              {calendars.length > 1 && (
+                <div className="order-4 border-t border-border/30 pt-3">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Calendarios</p>
+                  <div className="space-y-0.5">
+                    {calendars.map((cal) => {
+                      const visible = !hiddenCalendarIds.includes(cal.id);
+                      const color = calendarById.get(cal.id)?.color;
+                      return (
+                        <button
+                          key={cal.id}
+                          type="button"
+                          onClick={() => toggleCalendar(cal.id)}
+                          className={cn(
+                            "w-full flex items-center gap-2 rounded-md px-2 py-1 text-left transition-colors hover:bg-accent",
+                            !visible && "opacity-40",
+                          )}
+                          title={visible ? "Ocultar calendario" : "Mostrar calendario"}
+                        >
+                          <span
+                            className="h-3 w-3 rounded-[4px] border shrink-0"
+                            style={{ backgroundColor: visible ? color : "transparent", borderColor: color }}
+                          />
+                          <span className="text-xs text-foreground truncate">{cal.name}</span>
+                          {cal.isDefaultCalendar && (
+                            <span className="ml-auto text-[9px] text-muted-foreground shrink-0">principal</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* Category filters */}
               {outlookCategories.length > 0 && (
-                <div className="border-t border-border/30 pt-3">
+                <div className="order-3 border-t border-border/30 pt-3">
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Categorías</p>
                     {activeCategoryFilters.length > 0 && (
@@ -1030,7 +1335,7 @@ export function CalendarView({
 
               {/* AI analysis card */}
               {aiEvents && aiEvents.length > 0 && (
-                <div className="border-t border-border/30 pt-3">
+                <div className="order-1">
                   <CalendarKawiilCard
                     scope="week"
                     periodLabel={aiPeriodLabel || ""}
@@ -1042,13 +1347,13 @@ export function CalendarView({
               )}
 
               {/* Today agenda */}
-              <div className="border-t border-border/30 pt-3">
+              <div className="order-2 border-t border-border/30 pt-3">
                 {todayAgendaCard}
               </div>
 
               {/* Upcoming tasks */}
               {upcomingTasksCard && (
-                <div className="border-t border-border/30 pt-3">
+                <div className="order-7 border-t border-border/30 pt-3">
                   {upcomingTasksCard}
                 </div>
               )}
@@ -1208,18 +1513,37 @@ export function CalendarView({
               </div>
             </div>
           ) : null}
-          <DialogFooter>
-            <Button variant="destructive" onClick={() => { if (selectedEventId) deleteEvent.mutate(selectedEventId, { onSuccess: () => setSelectedEventId(null) }); }} disabled={deleteEvent.isPending}>
-              {deleteEvent.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Eliminar
+          {isGoogleEvent && (cachedEvent || eventDetail) && (
+            <p className="text-[11px] text-muted-foreground -mt-1">
+              Evento de Google (solo lectura desde Kawiil). Puedes crear una tarea a partir de él.
+            </p>
+          )}
+          <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:items-center">
+            {!isGoogleEvent && (
+              <Button variant="destructive" onClick={() => { if (selectedEventId) deleteEvent.mutate(selectedEventId, { onSuccess: () => setSelectedEventId(null) }); }} disabled={deleteEvent.isPending}>
+                {deleteEvent.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Eliminar
+              </Button>
+            )}
+            <div className="hidden sm:block sm:flex-1" />
+            <Button variant="outline" onClick={() => setShowTaskFromEvent(true)} disabled={!cachedEvent && !eventDetail}>
+              <CheckSquare className="mr-1.5 h-4 w-4" /> Crear tarea
             </Button>
-            <div className="flex-1" />
             <Button variant="outline" onClick={() => setSelectedEventId(null)}>Cerrar</Button>
-            <Button onClick={handleUpdateEvent} disabled={updateEvent.isPending || !editForm.subject}>
-              {updateEvent.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Guardar
-            </Button>
+            {!isGoogleEvent && (
+              <Button onClick={handleUpdateEvent} disabled={updateEvent.isPending || !editForm.subject}>
+                {updateEvent.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Guardar
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Crear tarea/actividad desde el evento seleccionado */}
+      <CreateTaskFromEventDialog
+        open={showTaskFromEvent}
+        onOpenChange={setShowTaskFromEvent}
+        event={(eventDetail || cachedEvent) ?? null}
+      />
     </div>
   );
 }

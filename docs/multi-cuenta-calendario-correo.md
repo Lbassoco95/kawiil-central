@@ -1,0 +1,108 @@
+# Multi-cuenta / multi-proveedor de calendario y correo
+
+Objetivo: que el calendario de Kawiil deje de estar atado a una sola cuenta de
+Microsoft 365 y se convierta en una **agenda de seguimiento de actividades** que
+agrega calendarios/correos de varias cuentas y proveedores (Microsoft, Google y,
+en el futuro, IMAP/SMTP).
+
+Este documento describe la arquitectura, lo que ya quedó implementado en esta
+rama y los pasos pendientes de configuración (credenciales) para activarlo.
+
+---
+
+## 1. Modelo de datos
+
+Tabla genérica `public.linked_accounts` (migración
+`supabase/migrations/20260707120000_linked_accounts_multi_provider.sql`):
+
+| Columna | Uso |
+|---------|-----|
+| `provider` | `microsoft` \| `google` \| `imap` |
+| `email`, `display_name`, `provider_account_id` | identidad de la cuenta |
+| `access_token`, `refresh_token`, `token_expires_at`, `scope` | OAuth (microsoft/google) |
+| `imap_host/port/username/password`, `smtp_host/port`, `smtp_use_tls` | IMAP/SMTP |
+| `status` | `connected` \| `error` \| `disconnected` |
+| `calendar_enabled`, `mail_enabled` | qué capacidades usa esta cuenta |
+| `last_sync_at`, `last_error` | diagnóstico |
+
+**Seguridad:** RLS por `user_id`. Los tokens y la contraseña IMAP **no** se
+exponen al cliente: se usan *GRANTs a nivel de columna* para que `authenticated`
+solo pueda leer/editar metadatos, mientras que las edge functions (service_role)
+son las únicas que leen los secretos.
+
+> Pendiente producción: cifrar `imap_password` (pgsodium / Supabase Vault) en vez
+> de texto plano.
+
+La tabla `microsoft_tokens` existente se mantiene por compatibilidad. Migración
+futura opcional: mover Microsoft a `linked_accounts` para un modelo único.
+
+---
+
+## 2. Google Calendar (implementado)
+
+Edge functions nuevas:
+
+- `google-auth` — inicia OAuth, devuelve la URL de consentimiento.
+- `google-callback` — intercambia el code, obtiene identidad (`userinfo`) y hace
+  upsert en `linked_accounts` (`provider = google`).
+- `google-api` — acciones `calendars` y `calendar-events`. Refresca el token si
+  expiró y **normaliza** los eventos de Google al formato tipo Microsoft Graph
+  (`subject`, `start.dateTime`, `location.displayName`, …) para que el frontend
+  los pinte igual. Cada evento se etiqueta con un `calendarId` con namespace
+  (`google:<accountId>:<calId>`) y `_source: "google"`.
+
+Frontend:
+
+- `src/hooks/useLinkedAccounts.ts`: `useLinkedAccounts`, `useGoogleConnection`
+  (connect/disconnect) y `useGoogleCalendarEvents`.
+- `CalendarView` fusiona los eventos de Google con los de M365, colorea por
+  calendario y muestra una sección **Cuentas** en el panel derecho para conectar
+  o quitar cuentas de Google. Los eventos de Google son de solo lectura desde
+  Kawiil (se puede crear una tarea a partir de ellos, no editarlos/eliminarlos).
+
+### Pasos de configuración (requiere acción manual)
+
+1. En **Google Cloud Console** → APIs & Services:
+   - Habilitar **Google Calendar API**.
+   - Crear credenciales **OAuth 2.0 Client ID** (tipo *Web application*).
+   - Redirect URI autorizado:
+     `https://<SUPABASE_PROJECT>.supabase.co/functions/v1/google-callback`
+   - Pantalla de consentimiento: agregar el scope
+     `https://www.googleapis.com/auth/calendar` y los testers, o publicar la app.
+2. En **Supabase → Project Settings → Edge Functions → Secrets**:
+   - `GOOGLE_CLIENT_ID`
+   - `GOOGLE_CLIENT_SECRET`
+3. Aplicar migración y desplegar funciones:
+   ```bash
+   supabase db push
+   supabase functions deploy google-auth google-callback google-api --no-verify-jwt
+   ```
+4. En el calendario, panel derecho → **Cuentas → Conectar cuenta de Google**.
+
+---
+
+## 3. IMAP / SMTP (pendiente — solo correo)
+
+IMAP/SMTP cubre **correo**, no calendario (para calendario de terceros se usaría
+CalDAV, fuera de alcance por ahora). Plan:
+
+- UI: formulario para dar de alta host/puerto/usuario/contraseña (guardar en
+  `linked_accounts` con `provider = imap`, cifrando la contraseña).
+- Edge function `imap-api` (Deno) que use una librería IMAP para listar/leer
+  correos y SMTP para enviar. Como las edge functions tienen límites de tiempo,
+  conviene sincronizar a una tabla `emails_cache` mediante un cron en vez de
+  consultar IMAP en cada request.
+- El buzón unificado (`EmailView`) leería de `linked_accounts` + `emails_cache`
+  en lugar de asumir Microsoft.
+
+---
+
+## 4. Roadmap sugerido
+
+1. ✅ Anti-encimamiento de eventos (carriles).
+2. ✅ Crear tarea/actividad desde un evento.
+3. ✅ Vista Agenda + multi-calendario dentro de M365.
+4. ✅ Google Calendar (multi-cuenta) — falta configurar credenciales.
+5. ⬜ Unificar Microsoft en `linked_accounts`.
+6. ⬜ IMAP/SMTP para correo (con caché + cron).
+7. ⬜ Cifrado de secretos IMAP (Vault/pgsodium).
