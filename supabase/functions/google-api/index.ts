@@ -171,6 +171,54 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ value: merged }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    if (action === "create-event") {
+      // Crea un evento en el calendario principal de la primera cuenta Google conectada.
+      // params: { summary, description?, location?, date? (all-day YYYY-MM-DD),
+      //           startDateTime?, endDateTime? (timed, ISO) }
+      const acc = accounts.find((a) => a.calendar_enabled) || accounts[0];
+      const token = await ensureAccessToken(supabaseAdmin, acc);
+      if (!token) {
+        return new Response(JSON.stringify({ error: "no_valid_token" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const tz = "America/Mexico_City";
+      let start: Record<string, string>;
+      let end: Record<string, string>;
+      if (params?.startDateTime) {
+        start = { dateTime: params.startDateTime, timeZone: tz };
+        end = { dateTime: params.endDateTime || params.startDateTime, timeZone: tz };
+      } else {
+        // Evento de día completo. En Google, end.date es exclusivo (+1 día).
+        const d = String(params?.date || new Date().toISOString().slice(0, 10)).slice(0, 10);
+        const next = new Date(`${d}T00:00:00Z`);
+        next.setUTCDate(next.getUTCDate() + 1);
+        start = { date: d };
+        end = { date: next.toISOString().slice(0, 10) };
+      }
+
+      const body: Record<string, unknown> = {
+        summary: params?.summary || "(sin título)",
+        start,
+        end,
+      };
+      if (params?.description) body.description = params.description;
+      if (params?.location) body.location = params.location;
+
+      const res = await fetch(
+        "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        },
+      );
+      const json = await res.json();
+      if (!res.ok) {
+        return new Response(JSON.stringify({ error: json?.error?.message || "create_failed" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      return new Response(JSON.stringify({ id: json.id, htmlLink: json.htmlLink }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     return new Response(JSON.stringify({ error: "unknown_action" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (error) {
     console.error("Error in google-api:", error);
