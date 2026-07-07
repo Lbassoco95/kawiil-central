@@ -43,8 +43,22 @@ export function useGoogleConnection() {
   const connect = useMutation({
     mutationFn: async () => {
       const { data, error } = await supabase.functions.invoke("google-auth");
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (error) {
+        const msg = String(error.message || error);
+        // La función aún no está desplegada o falta configuración.
+        if (/edge function|failed to send|not found|non-2xx/i.test(msg)) {
+          throw new Error(
+            "La conexión con Google todavía no está activada. Falta desplegar las funciones (google-auth/callback/api) y configurar GOOGLE_CLIENT_ID/SECRET en Supabase.",
+          );
+        }
+        throw error;
+      }
+      if (data?.error) {
+        if (data.error === "Google credentials not configured") {
+          throw new Error("Faltan las credenciales de Google (GOOGLE_CLIENT_ID/SECRET) en Supabase.");
+        }
+        throw new Error(data.error);
+      }
       if (!data?.url) throw new Error("No se recibió URL de autorización");
       window.open(data.url, "google-auth", "width=600,height=700");
       return new Promise<void>((resolve, reject) => {
