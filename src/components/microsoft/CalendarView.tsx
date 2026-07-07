@@ -50,6 +50,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { Link } from "react-router-dom";
 import { CalendarKawiilCard } from "@/components/microsoft/CalendarKawiilCard";
 import { CreateTaskFromEventDialog } from "@/components/microsoft/CreateTaskFromEventDialog";
+import { useLinkedAccounts, useGoogleConnection, useGoogleCalendarEvents } from "@/hooks/useLinkedAccounts";
 
 type ViewMode = "day" | "3days" | "week" | "month" | "agenda";
 
@@ -318,12 +319,13 @@ export function CalendarView({
     location: "", description: "", isOnlineMeeting: false, isAllDay: false, categories: [] as string[],
   });
 
+  const isGoogleEvent = !!selectedEventId && selectedEventId.startsWith("google:");
   const {
     data: eventDetail,
     isLoading: eventDetailLoading,
     isError: eventDetailFailed,
     error: eventDetailError,
-  } = useEventDetail(selectedEventId);
+  } = useEventDetail(isGoogleEvent ? null : selectedEventId);
   const updateEvent = useUpdateCalendarEvent();
   const { data: outlookCategories = [] } = useOutlookCategories();
   const [draggedEvent, setDraggedEvent] = useState<any>(null);
@@ -407,7 +409,19 @@ export function CalendarView({
   }, [calendars, visibleCalendarIds]);
 
   const { data: eventsData, isLoading } = useCalendarEvents(rangeStartISO, rangeEndISO, calendarIdsForQuery);
-  const allEvents = Array.isArray(eventsData) ? eventsData : [];
+
+  // Cuentas vinculadas (Microsoft/Google/IMAP) y eventos de Google.
+  const { data: linkedAccounts = [] } = useLinkedAccounts();
+  const { connect: connectGoogle, isConnecting: googleConnecting, disconnect: disconnectGoogle } = useGoogleConnection();
+  const hasGoogle = linkedAccounts.some((a) => a.provider === "google" && a.status === "connected" && a.calendar_enabled);
+  const { data: googleEventsData } = useGoogleCalendarEvents(rangeStartISO, rangeEndISO, hasGoogle);
+
+  const allEvents = useMemo(() => {
+    const m365 = Array.isArray(eventsData) ? eventsData : [];
+    const google = Array.isArray(googleEventsData) ? googleEventsData : [];
+    return [...m365, ...google];
+  }, [eventsData, googleEventsData]);
+
   const events = useMemo(() => {
     if (activeCategoryFilters.length === 0) return allEvents;
     return allEvents.filter((e: any) => {
@@ -426,7 +440,11 @@ export function CalendarView({
     calendars.forEach((c, i) => m.set(c.id, { name: c.name, color: calendarAccentColor(c.id, i) }));
     return m;
   }, [calendars]);
-  const showCalendarColors = calendars.length > 1;
+  const showCalendarColors = calendars.length > 1 || hasGoogle;
+  const calendarColorFor = (id?: string | null) =>
+    id ? (calendarById.get(id)?.color || calendarAccentColor(id)) : undefined;
+  const calendarNameFor = (event: any) =>
+    (event?.calendarId ? calendarById.get(event.calendarId)?.name : null) || event?.calendarName || null;
   const toggleCalendar = (id: string) => {
     setHiddenCalendarIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
@@ -918,7 +936,7 @@ export function CalendarView({
                               const primaryCategory: string | undefined = event.categories?.[0];
                               const catClasses = getCategoryClasses(primaryCategory);
                               const meetingUrl = event.onlineMeeting?.joinUrl || event.onlineMeetingUrl;
-                              const accent = showCalendarColors && event.calendarId ? calendarById.get(event.calendarId)?.color : undefined;
+                              const accent = showCalendarColors ? calendarColorFor(event.calendarId) : undefined;
 
                               return (
                                 <div key={event.id} className={cn("absolute px-0.5", draggedEvent?.id === event.id && "opacity-40")}
@@ -1063,8 +1081,8 @@ export function CalendarView({
                             const time = event._isAllDay ? "Todo el día" : formatMX(event._parsedStart, "HH:mm");
                             const endDt = event.end?.dateTime ? parseEventTime(event.end.dateTime) : null;
                             const endStr = !event._isAllDay && endDt ? `–${formatMX(endDt, "HH:mm")}` : "";
-                            const accent = showCalendarColors && event.calendarId ? calendarById.get(event.calendarId)?.color : undefined;
-                            const calName = event.calendarId ? calendarById.get(event.calendarId)?.name : null;
+                            const accent = showCalendarColors ? calendarColorFor(event.calendarId) : undefined;
+                            const calName = calendarNameFor(event);
                             return (
                               <button key={event.id} type="button"
                                 onClick={() => setSelectedEventId(event.id)}
@@ -1180,6 +1198,39 @@ export function CalendarView({
                       </button>
                     );
                   })}
+                </div>
+              </div>
+
+              {/* Cuentas conectadas (multi-proveedor) */}
+              <div className="border-t border-border/30 pt-3">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Cuentas</p>
+                <div className="space-y-1">
+                  {linkedAccounts.filter((a) => a.provider === "google").map((acc) => (
+                    <div key={acc.id} className="group flex items-center gap-2 rounded-md px-2 py-1 hover:bg-accent">
+                      <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: acc.status === "connected" ? "#22c55e" : "#ef4444" }} />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs text-foreground truncate">{acc.email || acc.display_name || "Google"}</p>
+                        <p className="text-[9px] text-muted-foreground">Google Calendar</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => disconnectGoogle(acc.id)}
+                        className="text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity shrink-0"
+                        title="Desconectar"
+                      >
+                        Quitar
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => connectGoogle()}
+                    disabled={googleConnecting}
+                    className="w-full flex items-center gap-2 rounded-md border border-dashed border-border px-2 py-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                  >
+                    {googleConnecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                    <span>Conectar cuenta de Google</span>
+                  </button>
                 </div>
               </div>
 
@@ -1449,18 +1500,27 @@ export function CalendarView({
               </div>
             </div>
           ) : null}
+          {isGoogleEvent && (cachedEvent || eventDetail) && (
+            <p className="text-[11px] text-muted-foreground -mt-1">
+              Evento de Google (solo lectura desde Kawiil). Puedes crear una tarea a partir de él.
+            </p>
+          )}
           <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:items-center">
-            <Button variant="destructive" onClick={() => { if (selectedEventId) deleteEvent.mutate(selectedEventId, { onSuccess: () => setSelectedEventId(null) }); }} disabled={deleteEvent.isPending}>
-              {deleteEvent.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Eliminar
-            </Button>
+            {!isGoogleEvent && (
+              <Button variant="destructive" onClick={() => { if (selectedEventId) deleteEvent.mutate(selectedEventId, { onSuccess: () => setSelectedEventId(null) }); }} disabled={deleteEvent.isPending}>
+                {deleteEvent.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Eliminar
+              </Button>
+            )}
             <div className="hidden sm:block sm:flex-1" />
             <Button variant="outline" onClick={() => setShowTaskFromEvent(true)} disabled={!cachedEvent && !eventDetail}>
               <CheckSquare className="mr-1.5 h-4 w-4" /> Crear tarea
             </Button>
             <Button variant="outline" onClick={() => setSelectedEventId(null)}>Cerrar</Button>
-            <Button onClick={handleUpdateEvent} disabled={updateEvent.isPending || !editForm.subject}>
-              {updateEvent.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Guardar
-            </Button>
+            {!isGoogleEvent && (
+              <Button onClick={handleUpdateEvent} disabled={updateEvent.isPending || !editForm.subject}>
+                {updateEvent.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Guardar
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
