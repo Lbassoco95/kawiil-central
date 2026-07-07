@@ -317,14 +317,51 @@ export function useAutoSyncMicrosoftPhoto() {
   }, [user, isConnected, isMsLoading, isProfileLoading, profile?.avatar_url, queryClient]);
 }
 
-export function useCalendarEvents(start?: string, end?: string) {
+export interface OutlookCalendar {
+  id: string;
+  name: string;
+  color?: string;
+  hexColor?: string;
+  isDefaultCalendar?: boolean;
+  canEdit?: boolean;
+  owner?: { name?: string; address?: string };
+}
+
+/** Lista los calendarios de la cuenta M365 conectada (principal, adicionales, compartidos). */
+export function useCalendars() {
   const { user } = useAuth();
 
   return useQuery({
-    queryKey: ["calendar-events", start, end],
-    queryFn: async () => {
+    queryKey: ["calendars"],
+    queryFn: async (): Promise<OutlookCalendar[]> => {
       const { data, error } = await supabase.functions.invoke("microsoft-api", {
-        body: { action: "calendar-events", params: { start, end } },
+        body: { action: "calendars" },
+      });
+      if (isNotConnectedError(data, error)) return [];
+      if (error) throw error;
+      return (data?.value as OutlookCalendar[]) || [];
+    },
+    enabled: !!user,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
+ * Eventos del calendario. Si se pasan `calendarIds` la Edge Function consulta y
+ * fusiona esos calendarios; si no, usa la vista por defecto (calendario principal).
+ */
+export function useCalendarEvents(start?: string, end?: string, calendarIds?: string[]) {
+  const { user } = useAuth();
+  const ids = Array.isArray(calendarIds) ? calendarIds : [];
+  const idsKey = ids.slice().sort().join(",");
+
+  return useQuery({
+    queryKey: ["calendar-events", start, end, idsKey],
+    queryFn: async () => {
+      const params: Record<string, unknown> = { start, end };
+      if (ids.length > 0) params.calendarIds = ids;
+      const { data, error } = await supabase.functions.invoke("microsoft-api", {
+        body: { action: "calendar-events", params },
       });
       if (isNotConnectedError(data, error)) return [];
       if (error) throw error;
