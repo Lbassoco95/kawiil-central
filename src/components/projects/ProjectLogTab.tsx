@@ -16,9 +16,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
   BookOpen,
   Plus,
   Trash2,
+  Pencil,
+  CalendarPlus,
+  Loader2,
   TrendingUp,
   Flag,
   AlertTriangle,
@@ -29,6 +39,8 @@ import {
 } from "lucide-react";
 import { formatMX, toDateStringMX } from "@/lib/dateUtils";
 import { toast } from "sonner";
+import { useUserRole } from "@/hooks/useUserRole";
+import { useLinkedAccounts, useCreateGoogleEvent } from "@/hooks/useLinkedAccounts";
 
 export const LOG_ENTRY_TYPES: {
   value: string;
@@ -60,7 +72,11 @@ const NEEDS_RESPONSIBILITY = new Set(["atraso", "bloqueo"]);
 
 interface Props {
   projectId: string;
+  projectName?: string;
 }
+
+// Tipos que tiene sentido llevar al calendario (fecha comprometida).
+const CALENDAR_TYPES = new Set(["hito", "reunion"]);
 
 interface LogEntry {
   id: string;
@@ -75,15 +91,55 @@ interface LogEntry {
   profile?: { full_name?: string; avatar_url?: string };
 }
 
-export function ProjectLogTab({ projectId }: Props) {
+export function ProjectLogTab({ projectId, projectName }: Props) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { isReferenteOrAbove } = useUserRole();
 
   const [entryDate, setEntryDate] = useState(toDateStringMX());
   const [entryType, setEntryType] = useState("avance");
   const [responsibility, setResponsibility] = useState<string>("");
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+
+  // Edición de una entrada existente (reutiliza los campos en un diálogo).
+  const [editing, setEditing] = useState<LogEntry | null>(null);
+  const [editForm, setEditForm] = useState({ entry_date: "", entry_type: "avance", responsibility: "", title: "", content: "" });
+
+  // Google Calendar
+  const { data: linkedAccounts = [] } = useLinkedAccounts();
+  const hasGoogle = linkedAccounts.some((a) => a.provider === "google" && a.status === "connected");
+  const createGoogleEvent = useCreateGoogleEvent();
+  const [addingToCalId, setAddingToCalId] = useState<string | null>(null);
+
+  const openEdit = (e: LogEntry) => {
+    setEditing(e);
+    setEditForm({
+      entry_date: e.entry_date?.slice(0, 10) || toDateStringMX(),
+      entry_type: e.entry_type,
+      responsibility: e.responsibility || "",
+      title: e.title || "",
+      content: e.content,
+    });
+  };
+
+  const addToGoogleCalendar = async (e: LogEntry) => {
+    setAddingToCalId(e.id);
+    try {
+      const res = await createGoogleEvent.mutateAsync({
+        summary: e.title || `${typeMeta(e.entry_type).label}${projectName ? ` · ${projectName}` : ""}`,
+        description: e.content,
+        date: e.entry_date?.slice(0, 10),
+      });
+      toast.success("Evento creado en Google Calendar", {
+        action: res.htmlLink ? { label: "Abrir", onClick: () => window.open(res.htmlLink, "_blank") } : undefined,
+      });
+    } catch (err) {
+      toast.error("No se pudo crear el evento: " + (err instanceof Error ? err.message : "error"));
+    } finally {
+      setAddingToCalId(null);
+    }
+  };
 
   const { data: entries = [] } = useQuery({
     queryKey: ["project-log", projectId],
@@ -146,6 +202,30 @@ export function ProjectLogTab({ projectId }: Props) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["project-log", projectId] });
       toast.success("Entrada eliminada");
+    },
+    onError: (e: Error) => toast.error("Error: " + e.message),
+  });
+
+  const updateEntry = useMutation({
+    mutationFn: async () => {
+      if (!editing) return;
+      const needsResp = NEEDS_RESPONSIBILITY.has(editForm.entry_type);
+      const { error } = await supabase
+        .from("project_log_entries")
+        .update({
+          entry_date: editForm.entry_date || toDateStringMX(),
+          entry_type: editForm.entry_type,
+          responsibility: needsResp && editForm.responsibility ? editForm.responsibility : null,
+          title: editForm.title.trim() || null,
+          content: editForm.content.trim(),
+        })
+        .eq("id", editing.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["project-log", projectId] });
+      setEditing(null);
+      toast.success("Entrada actualizada");
     },
     onError: (e: Error) => toast.error("Error: " + e.message),
   });
@@ -294,6 +374,8 @@ export function ProjectLogTab({ projectId }: Props) {
                 const Icon = meta.icon;
                 const rMeta = respMeta(e.responsibility);
                 const isOwn = e.user_id === user?.id;
+                const canManage = isOwn || isReferenteOrAbove;
+                const canAddToCalendar = hasGoogle && CALENDAR_TYPES.has(e.entry_type);
                 return (
                   <div key={e.id} className="flex gap-3 relative pb-5 last:pb-0">
                     {/* Línea vertical */}
@@ -316,17 +398,43 @@ export function ProjectLogTab({ projectId }: Props) {
                         <span className="text-xs text-muted-foreground">
                           {formatMX(e.entry_date, "dd MMM yyyy")}
                         </span>
-                        {isOwn && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 ml-auto text-muted-foreground hover:text-destructive"
-                            onClick={() => deleteEntry.mutate(e.id)}
-                            disabled={deleteEntry.isPending}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
+                        <div className="ml-auto flex items-center gap-0.5">
+                          {canAddToCalendar && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 text-muted-foreground hover:text-primary"
+                              onClick={() => addToGoogleCalendar(e)}
+                              disabled={addingToCalId === e.id}
+                              title="Agregar a Google Calendar"
+                            >
+                              {addingToCalId === e.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CalendarPlus className="h-3.5 w-3.5" />}
+                            </Button>
+                          )}
+                          {canManage && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                              onClick={() => openEdit(e)}
+                              title="Editar entrada"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                          {canManage && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                              onClick={() => deleteEntry.mutate(e.id)}
+                              disabled={deleteEntry.isPending}
+                              title="Eliminar entrada"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </div>
                       </div>
                       {e.title && (
                         <p className="text-sm font-medium mt-1">{e.title}</p>
@@ -353,6 +461,66 @@ export function ProjectLogTab({ projectId }: Props) {
           )}
         </CardContent>
       </Card>
+
+      {/* Editar entrada */}
+      <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Pencil className="h-4 w-4" /> Editar entrada</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div>
+                <label className="text-xs text-muted-foreground">Fecha</label>
+                <Input type="date" className="mt-1 h-9 text-sm" value={editForm.entry_date}
+                  onChange={(ev) => setEditForm({ ...editForm, entry_date: ev.target.value })} />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground">Tipo</label>
+                <Select value={editForm.entry_type} onValueChange={(v) => setEditForm({ ...editForm, entry_type: v })}>
+                  <SelectTrigger className="mt-1 h-9 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {LOG_ENTRY_TYPES.map((t) => (<SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground">
+                  Responsable {NEEDS_RESPONSIBILITY.has(editForm.entry_type) && <span className="text-red-500">*</span>}
+                </label>
+                <Select
+                  value={editForm.responsibility || "__none__"}
+                  onValueChange={(v) => setEditForm({ ...editForm, responsibility: v === "__none__" ? "" : v })}
+                  disabled={!NEEDS_RESPONSIBILITY.has(editForm.entry_type)}
+                >
+                  <SelectTrigger className="mt-1 h-9 text-sm"><SelectValue placeholder="No aplica" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Sin especificar</SelectItem>
+                    {LOG_RESPONSIBILITIES.map((r) => (<SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <Input className="h-9 text-sm" placeholder="Título (opcional)" value={editForm.title}
+              onChange={(ev) => setEditForm({ ...editForm, title: ev.target.value })} />
+            <Textarea className="text-sm min-h-[80px]" value={editForm.content}
+              onChange={(ev) => setEditForm({ ...editForm, content: ev.target.value })} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditing(null)}>Cancelar</Button>
+            <Button
+              onClick={() => updateEntry.mutate()}
+              disabled={
+                updateEntry.isPending ||
+                !editForm.content.trim() ||
+                (NEEDS_RESPONSIBILITY.has(editForm.entry_type) && !editForm.responsibility)
+              }
+            >
+              {updateEntry.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Guardar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
