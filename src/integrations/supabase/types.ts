@@ -3896,6 +3896,53 @@ export type Database = {
           },
         ]
       }
+      project_log_entries: {
+        Row: {
+          content: string
+          created_at: string
+          entry_date: string
+          entry_type: string
+          id: string
+          project_id: string
+          responsibility: string | null
+          title: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          entry_date?: string
+          entry_type?: string
+          id?: string
+          project_id: string
+          responsibility?: string | null
+          title?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          entry_date?: string
+          entry_type?: string
+          id?: string
+          project_id?: string
+          responsibility?: string | null
+          title?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_log_entries_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_members: {
         Row: {
           id: string
