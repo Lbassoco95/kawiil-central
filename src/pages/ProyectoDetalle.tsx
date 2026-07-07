@@ -23,8 +23,10 @@ import {
   CircleAlert,
   ListTree,
   FolderKanban,
+  BookOpen,
 } from "lucide-react";
 import { ProjectCommentsTab } from "@/components/projects/ProjectCommentsTab";
+import { ProjectLogTab } from "@/components/projects/ProjectLogTab";
 import { MeetingMinutesDialog } from "@/components/projects/MeetingMinutesDialog";
 import { LawsuitDashboard } from "@/components/projects/LawsuitDashboard";
 import { AccountingDashboard } from "@/components/projects/AccountingDashboard";
@@ -453,6 +455,7 @@ const ProyectoDetalle = () => {
         ? `Tareas (${openTaskCount} · ${closedTaskCount} cerr.)`
         : `Tareas (${openTaskCount})`,
   });
+  projectTabs.push({ key: "bitacora", label: "Bitácora", icon: BookOpen });
   projectTabs.push({ key: "comentarios", label: "Comentarios", icon: MessageSquare });
   projectTabs.push({ key: "firmas", label: "Firmas", icon: PenTool });
 
@@ -735,6 +738,10 @@ const ProyectoDetalle = () => {
               defaultPhaseKey={taskFormPhaseKey}
             />
           </div>
+        )}
+
+        {tab === "bitacora" && (
+          <ProjectLogTab projectId={project.id} projectName={project.name} />
         )}
 
         {tab === "comentarios" && (

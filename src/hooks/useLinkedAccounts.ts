@@ -103,6 +103,32 @@ export function useGoogleConnection() {
   return { connect: connect.mutate, isConnecting: connect.isPending, disconnect: disconnect.mutate };
 }
 
+/** Crea un evento en el calendario principal de la cuenta Google conectada. */
+export function useCreateGoogleEvent() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: {
+      summary: string;
+      description?: string;
+      location?: string;
+      date?: string;
+      startDateTime?: string;
+      endDateTime?: string;
+    }): Promise<{ id: string; htmlLink?: string }> => {
+      const { data, error } = await supabase.functions.invoke("google-api", {
+        body: { action: "create-event", params },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data as { id: string; htmlLink?: string };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["google-calendar-events"] });
+      queryClient.invalidateQueries({ queryKey: ["calendar-events"] });
+    },
+  });
+}
+
 /** Eventos de calendario de las cuentas Google conectadas (formato normalizado tipo Graph). */
 export function useGoogleCalendarEvents(start?: string, end?: string, enabled = true) {
   const { user } = useAuth();
