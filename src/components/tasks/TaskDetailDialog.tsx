@@ -71,6 +71,7 @@ import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useDeleteTask } from "@/hooks/useTasks";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
+import { DocumentChecklistButton } from "@/components/shared/DocumentChecklistButton";
 import { createNotifications } from "@/lib/notificationHelpers";
 import { renderTextWithMentionHighlights } from "@/lib/renderMentionHighlights";
 import { useNavigate } from "react-router-dom";
@@ -882,13 +883,19 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
 
               {/* ── Subtareas ── */}
               <section className="dr-section">
-                <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
                   <h3>
                     <ListChecks className="h-3 w-3" /> Subtareas
                     {checklist.length > 0 && (
                       <span className="count">{completedCount}/{checklist.length}</span>
                     )}
                   </h3>
+                  <DocumentChecklistButton
+                    className="h-6 text-[10px] px-2"
+                    checklist={checklist}
+                    assignedTo={task?.assigned_to ?? null}
+                    onInsert={(updated) => updateChecklist(updated)}
+                  />
                 </div>
                 {checklist.length > 0 && (
                   <div className="time-bar mb-2">
