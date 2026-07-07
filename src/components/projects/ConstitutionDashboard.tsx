@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
-import { Building2, Globe, Save, CalendarClock, Users, Plus, X, UserCheck } from "lucide-react";
+import { Building2, Globe, Save, CalendarClock, Users, Plus, X, UserCheck, ChevronDown } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -16,11 +16,16 @@ import {
   type ConstitutionStep,
 } from "@/lib/constitutionSteps";
 import {
-  buildSociosChecklist,
+  buildPartnerDocs,
+  ensurePartnerDocs,
+  companyInfoStepChecklist,
   partnerDocProgress,
   type ConstitutionPartner,
+  type PartnerDoc,
 } from "@/lib/documentChecklist";
 import { Badge } from "@/components/ui/badge";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { cn } from "@/lib/utils";
 
 const DEFAULT_STEPS: ConstitutionStep[] = buildDefaultConstitutionSteps(null);
 const DOCS_STEP_KEY = "documentacion_socios";
@@ -59,19 +64,23 @@ export function ConstitutionDashboard({ projectId, constitutionDetails, responsi
   useEffect(() => {
     if (!constitutionDetails || reconciledRef.current) return;
     const existingSteps = (constitutionDetails.steps as ConstitutionStep[]) ?? [];
-    const currentSocios = constitutionDetails.socios ?? [];
+    const existingSocios = constitutionDetails.socios ?? [];
     const { steps: reconciled } = reconcileConstitutionSteps(existingSteps, responsibleUserId ?? null);
-    // Migrar el checklist del paso de documentación al modelo por socio
-    // (reconstruye info de empresa + bloques por socio, quita la semilla plana).
-    const migrated = reconciled.map((s) =>
-      s.key === DOCS_STEP_KEY ? { ...s, checklist: buildSociosChecklist(currentSocios, s.checklist ?? []) } : s,
+    // El paso 1 se queda SOLO con la info de empresa; los documentos por socio
+    // se rastrean en el panel de Socios (quita la semilla plana anterior).
+    const migratedSteps = reconciled.map((s) =>
+      s.key === DOCS_STEP_KEY ? { ...s, checklist: companyInfoStepChecklist(s.checklist ?? []) } : s,
     );
-    if (JSON.stringify(existingSteps) === JSON.stringify(migrated)) return;
+    // Asegurar que cada socio tenga su lista de documentos poblada.
+    const migratedSocios = existingSocios.map(ensurePartnerDocs);
+    const stepsChanged = JSON.stringify(existingSteps) !== JSON.stringify(migratedSteps);
+    const sociosChanged = JSON.stringify(existingSocios) !== JSON.stringify(migratedSocios);
+    if (!stepsChanged && !sociosChanged) return;
     reconciledRef.current = true;
     const payload: ConstitutionDetails = {
-      steps: migrated,
+      steps: migratedSteps,
       has_foreign_partners: constitutionDetails.has_foreign_partners,
-      socios: currentSocios,
+      socios: migratedSocios,
     };
     setLocalConstitution(payload);
     supabase
@@ -94,14 +103,14 @@ export function ConstitutionDashboard({ projectId, constitutionDetails, responsi
   }));
   const hasForeignPartners = localConstitution?.has_foreign_partners ?? true;
   const socios: ConstitutionPartner[] = localConstitution?.socios ?? [];
-  const docsStep = steps.find((s) => s.key === DOCS_STEP_KEY);
-  const docsChecklist = docsStep?.checklist ?? [];
   const visibleSteps = steps.filter((s) => !s.conditional || hasForeignPartners);
   const completedCount = visibleSteps.filter((s) => s.status === "completado").length;
   const progressPct = visibleSteps.length > 0 ? Math.round((completedCount / visibleSteps.length) * 100) : 0;
 
   const [newSocioName, setNewSocioName] = useState("");
   const [newSocioMarried, setNewSocioMarried] = useState(false);
+  const [expandedSocioId, setExpandedSocioId] = useState<string | null>(null);
+  const [newDocLabel, setNewDocLabel] = useState<Record<string, string>>({});
 
   const saveMutation = useMutation({
     mutationFn: async (updatedSteps: ConstitutionStep[]) => {
@@ -144,20 +153,31 @@ export function ConstitutionDashboard({ projectId, constitutionDetails, responsi
       });
   };
 
-  /** Reconstruye el checklist del paso 1 a partir de la lista de socios. */
   const applySocios = (nextSocios: ConstitutionPartner[], successMsg?: string) => {
-    const currentSteps = localConstitution?.steps ?? steps;
-    const nextSteps = currentSteps.map((s) =>
-      s.key === DOCS_STEP_KEY ? { ...s, checklist: buildSociosChecklist(nextSocios, s.checklist ?? []) } : s,
-    );
-    persistDetails({ steps: nextSteps, socios: nextSocios }, successMsg);
+    persistDetails({ socios: nextSocios }, successMsg);
+  };
+
+  /** Aplica un cambio a un socio específico por id. */
+  const updateSocio = (id: string, fn: (s: ConstitutionPartner) => ConstitutionPartner, successMsg?: string) => {
+    applySocios(socios.map((s) => (s.id === id ? fn(s) : s)), successMsg);
+  };
+
+  /** Aplica un cambio a un documento específico de un socio. */
+  const updateSocioDocs = (id: string, fn: (docs: PartnerDoc[]) => PartnerDoc[], successMsg?: string) => {
+    updateSocio(id, (s) => ({ ...s, docs: fn(s.docs ?? buildPartnerDocs(!!s.married)) }), successMsg);
   };
 
   const addSocio = () => {
     const name = newSocioName.trim();
     if (!name) return;
-    const socio: ConstitutionPartner = { id: `socio-${Date.now()}`, name, married: newSocioMarried };
+    const socio: ConstitutionPartner = {
+      id: `socio-${Date.now()}`,
+      name,
+      married: newSocioMarried,
+      docs: buildPartnerDocs(newSocioMarried),
+    };
     applySocios([...socios, socio], `Socio "${name}" agregado`);
+    setExpandedSocioId(socio.id);
     setNewSocioName("");
     setNewSocioMarried(false);
   };
@@ -167,7 +187,29 @@ export function ConstitutionDashboard({ projectId, constitutionDetails, responsi
   };
 
   const toggleSocioMarried = (id: string) => {
-    applySocios(socios.map((s) => (s.id === id ? { ...s, married: !s.married } : s)));
+    updateSocio(id, (s) => {
+      const married = !s.married;
+      return { ...s, married, docs: buildPartnerDocs(married, s.docs ?? []) };
+    });
+  };
+
+  const toggleDoc = (socioId: string, docKey: string) => {
+    updateSocioDocs(socioId, (docs) => docs.map((d) => (d.key === docKey ? { ...d, completed: !d.completed } : d)));
+  };
+
+  const setDocNote = (socioId: string, docKey: string, note: string) => {
+    updateSocioDocs(socioId, (docs) => docs.map((d) => (d.key === docKey ? { ...d, note } : d)));
+  };
+
+  const removeDoc = (socioId: string, docKey: string) => {
+    updateSocioDocs(socioId, (docs) => docs.filter((d) => d.key !== docKey));
+  };
+
+  const addCustomDoc = (socioId: string) => {
+    const label = (newDocLabel[socioId] || "").trim();
+    if (!label) return;
+    updateSocioDocs(socioId, (docs) => [...docs, { key: `custom-${Date.now()}`, label, completed: false, custom: true }]);
+    setNewDocLabel((m) => ({ ...m, [socioId]: "" }));
   };
 
   const toggleForeignPartners = () => {
@@ -242,34 +284,89 @@ export function ConstitutionDashboard({ projectId, constitutionDetails, responsi
             <span className="text-sm font-medium text-muted-foreground">{socios.length} socio(s)</span>
           </div>
           <p className="text-xs text-muted-foreground">
-            Da de alta a cada socio para generar y rastrear su checklist de documentos dentro del paso «Recopilación de documentación de socios».
+            Da de alta a cada socio y expándelo para rastrear su checklist de documentos. Puedes ajustar la lista (agregar/quitar documentos) y dejar un comentario en cada uno.
           </p>
 
           {socios.length > 0 && (
             <div className="space-y-2">
               {socios.map((s) => {
-                const prog = partnerDocProgress(s, docsChecklist);
+                const prog = partnerDocProgress(s);
                 const done = prog.total > 0 && prog.completed === prog.total;
+                const open = expandedSocioId === s.id;
+                const docs = s.docs ?? [];
                 return (
-                  <div key={s.id} className="flex items-center gap-2 rounded-md border px-3 py-2">
-                    <UserCheck className={`h-4 w-4 shrink-0 ${done ? "text-emerald-600" : "text-muted-foreground"}`} />
-                    <span className="text-sm font-medium flex-1 min-w-0 truncate">{s.name}</span>
-                    <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer shrink-0">
-                      <Checkbox checked={!!s.married} onCheckedChange={() => toggleSocioMarried(s.id)} />
-                      <span>Casado/a</span>
-                    </label>
-                    <Badge variant={done ? "default" : "outline"} className="text-[10px] shrink-0">
-                      {prog.completed}/{prog.total} docs
-                    </Badge>
-                    <button
-                      type="button"
-                      className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
-                      onClick={() => removeSocio(s.id)}
-                      aria-label={`Eliminar socio ${s.name}`}
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
+                  <Collapsible key={s.id} open={open} onOpenChange={(o) => setExpandedSocioId(o ? s.id : null)}>
+                    <div className="rounded-md border">
+                      <div className="flex items-center gap-2 px-3 py-2">
+                        <CollapsibleTrigger asChild>
+                          <button type="button" className="flex items-center gap-2 flex-1 min-w-0 text-left">
+                            <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform shrink-0", open && "rotate-180")} />
+                            <UserCheck className={cn("h-4 w-4 shrink-0", done ? "text-emerald-600" : "text-muted-foreground")} />
+                            <span className="text-sm font-medium truncate">{s.name}</span>
+                          </button>
+                        </CollapsibleTrigger>
+                        <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer shrink-0">
+                          <Checkbox checked={!!s.married} onCheckedChange={() => toggleSocioMarried(s.id)} />
+                          <span>Casado/a</span>
+                        </label>
+                        <Badge variant={done ? "default" : "outline"} className="text-[10px] shrink-0">
+                          {prog.completed}/{prog.total} docs
+                        </Badge>
+                        <button
+                          type="button"
+                          className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                          onClick={() => removeSocio(s.id)}
+                          aria-label={`Eliminar socio ${s.name}`}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                      <CollapsibleContent>
+                        <div className="border-t px-3 py-2 space-y-1.5">
+                          {docs.map((d) => (
+                            <div key={d.key} className="group flex items-start gap-2 py-0.5">
+                              <Checkbox
+                                className="mt-0.5"
+                                checked={d.completed}
+                                onCheckedChange={() => toggleDoc(s.id, d.key)}
+                              />
+                              <div className="flex-1 min-w-0 space-y-1">
+                                <span className={cn("text-xs block", d.completed && "line-through text-muted-foreground")}>
+                                  {d.label}
+                                </span>
+                                <Input
+                                  defaultValue={d.note || ""}
+                                  placeholder="Comentario..."
+                                  className="h-6 text-[11px]"
+                                  onBlur={(e) => { if ((e.target.value || "") !== (d.note || "")) setDocNote(s.id, d.key, e.target.value); }}
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity mt-0.5"
+                                onClick={() => removeDoc(s.id, d.key)}
+                                aria-label={`Quitar documento ${d.label}`}
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ))}
+                          <div className="flex items-center gap-2 pt-1">
+                            <Input
+                              value={newDocLabel[s.id] || ""}
+                              onChange={(e) => setNewDocLabel((m) => ({ ...m, [s.id]: e.target.value }))}
+                              placeholder="Agregar documento..."
+                              className="h-7 text-xs"
+                              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustomDoc(s.id); } }}
+                            />
+                            <Button size="sm" variant="outline" className="h-7 px-2 text-[11px]" onClick={() => addCustomDoc(s.id)} disabled={!(newDocLabel[s.id] || "").trim()}>
+                              <Plus className="h-3 w-3 mr-0.5" /> Documento
+                            </Button>
+                          </div>
+                        </div>
+                      </CollapsibleContent>
+                    </div>
+                  </Collapsible>
                 );
               })}
             </div>

@@ -14,12 +14,25 @@ export interface DocDef {
   label: string;
 }
 
+/** Documento requerido de un socio, con estado y comentario editable. */
+export interface PartnerDoc {
+  key: string;
+  label: string;
+  completed: boolean;
+  /** Comentario / nota libre del documento (p. ej. "pendiente, solicitado el 7/jul"). */
+  note?: string;
+  /** true si el usuario lo agregó a mano (no viene de la plantilla). */
+  custom?: boolean;
+}
+
 /** Un socio/accionista del proyecto de constitución. */
 export interface ConstitutionPartner {
   id: string;
   name: string;
   /** Si está casado, aplica documentación adicional del cónyuge. */
   married?: boolean;
+  /** Checklist de documentos del socio (se actualiza por socio). */
+  docs?: PartnerDoc[];
 }
 
 /** Información personal + documentación que se solicita a CADA socio. */
@@ -77,56 +90,50 @@ export function buildCompanyInfoItems(prevCompleted: Map<string, boolean> = new 
 }
 
 /**
- * Genera el checklist del paso "Recopilación de documentación de socios" a
- * partir de la lista de socios: un bloque de documentos por socio (con su
- * nombre) + la información de empresa (una vez). Conserva el estado de
- * palomeado de los ítems que ya existían (por id estable) y respeta los ítems
- * personalizados que el usuario haya agregado a mano.
+ * Genera/actualiza la lista de documentos de un socio según su estado civil,
+ * conservando el palomeado y las notas de los documentos existentes (por key)
+ * y los documentos personalizados que el usuario haya agregado.
  */
-export function buildSociosChecklist(
-  socios: ConstitutionPartner[],
-  existing: ChecklistItem[] = [],
-): ChecklistItem[] {
-  const prevCompleted = new Map(existing.map((i) => [i.id, i.completed]));
-
-  const socioItems: ChecklistItem[] = socios.flatMap((socio) => {
-    const docs = [...PARTNER_DOCUMENTS, ...(socio.married ? PARTNER_MARRIED_DOCUMENTS : [])];
-    return docs.map((d) => {
-      const id = `${SOCIO_PREFIX}${socio.id}::${d.key}`;
-      return {
-        id,
-        text: `${socio.name?.trim() || "Socio"} — ${d.label}`,
-        completed: !!prevCompleted.get(id),
-        assigned_to: null,
-        due_date: null,
-        task_id: null,
-      };
-    });
+export function buildPartnerDocs(married = false, existing: PartnerDoc[] = []): PartnerDoc[] {
+  const prev = new Map(existing.map((d) => [d.key, d]));
+  const base: PartnerDoc[] = [...PARTNER_DOCUMENTS, ...(married ? PARTNER_MARRIED_DOCUMENTS : [])].map((d) => {
+    const p = prev.get(d.key);
+    return { key: d.key, label: d.label, completed: p?.completed ?? false, note: p?.note };
   });
+  const customDocs = existing.filter((d) => d.custom);
+  return [...base, ...customDocs];
+}
 
-  const companyItems = buildCompanyInfoItems(prevCompleted);
+/** Asegura que el socio tenga su lista de documentos poblada/actualizada. */
+export function ensurePartnerDocs(socio: ConstitutionPartner): ConstitutionPartner {
+  return { ...socio, docs: buildPartnerDocs(!!socio.married, socio.docs ?? []) };
+}
 
-  // Conservar ítems personalizados (no generados por socio/empresa ni por la
-  // semilla plana anterior `documentacion_socios::N`, que se migra al modelo
-  // por socio).
+/** Progreso de documentos de un socio (leído de socio.docs). */
+export function partnerDocProgress(socio: ConstitutionPartner): { completed: number; total: number } {
+  const docs = socio.docs ?? [];
+  return { completed: docs.filter((d) => d.completed).length, total: docs.length };
+}
+
+const LEGACY_SEED_TEXT_PREFIXES = ["Datos — ", "Doc — ", "Empresa — ", "Socio — ", "Socio (si es casado) — ", "Socio (casado) — "];
+
+/**
+ * Deja el checklist del paso 1 SOLO con la información de empresa (los
+ * documentos por socio se rastrean en el panel de Socios). Elimina las semillas
+ * planas/por-socio anteriores y conserva cualquier ítem realmente personalizado.
+ */
+export function companyInfoStepChecklist(existing: ChecklistItem[] = []): ChecklistItem[] {
+  const prevCompleted = new Map(existing.map((i) => [i.id, i.completed]));
+  const company = buildCompanyInfoItems(prevCompleted);
   const custom = existing.filter(
     (i) =>
       !i.id.startsWith(SOCIO_PREFIX) &&
       !i.id.startsWith(EMPRESA_PREFIX) &&
-      !i.id.startsWith("documentacion_socios::"),
+      !i.id.startsWith("documentacion_socios::") &&
+      !i.id.startsWith("doc-") &&
+      !LEGACY_SEED_TEXT_PREFIXES.some((p) => (i.text || "").startsWith(p)),
   );
-
-  return [...socioItems, ...companyItems, ...custom];
-}
-
-/** Progreso de documentos de un socio específico dentro del checklist. */
-export function partnerDocProgress(
-  socio: ConstitutionPartner,
-  checklist: ChecklistItem[] = [],
-): { completed: number; total: number } {
-  const prefix = `${SOCIO_PREFIX}${socio.id}::`;
-  const items = checklist.filter((i) => i.id.startsWith(prefix));
-  return { completed: items.filter((i) => i.completed).length, total: items.length };
+  return [...company, ...custom];
 }
 
 /**
