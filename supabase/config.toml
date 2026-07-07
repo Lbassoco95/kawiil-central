@@ -31,6 +31,12 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = false
   [functions.microsoft-api]
     verify_jwt = false
+  [functions.google-auth]
+    verify_jwt = false
+  [functions.google-callback]
+    verify_jwt = false
+  [functions.google-api]
+    verify_jwt = false
   [functions.dropbox-token-exchange]
     verify_jwt = false
   [functions.backup-data]

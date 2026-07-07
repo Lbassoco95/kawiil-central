@@ -270,39 +270,38 @@ export function CalendarView({
     if (isMobile) setViewMode("day");
   }, [isMobile]);
 
-  // Scroll to current time on load/view change
+  // Al abrir / cambiar de vista: centrar en la hora actual si hoy está a la vista.
+  // Así el usuario siempre aterriza en "ahora". Si hoy no está en la vista
+  // (p. ej. navegó a otra semana), se restaura la última posición guardada.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const anchor = scrollAreaRef.current;
     if (!anchor) return;
 
     const key = `kawiil-cal-scroll-${viewMode}`;
-    let restored = false;
-    try {
-      const saved = window.sessionStorage.getItem(key);
-      if (saved) {
-        anchor.scrollTop = parseInt(saved, 10) || 0;
-        restored = true;
-      }
-    } catch { /* ignore */ }
-
     let cancelInitialScroll = false;
-    if (!restored) {
-      const t = window.setTimeout(() => {
-        if (cancelInitialScroll) return;
-        const indicator = nowIndicatorRef.current;
-        if (!indicator) return;
+    const t = window.setTimeout(() => {
+      if (cancelInitialScroll) return;
+      const indicator = nowIndicatorRef.current;
+      if (indicator) {
+        // Centrar en la hora actual (indicador ~1/3 desde arriba).
         const containerRect = anchor.getBoundingClientRect();
         const indicatorRect = indicator.getBoundingClientRect();
         const top = anchor.scrollTop + (indicatorRect.top - containerRect.top) - anchor.clientHeight / 3;
         anchor.scrollTop = Math.max(0, top);
-      }, 120);
-      const onUserScrollOnce = () => {
-        cancelInitialScroll = true;
-        window.clearTimeout(t);
-      };
-      anchor.addEventListener("scroll", onUserScrollOnce, { passive: true, once: true });
-    }
+      } else {
+        // Hoy no está en la vista: restaurar posición previa si existe.
+        try {
+          const saved = window.sessionStorage.getItem(key);
+          if (saved) anchor.scrollTop = parseInt(saved, 10) || 0;
+        } catch { /* ignore */ }
+      }
+    }, 120);
+    const onUserScrollOnce = () => {
+      cancelInitialScroll = true;
+      window.clearTimeout(t);
+    };
+    anchor.addEventListener("scroll", onUserScrollOnce, { passive: true, once: true });
 
     const onScroll = () => {
       try { window.sessionStorage.setItem(key, String(anchor.scrollTop)); } catch { /* ignore */ }
@@ -311,6 +310,7 @@ export function CalendarView({
     return () => {
       cancelInitialScroll = true;
       anchor.removeEventListener("scroll", onScroll);
+      anchor.removeEventListener("scroll", onUserScrollOnce);
     };
   }, [viewMode]);
 
@@ -1149,9 +1149,9 @@ export function CalendarView({
           rightPanelOpen && !isMobile ? "w-[260px]" : "w-0"
         )}>
           <div className="w-[260px] flex-1 overflow-y-auto">
-            <div className="p-3 space-y-4">
+            <div className="p-3 flex flex-col gap-4">
               {/* Mini calendar */}
-              <div>
+              <div className="order-6 border-t border-border/30 pt-3">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground capitalize">
                     {format(currentDate, "MMMM yyyy", { locale: es })}
@@ -1215,7 +1215,7 @@ export function CalendarView({
               </div>
 
               {/* Cuentas conectadas (multi-proveedor) */}
-              <div className="border-t border-border/30 pt-3">
+              <div className="order-5 border-t border-border/30 pt-3">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Cuentas</p>
                 <div className="space-y-1">
                   {linkedAccounts.filter((a) => a.provider === "google").map((acc) => (
@@ -1249,7 +1249,7 @@ export function CalendarView({
 
               {/* Calendarios (cuenta M365 conectada) */}
               {calendars.length > 1 && (
-                <div className="border-t border-border/30 pt-3">
+                <div className="order-4 border-t border-border/30 pt-3">
                   <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Calendarios</p>
                   <div className="space-y-0.5">
                     {calendars.map((cal) => {
@@ -1283,7 +1283,7 @@ export function CalendarView({
 
               {/* Category filters */}
               {outlookCategories.length > 0 && (
-                <div className="border-t border-border/30 pt-3">
+                <div className="order-3 border-t border-border/30 pt-3">
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Categorías</p>
                     {activeCategoryFilters.length > 0 && (
@@ -1335,7 +1335,7 @@ export function CalendarView({
 
               {/* AI analysis card */}
               {aiEvents && aiEvents.length > 0 && (
-                <div className="border-t border-border/30 pt-3">
+                <div className="order-1">
                   <CalendarKawiilCard
                     scope="week"
                     periodLabel={aiPeriodLabel || ""}
@@ -1347,13 +1347,13 @@ export function CalendarView({
               )}
 
               {/* Today agenda */}
-              <div className="border-t border-border/30 pt-3">
+              <div className="order-2 border-t border-border/30 pt-3">
                 {todayAgendaCard}
               </div>
 
               {/* Upcoming tasks */}
               {upcomingTasksCard && (
-                <div className="border-t border-border/30 pt-3">
+                <div className="order-7 border-t border-border/30 pt-3">
                   {upcomingTasksCard}
                 </div>
               )}
