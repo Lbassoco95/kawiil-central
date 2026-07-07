@@ -778,10 +778,11 @@ export function CalendarView({
 
           {/* Day/3days/Week grid */}
           {viewMode !== "month" && viewMode !== "agenda" && (
-            <div className="overflow-x-auto">
-              <div className={getMinWidth()}>
+            <div className={getMinWidth()}>
+                {/* Cabecera fija: fechas + "Todo el día" quedan visibles al hacer scroll */}
+                <div className="sticky top-0 z-20 bg-card shadow-sm">
                 {/* Day headers */}
-                <div className="grid border-b border-border sticky top-0 z-10 bg-card"
+                <div className="grid border-b border-border"
                   style={{ gridTemplateColumns: `56px repeat(${colCount}, 1fr)` }}>
                   <div className="p-2 text-[10px] text-muted-foreground text-center border-r border-border flex items-center justify-center">
                     CDMX
@@ -852,6 +853,7 @@ export function CalendarView({
                     );
                   })}
                 </div>
+                </div>
 
                 {/* Time grid */}
                 {(() => {
@@ -870,7 +872,7 @@ export function CalendarView({
                       {showNow && (
                         <div
                           ref={nowIndicatorRef}
-                          className="pointer-events-none absolute z-30 flex items-center"
+                          className="pointer-events-none absolute z-10 flex items-center"
                           style={{ top: nowTop - 10, left: 48, right: 0, height: 20 }}
                           aria-label={`Hora actual: ${nowLabel}`}
                         >
@@ -975,7 +977,6 @@ export function CalendarView({
                     </div>
                   );
                 })()}
-              </div>
             </div>
           )}
 
