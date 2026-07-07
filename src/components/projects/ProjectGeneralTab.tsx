@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,7 @@ import {
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { Save, Pencil, X, AlertTriangle, Sparkles, BookTemplate } from "lucide-react";
 import { useUpdateProject, type Project } from "@/hooks/useProjects";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { AISummaryCard } from "@/components/shared/AISummaryCard";
@@ -26,6 +26,8 @@ import { MeetingMinutesDialog } from "./MeetingMinutesDialog";
 import { CRITICALITY_OPTIONS, DELAY_CATEGORIES } from "./CriticalityDelayCard";
 import { ProjectTeamCard } from "./ProjectTeamCard";
 import { ProjectKawiilAiCard } from "./ProjectKawiilAiCard";
+import { ProjectLogTab } from "./ProjectLogTab";
+import { computeAutoCriticality } from "@/lib/projectCriticality";
 
 type ProjectStatus = Database["public"]["Enums"]["project_status"];
 
@@ -53,13 +55,12 @@ interface Props {
 
 export function ProjectGeneralTab({ project }: Props) {
   const updateProject = useUpdateProject();
+  const queryClient = useQueryClient();
   const { user } = useAuth();
   const [editing, setEditing] = useState(false);
-  const [description, setDescription] = useState(project.description || "");
   const [status, setStatus] = useState<ProjectStatus>(project.status);
   const [startDate, setStartDate] = useState(project.start_date || "");
   const [endDate, setEndDate] = useState(project.end_date || "");
-  const [criticalityLevel, setCriticalityLevel] = useState((project as any).criticality_level || "normal");
   const [delayCategory, setDelayCategory] = useState((project as any).delay_category || "");
   const [delayNotes, setDelayNotes] = useState((project as any).delay_notes || "");
   const [clientId, setClientId] = useState(project.client_id || "");
@@ -123,6 +124,42 @@ export function ProjectGeneralTab({ project }: Props) {
     },
     enabled: !!user,
   });
+
+  // Semáforo automático: se deriva de las tareas del proyecto (vencidas, en
+  // revisión, fecha objetivo pasada), ya no se fija a mano.
+  const autoCriticality = useMemo(
+    () => computeAutoCriticality(project as any, projectTasks ?? []),
+    [project, projectTasks],
+  );
+  const currentAutoCriticality = CRITICALITY_OPTIONS.find((c) => c.value === autoCriticality);
+
+  // Persiste el valor calculado para que listas, tableros y briefings reflejen
+  // el mismo semáforo (se sincroniza al abrir el proyecto). Guarda el último
+  // valor sincronizado para no entrar en bucle de escrituras.
+  const lastSyncedCriticality = useRef<string | null>(null);
+  useEffect(() => {
+    if (!projectTasks) return;
+    const stored = (project as any).criticality_level || "normal";
+    if (autoCriticality === stored) {
+      lastSyncedCriticality.current = autoCriticality;
+      return;
+    }
+    if (lastSyncedCriticality.current === autoCriticality) return;
+    lastSyncedCriticality.current = autoCriticality;
+    // Escritura silenciosa (sin toast): sincroniza el semáforo derivado para que
+    // listas, tableros y briefings lo vean; no es una acción del usuario.
+    (async () => {
+      const { error } = await supabase
+        .from("projects")
+        .update({ criticality_level: autoCriticality } as any)
+        .eq("id", project.id);
+      if (!error) {
+        queryClient.invalidateQueries({ queryKey: ["project", project.id] });
+        queryClient.invalidateQueries({ queryKey: ["projects"] });
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoCriticality, projectTasks, project.id]);
 
   // Fetch accounting periods for this project
   const { data: accountingPeriods } = useQuery({
@@ -288,7 +325,7 @@ PROYECTO: ${project.name}
 CLIENTE: ${clientName}
 ÁREA: ${areaLabel}
 ESTADO: ${project.status}
-SEMÁFORO: ${(project as any).criticality_level || "normal"}
+SEMÁFORO: ${autoCriticality}
 MOTIVO DE ATRASO: ${(project as any).delay_category || "ninguno"}
 NOTAS DE ATRASO: ${(project as any).delay_notes || "sin notas"}
 INICIO: ${project.start_date || "no definido"}
@@ -310,16 +347,14 @@ INSTRUCCIONES:
 4. Si hay motivo de atraso, explícalo con contexto.
 5. Sugiere la siguiente acción prioritaria.
 6. Máximo 120 palabras. Usa markdown.`;
-  }, [project, projectTasks, accountingPeriods, annualDeclarations, clientName, areaLabel]);
+  }, [project, projectTasks, accountingPeriods, annualDeclarations, clientName, areaLabel, autoCriticality]);
 
   const handleSave = () => {
     const updates: any = {
       id: project.id,
-      description: description || null,
       status,
       start_date: startDate || null,
       end_date: endDate || null,
-      criticality_level: criticalityLevel,
       delay_category: delayCategory || null,
       delay_notes: delayNotes || null,
       client_id: clientId || null,
@@ -352,18 +387,14 @@ INSTRUCCIONES:
   };
 
   const handleCancel = () => {
-    setDescription(project.description || "");
     setStatus(project.status);
     setStartDate(project.start_date || "");
     setEndDate(project.end_date || "");
-    setCriticalityLevel((project as any).criticality_level || "normal");
     setDelayCategory((project as any).delay_category || "");
     setDelayNotes((project as any).delay_notes || "");
     setClientId(project.client_id || "");
     setEditing(false);
   };
-
-  const currentCriticality = CRITICALITY_OPTIONS.find(c => c.value === ((project as any).criticality_level || "normal"));
 
   return (
     <div className="space-y-4">
@@ -384,15 +415,15 @@ INSTRUCCIONES:
             projectName={project.name}
             status={project.status}
             endDate={project.end_date}
-            criticalityLevel={(project as any).criticality_level}
+            criticalityLevel={autoCriticality}
             variant="compact"
           />
           <ProjectTeamCard projectId={project.id} variant="compact" />
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-      <Card>
+      <div className="grid gap-4 md:grid-cols-3 items-start">
+      <Card className="md:col-span-1">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-base">Detalles del proyecto</CardTitle>
           {!editing ? (
@@ -497,25 +528,15 @@ INSTRUCCIONES:
             )}
           </div>
 
-          {/* Criticality level */}
+          {/* Criticality level — automático a partir de las tareas */}
           <div className="flex justify-between items-center">
-            <span className="text-muted-foreground">Semáforo</span>
-            {editing ? (
-              <Select value={criticalityLevel} onValueChange={setCriticalityLevel}>
-                <SelectTrigger className="w-40 h-8 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CRITICALITY_OPTIONS.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <Badge variant="outline" className={currentCriticality?.color}>
-                {currentCriticality?.label}
-              </Badge>
-            )}
+            <span className="text-muted-foreground flex items-center gap-1">
+              Semáforo
+              <span className="text-[10px] text-muted-foreground/70">(automático)</span>
+            </span>
+            <Badge variant="outline" className={currentAutoCriticality?.color}>
+              {currentAutoCriticality?.label}
+            </Badge>
           </div>
 
           {/* Delay category */}
@@ -543,30 +564,14 @@ INSTRUCCIONES:
         </CardContent>
       </Card>
 
-      {/* Description / Notes card */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Descripción y notas</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {editing ? (
-            <Textarea
-              className="min-h-[120px] text-sm"
-              placeholder="Agrega una descripción o notas del proyecto..."
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          ) : (
-            <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-              {project.description || "Sin descripción. Haz clic en Editar para agregar notas."}
-            </p>
-          )}
-        </CardContent>
-      </Card>
+      {/* Bitácora del proyecto — ocupa el lugar de la antigua tarjeta de notas */}
+      <div className="md:col-span-2">
+        <ProjectLogTab projectId={project.id} />
+      </div>
 
       {/* Delay notes card - only show if there's a delay category */}
       {(editing || (project as any).delay_category) && (
-        <Card className="md:col-span-2 border-warning/30">
+        <Card className="md:col-span-3 border-warning/30">
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-warning" />
@@ -592,7 +597,7 @@ INSTRUCCIONES:
 
       {/* Save as Template - show for completed or advanced projects */}
       {(project.status === "completado" || project.status === "activo") && (
-        <div className="md:col-span-2">
+        <div className="md:col-span-3">
           <Card className="border-dashed border-emerald-500/20 hover:border-emerald-500/40 transition-colors">
             <CardContent className="py-4 flex items-center justify-between">
               <div>
@@ -619,7 +624,7 @@ INSTRUCCIONES:
       )}
 
       {/* Meeting Minutes Button */}
-      <div className="md:col-span-2">
+      <div className="md:col-span-3">
         <Card className="border-dashed border-primary/20 hover:border-primary/40 transition-colors">
           <CardContent className="py-4 flex items-center justify-between">
             <div>
