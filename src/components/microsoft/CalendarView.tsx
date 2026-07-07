@@ -939,6 +939,10 @@ export function CalendarView({
                               const catClasses = getCategoryClasses(primaryCategory);
                               const meetingUrl = event.onlineMeeting?.joinUrl || event.onlineMeetingUrl;
                               const accent = showCalendarColors ? calendarColorFor(event.calendarId) : undefined;
+                              // Contenido adaptativo según la altura del evento (evita recortes ilegibles):
+                              // compacto = eventos cortos (~30 min) → solo el título.
+                              const compact = height < 46;
+                              const showLocation = height >= 64 && !!event.location?.displayName;
 
                               return (
                                 <div key={event.id} className={cn("absolute px-0.5", draggedEvent?.id === event.id && "opacity-40")}
@@ -946,18 +950,26 @@ export function CalendarView({
                                   onDragStart={(e) => { e.stopPropagation(); setDraggedEvent(event); e.dataTransfer.effectAllowed = "move"; }}
                                   onDragEnd={() => setDraggedEvent(null)}>
                                   <div style={accent ? { borderLeftWidth: 3, borderLeftColor: accent } : undefined}
-                                    className={cn("h-full rounded-md px-1.5 py-0.5 text-xs truncate group relative shadow-sm cursor-grab active:cursor-grabbing transition-all duration-150 hover:shadow-md border",
+                                    className={cn("h-full rounded-md px-1.5 py-0.5 text-xs overflow-hidden group relative shadow-sm cursor-grab active:cursor-grabbing transition-all duration-150 hover:shadow-md border",
                                     primaryCategory ? catClasses : "bg-primary/15 text-primary border-primary/20")}
                                     title={`${startStr}${endStr ? " - " + endStr : ""} ${event.subject}`}
                                     onClick={(e) => { e.stopPropagation(); setSelectedEventId(event.id); }}>
-                                    <div className="flex items-start gap-1 pr-4">
+                                    <div className="flex items-start gap-1 h-full pr-3">
                                       <div className="flex-1 min-w-0">
-                                        <div className="text-[10px] opacity-70">{endStr ? `${startStr}–${endStr}` : startStr}</div>
-                                        <div className="font-medium truncate leading-tight">{event.subject}</div>
-                                        {event.location?.displayName && <div className="text-[9px] opacity-70 truncate">{event.location.displayName}</div>}
+                                        {compact ? (
+                                          <div className="font-semibold leading-[1.15] break-words line-clamp-2">
+                                            <span className="font-normal opacity-70 mr-1">{startStr}</span>{event.subject}
+                                          </div>
+                                        ) : (
+                                          <>
+                                            <div className="text-[10px] opacity-70 leading-tight">{endStr ? `${startStr}–${endStr}` : startStr}</div>
+                                            <div className="font-semibold leading-[1.15] break-words line-clamp-3">{event.subject}</div>
+                                            {showLocation && <div className="text-[9px] opacity-70 truncate mt-0.5">{event.location.displayName}</div>}
+                                          </>
+                                        )}
                                       </div>
                                       {meetingUrl && (
-                                        <button type="button" className="ml-auto p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                                        <button type="button" className="ml-auto p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
                                           onClick={(e) => { e.stopPropagation(); window.open(meetingUrl, "_blank"); }} title="Unirse a reunión">
                                           <Video className="h-3 w-3" />
                                         </button>
