@@ -32,7 +32,7 @@ import {
   plannedModeForToday,
   type RhAbsenceType,
 } from "@/lib/rh";
-import { useJornada, useTransitStatus } from "@/hooks/useRh";
+import { useJornada, useTransitStatus, useChangeWorkMode } from "@/hooks/useRh";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEmployeeDocuments } from "@/hooks/useExpediente";
 import { useMyPendingQuestionnaires } from "@/hooks/useQuestionnaires";
@@ -47,6 +47,7 @@ export function JornadaTopbarWidget() {
   const { session, schedule, summary, isPending, act } = useJornada();
   const plannedMode = plannedModeForToday(schedule);
   const transit = useTransitStatus();
+  const changeMode = useChangeWorkMode();
   const navigate = useNavigate();
   const { user } = useAuth();
   const { data: docs = [] } = useEmployeeDocuments(user?.id ?? null);
@@ -159,6 +160,25 @@ export function JornadaTopbarWidget() {
           <Car className="mr-2 h-4 w-4" />
           {inTransit ? "Llegué (salir de trayecto)" : "En trayecto"}
         </DropdownMenuItem>
+
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="text-[10px] font-normal uppercase tracking-wide text-muted-foreground">
+          ¿Dónde estás?
+        </DropdownMenuLabel>
+        {WORK_MODES.map((mode) => {
+          const active = (session?.work_mode ?? "office") === mode && !inTransit;
+          return (
+            <DropdownMenuItem
+              key={mode}
+              disabled={active}
+              onClick={() => session && changeMode.mutate({ attendanceId: session.id, workMode: mode })}
+            >
+              <span className="mr-2">{WORK_MODE_EMOJI[mode]}</span>
+              {WORK_MODE_LABEL[mode]}
+              {active && <span className="ml-auto text-[10px] text-muted-foreground">actual</span>}
+            </DropdownMenuItem>
+          );
+        })}
 
         <DropdownMenuSeparator />
         <DropdownMenuLabel className="text-[10px] font-normal uppercase tracking-wide text-muted-foreground">

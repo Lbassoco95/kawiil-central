@@ -28,7 +28,7 @@ import {
   plannedModeForToday,
   type RhWorkMode,
 } from "@/lib/rh";
-import { useJornada, useTransitStatus } from "@/hooks/useRh";
+import { useJornada, useTransitStatus, useChangeWorkMode } from "@/hooks/useRh";
 
 /** Re-render periódico para que los contadores avancen. */
 function useTicker(active: boolean) {
@@ -43,6 +43,7 @@ function useTicker(active: boolean) {
 export function JornadaCard() {
   const { session, schedule, summary, isPending, act } = useJornada();
   const transit = useTransitStatus();
+  const changeMode = useChangeWorkMode();
   const inTransit = !!session?.in_transit;
   const plannedMode = plannedModeForToday(schedule);
   const [selectedMode, setSelectedMode] = useState<RhWorkMode>(plannedMode ?? "office");
@@ -171,6 +172,32 @@ export function JornadaCard() {
 
         {/* ---- Estado: trabajando ---- */}
         {summary.state === "working" && (
+          <div className="space-y-3">
+            {/* Cambiar dónde estás sin cerrar la jornada (oficina ↔ comisión ↔ home). */}
+            <div>
+              <p className="mb-1.5 text-xs font-medium text-muted-foreground">¿Dónde estás ahora?</p>
+              <div className="grid grid-cols-3 gap-2">
+                {WORK_MODES.map((mode) => {
+                  const active = (session?.work_mode ?? "office") === mode && !inTransit;
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      disabled={changeMode.isPending || active}
+                      onClick={() => session && changeMode.mutate({ attendanceId: session.id, workMode: mode })}
+                      className={cn(
+                        "flex flex-col items-center gap-0.5 rounded-lg border p-2 text-center text-xs transition-colors disabled:cursor-default",
+                        active ? "border-primary bg-primary/5 ring-1 ring-primary" : "hover:bg-muted/60",
+                      )}
+                    >
+                      <span className="text-base">{WORK_MODE_EMOJI[mode]}</span>
+                      <span className="font-medium">{WORK_MODE_LABEL[mode]}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
           <div className="grid grid-cols-2 gap-2">
             {session?.is_additional_shift ? (
               <p className="col-span-2 rounded-md bg-muted/50 px-2 py-1.5 text-center text-xs text-muted-foreground">
@@ -223,6 +250,7 @@ export function JornadaCard() {
                 {new Date(summary.nextBreakAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}
               </p>
             )}
+          </div>
           </div>
         )}
 

@@ -4,6 +4,7 @@ Lo que puedes hacer tú en **Hub → Recursos Humanos**.
 
 ## Mi jornada
 - **Iniciar jornada**: elige desde dónde trabajas hoy (🏢 Oficina · 🏠 Home office · 🚶 Comisión) y registra tu entrada.
+- **Cambiar dónde estás** sin cerrar la jornada: si sales a comisión o regresas a la oficina, toca la nueva modalidad en **¿Dónde estás ahora?** (en la tarjeta de jornada o en el menú rápido de la barra superior). Se actualiza al instante tu estado en Slack.
 - Durante el día: **Ir a comer** 🍴, **Descanso** ☕ (20 min) y **Terminar jornada**.
 - **En trayecto** 🚗: tócalo cuando vas en camino. Sigues trabajando (no pausa nada), solo avisa que vas en movimiento. Cuando llegas, toca **"Llegué"**.
 

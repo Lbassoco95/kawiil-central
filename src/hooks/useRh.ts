@@ -59,13 +59,10 @@ async function syncSlackStatus(status: SlackStatus | null): Promise<void> {
       await invokeSlackApi({ action: "users.profile.set", clear_status: true });
       return;
     }
-    // Comida/descanso/trayecto NO expiran solos: el usuario los termina
-    // manualmente (p. ej. comida con cliente sigue ocupado). El resto expira
-    // al final del día para no dejar el estado pegado.
-    const noExpire =
-      status === PAUSE_SLACK_STATUS.lunch ||
-      status === PAUSE_SLACK_STATUS.break ||
-      status === TRANSIT_SLACK_STATUS;
+    // Todo estado expira al final del día para no dejarlo pegado. Comida,
+    // descanso y trayecto duran hasta que el usuario los termina, pero nunca
+    // cruzan la medianoche: si la jornada se cierra sola (sin check-out), el
+    // "Comiendo" no se queda al día siguiente pisando el estado de oficina.
     const endOfDay = new Date();
     endOfDay.setHours(23, 59, 0, 0);
     await invokeSlackApi({
@@ -73,7 +70,7 @@ async function syncSlackStatus(status: SlackStatus | null): Promise<void> {
       profile: {
         status_text: status.text,
         status_emoji: status.emoji,
-        status_expiration: noExpire ? 0 : Math.floor(endOfDay.getTime() / 1000),
+        status_expiration: Math.floor(endOfDay.getTime() / 1000),
       },
     });
   } catch {
@@ -377,6 +374,34 @@ export function useTransitStatus() {
       qc.invalidateQueries({ queryKey: ["rh-org-attendance"] });
     },
     onError: (e: Error) => toast.error(e.message || "No se pudo actualizar el estado"),
+  });
+}
+
+/**
+ * Cambia la modalidad (oficina / home office / comisión) de la jornada EN CURSO
+ * y lo refleja de inmediato en Slack. Sirve para cuando sales a comisión o
+ * regresas a la oficina sin cerrar la jornada. Al fijar dónde estás, sales de
+ * "en trayecto" (ya llegaste).
+ */
+export function useChangeWorkMode() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ attendanceId, workMode }: { attendanceId: string; workMode: RhWorkMode }) => {
+      const { error } = await db
+        .from("rh_attendance")
+        .update({ work_mode: workMode, in_transit: false })
+        .eq("id", attendanceId)
+        .eq("user_id", user!.id);
+      if (error) throw error;
+      await syncSlackStatus(WORK_MODE_SLACK_STATUS[workMode]);
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["rh-today-attendance"] });
+      qc.invalidateQueries({ queryKey: ["rh-org-attendance"] });
+      toast.success(`Ahora: ${WORK_MODE_SLACK_STATUS[vars.workMode].text}`);
+    },
+    onError: (e: Error) => toast.error(e.message || "No se pudo cambiar la modalidad"),
   });
 }
 
