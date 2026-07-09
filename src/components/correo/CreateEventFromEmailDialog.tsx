@@ -9,12 +9,67 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CalendarIcon, Loader2, X } from "lucide-react";
 import { format, addDays } from "date-fns";
 import { es } from "date-fns/locale";
 import { useCreateCalendarEvent } from "@/hooks/useMicrosoft";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+
+/** Builds an HH:MM string (24h) adding `addHours` hours, clamped to 23:59. */
+function addHoursTo(hhmm: string, addHours: number): string {
+  const [h, m] = hhmm.split(":").map(Number);
+  const total = Math.min(h * 60 + m + addHours * 60, 23 * 60 + 59);
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+}
+
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => {
+  const label = i === 0 ? "12 a.m." : i < 12 ? `${i} a.m.` : i === 12 ? "12 p.m." : `${i - 12} p.m.`;
+  return { value: String(i).padStart(2, "0"), label };
+});
+const MIN_OPTIONS = [
+  { value: "00", label: ":00" },
+  { value: "15", label: ":15" },
+  { value: "30", label: ":30" },
+  { value: "45", label: ":45" },
+];
+
+function TimePicker({ value, onChange, minValue }: { value: string; onChange: (v: string) => void; minValue?: string }) {
+  const [hh, mm] = value.split(":");
+  const setH = (h: string) => {
+    const next = `${h}:${mm}`;
+    onChange(minValue && next <= minValue ? addHoursTo(minValue, 1) : next);
+  };
+  const setM = (m: string) => {
+    const next = `${hh}:${m}`;
+    onChange(minValue && next <= minValue ? addHoursTo(minValue, 1) : next);
+  };
+  return (
+    <div className="flex gap-1">
+      <Select value={hh} onValueChange={setH}>
+        <SelectTrigger className="text-[12.5px] h-9 w-[90px]">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent className="max-h-[220px]">
+          {HOUR_OPTIONS.map((o) => (
+            <SelectItem key={o.value} value={o.value} className="text-[12.5px]">{o.label}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Select value={mm} onValueChange={setM}>
+        <SelectTrigger className="text-[12.5px] h-9 w-[68px]">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {MIN_OPTIONS.map((o) => (
+            <SelectItem key={o.value} value={o.value} className="text-[12.5px]">{o.label}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
 
 interface Recipient {
   email: string;
@@ -48,14 +103,7 @@ export function CreateEventFromEmailDialog({
 
   const handleStartTimeChange = (val: string) => {
     setStartTime(val);
-    // Auto-advance end time if it's <= new start
-    if (val >= endTime) {
-      const [h, m] = val.split(":").map(Number);
-      const totalMins = h * 60 + m + 60;
-      const nh = Math.floor(totalMins / 60) % 24;
-      const nm = totalMins % 60;
-      setEndTime(`${String(nh).padStart(2, "0")}:${String(nm).padStart(2, "0")}`);
-    }
+    if (val >= endTime) setEndTime(addHoursTo(val, 1));
   };
   const [isOnlineMeeting, setIsOnlineMeeting] = useState(false);
   const [location, setLocation] = useState("");
@@ -196,11 +244,11 @@ export function CreateEventFromEmailDialog({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label className="text-[12px]">Hora inicio (CDMX)</Label>
-              <Input type="time" value={startTime} onChange={(e) => handleStartTimeChange(e.target.value)} className="text-[13px]" />
+              <TimePicker value={startTime} onChange={handleStartTimeChange} />
             </div>
             <div className="space-y-1.5">
               <Label className="text-[12px]">Hora fin (CDMX)</Label>
-              <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="text-[13px]" />
+              <TimePicker value={endTime} onChange={setEndTime} minValue={startTime} />
             </div>
           </div>
 
