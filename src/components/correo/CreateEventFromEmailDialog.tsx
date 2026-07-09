@@ -45,6 +45,18 @@ export function CreateEventFromEmailDialog({
   const [date, setDate] = useState<Date>(addDays(new Date(), 1));
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("10:00");
+
+  const handleStartTimeChange = (val: string) => {
+    setStartTime(val);
+    // Auto-advance end time if it's <= new start
+    if (val >= endTime) {
+      const [h, m] = val.split(":").map(Number);
+      const totalMins = h * 60 + m + 60;
+      const nh = Math.floor(totalMins / 60) % 24;
+      const nm = totalMins % 60;
+      setEndTime(`${String(nh).padStart(2, "0")}:${String(nm).padStart(2, "0")}`);
+    }
+  };
   const [isOnlineMeeting, setIsOnlineMeeting] = useState(false);
   const [location, setLocation] = useState("");
   const [description, setDescription] = useState("");
@@ -97,6 +109,10 @@ export function CreateEventFromEmailDialog({
 
   const handleCreate = () => {
     if (!subject.trim()) { toast.error("Escribe el asunto del evento"); return; }
+    if (endTime <= startTime) {
+      toast.error("La hora de fin debe ser después de la hora de inicio");
+      return;
+    }
     const tz = "America/Mexico_City";
     const dateStr = format(date, "yyyy-MM-dd");
     createEvent.mutate(
@@ -180,7 +196,7 @@ export function CreateEventFromEmailDialog({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label className="text-[12px]">Hora inicio (CDMX)</Label>
-              <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="text-[13px]" />
+              <Input type="time" value={startTime} onChange={(e) => handleStartTimeChange(e.target.value)} className="text-[13px]" />
             </div>
             <div className="space-y-1.5">
               <Label className="text-[12px]">Hora fin (CDMX)</Label>
