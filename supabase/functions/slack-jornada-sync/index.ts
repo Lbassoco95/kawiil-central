@@ -96,18 +96,30 @@ Deno.serve(async (req) => {
     }
     const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
-    // Jornadas activas (check-in hoy, sin check-out), no más viejas de 18h.
+    // Jornadas activas (sin check-out), no más viejas de 18h.
     const cutoff = new Date(Date.now() - 18 * 3600 * 1000).toISOString();
     const { data: sessions } = await admin
       .from("rh_attendance")
       .select("id, user_id, work_mode, in_transit, check_in_at")
       .is("check_out_at", null)
-      .gte("check_in_at", cutoff);
+      .gte("check_in_at", cutoff)
+      .order("check_in_at", { ascending: false });
+
+    // Una sola jornada por persona: la más reciente. Si alguien dejó una sesión
+    // vieja sin cerrar (p. ej. de ayer, sin check-out tras la comida), su último
+    // evento es "lunch_start" y marcaría "Comiendo"; al procesar también la
+    // jornada de hoy en orden indefinido, ese estado viejo pisaba el correcto.
+    // Ese era el bug de "todos aparecen en hora de comida".
+    const latestByUser = new Map<string, any>();
+    for (const s of sessions ?? []) {
+      if (!latestByUser.has(s.user_id)) latestByUser.set(s.user_id, s);
+    }
+    const activeSessions = [...latestByUser.values()];
 
     const endOfDay = mexEndOfDayEpoch();
     let updated = 0;
 
-    for (const s of sessions ?? []) {
+    for (const s of activeSessions) {
       // Slack conectado
       const { data: slack } = await admin
         .from("user_slack_connections").select("access_token").eq("user_id", s.user_id).maybeSingle();
@@ -125,15 +137,17 @@ Deno.serve(async (req) => {
       const onBreak = lastEv?.event_type === "break_start";
 
       let status: Status = WORK_MODE[s.work_mode] ?? WORK_MODE.office;
-      // Comida/descanso/trayecto no expiran solos (0): los termina el usuario.
+      // Todos los estados expiran al final del día (CDMX). Comida/descanso/
+      // trayecto duran hasta que el usuario los termina, pero nunca cruzan la
+      // medianoche: así un "Comiendo" olvidado no se queda pegado al día siguiente.
       let expiration = endOfDay;
 
       if (onLunch) {
-        status = LUNCH; expiration = 0;
+        status = LUNCH;
       } else if (onBreak) {
-        status = BREAK; expiration = 0;
+        status = BREAK;
       } else if (s.in_transit) {
-        status = TRANSIT; expiration = 0;
+        status = TRANSIT;
       } else {
         // ¿En reunión? (calendario de Outlook del usuario)
         const { data: msTok } = await admin
