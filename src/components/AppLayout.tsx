@@ -11,6 +11,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useTasksRealtime } from "@/hooks/useTasksRealtime";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useNotificationDelivery } from "@/hooks/useNotificationDelivery";
+import { useGlobalSlackReadSync } from "@/hooks/useGlobalSlackReadSync";
 import { useAutoSyncMicrosoftPhoto } from "@/hooks/useMicrosoft";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { OPEN_NEW_TASK_MODAL_EVENT, openNewTaskModal } from "@/lib/openNewTaskModal";
@@ -28,6 +29,7 @@ export function AppLayout({ children, contentMaxWidth = "default" }: AppLayoutPr
   useTasksRealtime();
   useActivityTracker();
   useNotificationDelivery();
+  useGlobalSlackReadSync();
   useAutoSyncMicrosoftPhoto();
   useDocumentTitle();
 
