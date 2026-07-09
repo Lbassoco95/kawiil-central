@@ -240,16 +240,23 @@ export function findAttachmentForCid(
 ): OutlookAttachment | undefined {
   if (!attachments?.length) return undefined;
   const n = normalizeCid(cidRef);
+  const nNoExt = n.replace(/\.[a-z0-9]{1,5}$/i, "");
   return attachments.find((a) => {
     const t = a["@odata.type"] || "";
     if (t.includes("itemAttachment") || t.includes("referenceAttachment")) return false;
     const cid = a.contentId;
     if (cid) {
       const nc = normalizeCid(cid);
+      const ncNoExt = nc.replace(/\.[a-z0-9]{1,5}$/i, "");
       if (nc === n || nc.includes(n) || n.includes(nc)) return true;
+      if (ncNoExt === nNoExt) return true;
     }
     const name = (a.name || "").trim();
-    if (name && normalizeCid(name) === n) return true;
+    if (name) {
+      const nn = normalizeCid(name);
+      const nnNoExt = nn.replace(/\.[a-z0-9]{1,5}$/i, "");
+      if (nn === n || nnNoExt === nNoExt || nnNoExt === n || nn === nNoExt) return true;
+    }
     return false;
   });
 }

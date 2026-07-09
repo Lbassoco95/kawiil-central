@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { ArrowLeft, Reply, Forward, Archive, Trash2, CheckSquare, Filter, Tag, FolderInput, ChevronRight, MessageSquare } from "lucide-react";
+import { ArrowLeft, Reply, Forward, Archive, Trash2, CheckSquare, Filter, Tag, FolderInput, ChevronRight, MessageSquare, CalendarPlus } from "lucide-react";
 import { useEmailDetail, useArchiveEmail, useDeleteEmail, useMoveEmail, useMailFolders } from "@/hooks/useMicrosoft";
 import { useResolvedEmailHtml } from "@/hooks/useResolvedEmailHtml";
 import { useEmailAttachments } from "@/hooks/useMicrosoft";
@@ -28,9 +28,10 @@ interface Props {
   onCreateTask: (email: EmailShape) => void;
   onCreateRule?: () => void;
   onSendToSlack?: () => void;
+  onCreateEvent?: () => void;
 }
 
-export function MailReadingOverlay({ emailId, open, onClose, onCompose, onForward, onCreateTask, onCreateRule, onSendToSlack }: Props) {
+export function MailReadingOverlay({ emailId, open, onClose, onCompose, onForward, onCreateTask, onCreateRule, onSendToSlack, onCreateEvent }: Props) {
   const { data: emailDetail, isLoading } = useEmailDetail(emailId);
   const { data: attachments = [] } = useEmailAttachments(emailId ?? undefined);
   const { html: resolvedHtml } = useResolvedEmailHtml(
@@ -170,6 +171,13 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onForwar
             onClick={() => emailDetail && onCreateTask(emailDetail as EmailShape)}
           >
             <CheckSquare className="w-3.5 h-3.5" />
+          </button>
+          <button
+            className="h-[30px] w-[30px] flex items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+            title="Crear evento en calendario"
+            onClick={onCreateEvent}
+          >
+            <CalendarPlus className="w-3.5 h-3.5" />
           </button>
           <button
             className="h-[30px] w-[30px] flex items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"

@@ -8,6 +8,7 @@ import { MailRulesSheet } from "./MailRulesSheet";
 import { ComposeEmailDialog } from "@/components/microsoft/ComposeEmailDialog";
 import { CreateMailRuleDialog } from "@/components/microsoft/CreateMailRuleDialog";
 import { SendEmailToSlackDialog } from "@/components/microsoft/SendEmailToSlackDialog";
+import { CreateEventFromEmailDialog } from "./CreateEventFromEmailDialog";
 import { MailTaskDrawer } from "./MailTaskDrawer";
 import { MailTranslateDrawer } from "./MailTranslateDrawer";
 import { type MailTabId } from "./MailTabs";
@@ -51,6 +52,7 @@ export function CorreoView() {
   const [customFolderName, setCustomFolderName] = useState<string | null>(null);
   const [activeLabelId, setActiveLabelId] = useState<string | null>(null);
   const [slackEmailOpen, setSlackEmailOpen] = useState(false);
+  const [eventFromEmailOpen, setEventFromEmailOpen] = useState(false);
 
   const { data: foldersQueryData } = useMailFolders();
   const folders = (foldersQueryData?.folders ?? []) as { id: string; displayName: string }[];
@@ -203,6 +205,7 @@ ${detail.body?.contentType === "html" ? origBody : `<pre style="font-family:inhe
           onCreateTask={handleCreateTask}
           onCreateRule={handleCreateRule}
           onSendToSlack={() => setSlackEmailOpen(true)}
+          onCreateEvent={() => setEventFromEmailOpen(true)}
         />
       </div>
 
@@ -281,6 +284,28 @@ ${detail.body?.contentType === "html" ? origBody : `<pre style="font-family:inhe
           ""
         }
         webLink={(selectedEmailDetail as any)?.webLink ?? null}
+      />
+      <CreateEventFromEmailDialog
+        open={eventFromEmailOpen}
+        onOpenChange={setEventFromEmailOpen}
+        emailSubject={(selectedEmailDetail as any)?.subject || ""}
+        emailFrom={
+          (selectedEmailDetail as any)?.from?.emailAddress
+            ? {
+                email: (selectedEmailDetail as any).from.emailAddress.address || "",
+                name: (selectedEmailDetail as any).from.emailAddress.name,
+              }
+            : null
+        }
+        emailTo={(((selectedEmailDetail as any)?.toRecipients ?? []) as any[]).map((r: any) => ({
+          email: r.emailAddress?.address || "",
+          name: r.emailAddress?.name,
+        }))}
+        emailCc={(((selectedEmailDetail as any)?.ccRecipients ?? []) as any[]).map((r: any) => ({
+          email: r.emailAddress?.address || "",
+          name: r.emailAddress?.name,
+        }))}
+        myEmail={user?.email ?? undefined}
       />
     </div>
   );
