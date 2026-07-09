@@ -987,6 +987,16 @@ Deno.serve(async (req) => {
         const eventPayload = normalizeEventPayload(rawEventPayload);
         const hasOnlineMeeting = !!eventPayload?.isOnlineMeeting;
 
+        // Validate start < end before hitting Graph (saves a round-trip and gives a clearer error)
+        const startDt = eventPayload.start?.dateTime as string | undefined;
+        const endDt = eventPayload.end?.dateTime as string | undefined;
+        if (startDt && endDt && endDt <= startDt) {
+          result = {
+            error: `La hora de fin (${endDt.slice(11, 16)}) debe ser después de la hora de inicio (${startDt.slice(11, 16)}). Si pusiste "12:00 a.m." asegúrate de seleccionar "p.m." para mediodía.`,
+          };
+          break;
+        }
+
         const tryCreate = async (payload: Record<string, any>): Promise<Response> =>
           graphMailFetchWithRetry(accessToken, `/me/events`, {
             method: "POST",
