@@ -242,7 +242,11 @@ export function useUpdateExpenseStatus() {
       } else if (status === "pagado") {
         updates.paid_by = user!.id;
         updates.paid_at = now;
-        if ((expense as any)?.reimbursement_type) {
+        // Reembolsar al trabajador: pagar el gasto ES el reembolso, así que se
+        // completa junto con el pago. "Cobrar al cliente" NO: que el despacho
+        // pague al proveedor no significa que ya cobró al cliente; ese cobro se
+        // cierra aparte con "marcar reembolso cobrado".
+        if ((expense as any)?.reimbursement_type === "reembolsar_trabajador") {
           updates.reimbursement_status = "completado";
         }
       }
@@ -333,11 +337,15 @@ export function useUpdateExpenseStatus() {
           );
         }
       } else if (status === "pagado" && existingTaskId) {
-        // El pago se realizó: cierra la tarea vinculada.
-        await supabase
-          .from("tasks")
-          .update({ status: "completada", completed_at: now } as any)
-          .eq("id", existingTaskId);
+        // El pago se realizó: cierra la tarea vinculada, salvo en "cobrar al
+        // cliente", cuya tarea es de cobro y sigue abierta hasta que el cliente
+        // reembolse (se cierra con "marcar reembolso cobrado").
+        if ((expense as any)?.reimbursement_type !== "cobrar_cliente") {
+          await supabase
+            .from("tasks")
+            .update({ status: "completada", completed_at: now } as any)
+            .eq("id", existingTaskId);
+        }
       } else if (status === "rechazado" && existingTaskId) {
         // Gasto rechazado tras aprobarse: cancela la tarea de pago.
         await supabase
@@ -383,5 +391,71 @@ export function useUpdateExpenseStatus() {
       } catch { /* non-critical */ }
     },
     onError: (e: any) => toast.error(e.message || "Error al actualizar"),
+  });
+}
+
+/**
+ * Marca un reembolso como completado (cobrado al cliente o pagado al trabajador)
+ * de forma independiente al estatus de pago del gasto. Cierra la tarea de
+ * cobro/reembolso vinculada y avisa a quien solicitó el gasto.
+ */
+export function useMarkReimbursementDone() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+
+  return useMutation({
+    mutationFn: async ({ id }: { id: string }) => {
+      const now = new Date().toISOString();
+      const { data: expense, error: fetchErr } = await supabase
+        .from("expenses")
+        .select("payment_task_id, requested_by, description, reimbursement_type")
+        .eq("id", id)
+        .single();
+      if (fetchErr) throw fetchErr;
+
+      const { error } = await supabase
+        .from("expenses")
+        .update({ reimbursement_status: "completado" } as any)
+        .eq("id", id);
+      if (error) throw error;
+
+      // Cierra la tarea de cobro/reembolso vinculada.
+      if ((expense as any)?.payment_task_id) {
+        await supabase
+          .from("tasks")
+          .update({ status: "completada", completed_at: now } as any)
+          .eq("id", (expense as any).payment_task_id);
+      }
+
+      return expense;
+    },
+    onSuccess: (expense, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["tasks", "mine"] });
+      const done =
+        (expense as any)?.reimbursement_type === "cobrar_cliente"
+          ? "Cobro al cliente registrado"
+          : "Reembolso marcado como completado";
+      toast.success(done);
+
+      try {
+        if ((expense as any)?.requested_by) {
+          createNotifications([{
+            user_id: (expense as any).requested_by,
+            type: "expense_status_changed",
+            title:
+              (expense as any).reimbursement_type === "cobrar_cliente"
+                ? "El cobro al cliente de tu gasto se completó"
+                : "Tu reembolso fue completado",
+            body: (expense as any).description?.substring(0, 200) || undefined,
+            entity_type: "expense",
+            entity_id: vars.id,
+            source_user_id: user!.id,
+          }]);
+        }
+      } catch { /* non-critical */ }
+    },
+    onError: (e: any) => toast.error(e.message || "Error al actualizar el reembolso"),
   });
 }
