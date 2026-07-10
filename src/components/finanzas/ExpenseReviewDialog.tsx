@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog, DialogContent,
 } from "@/components/ui/dialog";
@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import {
   useUpdateExpenseStatus,
+  useMarkReimbursementDone,
   Expense,
   ReimbursementType,
   REIMBURSEMENT_LABELS,
@@ -62,8 +63,18 @@ export function ExpenseReviewDialog({ expense, open, onOpenChange, canManage }: 
   const [paymentDueDate, setPaymentDueDate] = useState("");
   const [reimbursement, setReimbursement] = useState<"none" | ReimbursementType>("none");
   const updateStatus = useUpdateExpenseStatus();
+  const markReimbursement = useMarkReimbursementDone();
   const { data: users = [] } = useOrgUsers();
   const attachments = expense ? parseExpenseAttachments(expense) : [];
+
+  // Precarga el tipo de reembolso que indicó quien solicitó, para que el
+  // revisor solo lo confirme o ajuste al aprobar.
+  useEffect(() => {
+    if (open && expense) {
+      setReimbursement(expense.reimbursement_type ?? "none");
+      setPaymentDueDate(expense.payment_due_date ?? "");
+    }
+  }, [open, expense]);
 
   if (!expense) return null;
 
@@ -115,6 +126,16 @@ export function ExpenseReviewDialog({ expense, open, onOpenChange, canManage }: 
   const canReview = canManage && expense.status === "solicitado";
   const canApprove = canManage && expense.status === "en_revision";
   const canPay = canManage && expense.status === "aprobado";
+  const canMarkReimbursement =
+    canManage &&
+    !!expense.reimbursement_type &&
+    expense.reimbursement_status === "pendiente" &&
+    !!expense.payment_task_id;
+
+  const handleMarkReimbursement = async () => {
+    await markReimbursement.mutateAsync({ id: expense.id });
+    onOpenChange(false);
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -346,6 +367,20 @@ export function ExpenseReviewDialog({ expense, open, onOpenChange, canManage }: 
             {canPay && (
               <Button size="sm" onClick={() => handleAction("pagado")} disabled={updateStatus.isPending}>
                 <CreditCard className="h-3.5 w-3.5 mr-1" /> Marcar pagado
+              </Button>
+            )}
+            {canMarkReimbursement && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleMarkReimbursement}
+                disabled={markReimbursement.isPending}
+                className="border-amber-300/70 text-amber-700 hover:bg-amber-50 dark:border-amber-500/40 dark:text-amber-300 dark:hover:bg-amber-950/30"
+              >
+                <RefreshCcw className="h-3.5 w-3.5 mr-1" />
+                {expense.reimbursement_type === "cobrar_cliente"
+                  ? "Marcar cobrado al cliente"
+                  : "Marcar reembolsado"}
               </Button>
             )}
           </div>

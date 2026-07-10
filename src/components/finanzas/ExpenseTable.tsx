@@ -3,6 +3,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { parseExpenseAttachments, type Expense } from "@/hooks/useExpenses";
+import { cn } from "@/lib/utils";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -100,9 +101,27 @@ export function ExpenseTable({ expenses, onSelect, showRequester = false }: Prop
                 ${Number(exp.amount).toLocaleString("es-MX", { minimumFractionDigits: 2 })} {exp.currency}
               </TableCell>
               <TableCell>
-                <Badge className={STATUS_STYLES[exp.status] + " text-[10px]"}>
-                  {STATUS_LABELS[exp.status]}
-                </Badge>
+                <div className="flex flex-wrap items-center gap-1">
+                  <Badge className={STATUS_STYLES[exp.status] + " text-[10px]"}>
+                    {STATUS_LABELS[exp.status]}
+                  </Badge>
+                  {exp.reimbursement_type && (
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-[10px] gap-0.5 border-amber-300/70 text-amber-700 dark:border-amber-500/40 dark:text-amber-300",
+                        exp.reimbursement_status === "completado" && "opacity-60 line-through",
+                      )}
+                      title={
+                        exp.reimbursement_type === "cobrar_cliente"
+                          ? "Reembolso: cobrar al cliente"
+                          : "Reembolso: pagar al trabajador"
+                      }
+                    >
+                      ↩ {exp.reimbursement_type === "cobrar_cliente" ? "Cobrar" : "Reembolso"}
+                    </Badge>
+                  )}
+                </div>
               </TableCell>
             </TableRow>
           ))}

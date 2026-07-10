@@ -19,7 +19,7 @@ import {
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { useClients } from "@/hooks/useClients";
 import { useProjects } from "@/hooks/useProjects";
-import { useCreateExpense } from "@/hooks/useExpenses";
+import { useCreateExpense, REIMBURSEMENT_LABELS } from "@/hooks/useExpenses";
 import { FileDropzone } from "@/components/shared/FileDropzone";
 import { expensesLimits } from "@/lib/fileIntake/limits";
 import {
@@ -46,6 +46,9 @@ const schema = z.object({
   client_id: z.string().optional().or(z.literal("")),
   project_id: z.string().optional().or(z.literal("")),
   expense_date: z.string().min(1, "La fecha es requerida"),
+  reimbursement_type: z
+    .enum(["none", "cobrar_cliente", "reembolsar_trabajador"])
+    .default("none"),
   notes: z.string().optional().or(z.literal("")),
 });
 
@@ -110,6 +113,7 @@ export function ExpenseFormDialog({ open, onOpenChange }: Props) {
       client_id: "",
       project_id: "",
       expense_date: new Date().toISOString().slice(0, 10),
+      reimbursement_type: "none",
       notes: "",
     },
   });
@@ -188,6 +192,10 @@ Datos del gasto:
       client_id: values.client_id || null,
       project_id: values.project_id || null,
       expense_date: values.expense_date,
+      reimbursement_type:
+        values.reimbursement_type && values.reimbursement_type !== "none"
+          ? values.reimbursement_type
+          : null,
       notes: values.notes || null,
       files: pendingFiles,
     });
@@ -367,6 +375,31 @@ Datos del gasto:
                     onValueChange={field.onChange}
                     placeholder="Seleccionar proyecto..."
                   />
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="reimbursement_type"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>¿Es reembolsable?</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="none">No es reembolso</SelectItem>
+                      <SelectItem value="cobrar_cliente">{REIMBURSEMENT_LABELS.cobrar_cliente}</SelectItem>
+                      <SelectItem value="reembolsar_trabajador">{REIMBURSEMENT_LABELS.reembolsar_trabajador}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-muted-foreground">
+                    Marca si el despacho debe cobrarlo al cliente (lo absorbió) o si hay que
+                    reembolsarlo a quien lo pagó. El revisor lo confirma al aprobar.
+                  </p>
                   <FormMessage />
                 </FormItem>
               )}
