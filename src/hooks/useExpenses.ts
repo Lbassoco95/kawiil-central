@@ -53,9 +53,21 @@ export interface Expense {
   attachments?: ExpenseAttachment[] | null;
   notes: string | null;
   expense_date: string;
+  payment_due_date: string | null;
+  payment_task_id: string | null;
+  reimbursement_type: ReimbursementType | null;
+  reimbursement_status: "pendiente" | "completado" | null;
   created_at: string;
   updated_at: string;
 }
+
+/** Naturaleza del reembolso de un gasto. */
+export type ReimbursementType = "cobrar_cliente" | "reembolsar_trabajador";
+
+export const REIMBURSEMENT_LABELS: Record<ReimbursementType, string> = {
+  cobrar_cliente: "Cobrar al cliente",
+  reembolsar_trabajador: "Reembolsar al trabajador",
+};
 
 export function useExpenses() {
   const { user } = useAuth();
@@ -163,6 +175,20 @@ export function useCreateExpense() {
   });
 }
 
+/** Construye el título de la tarea de pago/reembolso a partir del gasto. */
+function buildPaymentTaskTitle(
+  reimbursementType: ReimbursementType | null | undefined,
+  description: string,
+  amount: number,
+  currency: string,
+): string {
+  const money = `$${Number(amount).toLocaleString("es-MX", { minimumFractionDigits: 2 })} ${currency}`;
+  const desc = (description || "gasto").trim().slice(0, 80);
+  if (reimbursementType === "cobrar_cliente") return `Cobrar al cliente: ${desc} — ${money}`;
+  if (reimbursementType === "reembolsar_trabajador") return `Reembolso a trabajador: ${desc} — ${money}`;
+  return `Pago: ${desc} — ${money}`;
+}
+
 export function useUpdateExpenseStatus() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -172,13 +198,29 @@ export function useUpdateExpenseStatus() {
       id,
       status,
       rejection_reason,
+      payment_due_date,
+      reimbursement_type,
     }: {
       id: string;
       status: string;
       rejection_reason?: string;
+      /** Fecha en que se debe realizar el pago (requerida al aprobar). */
+      payment_due_date?: string | null;
+      /** Naturaleza del reembolso; null = no reembolsable. */
+      reimbursement_type?: ReimbursementType | null;
     }) => {
       const now = new Date().toISOString();
       const updates: Record<string, any> = { status };
+
+      // Necesitamos datos del gasto para el ciclo de vida de la tarea de pago.
+      const { data: expense, error: fetchErr } = await supabase
+        .from("expenses")
+        .select(
+          "organization_id, requested_by, description, amount, currency, category, client_id, project_id, payment_task_id, reimbursement_type",
+        )
+        .eq("id", id)
+        .single();
+      if (fetchErr) throw fetchErr;
 
       if (status === "en_revision") {
         updates.reviewed_by = user!.id;
@@ -186,6 +228,9 @@ export function useUpdateExpenseStatus() {
       } else if (status === "aprobado") {
         updates.approved_by = user!.id;
         updates.approved_at = now;
+        updates.payment_due_date = payment_due_date || null;
+        updates.reimbursement_type = reimbursement_type ?? null;
+        updates.reimbursement_status = reimbursement_type ? "pendiente" : null;
       } else if (status === "rechazado") {
         updates.approved_by = user!.id;
         updates.approved_at = now;
@@ -193,6 +238,9 @@ export function useUpdateExpenseStatus() {
       } else if (status === "pagado") {
         updates.paid_by = user!.id;
         updates.paid_at = now;
+        if ((expense as any)?.reimbursement_type) {
+          updates.reimbursement_status = "completado";
+        }
       }
 
       const { error } = await supabase
@@ -200,9 +248,104 @@ export function useUpdateExpenseStatus() {
         .update(updates as any)
         .eq("id", id);
       if (error) throw error;
+
+      // --- Ciclo de vida de la tarea de pago/reembolso ---
+      const existingTaskId = (expense as any)?.payment_task_id as string | null;
+
+      if (status === "aprobado" && !existingTaskId) {
+        // Responsable(s) de pagos desde la configuración de la organización.
+        let primaryAssignee: string | null = null;
+        let additionalAssignees: string[] = [];
+        try {
+          const { data: org } = await supabase
+            .from("organizations")
+            .select("settings")
+            .eq("id", (expense as any).organization_id)
+            .single();
+          const settings = ((org?.settings as Record<string, any>) || {});
+          primaryAssignee = settings.payment_assignee_user_id || null;
+          const extra = settings.payment_additional_assignee_user_ids;
+          additionalAssignees = Array.isArray(extra)
+            ? extra.filter((u: unknown): u is string => typeof u === "string" && !!u && u !== primaryAssignee)
+            : [];
+        } catch { /* sin configuración: se crea la tarea sin asignar */ }
+
+        const title = buildPaymentTaskTitle(
+          reimbursement_type,
+          (expense as any).description,
+          (expense as any).amount,
+          (expense as any).currency,
+        );
+        const descParts = [
+          `Gasto aprobado (${(expense as any).category}).`,
+          reimbursement_type === "cobrar_cliente"
+            ? "El cliente debe reembolsar este monto al despacho."
+            : reimbursement_type === "reembolsar_trabajador"
+              ? "El despacho debe reembolsar este monto al trabajador."
+              : null,
+        ].filter(Boolean);
+
+        const { data: task, error: taskErr } = await supabase
+          .from("tasks")
+          .insert({
+            organization_id: (expense as any).organization_id,
+            title,
+            description: descParts.join(" "),
+            priority: "alta",
+            status: "pendiente",
+            due_date: payment_due_date || null,
+            assigned_to: primaryAssignee,
+            client_id: (expense as any).client_id,
+            project_id: (expense as any).project_id,
+            created_by: user!.id,
+          } as any)
+          .select("id")
+          .single();
+        if (taskErr) throw taskErr;
+
+        // Vincula la tarea al gasto.
+        await supabase.from("expenses").update({ payment_task_id: task.id } as any).eq("id", id);
+
+        // Co-asignados adicionales.
+        if (additionalAssignees.length > 0) {
+          await supabase
+            .from("task_assignees")
+            .insert(additionalAssignees.map((uid) => ({ task_id: task.id, user_id: uid })));
+        }
+
+        // Notifica a los responsables de pagos.
+        const notifyIds = [...new Set([primaryAssignee, ...additionalAssignees].filter(Boolean))] as string[];
+        if (notifyIds.length > 0) {
+          createNotifications(
+            notifyIds.map((uid) => ({
+              user_id: uid,
+              type: "task_assigned",
+              title: `Pago por realizar: ${title}`,
+              body: descParts.join(" ") || undefined,
+              entity_type: "task",
+              entity_id: task.id,
+              source_user_id: user!.id,
+            })),
+          );
+        }
+      } else if (status === "pagado" && existingTaskId) {
+        // El pago se realizó: cierra la tarea vinculada.
+        await supabase
+          .from("tasks")
+          .update({ status: "completada", completed_at: now } as any)
+          .eq("id", existingTaskId);
+      } else if (status === "rechazado" && existingTaskId) {
+        // Gasto rechazado tras aprobarse: cancela la tarea de pago.
+        await supabase
+          .from("tasks")
+          .update({ status: "cancelada" } as any)
+          .eq("id", existingTaskId);
+      }
     },
     onSuccess: async (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["tasks", "mine"] });
       toast.success("Estado actualizado");
 
       // Notify the expense requester about status change

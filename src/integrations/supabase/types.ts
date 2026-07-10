@@ -2351,8 +2351,12 @@ export type Database = {
           organization_id: string
           paid_at: string | null
           paid_by: string | null
+          payment_due_date: string | null
+          payment_task_id: string | null
           project_id: string | null
           receipt_path: string | null
+          reimbursement_status: string | null
+          reimbursement_type: string | null
           rejection_reason: string | null
           requested_by: string
           reviewed_at: string | null
@@ -2376,8 +2380,12 @@ export type Database = {
           organization_id: string
           paid_at?: string | null
           paid_by?: string | null
+          payment_due_date?: string | null
+          payment_task_id?: string | null
           project_id?: string | null
           receipt_path?: string | null
+          reimbursement_status?: string | null
+          reimbursement_type?: string | null
           rejection_reason?: string | null
           requested_by: string
           reviewed_at?: string | null
@@ -2401,8 +2409,12 @@ export type Database = {
           organization_id?: string
           paid_at?: string | null
           paid_by?: string | null
+          payment_due_date?: string | null
+          payment_task_id?: string | null
           project_id?: string | null
           receipt_path?: string | null
+          reimbursement_status?: string | null
+          reimbursement_type?: string | null
           rejection_reason?: string | null
           requested_by?: string
           reviewed_at?: string | null
@@ -2423,6 +2435,13 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_payment_task_id_fkey"
+            columns: ["payment_task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
             referencedColumns: ["id"]
           },
           {

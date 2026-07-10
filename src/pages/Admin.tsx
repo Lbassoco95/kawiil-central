@@ -2,6 +2,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { UserManagement } from "@/components/admin/UserManagement";
 import { CelulaManagement } from "@/components/admin/CelulaManagement";
 import { DefaultAbsenceApproverCard } from "@/components/admin/DefaultAbsenceApproverCard";
+import { PaymentAssigneeCard } from "@/components/admin/PaymentAssigneeCard";
 import { CatalogManagement } from "@/components/admin/CatalogManagement";
 import { AdoptionAnalyticsTab } from "@/components/admin/AdoptionAnalyticsTab";
 import { useEffect, useState } from "react";
@@ -118,6 +119,7 @@ const Configuracion = () => {
             <div className="space-y-4">
               <CelulaManagement />
               {isTransformador && <DefaultAbsenceApproverCard />}
+              {isTransformador && <PaymentAssigneeCard />}
             </div>
           )}
           {tab === "catalogos" && <CatalogManagement />}
