@@ -11,6 +11,10 @@ export interface OrgSettings {
   permissions_steward_user_id?: string | null;
   /** Aprobador por defecto de solicitudes de ausencia cuya célula no tiene responsable asignado. */
   default_absence_approver_user_id?: string | null;
+  /** Responsable principal de pagos: recibe (como tarea) los pagos/reembolsos al aprobar un gasto. */
+  payment_assignee_user_id?: string | null;
+  /** Co-responsables de pagos adicionales que también reciben la tarea de pago. */
+  payment_additional_assignee_user_ids?: string[];
 }
 
 /** Transformador con permiso para mutar `user_module_permissions` y `organizations.settings` de permisos (RLS alineado). */

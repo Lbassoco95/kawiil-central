@@ -5,10 +5,17 @@ import {
 import { KAWIIL_AI_HEADER_BG } from "@/lib/kawiilAi";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import {
   useUpdateExpenseStatus,
   Expense,
+  ReimbursementType,
+  REIMBURSEMENT_LABELS,
   parseExpenseAttachments,
 } from "@/hooks/useExpenses";
 import { supabase } from "@/integrations/supabase/client";
@@ -16,7 +23,7 @@ import { toast } from "sonner";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { Check, X, CreditCard, Eye, Paperclip, Download, Receipt } from "lucide-react";
+import { Check, X, CreditCard, Eye, Paperclip, Download, Receipt, CalendarClock, RefreshCcw } from "lucide-react";
 
 const CATEGORY_LABELS: Record<string, string> = {
   terceros: "Terceros / cliente",
@@ -52,6 +59,8 @@ export function ExpenseReviewDialog({ expense, open, onOpenChange, canManage }: 
   const [rejectionReason, setRejectionReason] = useState("");
   const [showReject, setShowReject] = useState(false);
   const [downloadingPath, setDownloadingPath] = useState<string | null>(null);
+  const [paymentDueDate, setPaymentDueDate] = useState("");
+  const [reimbursement, setReimbursement] = useState<"none" | ReimbursementType>("none");
   const updateStatus = useUpdateExpenseStatus();
   const { data: users = [] } = useOrgUsers();
   const attachments = expense ? parseExpenseAttachments(expense) : [];
@@ -84,13 +93,22 @@ export function ExpenseReviewDialog({ expense, open, onOpenChange, canManage }: 
       setShowReject(true);
       return;
     }
+    if (status === "aprobado" && !paymentDueDate) {
+      toast.error("Indica la fecha en que se deberá realizar el pago");
+      return;
+    }
     await updateStatus.mutateAsync({
       id: expense.id,
       status,
       rejection_reason: status === "rechazado" ? rejectionReason : undefined,
+      payment_due_date: status === "aprobado" ? paymentDueDate : undefined,
+      reimbursement_type:
+        status === "aprobado" && reimbursement !== "none" ? reimbursement : null,
     });
     setShowReject(false);
     setRejectionReason("");
+    setPaymentDueDate("");
+    setReimbursement("none");
     onOpenChange(false);
   };
 
@@ -167,6 +185,32 @@ export function ExpenseReviewDialog({ expense, open, onOpenChange, canManage }: 
             </div>
           )}
 
+          {(expense.payment_due_date || expense.reimbursement_type) && (
+            <div className="rounded-lg border border-sky-200/60 bg-sky-50/60 p-3 dark:border-sky-900/40 dark:bg-sky-950/20 space-y-1.5">
+              {expense.payment_due_date && (
+                <p className="flex items-center gap-1.5 text-sm">
+                  <CalendarClock className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" />
+                  <span className="text-muted-foreground">Pago programado:</span>{" "}
+                  <span className="font-medium">
+                    {format(new Date(expense.payment_due_date), "dd MMM yyyy", { locale: es })}
+                  </span>
+                </p>
+              )}
+              {expense.reimbursement_type && (
+                <p className="flex items-center gap-1.5 text-sm">
+                  <RefreshCcw className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" />
+                  <span className="text-muted-foreground">Reembolso:</span>{" "}
+                  <span className="font-medium">{REIMBURSEMENT_LABELS[expense.reimbursement_type]}</span>
+                  {expense.reimbursement_status && (
+                    <Badge className="ml-1 border-0 bg-white/70 text-[10px] font-semibold text-sky-700 dark:bg-sky-900/40 dark:text-sky-300">
+                      {expense.reimbursement_status === "completado" ? "Completado" : "Pendiente"}
+                    </Badge>
+                  )}
+                </p>
+              )}
+            </div>
+          )}
+
           {attachments.length > 0 && (
             <div>
               <span className="text-muted-foreground flex items-center gap-1">
@@ -215,7 +259,7 @@ export function ExpenseReviewDialog({ expense, open, onOpenChange, canManage }: 
         </div>
 
         {showReject && (
-          <div className="space-y-2">
+          <div className="space-y-2 px-4 sm:px-5 pb-4 pt-3 border-t">
             <Textarea
               placeholder="Motivo del rechazo..."
               value={rejectionReason}
@@ -238,8 +282,48 @@ export function ExpenseReviewDialog({ expense, open, onOpenChange, canManage }: 
           </div>
         )}
 
+        {canApprove && !showReject && (
+          <div className="px-4 sm:px-5 pb-1 pt-3 border-t space-y-3">
+            <div className="space-y-1.5">
+              <Label className="flex items-center gap-1.5 text-xs">
+                <CalendarClock className="h-3.5 w-3.5" />
+                ¿Qué día se deberá realizar el pago?
+              </Label>
+              <Input
+                type="date"
+                value={paymentDueDate}
+                onChange={(e) => setPaymentDueDate(e.target.value)}
+                className="h-9"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="flex items-center gap-1.5 text-xs">
+                <RefreshCcw className="h-3.5 w-3.5" />
+                ¿Es un reembolso?
+              </Label>
+              <Select
+                value={reimbursement}
+                onValueChange={(v) => setReimbursement(v as "none" | ReimbursementType)}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No es reembolso</SelectItem>
+                  <SelectItem value="cobrar_cliente">{REIMBURSEMENT_LABELS.cobrar_cliente}</SelectItem>
+                  <SelectItem value="reembolsar_trabajador">{REIMBURSEMENT_LABELS.reembolsar_trabajador}</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">
+                Al aprobar se crea una tarea de pago para el responsable de pagos configurado
+                en el panel de administración.
+              </p>
+            </div>
+          </div>
+        )}
+
         {canManage && !showReject && (
-          <div className="flex gap-2 pt-2 border-t">
+          <div className="flex flex-wrap gap-2 px-4 sm:px-5 pb-4 pt-3 border-t">
             {canReview && (
               <Button size="sm" onClick={() => handleAction("en_revision")} disabled={updateStatus.isPending}>
                 <Eye className="h-3.5 w-3.5 mr-1" /> Marcar en revisión
@@ -247,7 +331,11 @@ export function ExpenseReviewDialog({ expense, open, onOpenChange, canManage }: 
             )}
             {canApprove && (
               <>
-                <Button size="sm" onClick={() => handleAction("aprobado")} disabled={updateStatus.isPending}>
+                <Button
+                  size="sm"
+                  onClick={() => handleAction("aprobado")}
+                  disabled={updateStatus.isPending || !paymentDueDate}
+                >
                   <Check className="h-3.5 w-3.5 mr-1" /> Aprobar
                 </Button>
                 <Button size="sm" variant="destructive" onClick={() => handleAction("rechazado")} disabled={updateStatus.isPending}>
