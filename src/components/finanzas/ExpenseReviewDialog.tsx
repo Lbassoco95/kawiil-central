@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog, DialogContent,
 } from "@/components/ui/dialog";
@@ -64,6 +64,15 @@ export function ExpenseReviewDialog({ expense, open, onOpenChange, canManage }: 
   const updateStatus = useUpdateExpenseStatus();
   const { data: users = [] } = useOrgUsers();
   const attachments = expense ? parseExpenseAttachments(expense) : [];
+
+  // Precarga el tipo de reembolso que indicó quien solicitó, para que el
+  // revisor solo lo confirme o ajuste al aprobar.
+  useEffect(() => {
+    if (open && expense) {
+      setReimbursement(expense.reimbursement_type ?? "none");
+      setPaymentDueDate(expense.payment_due_date ?? "");
+    }
+  }, [open, expense]);
 
   if (!expense) return null;
 

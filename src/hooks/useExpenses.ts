@@ -95,6 +95,8 @@ export interface CreateExpenseParams {
   expense_date: string;
   receipt_path?: string | null;
   notes?: string | null;
+  /** Si el gasto es reembolsable y de qué tipo (indicado por quien solicita). */
+  reimbursement_type?: ReimbursementType | null;
   files?: File[];
 }
 
@@ -104,7 +106,7 @@ export function useCreateExpense() {
 
   return useMutation({
     mutationFn: async (params: CreateExpenseParams) => {
-      const { files = [], ...row } = params;
+      const { files = [], reimbursement_type = null, ...row } = params;
       const { data: profile } = await supabase
         .from("profiles")
         .select("organization_id")
@@ -138,6 +140,8 @@ export function useCreateExpense() {
           attachments: uploaded,
           organization_id: orgId,
           requested_by: user!.id,
+          reimbursement_type,
+          reimbursement_status: reimbursement_type ? "pendiente" : null,
         } as any)
         .select()
         .single();
