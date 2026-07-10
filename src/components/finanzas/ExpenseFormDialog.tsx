@@ -19,7 +19,7 @@ import {
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { useClients } from "@/hooks/useClients";
 import { useProjects } from "@/hooks/useProjects";
-import { useCreateExpense, REIMBURSEMENT_LABELS } from "@/hooks/useExpenses";
+import { useCreateExpense } from "@/hooks/useExpenses";
 import { FileDropzone } from "@/components/shared/FileDropzone";
 import { expensesLimits } from "@/lib/fileIntake/limits";
 import {
@@ -38,19 +38,29 @@ const CATEGORY_OPTIONS = [
   { value: "contratacion_externa", label: "Contrataciones externas" },
 ];
 
-const schema = z.object({
-  category: z.string().min(1, "Selecciona una categoría"),
-  amount: z.coerce.number().positive("El monto debe ser mayor a 0"),
-  currency: z.string().default("MXN"),
-  description: z.string().min(1, "La descripción es requerida"),
-  client_id: z.string().optional().or(z.literal("")),
-  project_id: z.string().optional().or(z.literal("")),
-  expense_date: z.string().min(1, "La fecha es requerida"),
-  reimbursement_type: z
-    .enum(["none", "cobrar_cliente", "reembolsar_trabajador"])
-    .default("none"),
-  notes: z.string().optional().or(z.literal("")),
-});
+const schema = z
+  .object({
+    category: z.string().min(1, "Selecciona una categoría"),
+    amount: z.coerce.number().positive("El monto debe ser mayor a 0"),
+    currency: z.string().default("MXN"),
+    description: z.string().min(1, "La descripción es requerida"),
+    client_id: z.string().optional().or(z.literal("")),
+    project_id: z.string().optional().or(z.literal("")),
+    expense_date: z.string().min(1, "La fecha es requerida"),
+    // A cuenta de quién es el gasto (obligatorio): cliente / reembolso al
+    // trabajador / Kawiil (interno).
+    charge_to: z.string().min(1, "Indica a cuenta de quién es el gasto"),
+    notes: z.string().optional().or(z.literal("")),
+  })
+  .superRefine((val, ctx) => {
+    if (val.charge_to === "cliente" && !val.client_id) {
+      ctx.addIssue({
+        path: ["client_id"],
+        code: z.ZodIssueCode.custom,
+        message: "Selecciona el cliente al que se le cobrará",
+      });
+    }
+  });
 
 type FormValues = z.infer<typeof schema>;
 
@@ -113,13 +123,14 @@ export function ExpenseFormDialog({ open, onOpenChange }: Props) {
       client_id: "",
       project_id: "",
       expense_date: new Date().toISOString().slice(0, 10),
-      reimbursement_type: "none",
+      charge_to: "",
       notes: "",
     },
   });
 
   const watchCategory = form.watch("category");
   const watchClient = form.watch("client_id");
+  const watchChargeTo = form.watch("charge_to");
 
   const clientOptions = clients.map((c) => ({ value: c.id, label: c.name }));
   const projectOptions = projects
@@ -184,6 +195,12 @@ Datos del gasto:
   };
 
   const onSubmit = async (values: FormValues) => {
+    const reimbursement_type =
+      values.charge_to === "cliente"
+        ? "cobrar_cliente"
+        : values.charge_to === "reembolsar_trabajador"
+          ? "reembolsar_trabajador"
+          : null;
     await createExpense.mutateAsync({
       category: values.category,
       amount: values.amount,
@@ -192,10 +209,7 @@ Datos del gasto:
       client_id: values.client_id || null,
       project_id: values.project_id || null,
       expense_date: values.expense_date,
-      reimbursement_type:
-        values.reimbursement_type && values.reimbursement_type !== "none"
-          ? values.reimbursement_type
-          : null,
+      reimbursement_type,
       notes: values.notes || null,
       files: pendingFiles,
     });
@@ -348,10 +362,37 @@ Datos del gasto:
 
             <FormField
               control={form.control}
+              name="charge_to"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>¿A cuenta de quién es el gasto? *</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="cliente">A cuenta del cliente (se le cobra)</SelectItem>
+                      <SelectItem value="reembolsar_trabajador">Reembolso a trabajador (lo pagó de su bolsa)</SelectItem>
+                      <SelectItem value="kawiil">A cuenta de Kawiil (gasto interno)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-muted-foreground">
+                    Define quién absorbe el gasto: se le cobra al cliente, se reembolsa a quien
+                    lo pagó, o lo asume el despacho.
+                  </p>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
               name="client_id"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Cliente</FormLabel>
+                  <FormLabel>
+                    Cliente {watchChargeTo === "cliente" && <span className="text-destructive">*</span>}
+                  </FormLabel>
                   <SearchableSelect
                     options={[{ value: "", label: "Ninguno" }, ...clientOptions]}
                     value={field.value || ""}
@@ -375,31 +416,6 @@ Datos del gasto:
                     onValueChange={field.onChange}
                     placeholder="Seleccionar proyecto..."
                   />
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="reimbursement_type"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>¿Es reembolsable?</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="none">No es reembolso</SelectItem>
-                      <SelectItem value="cobrar_cliente">{REIMBURSEMENT_LABELS.cobrar_cliente}</SelectItem>
-                      <SelectItem value="reembolsar_trabajador">{REIMBURSEMENT_LABELS.reembolsar_trabajador}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-[11px] text-muted-foreground">
-                    Marca si el despacho debe cobrarlo al cliente (lo absorbió) o si hay que
-                    reembolsarlo a quien lo pagó. El revisor lo confirma al aprobar.
-                  </p>
                   <FormMessage />
                 </FormItem>
               )}

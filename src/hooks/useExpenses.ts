@@ -203,15 +203,12 @@ export function useUpdateExpenseStatus() {
       status,
       rejection_reason,
       payment_due_date,
-      reimbursement_type,
     }: {
       id: string;
       status: string;
       rejection_reason?: string;
       /** Fecha en que se debe realizar el pago (requerida al aprobar). */
       payment_due_date?: string | null;
-      /** Naturaleza del reembolso; null = no reembolsable. */
-      reimbursement_type?: ReimbursementType | null;
     }) => {
       const now = new Date().toISOString();
       const updates: Record<string, any> = { status };
@@ -233,8 +230,8 @@ export function useUpdateExpenseStatus() {
         updates.approved_by = user!.id;
         updates.approved_at = now;
         updates.payment_due_date = payment_due_date || null;
-        updates.reimbursement_type = reimbursement_type ?? null;
-        updates.reimbursement_status = reimbursement_type ? "pendiente" : null;
+        // El destino del gasto (cliente/reembolso/Kawiil) se define al crear la
+        // solicitud; aquí no se reclasifica.
       } else if (status === "rechazado") {
         updates.approved_by = user!.id;
         updates.approved_at = now;
@@ -278,17 +275,18 @@ export function useUpdateExpenseStatus() {
             : [];
         } catch { /* sin configuración: se crea la tarea sin asignar */ }
 
+        const reimbursementType = (expense as any).reimbursement_type as ReimbursementType | null;
         const title = buildPaymentTaskTitle(
-          reimbursement_type,
+          reimbursementType,
           (expense as any).description,
           (expense as any).amount,
           (expense as any).currency,
         );
         const descParts = [
           `Gasto aprobado (${(expense as any).category}).`,
-          reimbursement_type === "cobrar_cliente"
+          reimbursementType === "cobrar_cliente"
             ? "El cliente debe reembolsar este monto al despacho."
-            : reimbursement_type === "reembolsar_trabajador"
+            : reimbursementType === "reembolsar_trabajador"
               ? "El despacho debe reembolsar este monto al trabajador."
               : null,
         ].filter(Boolean);

@@ -9,13 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import {
   useUpdateExpenseStatus,
   useMarkReimbursementDone,
   Expense,
-  ReimbursementType,
   REIMBURSEMENT_LABELS,
   parseExpenseAttachments,
 } from "@/hooks/useExpenses";
@@ -61,17 +57,14 @@ export function ExpenseReviewDialog({ expense, open, onOpenChange, canManage }: 
   const [showReject, setShowReject] = useState(false);
   const [downloadingPath, setDownloadingPath] = useState<string | null>(null);
   const [paymentDueDate, setPaymentDueDate] = useState("");
-  const [reimbursement, setReimbursement] = useState<"none" | ReimbursementType>("none");
   const updateStatus = useUpdateExpenseStatus();
   const markReimbursement = useMarkReimbursementDone();
   const { data: users = [] } = useOrgUsers();
   const attachments = expense ? parseExpenseAttachments(expense) : [];
 
-  // Precarga el tipo de reembolso que indicó quien solicitó, para que el
-  // revisor solo lo confirme o ajuste al aprobar.
+  // Precarga la fecha de pago si el gasto ya la tenía.
   useEffect(() => {
     if (open && expense) {
-      setReimbursement(expense.reimbursement_type ?? "none");
       setPaymentDueDate(expense.payment_due_date ?? "");
     }
   }, [open, expense]);
@@ -113,13 +106,10 @@ export function ExpenseReviewDialog({ expense, open, onOpenChange, canManage }: 
       status,
       rejection_reason: status === "rechazado" ? rejectionReason : undefined,
       payment_due_date: status === "aprobado" ? paymentDueDate : undefined,
-      reimbursement_type:
-        status === "aprobado" && reimbursement !== "none" ? reimbursement : null,
     });
     setShowReject(false);
     setRejectionReason("");
     setPaymentDueDate("");
-    setReimbursement("none");
     onOpenChange(false);
   };
 
@@ -317,29 +307,15 @@ export function ExpenseReviewDialog({ expense, open, onOpenChange, canManage }: 
                 className="h-9"
               />
             </div>
-            <div className="space-y-1.5">
-              <Label className="flex items-center gap-1.5 text-xs">
-                <RefreshCcw className="h-3.5 w-3.5" />
-                ¿Es un reembolso?
-              </Label>
-              <Select
-                value={reimbursement}
-                onValueChange={(v) => setReimbursement(v as "none" | ReimbursementType)}
-              >
-                <SelectTrigger className="h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No es reembolso</SelectItem>
-                  <SelectItem value="cobrar_cliente">{REIMBURSEMENT_LABELS.cobrar_cliente}</SelectItem>
-                  <SelectItem value="reembolsar_trabajador">{REIMBURSEMENT_LABELS.reembolsar_trabajador}</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-[11px] text-muted-foreground">
-                Al aprobar se crea una tarea de pago para el responsable de pagos configurado
-                en el panel de administración.
-              </p>
-            </div>
+            <p className="text-[11px] text-muted-foreground">
+              {expense.reimbursement_type === "cobrar_cliente"
+                ? "Este gasto se cobra al cliente. "
+                : expense.reimbursement_type === "reembolsar_trabajador"
+                  ? "Este gasto se reembolsa al trabajador. "
+                  : "Gasto a cuenta de Kawiil. "}
+              Al aprobar se crea una tarea de pago para el responsable de pagos configurado
+              en el panel de administración.
+            </p>
           </div>
         )}
 
