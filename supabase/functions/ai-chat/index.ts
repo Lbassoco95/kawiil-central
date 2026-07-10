@@ -1271,6 +1271,28 @@ const anthropicTools = [
       required: ["task_id", "content"],
     },
   },
+  {
+    name: "attach_files_to_task",
+    description:
+      "Adjunta a una tarea los archivos que el usuario subió en ESTE mensaje del chat. " +
+      "Copia cada archivo al almacén de la tarea y quedan visibles en la pestaña «Archivos» de la tarea. " +
+      "ÚSALA cuando el usuario comparta archivos y pida crear/asignar una tarea con ellos, o adjuntarlos a una tarea existente. " +
+      "Si acabas de crear la tarea con create_tasks, usa el `id` devuelto como `task_id`. " +
+      "Solo puede adjuntar archivos presentes en el mensaje actual (no de mensajes anteriores).",
+    input_schema: {
+      type: "object",
+      properties: {
+        task_id: { type: "string", description: "UUID de la tarea (tasks.id) a la que se adjuntarán los archivos." },
+        file_names: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Opcional. Nombres de los adjuntos del mensaje a cargar. Si se omite, se cargan TODOS los archivos adjuntos del mensaje actual.",
+        },
+      },
+      required: ["task_id"],
+    },
+  },
 ];
 
 const TASK_STATUS_AI = ["pendiente", "en_progreso", "en_revision", "completada", "cancelada"] as const;
@@ -1586,6 +1608,66 @@ function getSupabaseServiceRole(): ReturnType<typeof createClient> | null {
   return createClient(url, key);
 }
 
+/**
+ * Anti-duplicado de tareas creadas por la IA. El modelo (o un reintento del cliente) a veces
+ * vuelve a llamar create_tasks con la misma tarea en otra ronda del loop; sin esta guardia la
+ * tarea termina creada dos veces. Reutilizamos una tarea equivalente creada por el mismo usuario,
+ * en la misma organización, con el mismo título (normalizado), proyecto y tarea padre dentro de
+ * una ventana reciente.
+ */
+const AI_TASK_DEDUP_WINDOW_MS = 3 * 60 * 1000; // 3 min
+
+function normalizeTaskTitle(title: unknown): string {
+  return String(title ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+type DedupTaskRow = {
+  id: string;
+  title: string;
+  priority: string;
+  status: string;
+  description: string | null;
+  parent_task_id: string | null;
+};
+
+async function findRecentDuplicateTask(
+  supabase: any,
+  opts: {
+    orgId: string;
+    createdBy: string;
+    title: string;
+    projectId: string | null;
+    parentTaskId: string | null;
+  },
+): Promise<DedupTaskRow | null> {
+  const normTitle = normalizeTaskTitle(opts.title);
+  if (!normTitle) return null;
+  const cutoff = new Date(Date.now() - AI_TASK_DEDUP_WINDOW_MS).toISOString();
+  const { data, error } = await supabase
+    .from("tasks")
+    .select("id, title, priority, status, description, parent_task_id, project_id, created_at")
+    .eq("organization_id", opts.orgId)
+    .eq("created_by", opts.createdBy)
+    .gte("created_at", cutoff)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error || !Array.isArray(data)) return null;
+  const match = data.find((r: any) =>
+    normalizeTaskTitle(r.title) === normTitle &&
+    (opts.projectId ?? null) === (r.project_id ?? null) &&
+    (opts.parentTaskId ?? null) === (r.parent_task_id ?? null)
+  );
+  if (!match) return null;
+  return {
+    id: match.id,
+    title: match.title,
+    priority: match.priority,
+    status: match.status,
+    description: match.description ?? null,
+    parent_task_id: match.parent_task_id ?? null,
+  };
+}
+
 // ─── Tool executor ───
 async function executeTool(
   name: string,
@@ -1594,6 +1676,7 @@ async function executeTool(
   userId: string,
   orgId: string,
   conversationId: string | null = null,
+  chatAttachmentRefs: Array<{ bucket?: string; path: string; name?: string; mime_type?: string }> = [],
 ) {
   switch (name) {
     case "get_my_tasks": {
@@ -2157,7 +2240,15 @@ async function executeTool(
 
       // Create tasks if provided inline
       const taskResults: any[] = [];
+      const seenProjectTasks = new Set<string>();
       for (const task of args.tasks || []) {
+        // Dedup dentro del lote: no insertar dos veces el mismo título en el proyecto recién creado.
+        const projTaskKey = normalizeTaskTitle(task.title);
+        if (projTaskKey && seenProjectTasks.has(projTaskKey)) {
+          taskResults.push({ title: task.title, deduplicated: true });
+          continue;
+        }
+        if (projTaskKey) seenProjectTasks.add(projTaskKey);
         let phaseKey: string | null = null;
         if (task.phase_name) {
           const matched = projectPhases.find((p: any) => p.name.toLowerCase() === task.phase_name.toLowerCase());
@@ -2199,7 +2290,7 @@ async function executeTool(
         success: true,
         project,
         phases: projectPhases,
-        tasks_created: taskResults.filter((r) => !r.error).length,
+        tasks_created: taskResults.filter((r) => !r.error && !r.deduplicated).length,
         tasks: taskResults,
         url: `/proyectos/${project.id}`,
       };
@@ -2207,6 +2298,9 @@ async function executeTool(
 
     case "create_tasks": {
       const results: any[] = [];
+      const projectIdForTasks = args.project_id || null;
+      // Dedup dentro del mismo lote (el modelo a veces repite el título en el array `tasks`).
+      const seenInBatch = new Set<string>();
       for (const task of args.tasks || []) {
         let parentTaskId: string | null =
           typeof task.parent_task_id === "string" && task.parent_task_id.trim()
@@ -2287,6 +2381,25 @@ async function executeTool(
         }
         if (taskAborted) continue;
 
+        // Anti-duplicado: mismo título+proyecto+padre en este lote o creado hace instantes.
+        const dedupKey = `${normalizeTaskTitle(task.title)}|${projectIdForTasks ?? ""}|${parentTaskId ?? ""}`;
+        if (normalizeTaskTitle(task.title) && seenInBatch.has(dedupKey)) {
+          results.push({ title: task.title, deduplicated: true, note: "Tarea idéntica ya incluida en este lote; no se duplicó." });
+          continue;
+        }
+        const existingDup = await findRecentDuplicateTask(supabase, {
+          orgId,
+          createdBy: userId,
+          title: task.title,
+          projectId: projectIdForTasks,
+          parentTaskId,
+        });
+        if (existingDup) {
+          seenInBatch.add(dedupKey);
+          results.push({ ...existingDup, deduplicated: true, note: "Ya existía una tarea idéntica reciente; se reutilizó en vez de duplicarla." });
+          continue;
+        }
+
         const { data, error } = await supabase.from("tasks").insert({
           title: task.title,
           description: task.description || null,
@@ -2333,9 +2446,20 @@ async function executeTool(
           isSubtask,
         });
 
+        seenInBatch.add(dedupKey);
         results.push(data);
       }
-      return { success: true, created: results.filter((r) => !r.error).length, tasks: results };
+      const createdCount = results.filter((r) => !r.error && !r.deduplicated).length;
+      const dedupCount = results.filter((r) => r.deduplicated).length;
+      return {
+        success: true,
+        created: createdCount,
+        deduplicated: dedupCount,
+        tasks: results,
+        ...(dedupCount > 0
+          ? { note: "Algunas tareas ya existían (creadas hace instantes) y se reutilizaron; no vuelvas a crearlas." }
+          : {}),
+      };
     }
 
     case "update_task": {
@@ -2415,6 +2539,111 @@ async function executeTool(
       });
 
       return { success: true, task_id: taskId };
+    }
+
+    case "attach_files_to_task": {
+      const taskId = typeof args.task_id === "string" ? args.task_id.trim() : "";
+      if (!taskId) return { error: "task_id es obligatorio." };
+
+      const refs = Array.isArray(chatAttachmentRefs) ? chatAttachmentRefs.filter((r) => r && typeof r.path === "string") : [];
+      if (refs.length === 0) {
+        return {
+          error:
+            "No hay archivos adjuntos en este mensaje. Pídele al usuario que adjunte los archivos al chat en el mismo mensaje para poder cargarlos a la tarea.",
+        };
+      }
+
+      const svc = getSupabaseServiceRole();
+      if (!svc) return { error: "Configuración de servicio no disponible para cargar archivos." };
+
+      // Validar la tarea y su organización (service-role evita falsos negativos por RLS).
+      const { data: trow, error: tErr } = await svc
+        .from("tasks")
+        .select("id, title, organization_id")
+        .eq("id", taskId)
+        .maybeSingle();
+      if (tErr) return { error: tErr.message };
+      if (!trow) {
+        return { error: "No existe una tarea con ese id. Confirma con get_task_details o get_all_org_tasks (debe ser tasks.id)." };
+      }
+      if (trow.organization_id !== orgId) return { error: "La tarea pertenece a otra organización." };
+
+      // Selección opcional por nombre; si se omite, se cargan todos los adjuntos del mensaje.
+      const wanted = Array.isArray(args.file_names)
+        ? args.file_names
+            .filter((n: unknown) => typeof n === "string" && n.trim())
+            .map((n: string) => n.trim().toLowerCase())
+        : [];
+      const selected = wanted.length
+        ? refs.filter((r) => wanted.includes(String(r.name || "").trim().toLowerCase()))
+        : refs;
+      if (selected.length === 0) {
+        return {
+          error:
+            `Ningún adjunto del mensaje coincide con: ${wanted.join(", ")}. ` +
+            `Adjuntos disponibles: ${refs.map((r) => r.name || r.path).join(", ")}.`,
+        };
+      }
+
+      const attachResults: any[] = [];
+      for (const ref of selected) {
+        const displayName = String(ref.name || ref.path || "archivo");
+        try {
+          const bucket = ref.bucket || "chat-uploads";
+          const bytes = await downloadStorageObject(svc, bucket, ref.path);
+          if (!bytes) {
+            attachResults.push({ name: displayName, error: "No se pudo leer el archivo del chat." });
+            continue;
+          }
+          const safe = (displayName.replace(/[^\w.\-]+/g, "_").slice(0, 180)) || "archivo";
+          const filePath = `tasks/${taskId}/${Date.now()}_${safe}`;
+          const { error: upErr } = await svc.storage.from("documents").upload(filePath, bytes, {
+            contentType: ref.mime_type || "application/octet-stream",
+            upsert: false,
+          });
+          if (upErr) {
+            attachResults.push({ name: displayName, error: `No se pudo copiar al almacén de la tarea: ${upErr.message}` });
+            continue;
+          }
+          const { data: doc, error: insErr } = await svc
+            .from("documents")
+            .insert({
+              name: displayName,
+              file_path: filePath,
+              mime_type: ref.mime_type || null,
+              file_size: bytes.length,
+              task_id: taskId,
+              organization_id: orgId,
+              uploaded_by: userId,
+              source: "supabase",
+              metadata: { attached_via: "kawiil_ai" },
+            })
+            .select("id, name")
+            .single();
+          if (insErr) {
+            attachResults.push({ name: displayName, error: insErr.message });
+            continue;
+          }
+          // Indexación best-effort para búsqueda; no bloquea la respuesta.
+          try {
+            svc.functions.invoke("process-document", { body: { document_id: doc.id } }).catch(() => {});
+          } catch {
+            /* ignore */
+          }
+          attachResults.push({ document_id: doc.id, name: doc.name, task_id: taskId });
+        } catch (e) {
+          attachResults.push({ name: displayName, error: e instanceof Error ? e.message : String(e) });
+        }
+      }
+
+      const attached = attachResults.filter((r) => !r.error).length;
+      return {
+        success: attached > 0,
+        task_id: taskId,
+        task_title: trow.title,
+        attached,
+        documents: attachResults,
+      };
     }
 
     case "suggest_template": {
@@ -2625,6 +2854,8 @@ Los artifacts aparecen en un panel lateral: vista de texto, descarga de DOCX, y 
 - Al crear tareas, asigna prioridades inteligentemente según la urgencia y la naturaleza de la tarea.
 - **Tareas vencidas:** si el usuario quiere reactivar o continuar una tarea con fecha pasada, puedes crear subtareas bajo la misma tarea padre y/o usar **update_task** para nueva \`due_date\` o estatus \`en_progreso\`.
 - **IMPORTANTE:** Cuando crees un proyecto exitosamente, SIEMPRE incluye en tu respuesta el marcador [project:UUID_DEL_PROYECTO|NOMBRE_DEL_PROYECTO|AREA] para que aparezca una tarjeta visual del proyecto en el chat. Ejemplo: [project:abc-123|Contabilidad Grupo Dazon|contabilidad]
+- **NO DUPLIQUES TAREAS.** Llama a **create_tasks UNA sola vez** por cada conjunto de tareas que pida el usuario. Si el \`tool_result\` de create_tasks ya devolvió las tareas con su \`id\`, la creación fue exitosa y definitiva: **no vuelvas a llamar create_tasks** para las mismas tareas, ni "por si acaso" ni para confirmar ni para añadir detalles. Para cambios posteriores usa **update_task**. Si el resultado incluye \`deduplicated\`, significa que esa tarea ya existía y se reutilizó: no intentes crearla de nuevo.
+- **ARCHIVOS → TAREA:** cuando el usuario adjunte archivos y pida una tarea con ellos, primero crea la tarea con **create_tasks** (una sola vez) y luego adjunta los archivos con **attach_files_to_task** usando el \`id\` que devolvió create_tasks. Para adjuntar a una tarea ya existente, usa directamente attach_files_to_task con su \`task_id\`.
 
 ### 5c. Actualización de tareas existentes (no digas que no puedes)
 - **USA update_task** para cambiar una sola tarea: estatus (p. ej. completada), fecha límite (\`due_date\` en YYYY-MM-DD), \`clear_due_date: true\` para quitar vencimiento, prioridad, título, descripción o responsable. Para el responsable usa \`assigned_to\` (UUID de **get_team_members**) o \`assigned_to_email\`; cadena vacía en \`assigned_to\` quita la asignación.
@@ -2902,6 +3133,20 @@ serve(async (req) => {
     const indexedNames = Array.isArray(indexed_attachment_names)
       ? indexed_attachment_names.filter((n: unknown) => typeof n === "string" && n.trim().length > 0)
       : [];
+    const attachNames = Array.isArray(attachmentRefs)
+      ? attachmentRefs
+          .map((a: unknown) => (a && typeof (a as { name?: unknown }).name === "string" ? (a as { name: string }).name : ""))
+          .filter((n: string) => n.trim().length > 0)
+      : [];
+    if (attachNames.length > 0 && !(simple && insightLite)) {
+      systemPrompt +=
+        `\n\n## Archivos adjuntos en ESTE mensaje\n` +
+        `El usuario adjuntó: **${attachNames.join(", ")}**.\n` +
+        `Si pide crear o asignar una tarea con estos archivos, o adjuntarlos a una tarea existente, usa la herramienta **attach_files_to_task** ` +
+        `con el \`task_id\` correspondiente. Si acabas de crear la tarea con create_tasks, usa el \`id\` devuelto por esa herramienta. ` +
+        `Puedes indicar \`file_names\` para elegir cuáles cargar; si lo omites se cargan todos los adjuntos del mensaje. ` +
+        `Solo se pueden adjuntar archivos presentes en este mensaje.\n`;
+    }
     if (indexedNames.length > 0 && !(simple && insightLite)) {
       systemPrompt +=
         `\n\n## PDF(s) del usuario indexados para búsqueda semántica\n` +
@@ -3082,6 +3327,7 @@ serve(async (req) => {
             sseWriter,
             authHeader!,
             conversationIdForTools,
+            Array.isArray(attachmentRefs) ? attachmentRefs : [],
           ),
           new Promise<never>((_, reject) =>
             setTimeout(
@@ -4387,6 +4633,8 @@ function progressMessageForTool(name: string, input: Record<string, unknown> | u
     const short = q.length > 80 ? q.slice(0, 77) + "…" : q;
     return `Buscando en la plataforma: «${short}»`;
   }
+  if (name === "create_tasks") return "Creando tarea(s)…";
+  if (name === "attach_files_to_task") return "Adjuntando archivo(s) a la tarea…";
   return `Ejecutando herramienta: ${name}…`;
 }
 
@@ -4397,6 +4645,7 @@ async function handleClaudeChat(
   sseWriter: LiveSseWriter,
   authHeader: string,
   conversationId: string | null,
+  chatAttachmentRefs: Array<{ bucket?: string; path: string; name?: string; mime_type?: string }> = [],
 ): Promise<void> {
   const lastUserPlainText = getLastUserPlainTextFromOpenAiMessages(userMessages);
   const deliverableIntent = userLastMessageRequestedFileDeliverable(lastUserPlainText);
@@ -4736,7 +4985,7 @@ async function handleClaudeChat(
             "tool",
             progressMessageForTool(tu.name, (tu.input || {}) as Record<string, unknown>),
           );
-          result = await executeTool(tu.name, tu.input || {}, supabase, userId, orgId, conversationId);
+          result = await executeTool(tu.name, tu.input || {}, supabase, userId, orgId, conversationId, chatAttachmentRefs);
           if (result && typeof result === "object" && !Array.isArray(result)) {
             tallyTaskMutationTool(tu.name, result as Record<string, unknown>, taskMutationTally);
           }
