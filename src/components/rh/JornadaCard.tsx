@@ -171,7 +171,35 @@ export function JornadaCard() {
 
         {/* ---- Estado: trabajando ---- */}
         {summary.state === "working" && (
-          <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-4">
+            {/* Cambiar modalidad en curso (dónde estás ahora) */}
+            <div>
+              <p className="mb-2 text-sm font-medium">¿Dónde estás trabajando?</p>
+              <div className="grid grid-cols-3 gap-2">
+                {WORK_MODES.map((mode) => {
+                  const active = (session?.work_mode ?? "office") === mode;
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      disabled={isPending || active}
+                      onClick={() => act({ type: "change_mode", workMode: mode })}
+                      className={cn(
+                        "flex flex-col items-center gap-1 rounded-lg border p-2.5 text-center text-xs transition-colors",
+                        active
+                          ? "border-primary bg-primary/5 ring-1 ring-primary"
+                          : "hover:bg-muted/60",
+                      )}
+                    >
+                      <span className="text-lg">{WORK_MODE_EMOJI[mode]}</span>
+                      <span className="font-medium">{WORK_MODE_LABEL[mode]}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
             {session?.is_additional_shift ? (
               <p className="col-span-2 rounded-md bg-muted/50 px-2 py-1.5 text-center text-xs text-muted-foreground">
                 Turno adicional · solo descansos (sin comida)
@@ -223,6 +251,7 @@ export function JornadaCard() {
                 {new Date(summary.nextBreakAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}
               </p>
             )}
+            </div>
           </div>
         )}
 

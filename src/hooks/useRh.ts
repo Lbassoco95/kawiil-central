@@ -190,6 +190,7 @@ async function captureGeo(workMode: RhWorkMode, offices: RhOfficeLocation[]) {
 
 export type JornadaAction =
   | { type: "check_in"; workMode: RhWorkMode }
+  | { type: "change_mode"; workMode: RhWorkMode }
   | { type: "lunch_start" }
   | { type: "lunch_end" }
   | { type: "break_start" }
@@ -229,8 +230,31 @@ export function useJornada() {
     mutationFn: async (action: JornadaAction) => {
       const orgId = await getMyOrgId(user!.id);
       const workMode =
-        action.type === "check_in" ? action.workMode : session?.work_mode ?? "office";
+        action.type === "check_in" || action.type === "change_mode"
+          ? action.workMode
+          : session?.work_mode ?? "office";
       const geo = await captureGeo(workMode, offices);
+
+      // Cambiar la modalidad en curso (dónde estás) sin abrir un evento nuevo:
+      // actualiza la jornada activa y refleja el estado en Slack al instante.
+      if (action.type === "change_mode") {
+        if (!session?.id) throw new Error("No hay una jornada activa.");
+        const { error } = await db
+          .from("rh_attendance")
+          .update({
+            work_mode: action.workMode,
+            within_geofence: geo.withinGeofence,
+            office_location_id: geo.officeLocationId,
+          })
+          .eq("id", session.id)
+          .eq("user_id", user!.id);
+        if (error) throw error;
+        // Si va en trayecto, ese estado manda; si no, refleja la nueva modalidad.
+        await syncSlackStatus(
+          session.in_transit ? TRANSIT_SLACK_STATUS : WORK_MODE_SLACK_STATUS[action.workMode],
+        );
+        return action.type;
+      }
 
       let attendanceId = session?.id ?? null;
 
@@ -334,7 +358,7 @@ export function useJornada() {
     },
     onSuccess: (type) => {
       invalidate();
-      toast.success(ACTION_TOAST[type]);
+      toast.success(type === "change_mode" ? "Modalidad actualizada" : ACTION_TOAST[type]);
     },
     onError: (e: Error) => toast.error(e.message || "No se pudo registrar el evento"),
   });
