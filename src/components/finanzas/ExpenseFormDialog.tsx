@@ -296,6 +296,67 @@ Datos del gasto:
               )}
             />
 
+            <FormField
+              control={form.control}
+              name="charge_to"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>¿A cuenta de quién es el gasto? *</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="cliente">A cuenta del cliente (se le cobra)</SelectItem>
+                      <SelectItem value="reembolsar_trabajador">Reembolso a trabajador (lo pagó de su bolsa)</SelectItem>
+                      <SelectItem value="kawiil">A cuenta de Kawiil (gasto interno)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-muted-foreground">
+                    Define quién absorbe el gasto: se le cobra al cliente, se reembolsa a quien
+                    lo pagó, o lo asume el despacho.
+                  </p>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="client_id"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>
+                    Cliente {watchChargeTo === "cliente" && <span className="text-destructive">*</span>}
+                  </FormLabel>
+                  <SearchableSelect
+                    options={[{ value: "", label: "Ninguno" }, ...clientOptions]}
+                    value={field.value || ""}
+                    onValueChange={field.onChange}
+                    placeholder="Seleccionar cliente..."
+                  />
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="project_id"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Proyecto</FormLabel>
+                  <SearchableSelect
+                    options={[{ value: "", label: "Ninguno" }, ...projectOptions]}
+                    value={field.value || ""}
+                    onValueChange={field.onChange}
+                    placeholder="Seleccionar proyecto..."
+                  />
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
             <div className="grid grid-cols-2 gap-3">
               <FormField
                 control={form.control}
@@ -355,67 +416,6 @@ Datos del gasto:
                   <FormControl>
                     <Input type="date" {...field} />
                   </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="charge_to"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>¿A cuenta de quién es el gasto? *</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="cliente">A cuenta del cliente (se le cobra)</SelectItem>
-                      <SelectItem value="reembolsar_trabajador">Reembolso a trabajador (lo pagó de su bolsa)</SelectItem>
-                      <SelectItem value="kawiil">A cuenta de Kawiil (gasto interno)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-[11px] text-muted-foreground">
-                    Define quién absorbe el gasto: se le cobra al cliente, se reembolsa a quien
-                    lo pagó, o lo asume el despacho.
-                  </p>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="client_id"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>
-                    Cliente {watchChargeTo === "cliente" && <span className="text-destructive">*</span>}
-                  </FormLabel>
-                  <SearchableSelect
-                    options={[{ value: "", label: "Ninguno" }, ...clientOptions]}
-                    value={field.value || ""}
-                    onValueChange={field.onChange}
-                    placeholder="Seleccionar cliente..."
-                  />
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="project_id"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Proyecto</FormLabel>
-                  <SearchableSelect
-                    options={[{ value: "", label: "Ninguno" }, ...projectOptions]}
-                    value={field.value || ""}
-                    onValueChange={field.onChange}
-                    placeholder="Seleccionar proyecto..."
-                  />
                   <FormMessage />
                 </FormItem>
               )}
