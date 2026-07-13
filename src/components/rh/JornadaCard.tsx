@@ -128,7 +128,7 @@ export function JornadaCard() {
               <p className="mb-2 text-sm font-medium">
                 {summary.state === "done" ? "¿Inicias otra jornada?" : "¿Desde dónde trabajas hoy?"}
               </p>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 {WORK_MODES.map((mode) => {
                   const active = selectedMode === mode;
                   const isPlanned = plannedMode === mode;
@@ -175,7 +175,7 @@ export function JornadaCard() {
             {/* Cambiar modalidad en curso (dónde estás ahora) */}
             <div>
               <p className="mb-2 text-sm font-medium">¿Dónde estás trabajando?</p>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 {WORK_MODES.map((mode) => {
                   const active = (session?.work_mode ?? "office") === mode;
                   return (

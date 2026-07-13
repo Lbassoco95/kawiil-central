@@ -4,9 +4,9 @@
  * (oficina / home office) configurada por los G4 (transformador).
  */
 
-export type RhWorkMode = "office" | "home_office" | "commission";
+export type RhWorkMode = "office" | "home_office" | "client" | "commission";
 
-export const WORK_MODES: RhWorkMode[] = ["office", "home_office", "commission"];
+export const WORK_MODES: RhWorkMode[] = ["office", "home_office", "client", "commission"];
 
 export type RhEmploymentType = "full_time" | "part_time";
 
@@ -127,13 +127,15 @@ export const JORNADA_STATE_LABEL: Record<RhJornadaState, string> = {
 export const WORK_MODE_LABEL: Record<RhWorkMode, string> = {
   office: "Oficina",
   home_office: "Home Office",
-  commission: "De comisión",
+  client: "Con cliente",
+  commission: "Diligencia / juzgado",
 };
 
 export const WORK_MODE_EMOJI: Record<RhWorkMode, string> = {
   office: "🏢",
   home_office: "🏠",
-  commission: "🚶",
+  client: "🤝",
+  commission: "⚖️",
 };
 
 export interface SlackStatus {
@@ -145,7 +147,8 @@ export interface SlackStatus {
 export const WORK_MODE_SLACK_STATUS: Record<RhWorkMode, SlackStatus> = {
   office: { emoji: ":office:", text: "En la oficina" },
   home_office: { emoji: ":house_with_garden:", text: "Home Office" },
-  commission: { emoji: ":walking:", text: "De comisión" },
+  client: { emoji: ":handshake:", text: "Con cliente" },
+  commission: { emoji: ":scales:", text: "En diligencia" },
 };
 
 /** Estado de Slack durante las pausas (comida y descanso). */
