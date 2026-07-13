@@ -15,7 +15,8 @@ type Status = { emoji: string; text: string };
 const WORK_MODE: Record<string, Status> = {
   office: { emoji: ":office:", text: "En la oficina" },
   home_office: { emoji: ":house_with_garden:", text: "Home Office" },
-  commission: { emoji: ":walking:", text: "De comisión" },
+  client: { emoji: ":handshake:", text: "Con cliente" },
+  commission: { emoji: ":scales:", text: "En diligencia" },
 };
 const LUNCH: Status = { emoji: ":knife_fork_plate:", text: "Comiendo" };
 const BREAK: Status = { emoji: ":coffee:", text: "En un descanso" };
