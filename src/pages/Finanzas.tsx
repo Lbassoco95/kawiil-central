@@ -8,7 +8,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Wallet, DollarSign, Clock, CheckCircle, XCircle, Landmark, LayoutDashboard, BarChart3 } from "lucide-react";
+import { Plus, Wallet, DollarSign, Clock, CheckCircle, XCircle, Landmark, LayoutDashboard, BarChart3, HandCoins, RefreshCcw } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useExpenses, Expense } from "@/hooks/useExpenses";
 import { useFinanceAccess } from "@/hooks/useFinanceAccess";
@@ -109,6 +109,17 @@ export default function Finanzas() {
     const approved = expenses.filter((e) => e.status === "aprobado");
     const paid = expenses.filter((e) => e.status === "pagado");
     const rejected = expenses.filter((e) => e.status === "rechazado");
+    // Reembolsos pendientes: gastos aprobados/pagados que aún no se cobran/reembolsan.
+    // Excluye rechazados (su reembolso ya no aplica).
+    const reimbursable = (type: string) =>
+      expenses.filter(
+        (e) =>
+          e.reimbursement_type === type &&
+          e.reimbursement_status === "pendiente" &&
+          e.status !== "rechazado",
+      );
+    const toCollect = reimbursable("cobrar_cliente");
+    const toReimburse = reimbursable("reembolsar_trabajador");
     const sum = (arr: Expense[]) => arr.reduce((s, e) => s + Number(e.amount), 0);
     return {
       pending: sum(pending),
@@ -118,6 +129,10 @@ export default function Finanzas() {
       paid: sum(paid),
       paidCount: paid.length,
       rejected: rejected.length,
+      toCollect: sum(toCollect),
+      toCollectCount: toCollect.length,
+      toReimburse: sum(toReimburse),
+      toReimburseCount: toReimburse.length,
     };
   }, [expenses]);
 
@@ -282,6 +297,33 @@ export default function Finanzas() {
           </p>
         </KpiTile>
       </div>
+
+      {(totals.toCollect > 0 || totals.toReimburse > 0) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <KpiTile
+            title="Por cobrar a clientes"
+            subtitle="Gastos que el despacho absorbió y hay que cobrar al cliente."
+            accentClass="before:bg-amber-500"
+            icon={<HandCoins className="h-4 w-4" />}
+            footer={<p className="text-[11px] text-muted-foreground">{totals.toCollectCount} pendiente{totals.toCollectCount === 1 ? "" : "s"}</p>}
+          >
+            <p className="text-2xl font-semibold tabular-nums tracking-tight text-amber-700 dark:text-amber-400">
+              {fmtMoney(totals.toCollect)}
+            </p>
+          </KpiTile>
+          <KpiTile
+            title="Por reembolsar"
+            subtitle="Gastos que el trabajador pagó y el despacho debe reembolsar."
+            accentClass="before:bg-sky-500"
+            icon={<RefreshCcw className="h-4 w-4" />}
+            footer={<p className="text-[11px] text-muted-foreground">{totals.toReimburseCount} pendiente{totals.toReimburseCount === 1 ? "" : "s"}</p>}
+          >
+            <p className="text-2xl font-semibold tabular-nums tracking-tight text-sky-700 dark:text-sky-400">
+              {fmtMoney(totals.toReimburse)}
+            </p>
+          </KpiTile>
+        </div>
+      )}
 
       <div className="surface-toolbar flex flex-wrap items-center gap-2 p-3 md:p-4">
         <Input
