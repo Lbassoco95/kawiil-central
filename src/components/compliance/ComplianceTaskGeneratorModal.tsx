@@ -24,21 +24,10 @@ import {
   useGenerateComplianceTasks,
   type ComplianceTaskTemplate,
 } from "@/hooks/useCompliance";
-
-const CATEGORY_LABELS: Record<string, string> = {
-  reportes_uif: "Reportes al SAT/UIF",
-  reportes_cnbv: "Reportes a CNBV",
-  reportes_banxico: "Reportes Banxico",
-  reportes_condusef: "Reportes Condusef",
-  fiscal: "Obligaciones SAT/Fiscal",
-  gobierno_corporativo: "Gobierno corporativo",
-  capacitacion: "Capacitación",
-  kyc: "KYC / Expedientes",
-  politicas: "Políticas y manuales",
-  auditoria: "Auditoría",
-  avisos_sat: "Avisos al SAT",
-  conservacion: "Conservación",
-};
+import {
+  COMPLIANCE_CATEGORY_ORDER,
+  complianceCategoryLabel,
+} from "@/lib/compliancePhaseCatalog";
 
 const CATEGORY_ICONS: Partial<Record<string, LucideIcon>> = {
   reportes_banxico: Landmark,
@@ -48,7 +37,7 @@ const CATEGORY_ICONS: Partial<Record<string, LucideIcon>> = {
 };
 
 /** Orden de secciones en el modal (categorías desconocidas al final por nombre). */
-const CATEGORY_SORT_ORDER = Object.keys(CATEGORY_LABELS);
+const CATEGORY_SORT_ORDER = COMPLIANCE_CATEGORY_ORDER;
 
 const PERIODICITY_LABELS: Record<string, string> = {
   mensual: "Mensual",
@@ -164,7 +153,7 @@ export function ComplianceTaskGeneratorModal({
                   {CategoryIcon ? (
                     <CategoryIcon className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
                   ) : null}
-                  {CATEGORY_LABELS[category] || category}
+                  {complianceCategoryLabel(category)}
                 </h4>
                 <div className="space-y-1">
                   {tpls.map((tpl) => (

@@ -13,6 +13,8 @@ import {
   complianceAnchorYmdFromProject,
   shouldIncludeComplianceOccurrence,
 } from "@/lib/complianceDueDates";
+import { hiddenComplianceCategoryKeys } from "@/lib/complianceSections";
+import type { SyncPhase } from "@/lib/projectPhaseSync";
 
 export type { ComplianceTemplateForDueDates } from "@/lib/complianceDueDates";
 export { calculateDueDates };
@@ -297,12 +299,15 @@ export function useGenerateComplianceTasks() {
 
       const { data: projectMeta, error: metaErr } = await supabase
         .from("projects")
-        .select("start_date, created_at, client_id")
+        .select("start_date, created_at, client_id, phases")
         .eq("id", projectId)
         .single();
       if (metaErr) throw metaErr;
 
       const anchorYmd = complianceAnchorYmdFromProject(projectMeta?.start_date, projectMeta?.created_at);
+      const excludedCategories = hiddenComplianceCategoryKeys(
+        (projectMeta?.phases as SyncPhase[] | null) ?? null,
+      );
 
       const cid = projectMeta?.client_id;
       if (cid) {
@@ -320,6 +325,8 @@ export function useGenerateComplianceTasks() {
       const tasksToInsert: any[] = [];
 
       for (const tpl of templates) {
+        // Categorías eliminadas por el usuario («No aplica») no se regeneran.
+        if (excludedCategories.has(tpl.category)) continue;
         const dates = calculateDueDates(tpl, year);
 
         for (const { dueDate, period } of dates) {

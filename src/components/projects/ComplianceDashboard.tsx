@@ -21,6 +21,12 @@ import {
   Layers,
   ArrowUp,
   ArrowDown,
+  Pencil,
+  Trash2,
+  Check,
+  X,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -36,6 +42,9 @@ import { cn } from "@/lib/utils";
 import { projectPhaseColorClass } from "./projectPhaseVisual";
 import { ensureCompliancePhasesOnProject, type SyncPhase } from "@/lib/projectPhaseSync";
 import { complianceCategoryLabel } from "@/lib/compliancePhaseCatalog";
+import { buildComplianceSections } from "@/lib/complianceSections";
+import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
+import { toast } from "sonner";
 import { TaskFormDialog } from "@/components/tasks/TaskFormDialog";
 import { formatComplianceRegDate } from "@/lib/complianceProjectSummary";
 import {
@@ -197,7 +206,10 @@ function CompliancePhaseCard({
   onUpdate,
   onAddTask,
   onMovePhase,
+  onRename,
+  onDelete,
   persistedInProject,
+  hidden,
 }: {
   phase: SyncPhase;
   phaseIndex: number;
@@ -214,13 +226,34 @@ function CompliancePhaseCard({
   onUpdate: () => void;
   onAddTask: (phaseKey: string) => void;
   onMovePhase: (phaseKey: string, direction: "up" | "down") => void;
+  onRename: (phaseKey: string, name: string) => void;
+  onDelete: (phaseKey: string) => void;
   persistedInProject: boolean;
+  /** Sección eliminada por el usuario (visible solo con el toggle «mostrar ocultas»). */
+  hidden?: boolean;
 }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(!hidden);
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState(phase.name);
   const total = tasksOpen.length + tasksClosed.length;
   const completed = tasksOpen.concat(tasksClosed).filter((t) => t.status === "completada").length;
-  const groupPct = total > 0 ? Math.round((completed / total) * 100) : 0;
-  const shellClass = cn("rounded-xl border overflow-hidden", projectPhaseColorClass(phaseIndex));
+  // Denominador sin canceladas: "No aplica" no debe hundir el avance.
+  const countable = tasksOpen
+    .concat(tasksClosed)
+    .filter((t) => t.status !== "cancelada").length;
+  const groupPct = countable > 0 ? Math.round((completed / countable) * 100) : 0;
+  const shellClass = cn(
+    "rounded-xl border overflow-hidden",
+    projectPhaseColorClass(phaseIndex),
+    hidden && "opacity-70",
+  );
+
+  const commitRename = () => {
+    const next = editName.trim();
+    setEditing(false);
+    if (next && next !== phase.name) onRename(phase.key, next);
+    else setEditName(phase.name);
+  };
 
   return (
     <Collapsible open={open} onOpenChange={setOpen} className={shellClass}>
@@ -236,8 +269,55 @@ function CompliancePhaseCard({
         </CollapsibleTrigger>
         <Shield className="h-3.5 w-3.5 text-primary shrink-0" />
         <Layers className="h-3.5 w-3.5 text-muted-foreground/70 shrink-0 hidden sm:block" />
-        <span className="text-sm font-semibold flex-1 min-w-0 truncate">{phase.name}</span>
-        {persistedInProject && persistedOrderIndex >= 0 && (
+        {editing ? (
+          <div className="flex items-center gap-1 flex-1 min-w-0" onClick={(e) => e.stopPropagation()}>
+            <Input
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitRename();
+                if (e.key === "Escape") {
+                  setEditing(false);
+                  setEditName(phase.name);
+                }
+              }}
+              className="h-7 text-sm"
+              autoFocus
+            />
+            <Button size="icon" variant="ghost" className="h-6 w-6" onClick={commitRename}>
+              <Check className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6"
+              onClick={() => {
+                setEditing(false);
+                setEditName(phase.name);
+              }}
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        ) : (
+          <span
+            className="text-sm font-semibold flex-1 min-w-0 truncate cursor-text"
+            title="Doble clic para renombrar"
+            onDoubleClick={(e) => {
+              e.stopPropagation();
+              setEditName(phase.name);
+              setEditing(true);
+            }}
+          >
+            {phase.name}
+          </span>
+        )}
+        {hidden && !editing && (
+          <Badge variant="outline" className="text-[9px] px-1 py-0 shrink-0 text-muted-foreground">
+            Oculta
+          </Badge>
+        )}
+        {!editing && persistedInProject && persistedOrderIndex >= 0 && (
           <div className="flex items-center gap-0.5 shrink-0">
             <Button
               type="button"
@@ -274,20 +354,52 @@ function CompliancePhaseCard({
           <span className="text-[10px] text-muted-foreground w-7 text-right">{groupPct}%</span>
         </div>
         <Badge variant="secondary" className="text-[10px] px-1.5 py-0 shrink-0">
-          {completed}/{total}
+          {completed}/{countable}
         </Badge>
-        <Button
-          type="button"
-          size="icon"
-          variant="outline"
-          className="h-7 w-7 shrink-0"
-          onClick={(e) => {
-            e.stopPropagation();
-            onAddTask(phase.key);
-          }}
-        >
-          <Plus className="h-3.5 w-3.5" />
-        </Button>
+        {!editing && (
+          <>
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7 shrink-0"
+              title="Renombrar sección"
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditName(phase.name);
+                setEditing(true);
+              }}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7 shrink-0 text-destructive/60 hover:text-destructive"
+              title="Eliminar sección (marca sus obligaciones como No aplica)"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(phase.key);
+              }}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              type="button"
+              size="icon"
+              variant="outline"
+              className="h-7 w-7 shrink-0"
+              title="Agregar tarea"
+              onClick={(e) => {
+                e.stopPropagation();
+                onAddTask(phase.key);
+              }}
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </Button>
+          </>
+        )}
       </div>
 
       <CollapsibleContent>
@@ -364,6 +476,11 @@ export function ComplianceDashboard({
   const [generatorOpen, setGeneratorOpen] = useState(false);
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [taskFormPhaseKey, setTaskFormPhaseKey] = useState<string | undefined>();
+  const [showHidden, setShowHidden] = useState(false);
+  const [addingSection, setAddingSection] = useState(false);
+  const [newSectionName, setNewSectionName] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<{ key: string; name: string; openCount: number } | null>(null);
+  const [deletingSection, setDeletingSection] = useState(false);
 
   const hasComplianceConfig = (complianceConfigs || []).length > 0;
   const complianceEntityTypeIds = (complianceConfigs || []).map((c) => c.entity_type_id);
@@ -426,9 +543,24 @@ export function ComplianceDashboard({
     enabled: !!user && !!projectId,
   });
 
-  const refreshTasks = () => {
+  // Invalida TODAS las vistas que leen estas tareas para que los conteros (tab Tareas,
+  // hero, /tareas) y el % del panel no queden desincronizados al completar/cancelar aquí.
+  const refreshTasks = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["compliance-tasks", projectId] });
-  };
+    queryClient.invalidateQueries({ queryKey: ["project-tasks", projectId] });
+    queryClient.invalidateQueries({ queryKey: ["project", projectId] });
+    queryClient.invalidateQueries({ queryKey: ["tasks"] });
+  }, [queryClient, projectId]);
+
+  const persistPhases = useCallback(
+    async (next: SyncPhase[]) => {
+      const { error } = await supabase.from("projects").update({ phases: next } as any).eq("id", projectId);
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["project", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["compliance-dashboard-project", projectId] });
+    },
+    [projectId, queryClient],
+  );
 
   const today = useMemo(() => nowMX(), []);
 
@@ -506,27 +638,107 @@ export function ComplianceDashboard({
     [projectPhases]
   );
 
-  const orderedPhases = useMemo(() => {
-    const base = sortedProjectPhases;
-    const keys = new Set(base.map((p) => p.key));
-    const extras: SyncPhase[] = [];
-    for (const b of tasksByBucket.keys()) {
-      if (!keys.has(b)) {
-        extras.push({
-          key: b,
-          name: complianceCategoryLabel(b),
-          order: 9999 + extras.length,
-        });
-      }
-    }
-    extras.sort((a, b) => a.name.localeCompare(b.name, "es"));
-    return [...base, ...extras];
-  }, [sortedProjectPhases, tasksByBucket]);
+  const taskCountByKey = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const [key, list] of tasksByBucket) m.set(key, list.length);
+    return m;
+  }, [tasksByBucket]);
+
+  const { sections, hiddenOrEmptyCount } = useMemo(
+    () => buildComplianceSections({ phases: projectPhases, taskCountByKey, showHidden }),
+    [projectPhases, taskCountByKey, showHidden],
+  );
+
+  const visibleSections = useMemo(() => sections.filter((s) => s.visible), [sections]);
 
   const openAddTask = useCallback((phaseKey: string) => {
     setTaskFormPhaseKey(phaseKey);
     setShowTaskForm(true);
   }, []);
+
+  const nextPhaseOrder = useCallback(
+    () => projectPhases.reduce((m, p) => Math.max(m, p.order ?? 0), -1) + 1,
+    [projectPhases],
+  );
+
+  const handleRenamePhase = useCallback(
+    async (phaseKey: string, name: string) => {
+      // Si la sección solo venía de la categoría de las tareas, la persistimos al renombrar.
+      const exists = projectPhases.some((p) => p.key === phaseKey);
+      const next = exists
+        ? projectPhases.map((p) => (p.key === phaseKey ? { ...p, name } : p))
+        : [...projectPhases, { key: phaseKey, name, order: nextPhaseOrder() }];
+      try {
+        await persistPhases(next);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "No se pudo renombrar la sección");
+      }
+    },
+    [projectPhases, nextPhaseOrder, persistPhases],
+  );
+
+  const requestDeletePhase = useCallback(
+    (phaseKey: string) => {
+      const list = tasksByBucket.get(phaseKey) || [];
+      const openCount = list.filter((t) => !isTaskClosedStatus(t.status)).length;
+      const name = projectPhases.find((p) => p.key === phaseKey)?.name || complianceCategoryLabel(phaseKey);
+      setDeleteTarget({ key: phaseKey, name, openCount });
+    },
+    [tasksByBucket, projectPhases],
+  );
+
+  const confirmDeletePhase = useCallback(async () => {
+    if (!deleteTarget) return;
+    setDeletingSection(true);
+    try {
+      const phaseKey = deleteTarget.key;
+      // 1) Marcar la fase como oculta (así no reaparece al re-sembrar el catálogo y su
+      //    categoría queda excluida de la regeneración automática).
+      const exists = projectPhases.some((p) => p.key === phaseKey);
+      const next = exists
+        ? projectPhases.map((p) => (p.key === phaseKey ? { ...p, hidden: true } : p))
+        : [
+            ...projectPhases,
+            { key: phaseKey, name: complianceCategoryLabel(phaseKey), order: nextPhaseOrder(), hidden: true },
+          ];
+      await persistPhases(next);
+      // 2) Cancelar («No aplica») las tareas abiertas de la sección para que no regeneren.
+      const openIds = (tasksByBucket.get(phaseKey) || [])
+        .filter((t) => !isTaskClosedStatus(t.status))
+        .map((t) => t.id);
+      if (openIds.length > 0) {
+        const { error } = await supabase
+          .from("tasks")
+          .update({ status: "cancelada" } as any)
+          .in("id", openIds);
+        if (error) throw error;
+      }
+      refreshTasks();
+      toast.success(
+        openIds.length > 0
+          ? `Sección eliminada. ${openIds.length} obligación${openIds.length !== 1 ? "es" : ""} marcada${openIds.length !== 1 ? "s" : ""} como No aplica.`
+          : "Sección eliminada.",
+      );
+      setDeleteTarget(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo eliminar la sección");
+    } finally {
+      setDeletingSection(false);
+    }
+  }, [deleteTarget, projectPhases, nextPhaseOrder, persistPhases, tasksByBucket, refreshTasks]);
+
+  const handleAddSection = useCallback(async () => {
+    const name = newSectionName.trim();
+    if (!name) return;
+    try {
+      const key = `phase_${Date.now()}`;
+      await persistPhases([...projectPhases, { key, name, order: nextPhaseOrder() }]);
+      setNewSectionName("");
+      setAddingSection(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo agregar la sección");
+    }
+  }, [newSectionName, projectPhases, nextPhaseOrder, persistPhases]);
 
   const handleMovePhase = useCallback(
     async (phaseKey: string, direction: "up" | "down") => {
@@ -549,8 +761,10 @@ export function ComplianceDashboard({
     [projectPhases, phaseKeySet, projectId, queryClient]
   );
 
-  const totalTasks = tasks.length;
-  const completedTasks = tasks.filter((t) => t.status === "completada").length;
+  // Canceladas («No aplica») no cuentan ni en total ni en el avance.
+  const countableTasks = tasks.filter((t) => t.status !== "cancelada");
+  const totalTasks = countableTasks.length;
+  const completedTasks = countableTasks.filter((t) => t.status === "completada").length;
   const progressPct = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
   const urgentTasks = tasks.filter((t) => {
     if (t.status === "completada" || t.status === "cancelada" || !t.due_date) return false;
@@ -762,21 +976,75 @@ export function ComplianceDashboard({
         </CardContent>
       </Card>
 
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          {hiddenOrEmptyCount > 0 && (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="text-xs text-muted-foreground gap-1.5"
+              onClick={() => setShowHidden((v) => !v)}
+            >
+              {showHidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+              {showHidden
+                ? "Ocultar secciones vacías u ocultas"
+                : `Mostrar secciones vacías u ocultas (${hiddenOrEmptyCount})`}
+            </Button>
+          )}
+        </div>
+        {addingSection ? (
+          <div className="flex items-center gap-1.5">
+            <Input
+              value={newSectionName}
+              onChange={(e) => setNewSectionName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void handleAddSection();
+                if (e.key === "Escape") {
+                  setAddingSection(false);
+                  setNewSectionName("");
+                }
+              }}
+              placeholder="Nombre de la sección..."
+              className="h-8 text-sm w-56"
+              autoFocus
+            />
+            <Button size="sm" onClick={() => void handleAddSection()} disabled={!newSectionName.trim()}>
+              <Check className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setAddingSection(false);
+                setNewSectionName("");
+              }}
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        ) : (
+          <Button type="button" size="sm" variant="outline" className="text-xs" onClick={() => setAddingSection(true)}>
+            <Plus className="h-3.5 w-3.5 mr-1" /> Agregar sección
+          </Button>
+        )}
+      </div>
+
       <div className="space-y-3">
-        {orderedPhases.map((phase, listIndex) => {
-          const bucketTasks = tasksByBucket.get(phase.key) || [];
+        {visibleSections.map((section, listIndex) => {
+          const bucketTasks = tasksByBucket.get(section.key) || [];
           const tasksOpen = bucketTasks.filter((t) => !isTaskClosedStatus(t.status));
           const tasksClosed = bucketTasks.filter((t) => isTaskClosedStatus(t.status));
-          const persistedInProject = phaseKeySet.has(phase.key);
+          const persistedInProject = section.persisted;
           const persistedOrderIndex = persistedInProject
-            ? sortedProjectPhases.findIndex((p) => p.key === phase.key)
+            ? sortedProjectPhases.findIndex((p) => p.key === section.key)
             : -1;
           const phaseIndex = persistedOrderIndex >= 0 ? persistedOrderIndex : listIndex;
 
           return (
             <CompliancePhaseCard
-              key={phase.key}
-              phase={phase}
+              key={section.key}
+              phase={{ key: section.key, name: section.name, order: section.order }}
               phaseIndex={phaseIndex}
               persistedOrderIndex={persistedOrderIndex}
               persistedOrderCount={sortedProjectPhases.length}
@@ -790,10 +1058,18 @@ export function ComplianceDashboard({
               onUpdate={refreshTasks}
               onAddTask={openAddTask}
               onMovePhase={handleMovePhase}
+              onRename={handleRenamePhase}
+              onDelete={requestDeletePhase}
               persistedInProject={persistedInProject}
+              hidden={section.hidden}
             />
           );
         })}
+        {visibleSections.length === 0 && (
+          <p className="text-sm text-muted-foreground text-center py-8 rounded-xl bg-muted/20">
+            No hay secciones con tareas. Usa «Agregar sección» o «Mostrar secciones vacías u ocultas» para gestionarlas.
+          </p>
+        )}
       </div>
 
       <ComplianceTaskGeneratorModal
@@ -822,6 +1098,21 @@ export function ComplianceDashboard({
         defaultClientId={clientId || undefined}
         defaultArea="cumplimiento"
         defaultPhaseKey={taskFormPhaseKey}
+      />
+
+      <DeleteConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(o) => {
+          if (!o) setDeleteTarget(null);
+        }}
+        title={`¿Eliminar la sección «${deleteTarget?.name ?? ""}»?`}
+        description={
+          deleteTarget && deleteTarget.openCount > 0
+            ? `Se marcarán como «No aplica» (canceladas) sus ${deleteTarget.openCount} obligación${deleteTarget.openCount !== 1 ? "es" : ""} en curso y no se volverán a generar automáticamente. Puedes revertirlo mostrando las secciones ocultas.`
+            : "La sección dejará de mostrarse y su categoría no se regenerará automáticamente. Puedes revertirlo mostrando las secciones ocultas."
+        }
+        onConfirm={confirmDeletePhase}
+        isPending={deletingSection}
       />
     </div>
   );
