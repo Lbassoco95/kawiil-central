@@ -3,6 +3,11 @@
 export const COMPLIANCE_CATEGORY_LABELS: Record<string, string> = {
   reportes_uif: "Reportes al SAT/UIF",
   reportes_cnbv: "Reportes a CNBV",
+  reportes_banxico: "Reportes a Banxico",
+  reportes_condusef: "Reportes a Condusef",
+  fiscal: "Obligaciones fiscales (SAT)",
+  gobierno_corporativo: "Gobierno corporativo",
+  reportes_producto: "Reportes de producto",
   capacitacion: "Capacitación y cultura de cumplimiento",
   kyc: "Gestión de expedientes y KYC",
   politicas: "Políticas y manuales",
@@ -12,8 +17,33 @@ export const COMPLIANCE_CATEGORY_LABELS: Record<string, string> = {
   otros: "Otros",
 };
 
-/** Orden por defecto al sembrar `projects.phases` (sin incluir claves personalizadas). */
+/**
+ * Orden por defecto al sembrar `projects.phases` y al ordenar secciones (incluye
+ * categorías que solo llegan por plantilla/documento para que nunca se muestren en snake_case).
+ */
 export const COMPLIANCE_CATEGORY_ORDER: string[] = [
+  "reportes_uif",
+  "reportes_cnbv",
+  "reportes_banxico",
+  "reportes_condusef",
+  "fiscal",
+  "gobierno_corporativo",
+  "reportes_producto",
+  "capacitacion",
+  "kyc",
+  "politicas",
+  "auditoria",
+  "avisos_sat",
+  "conservacion",
+  "otros",
+];
+
+/**
+ * Categorías que se siembran como fases fijas al abrir un proyecto de cumplimiento.
+ * Es un subconjunto de `COMPLIANCE_CATEGORY_ORDER`: las demás categorías solo aparecen
+ * si una plantilla/documento genera tareas de ese tipo (evita 14 secciones vacías).
+ */
+export const COMPLIANCE_SEED_CATEGORY_ORDER: string[] = [
   "reportes_uif",
   "reportes_cnbv",
   "capacitacion",

@@ -544,6 +544,7 @@ export function useUpdateTask() {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       queryClient.invalidateQueries({ queryKey: ["task"] });
       queryClient.invalidateQueries({ queryKey: ["project-tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["compliance-tasks"] });
       queryClient.invalidateQueries({ queryKey: ["assigned-steps"] });
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       queryClient.invalidateQueries({ queryKey: ["project"] });
@@ -612,6 +613,8 @@ export function useDeleteTask() {
     },
     onSuccess: (_, id) => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["project-tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["compliance-tasks"] });
       queryClient.invalidateQueries({ queryKey: ["assigned-steps"] });
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       queryClient.invalidateQueries({ queryKey: ["project"] });

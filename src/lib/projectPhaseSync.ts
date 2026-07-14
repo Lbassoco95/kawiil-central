@@ -1,8 +1,8 @@
 import { supabase } from "@/integrations/supabase/client";
 import { getMonthName } from "@/hooks/useAccountingPeriods";
-import { COMPLIANCE_CATEGORY_LABELS, COMPLIANCE_CATEGORY_ORDER } from "@/lib/compliancePhaseCatalog";
+import { COMPLIANCE_CATEGORY_LABELS, COMPLIANCE_SEED_CATEGORY_ORDER } from "@/lib/compliancePhaseCatalog";
 
-export type SyncPhase = { key: string; name: string; order: number };
+export type SyncPhase = { key: string; name: string; order: number; hidden?: boolean };
 
 /** `phase_key` en tareas del proyecto para un periodo contable. */
 export function accountingPeriodPhaseKey(periodId: string) {
@@ -66,7 +66,7 @@ export async function ensureGestoriaPhasesOnProject(projectId: string): Promise<
 
 /** Asegura entradas en `projects.phases` por categoría de cumplimiento (alineado con tab Tareas). */
 export async function ensureCompliancePhasesOnProject(projectId: string): Promise<boolean> {
-  const additions = COMPLIANCE_CATEGORY_ORDER.map((key) => ({
+  const additions = COMPLIANCE_SEED_CATEGORY_ORDER.map((key) => ({
     key,
     name: COMPLIANCE_CATEGORY_LABELS[key] || key,
     order: 0,

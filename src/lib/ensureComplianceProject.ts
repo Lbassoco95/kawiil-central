@@ -9,6 +9,8 @@ import {
   complianceAnchorYmdFromProject,
   shouldIncludeComplianceOccurrence,
 } from "@/lib/complianceDueDates";
+import { hiddenComplianceCategoryKeys } from "@/lib/complianceSections";
+import type { SyncPhase } from "@/lib/projectPhaseSync";
 
 type ServiceArea = Database["public"]["Enums"]["service_area"];
 
@@ -64,12 +66,15 @@ async function syncComplianceTasksForTemplates(params: {
 
   const { data: projectMeta, error: metaErr } = await supabase
     .from("projects")
-    .select("start_date, created_at")
+    .select("start_date, created_at, phases")
     .eq("id", projectId)
     .single();
   if (metaErr) throw metaErr;
 
   const anchorYmd = complianceAnchorYmdFromProject(projectMeta?.start_date, projectMeta?.created_at);
+  const excludedCategories = hiddenComplianceCategoryKeys(
+    (projectMeta?.phases as SyncPhase[] | null) ?? null,
+  );
 
   const { error: pruneErr } = await supabase
     .from("tasks")
@@ -122,6 +127,8 @@ async function syncComplianceTasksForTemplates(params: {
   const tasksToInsert: Record<string, unknown>[] = [];
 
   for (const tpl of templates || []) {
+    // Categorías eliminadas por el usuario («No aplica») no se regeneran.
+    if (excludedCategories.has(tpl.category as string)) continue;
     const dates = calculateDueDates(
       {
         periodicity: tpl.periodicity as string,
