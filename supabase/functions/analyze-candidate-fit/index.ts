@@ -40,6 +40,16 @@ function json(body: unknown, status = 200) {
   });
 }
 
+/** Traduce un fallo de la API de Anthropic a un mensaje accionable para el usuario. */
+function anthropicErrorMessage(status: number, body: string): string {
+  const snippet = body.replace(/\s+/g, " ").trim().slice(0, 200);
+  if (status === 401) return "La ANTHROPIC_API_KEY es inválida o falta en Edge Functions (Secrets).";
+  if (status === 404) return `El modelo ${MODEL} no está disponible para esta API key.`;
+  if (status === 429) return "Límite de uso de la IA alcanzado; espera un momento y reintenta.";
+  if (status === 529 || status === 503) return "El servicio de IA está saturado; reintenta en un momento.";
+  return `La IA no pudo procesar el examen (Anthropic ${status}). ${snippet}`;
+}
+
 function mediaTypeFor(path: string): { kind: "document" | "image"; mime: string } {
   const ext = path.split(".").pop()?.toLowerCase() ?? "";
   if (ext === "png") return { kind: "image", mime: "image/png" };
@@ -309,7 +319,7 @@ Adjunto el PDF del examen / psicométrico${cv ? " y el CV" : ""}. Analiza al can
     if (!aiResp.ok) {
       const errText = await aiResp.text();
       console.error("Anthropic error:", aiResp.status, errText.substring(0, 500));
-      return json({ error: "El modelo no pudo procesar el examen. Intenta de nuevo." }, 502);
+      return json({ error: anthropicErrorMessage(aiResp.status, errText) }, 502);
     }
 
     const aiJson = await aiResp.json();
