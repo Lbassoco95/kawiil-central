@@ -129,6 +129,32 @@ export function useCreateGoogleEvent() {
   });
 }
 
+export interface GoogleCalendar {
+  id: string;            // namespace: google:<accountId>:<calId>
+  name: string;
+  hexColor?: string;
+  isDefaultCalendar?: boolean;
+  canEdit?: boolean;
+  _accountId: string;
+}
+
+/** Lista los calendarios de las cuentas Google conectadas (con id namespaced). */
+export function useGoogleCalendars(enabled = true) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["google-calendars"],
+    queryFn: async (): Promise<GoogleCalendar[]> => {
+      const { data, error } = await supabase.functions.invoke("google-api", {
+        body: { action: "calendars" },
+      });
+      if (error) throw error;
+      return (data?.value as GoogleCalendar[]) || [];
+    },
+    enabled: !!user && enabled,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 /** Eventos de calendario de las cuentas Google conectadas (formato normalizado tipo Graph). */
 export function useGoogleCalendarEvents(start?: string, end?: string, enabled = true) {
   const { user } = useAuth();

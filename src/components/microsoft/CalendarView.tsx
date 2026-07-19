@@ -50,7 +50,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { Link } from "react-router-dom";
 import { CalendarKawiilCard } from "@/components/microsoft/CalendarKawiilCard";
 import { CreateTaskFromEventDialog } from "@/components/microsoft/CreateTaskFromEventDialog";
-import { useLinkedAccounts, useGoogleConnection, useGoogleCalendarEvents } from "@/hooks/useLinkedAccounts";
+import { useLinkedAccounts, useGoogleConnection, useGoogleCalendarEvents, useGoogleCalendars } from "@/hooks/useLinkedAccounts";
 import { ColorPickerPopover, paletteColorFor, hexAlpha } from "@/components/microsoft/ColorPickerPopover";
 
 type ViewMode = "day" | "3days" | "week" | "month" | "agenda";
@@ -72,6 +72,23 @@ function calendarAccentColor(calendarId?: string | null, index = 0): string {
   let hash = 0;
   for (let i = 0; i < calendarId.length; i++) hash = (hash + calendarId.charCodeAt(i)) % 2147483647;
   return CALENDAR_ACCENT_COLORS[hash % CALENDAR_ACCENT_COLORS.length];
+}
+
+/** Color estable por cuenta conectada (verde primero, reutiliza el de la cuenta Google;
+ *  evita el teal del calendario principal de Microsoft). */
+const ACCOUNT_COLORS = ["#22c55e", "#f97316", "#a855f7", "#0ea5e9", "#ec4899", "#eab308", "#ef4444", "#8b5cf6"];
+function accountColorFor(accountId?: string | null): string {
+  if (!accountId) return ACCOUNT_COLORS[0];
+  let hash = 0;
+  for (let i = 0; i < accountId.length; i++) hash = (hash + accountId.charCodeAt(i)) % 2147483647;
+  return ACCOUNT_COLORS[hash % ACCOUNT_COLORS.length];
+}
+
+/** Extrae el accountId de un calendarId namespaced de Google (google:<accId>:<calId>). */
+function googleAccountIdFromCalendarId(calendarId?: string | null): string | null {
+  if (!calendarId || !calendarId.startsWith("google:")) return null;
+  const parts = calendarId.split(":");
+  return parts.length >= 2 ? parts[1] : null;
 }
 
 const START_HOUR = 6;
@@ -405,6 +422,7 @@ export function CalendarView({
   const { connect: connectGoogle, isConnecting: googleConnecting, disconnect: disconnectGoogle } = useGoogleConnection();
   const hasGoogle = linkedAccounts.some((a) => a.provider === "google" && a.status === "connected" && a.calendar_enabled);
   const { data: googleEventsData } = useGoogleCalendarEvents(rangeStartISO, rangeEndISO, hasGoogle);
+  const { data: googleCalendars = [] } = useGoogleCalendars(hasGoogle);
 
   const allEvents = useMemo(() => {
     const m365 = Array.isArray(eventsData) ? eventsData : [];
@@ -413,13 +431,18 @@ export function CalendarView({
   }, [eventsData, googleEventsData]);
 
   const events = useMemo(() => {
-    if (activeCategoryFilters.length === 0) return allEvents;
     return allEvents.filter((e: any) => {
-      const cats: string[] = Array.isArray(e.categories) ? e.categories : [];
-      if (cats.length === 0) return false;
-      return cats.some((c) => activeCategoryFilters.includes(c));
+      // Ocultar por calendario (M365 se filtra en el servidor; Google, aquí por calendarId).
+      if (e.calendarId && hiddenCalendarIds.includes(e.calendarId)) return false;
+      // Filtro por categorías activas.
+      if (activeCategoryFilters.length > 0) {
+        const cats: string[] = Array.isArray(e.categories) ? e.categories : [];
+        if (cats.length === 0) return false;
+        return cats.some((c) => activeCategoryFilters.includes(c));
+      }
+      return true;
     });
-  }, [allEvents, activeCategoryFilters]);
+  }, [allEvents, activeCategoryFilters, hiddenCalendarIds]);
   const createEvent = useCreateCalendarEvent();
   const deleteEvent = useDeleteCalendarEvent();
 
@@ -428,16 +451,24 @@ export function CalendarView({
   const calendarById = useMemo(() => {
     const m = new Map<string, { name: string; color: string; hexColor?: string }>();
     calendars.forEach((c, i) => m.set(c.id, { name: c.name, color: calendarAccentColor(c.id, i), hexColor: c.hexColor }));
+    googleCalendars.forEach((c) => m.set(c.id, { name: c.name, color: accountColorFor(c._accountId), hexColor: c.hexColor }));
     return m;
-  }, [calendars]);
+  }, [calendars, googleCalendars]);
   const showCalendarColors = calendars.length > 1 || hasGoogle;
-  // Color de un calendario: 1) override del usuario, 2) color real de Outlook, 3) hash de respaldo.
+  // Color de un calendario: 1) override del usuario, 2) color real (Outlook/Google), 3) hash de respaldo.
   const calendarColorFor = (id?: string | null) => {
     if (!id) return undefined;
     if (calendarColors[id]) return calendarColors[id];
     const cal = calendarById.get(id);
     const hx = cal?.hexColor;
     return (hx && /^#[0-9a-fA-F]{6}$/.test(hx) ? hx : undefined) || cal?.color || calendarAccentColor(id);
+  };
+  // Acento del evento: si viene de una cuenta añadida (Google), usa el color de la cuenta
+  // para distinguirlo del principal; si no, el color propio del calendario.
+  const eventAccentColor = (event: any): string | undefined => {
+    const accId = googleAccountIdFromCalendarId(event?.calendarId);
+    if (accId) return calendarColors[event.calendarId] || accountColorFor(accId);
+    return calendarColorFor(event?.calendarId);
   };
   // Color de una categoría: override del usuario o color determinista de la paleta.
   const categoryColorFor = (name?: string | null) => categoryColors[name || ""] || paletteColorFor(name);
@@ -446,6 +477,25 @@ export function CalendarView({
   const toggleCalendar = (id: string) => {
     setHiddenCalendarIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
+  // Al quitar una cuenta Google, limpiar sus calendarios ocultos para no dejar basura.
+  const disconnectGoogleAccount = (accountId: string) => {
+    setHiddenCalendarIds((prev) => prev.filter((id) => googleAccountIdFromCalendarId(id) !== accountId));
+    disconnectGoogle(accountId);
+  };
+
+  // Calendarios agrupados por cuenta para el panel (Microsoft principal + cada cuenta Google).
+  const calendarGroups = useMemo(() => {
+    const groups: Array<{ key: string; label: string; color?: string; items: Array<{ id: string; name: string; isDefaultCalendar?: boolean }> }> = [];
+    if (calendars.length > 0) {
+      groups.push({ key: "microsoft", label: "Microsoft 365", items: calendars.map((c) => ({ id: c.id, name: c.name, isDefaultCalendar: c.isDefaultCalendar })) });
+    }
+    const googleAccts = linkedAccounts.filter((a) => a.provider === "google");
+    googleAccts.forEach((acc) => {
+      const items = googleCalendars.filter((c) => c._accountId === acc.id).map((c) => ({ id: c.id, name: c.name, isDefaultCalendar: c.isDefaultCalendar }));
+      if (items.length > 0) groups.push({ key: acc.id, label: acc.email || acc.display_name || "Google", color: accountColorFor(acc.id), items });
+    });
+    return groups;
+  }, [calendars, googleCalendars, linkedAccounts]);
 
   const cachedEvent = useMemo(
     () => (selectedEventId ? events.find((e: any) => e.id === selectedEventId) : null),
@@ -936,7 +986,7 @@ export function CalendarView({
                               const primaryCategory: string | undefined = event.categories?.[0];
                               const catHex = primaryCategory ? categoryColorFor(primaryCategory) : undefined;
                               const meetingUrl = event.onlineMeeting?.joinUrl || event.onlineMeetingUrl;
-                              const accent = showCalendarColors ? calendarColorFor(event.calendarId) : undefined;
+                              const accent = showCalendarColors ? eventAccentColor(event) : undefined;
                               // Contenido adaptativo según la altura del evento (evita recortes ilegibles):
                               // compacto = eventos cortos (~30 min) → solo el título.
                               const compact = height < 46;
@@ -1095,7 +1145,7 @@ export function CalendarView({
                             const time = event._isAllDay ? "Todo el día" : formatMX(event._parsedStart, "HH:mm");
                             const endDt = event.end?.dateTime ? parseEventTime(event.end.dateTime) : null;
                             const endStr = !event._isAllDay && endDt ? `–${formatMX(endDt, "HH:mm")}` : "";
-                            const accent = showCalendarColors ? calendarColorFor(event.calendarId) : undefined;
+                            const accent = showCalendarColors ? eventAccentColor(event) : undefined;
                             const calName = calendarNameFor(event);
                             return (
                               <button key={event.id} type="button"
@@ -1221,14 +1271,14 @@ export function CalendarView({
                 <div className="space-y-1">
                   {linkedAccounts.filter((a) => a.provider === "google").map((acc) => (
                     <div key={acc.id} className="group flex items-center gap-2 rounded-md px-2 py-1 hover:bg-accent">
-                      <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: acc.status === "connected" ? "#22c55e" : "#ef4444" }} />
+                      <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: accountColorFor(acc.id) }} title={acc.status === "connected" ? "Conectada" : "Con error"} />
                       <div className="min-w-0 flex-1">
                         <p className="text-xs text-foreground truncate">{acc.email || acc.display_name || "Google"}</p>
-                        <p className="text-[9px] text-muted-foreground">Google Calendar</p>
+                        <p className="text-[9px] text-muted-foreground">Google Calendar{acc.status !== "connected" ? " · error" : ""}</p>
                       </div>
                       <button
                         type="button"
-                        onClick={() => disconnectGoogle(acc.id)}
+                        onClick={() => disconnectGoogleAccount(acc.id)}
                         className="text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity shrink-0"
                         title="Desconectar"
                       >
@@ -1248,42 +1298,52 @@ export function CalendarView({
                 </div>
               </div>
 
-              {/* Calendarios (cuenta M365 conectada) */}
-              {calendars.length > 1 && (
+              {/* Calendarios agrupados por cuenta (Microsoft + cada cuenta Google) */}
+              {(calendars.length > 1 || googleCalendars.length > 0) && (
                 <div className="order-4 border-t border-border/30 pt-3">
                   <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Calendarios</p>
-                  <div className="space-y-0.5">
-                    {calendars.map((cal) => {
-                      const visible = !hiddenCalendarIds.includes(cal.id);
-                      const color = calendarColorFor(cal.id) || "#3b82f6";
-                      return (
-                        <div
-                          key={cal.id}
-                          className={cn(
-                            "w-full flex items-center gap-2 rounded-md px-2 py-1 transition-colors hover:bg-accent",
-                            !visible && "opacity-40",
-                          )}
-                        >
-                          <ColorPickerPopover
-                            value={color}
-                            onChange={(c) => setCalendarColor(cal.id, c)}
-                            onReset={calendarColors[cal.id] ? () => resetCalendarColor(cal.id) : undefined}
-                            ariaLabel={`Color de ${cal.name}`}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => toggleCalendar(cal.id)}
-                            className="flex-1 min-w-0 flex items-center gap-2 text-left"
-                            title={visible ? "Ocultar calendario" : "Mostrar calendario"}
-                          >
-                            <span className="text-xs text-foreground truncate">{cal.name}</span>
-                            {cal.isDefaultCalendar && (
-                              <span className="ml-auto text-[9px] text-muted-foreground shrink-0">principal</span>
-                            )}
-                          </button>
-                        </div>
-                      );
-                    })}
+                  <div className="space-y-2">
+                    {calendarGroups.map((group) => (
+                      <div key={group.key} className="space-y-0.5">
+                        {calendarGroups.length > 1 && (
+                          <div className="flex items-center gap-1.5 px-2 pb-0.5">
+                            {group.color && <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: group.color }} />}
+                            <span className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground truncate">{group.label}</span>
+                          </div>
+                        )}
+                        {group.items.map((cal) => {
+                          const visible = !hiddenCalendarIds.includes(cal.id);
+                          const color = calendarColorFor(cal.id) || "#3b82f6";
+                          return (
+                            <div
+                              key={cal.id}
+                              className={cn(
+                                "w-full flex items-center gap-2 rounded-md px-2 py-1 transition-colors hover:bg-accent",
+                                !visible && "opacity-40",
+                              )}
+                            >
+                              <ColorPickerPopover
+                                value={color}
+                                onChange={(c) => setCalendarColor(cal.id, c)}
+                                onReset={calendarColors[cal.id] ? () => resetCalendarColor(cal.id) : undefined}
+                                ariaLabel={`Color de ${cal.name}`}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => toggleCalendar(cal.id)}
+                                className="flex-1 min-w-0 flex items-center gap-2 text-left"
+                                title={visible ? "Ocultar calendario" : "Mostrar calendario"}
+                              >
+                                <span className="text-xs text-foreground truncate">{cal.name}</span>
+                                {cal.isDefaultCalendar && (
+                                  <span className="ml-auto text-[9px] text-muted-foreground shrink-0">principal</span>
+                                )}
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
