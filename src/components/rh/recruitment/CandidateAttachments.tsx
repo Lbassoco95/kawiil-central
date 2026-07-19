@@ -3,14 +3,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, Upload, FileText, Trash2, Paperclip, Pencil, Check, X } from "lucide-react";
-import { toast } from "sonner";
 import {
   useCandidateAttachments,
   useUploadCandidateAttachment,
   useUpdateCandidateAttachment,
   useDeleteCandidateAttachment,
-  getCvSignedUrl,
 } from "@/hooks/useRecruitment";
+import { DocumentPreviewDialog, type PreviewTarget } from "./DocumentPreviewDialog";
 import type { Candidate, CandidateAttachment } from "@/lib/recruitment";
 
 function formatSize(bytes: number | null): string {
@@ -28,15 +27,7 @@ export function CandidateAttachments({ candidate, isAdmin }: { candidate: Candid
   const fileRef = useRef<HTMLInputElement>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [label, setLabel] = useState("");
-  const [opening, setOpening] = useState<string | null>(null);
-
-  async function handleOpen(att: CandidateAttachment) {
-    setOpening(att.id);
-    const url = await getCvSignedUrl(att.file_path);
-    setOpening(null);
-    if (url) window.open(url, "_blank", "noopener");
-    else toast.error("No se pudo abrir el archivo.");
-  }
+  const [preview, setPreview] = useState<PreviewTarget | null>(null);
 
   function handleUpload() {
     if (!pendingFile) return;
@@ -69,8 +60,7 @@ export function CandidateAttachments({ candidate, isAdmin }: { candidate: Candid
               key={att.id}
               att={att}
               isAdmin={isAdmin}
-              opening={opening === att.id}
-              onOpen={() => handleOpen(att)}
+              onOpen={() => setPreview({ path: att.file_path, name: att.file_name })}
               onDelete={() => del.mutate({ attachment: att })}
               deleting={del.isPending}
             />
@@ -110,6 +100,8 @@ export function CandidateAttachments({ candidate, isAdmin }: { candidate: Candid
           </div>
         </div>
       )}
+
+      <DocumentPreviewDialog target={preview} open={!!preview} onOpenChange={(o) => !o && setPreview(null)} />
     </div>
   );
 }
@@ -117,14 +109,12 @@ export function CandidateAttachments({ candidate, isAdmin }: { candidate: Candid
 function AttachmentRow({
   att,
   isAdmin,
-  opening,
   onOpen,
   onDelete,
   deleting,
 }: {
   att: CandidateAttachment;
   isAdmin: boolean;
-  opening: boolean;
   onOpen: () => void;
   onDelete: () => void;
   deleting: boolean;
@@ -165,7 +155,6 @@ function AttachmentRow({
 
       {!editing && (
         <>
-          {opening && <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />}
           {isAdmin && (
             <>
               <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" title="Renombrar" onClick={() => setEditing(true)}>
