@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { formatMX } from "@/lib/dateUtils";
 import { useUserRole } from "@/hooks/useUserRole";
 import { HireCandidateDialog } from "./HireCandidateDialog";
+import { CandidateAttachments } from "./CandidateAttachments";
 import {
   ACTIVITY_LABEL,
   EDUCATION_STATUSES,
@@ -54,6 +55,7 @@ import {
   useUploadCandidateCv,
   useUploadCandidateExam,
   useAnalyzeCandidateFit,
+  useExtractCvData,
   getCvSignedUrl,
 } from "@/hooks/useRecruitment";
 
@@ -128,6 +130,7 @@ function CandidateDetailInner({
   const uploadCv = useUploadCandidateCv();
   const uploadExam = useUploadCandidateExam();
   const analyzeFit = useAnalyzeCandidateFit();
+  const extractCv = useExtractCvData();
   const sendEmail = useSendCandidateEmail();
   const fileRef = useRef<HTMLInputElement>(null);
   const examRef = useRef<HTMLInputElement>(null);
@@ -189,6 +192,38 @@ function CandidateDetailInner({
         assessment_url: form.assessment_url.trim() || null,
       },
     });
+  }
+
+  async function handlePrefillFromCv() {
+    try {
+      const d = await extractCv.mutateAsync({ candidate });
+      let filled = 0;
+      const keep = (cur: string, next: string | null) => {
+        if (cur.trim() || !next) return cur;
+        filled++;
+        return next;
+      };
+      setForm((f) => ({
+        ...f,
+        university: keep(f.university, d.university),
+        degree: keep(f.degree, d.degree),
+        education_status: f.education_status || (d.education_status ?? ""),
+        years_experience: keep(f.years_experience, d.years_experience != null ? String(d.years_experience) : null),
+        salary_expectation: keep(f.salary_expectation, d.salary_expectation != null ? String(d.salary_expectation) : null),
+        available_from: keep(f.available_from, d.available_from),
+        skills: keep(f.skills, d.skills.length ? d.skills.join(", ") : null),
+        linkedin_url: keep(f.linkedin_url, d.linkedin_url),
+        portfolio_url: keep(f.portfolio_url, d.portfolio_url),
+      }));
+      if (d.education_status && !form.education_status) filled++;
+      toast.success(
+        filled > 0
+          ? `Se prellenaron ${filled} campo(s) desde el CV. Revisa y guarda la ficha.`
+          : "El CV no aportó campos nuevos (los que tiene ya estaban capturados).",
+      );
+    } catch {
+      /* el hook ya muestra el error */
+    }
   }
 
   async function handleSendEmail() {
@@ -290,6 +325,13 @@ function CandidateDetailInner({
                   ref={fileRef} type="file" accept=".pdf,.doc,.docx,application/pdf" className="hidden"
                   onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadCv.mutate({ candidate, file: f }); e.target.value = ""; }}
                 />
+                {candidate.resume_url && (
+                  <Button size="sm" variant="ghost" onClick={handlePrefillFromCv} disabled={extractCv.isPending}
+                    title="Lee el CV con IA y prellena los campos vacíos de la ficha">
+                    {extractCv.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}
+                    Prellenar desde CV
+                  </Button>
+                )}
               </>
             )}
           </div>
@@ -399,6 +441,8 @@ function CandidateDetailInner({
             <p className="text-[10px] text-muted-foreground">La calificación va en la pestaña Evaluación (rúbrica).</p>
           </div>
 
+          <CandidateAttachments candidate={candidate} isAdmin={isAdmin} />
+
           <div className="flex items-center justify-between gap-2">
             {confirmDelete ? (
               <div className="flex items-center gap-1.5">
@@ -426,7 +470,10 @@ function CandidateDetailInner({
           </div>
           </>
           ) : (
-            <ProfileReadOnly candidate={candidate} />
+            <>
+              <ProfileReadOnly candidate={candidate} />
+              <CandidateAttachments candidate={candidate} isAdmin={false} />
+            </>
           )}
         </TabsContent>
 

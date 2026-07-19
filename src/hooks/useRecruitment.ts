@@ -11,6 +11,7 @@ import {
   type Candidate,
   type CandidateActivity,
   type CandidateAiAnalysis,
+  type CandidateAttachment,
   type CandidateScore,
   type EmailTemplate,
   type RecruitmentCriterion,
@@ -1065,6 +1066,97 @@ export function useUploadCandidateExam() {
   });
 }
 
+/* ---------------- Adjuntos múltiples del candidato ---------------- */
+
+/** Lista los archivos adjuntos del candidato (más recientes primero). */
+export function useCandidateAttachments(candidateId: string | null) {
+  return useQuery({
+    queryKey: ["rh-candidate-attachments", candidateId],
+    enabled: !!candidateId,
+    queryFn: async (): Promise<CandidateAttachment[]> => {
+      const { data, error } = await db
+        .from("rh_candidate_attachments")
+        .select("*")
+        .eq("candidate_id", candidateId)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data as CandidateAttachment[]) ?? [];
+    },
+  });
+}
+
+/** Sube un adjunto del candidato al bucket privado 'cv' y lo registra con un nombre/comentario. */
+export function useUploadCandidateAttachment() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ candidate, file, label }: { candidate: Candidate; file: File; label: string }) => {
+      const ext = file.name.split(".").pop()?.toLowerCase() || "bin";
+      const path = `${candidate.organization_id}/${candidate.id}/adjunto_${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from(CV_BUCKET)
+        .upload(path, file, { upsert: true, contentType: file.type || undefined });
+      if (upErr) throw upErr;
+      const { error } = await db.from("rh_candidate_attachments").insert({
+        organization_id: candidate.organization_id,
+        candidate_id: candidate.id,
+        file_path: path,
+        file_name: file.name,
+        label: label.trim() || null,
+        content_type: file.type || null,
+        size_bytes: file.size,
+        created_by: user!.id,
+      });
+      if (error) throw error;
+      await logActivity(candidate.organization_id, user!.id, candidate.id, "note",
+        `Adjunto cargado: ${label.trim() || file.name}`);
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["rh-candidate-attachments", vars.candidate.id] });
+      qc.invalidateQueries({ queryKey: ["rh-candidate-activities", vars.candidate.id] });
+      toast.success("Adjunto cargado");
+    },
+    onError: (e: Error) => toast.error(e.message || "No se pudo cargar el adjunto"),
+  });
+}
+
+/** Renombra (actualiza el comentario de) un adjunto. */
+export function useUpdateCandidateAttachment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ attachment, label }: { attachment: CandidateAttachment; label: string }) => {
+      const { error } = await db
+        .from("rh_candidate_attachments")
+        .update({ label: label.trim() || null })
+        .eq("id", attachment.id);
+      if (error) throw error;
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["rh-candidate-attachments", vars.attachment.candidate_id] });
+      toast.success("Adjunto actualizado");
+    },
+    onError: (e: Error) => toast.error(e.message || "No se pudo actualizar el adjunto"),
+  });
+}
+
+/** Elimina un adjunto (registro + archivo en storage). */
+export function useDeleteCandidateAttachment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ attachment }: { attachment: CandidateAttachment }) => {
+      const { error } = await db.from("rh_candidate_attachments").delete().eq("id", attachment.id);
+      if (error) throw error;
+      // Best-effort: borra el archivo del bucket (si falla, el registro ya no existe).
+      await supabase.storage.from(CV_BUCKET).remove([attachment.file_path]);
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["rh-candidate-attachments", vars.attachment.candidate_id] });
+      toast.success("Adjunto eliminado");
+    },
+    onError: (e: Error) => toast.error(e.message || "No se pudo eliminar el adjunto"),
+  });
+}
+
 /** Sube el CV de un candidato recién creado (cuando ya tenemos su id). */
 export async function uploadCandidateCvByIds(orgId: string, candidateId: string, file: File): Promise<void> {
   const ext = file.name.split(".").pop()?.toLowerCase() || "pdf";
@@ -1097,6 +1189,37 @@ export function useAnalyzeCandidateFit() {
       toast.success("Análisis de IA completado");
     },
     onError: (e: Error) => toast.error(e.message || "No se pudo analizar el examen"),
+  });
+}
+
+export interface ExtractedCvData {
+  university: string | null;
+  degree: string | null;
+  education_status: string | null;
+  years_experience: number | null;
+  salary_expectation: number | null;
+  available_from: string | null;
+  skills: string[];
+  linkedin_url: string | null;
+  portfolio_url: string | null;
+  phone: string | null;
+  email: string | null;
+}
+
+/** Extrae datos del CV con IA para prellenar la ficha (no escribe en la base). */
+export function useExtractCvData() {
+  return useMutation({
+    mutationFn: async ({ candidate }: { candidate: Candidate }): Promise<ExtractedCvData> => {
+      const { data, error } = await supabase.functions.invoke<{ ok?: boolean; data?: ExtractedCvData; error?: string }>(
+        "extract-cv-data",
+        { body: { candidate_id: candidate.id } },
+      );
+      if (error) throw new Error(error.message || "No se pudo leer el CV");
+      if (data?.error) throw new Error(data.error);
+      if (!data?.data) throw new Error("El CV no devolvió datos.");
+      return data.data;
+    },
+    onError: (e: Error) => toast.error(e.message || "No se pudo prellenar desde el CV"),
   });
 }
 

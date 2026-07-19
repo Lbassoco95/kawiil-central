@@ -127,3 +127,7 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = true
   [functions.analyze-candidate-fit]
     verify_jwt = true
+  [functions.extract-cv-data]
+    verify_jwt = true
+  [functions.update-user-email]
+    verify_jwt = true
