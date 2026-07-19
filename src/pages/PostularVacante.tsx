@@ -337,6 +337,69 @@ export default function PostularVacante() {
           </div>
         </section>
 
+        {/* ══ ÁREAS DE PRÁCTICA ════════════════════════════════════ */}
+        <section className="mt-3 rounded-2xl bg-white p-6 shadow-sm">
+          <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-emerald-600">
+            Áreas de práctica
+          </p>
+          <h2 className="mb-4 text-lg font-bold text-gray-900">
+            Dónde vas a trabajar
+          </h2>
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { icon: "📊", area: "Contable",    desc: "Contabilidad mensual, estados financieros y conciliaciones bancarias." },
+              { icon: "📋", area: "Fiscal",      desc: "Declaraciones, ISR, IVA, CFDI 4.0 y atención SAT." },
+              { icon: "⚖️", area: "Legal",       desc: "Contratos, asambleas, libros corporativos y marcas." },
+              { icon: "👥", area: "Nómina y RH", desc: "Nóminas timbradas, IMSS, INFONAVIT y operación de personal." },
+            ].map(({ icon, area, desc }) => (
+              <div key={area} className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                <p className="mb-1 text-xl">{icon}</p>
+                <p className="text-xs font-semibold text-gray-800">{area}</p>
+                <p className="mt-0.5 text-[11px] leading-relaxed text-gray-500">{desc}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* ══ CÓMO TRABAJAMOS ══════════════════════════════════════ */}
+        <section className="mt-3 rounded-2xl bg-white p-6 shadow-sm">
+          <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-emerald-600">
+            Cómo trabajamos
+          </p>
+          <h2 className="mb-2 text-lg font-bold text-gray-900">
+            Un hub para que te desarrolles
+          </h2>
+          <p className="mb-4 text-sm leading-relaxed text-gray-600">
+            No somos un despacho tradicional. Operamos con metodología ágil —
+            sprints de 2 semanas, tableros visibles y entregables claros. Todo
+            vive en el Hub Kawiil, nuestro sistema interno.
+          </p>
+          <div className="space-y-2">
+            {[
+              {
+                label: "Sprint, no billable hour",
+                desc:  "Ciclos cortos, avances medibles. Sin 'te aviso cuando esté listo'.",
+              },
+              {
+                label: "Hub Kawiil",
+                desc:  "Legal, contable, fiscal y nómina en un solo sistema. Cero Excels sueltos.",
+              },
+              {
+                label: "Cartera propia desde G2",
+                desc:  "A partir del nivel Autónomo, gestionas clientes directamente.",
+              },
+            ].map(({ label, desc }) => (
+              <div key={label} className="flex gap-3 rounded-xl bg-gray-50 px-3 py-2.5">
+                <span className="mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-emerald-500" />
+                <div>
+                  <p className="text-xs font-semibold text-gray-800">{label}</p>
+                  <p className="text-[11px] leading-relaxed text-gray-500">{desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
         {/* ══ SISTEMA DE CRECIMIENTO (sólo si hay grade) ══════════ */}
         {hasGrade && (
           <section className="mt-3 rounded-2xl bg-white p-6 shadow-sm">
