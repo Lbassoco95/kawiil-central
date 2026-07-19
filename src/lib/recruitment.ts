@@ -120,6 +120,19 @@ export const EDUCATION_STATUS_LABEL: Record<EducationStatus, string> = {
 export const EDUCATION_STATUSES: EducationStatus[] = ["titulado", "pasante", "trunco"];
 
 /** Rúbrica (Fase B) */
+export interface CandidateAttachment {
+  id: string;
+  organization_id: string;
+  candidate_id: string;
+  file_path: string;
+  file_name: string;
+  label: string | null;
+  content_type: string | null;
+  size_bytes: number | null;
+  created_by: string | null;
+  created_at: string;
+}
+
 export interface RecruitmentCriterion {
   id: string;
   organization_id: string;
