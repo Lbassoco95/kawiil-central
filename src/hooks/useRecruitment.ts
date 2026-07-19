@@ -1268,9 +1268,15 @@ export function useSetOrgCulturalProfile() {
   });
 }
 
-/** Genera una URL firmada temporal para ver/descargar el CV. */
-export async function getCvSignedUrl(path: string): Promise<string | null> {
-  const { data, error } = await supabase.storage.from(CV_BUCKET).createSignedUrl(path, 60 * 10);
+/** Genera una URL firmada temporal para ver/descargar un archivo del bucket privado.
+ *  Con `download` fuerza la descarga con ese nombre (Content-Disposition attachment). */
+export async function getCvSignedUrl(
+  path: string,
+  opts?: { download?: string },
+): Promise<string | null> {
+  const { data, error } = await supabase.storage
+    .from(CV_BUCKET)
+    .createSignedUrl(path, 60 * 10, opts?.download ? { download: opts.download } : undefined);
   if (error) return null;
   return data?.signedUrl ?? null;
 }

@@ -25,6 +25,7 @@ import { formatMX } from "@/lib/dateUtils";
 import { useUserRole } from "@/hooks/useUserRole";
 import { HireCandidateDialog } from "./HireCandidateDialog";
 import { CandidateAttachments } from "./CandidateAttachments";
+import { DocumentPreviewDialog, type PreviewTarget } from "./DocumentPreviewDialog";
 import {
   ACTIVITY_LABEL,
   EDUCATION_STATUSES,
@@ -56,7 +57,6 @@ import {
   useUploadCandidateExam,
   useAnalyzeCandidateFit,
   useExtractCvData,
-  getCvSignedUrl,
 } from "@/hooks/useRecruitment";
 
 interface Props {
@@ -139,8 +139,8 @@ function CandidateDetailInner({
   const [emailOpen, setEmailOpen] = useState(false);
   const [subject, setSubject] = useState("");
   const [emailBody, setEmailBody] = useState("");
-  const [openingCv, setOpeningCv] = useState(false);
   const [hireOpen, setHireOpen] = useState(false);
+  const [preview, setPreview] = useState<PreviewTarget | null>(null);
 
   // Borrador editable de la ficha (se inicializa una vez por candidato).
   const [form, setForm] = useState({
@@ -240,20 +240,16 @@ function CandidateDetailInner({
     }
   }
 
-  async function handleViewCv() {
+  const baseName = (path: string, fallback: string) => path.split("/").pop() || fallback;
+
+  function handleViewCv() {
     if (!candidate.resume_url) return;
-    setOpeningCv(true);
-    const url = await getCvSignedUrl(candidate.resume_url);
-    setOpeningCv(false);
-    if (url) window.open(url, "_blank", "noopener");
-    else toast.error("No se pudo abrir el CV.");
+    setPreview({ path: candidate.resume_url, name: baseName(candidate.resume_url, "CV.pdf") });
   }
 
-  async function handleViewExam() {
+  function handleViewExam() {
     if (!candidate.assessment_file_path) return;
-    const url = await getCvSignedUrl(candidate.assessment_file_path);
-    if (url) window.open(url, "_blank", "noopener");
-    else toast.error("No se pudo abrir el examen.");
+    setPreview({ path: candidate.assessment_file_path, name: baseName(candidate.assessment_file_path, "Examen.pdf") });
   }
 
   return (
@@ -308,8 +304,8 @@ function CandidateDetailInner({
           {/* CV */}
           <div className="flex items-center gap-2">
             {candidate.resume_url ? (
-              <Button size="sm" variant="outline" onClick={handleViewCv} disabled={openingCv}>
-                {openingCv ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <FileText className="mr-1.5 h-3.5 w-3.5" />}
+              <Button size="sm" variant="outline" onClick={handleViewCv}>
+                <FileText className="mr-1.5 h-3.5 w-3.5" />
                 Ver CV
               </Button>
             ) : (
@@ -702,6 +698,7 @@ function CandidateDetailInner({
       </Tabs>
 
       <HireCandidateDialog candidate={candidate} states={states} defaultGrade={processGrade} open={hireOpen} onOpenChange={setHireOpen} />
+      <DocumentPreviewDialog target={preview} open={!!preview} onOpenChange={(o) => !o && setPreview(null)} />
     </>
   );
 }
