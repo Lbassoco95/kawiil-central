@@ -29,7 +29,14 @@ export function toMXDate(date: string | Date): Date {
  * Reemplaza todos los `format(new Date(x), pattern, { locale: es })` del proyecto.
  */
 export function formatMX(date: string | Date, pattern: string): string {
-  return fnsFormat(toMXDate(date), pattern, { locale: es });
+  if (date == null || !pattern) return "";
+  try {
+    const d = toMXDate(date);
+    if (isNaN(d.getTime())) return "";
+    return fnsFormat(d, pattern, { locale: es });
+  } catch {
+    return "";
+  }
 }
 
 /**

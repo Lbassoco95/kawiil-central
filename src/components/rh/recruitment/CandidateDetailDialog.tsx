@@ -538,7 +538,7 @@ function CandidateDetailInner({
                     <p className="text-sm font-medium">Fit con Kawiil</p>
                     {candidate.ai_analyzed_at && (
                       <p className="text-[10px] text-muted-foreground">
-                        Analizado {formatMX(candidate.ai_analyzed_at)}
+                        Analizado {formatMX(candidate.ai_analyzed_at, "d MMM yyyy, HH:mm")}
                         {ai?.used_manuals ? " · con manuales" : ""}
                       </p>
                     )}
