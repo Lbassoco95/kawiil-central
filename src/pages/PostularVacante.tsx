@@ -309,47 +309,60 @@ export default function PostularVacante() {
           </button>
         </section>
 
-        {/* ══ SOBRE KAWIIL ═════════════════════════════════════════ */}
-        <section className="mt-3 rounded-2xl bg-white p-6 shadow-sm">
-          <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-emerald-600">
-            Sobre Kawiil
-          </p>
-          <p className="text-sm leading-relaxed text-gray-700">
-            Kawiil es un despacho de servicios profesionales con base en CDMX
-            que opera con{" "}
-            <strong>estructura y metodología de empresa de tecnología</strong>.
-            Construimos trayectorias claras para nuestro equipo con niveles
-            definidos de crecimiento.
-          </p>
-          <div className="mt-4 grid grid-cols-3 divide-x overflow-hidden rounded-xl border text-center">
-            {[
-              { val: "10",   label: "Personas"  },
-              { val: "CDMX", label: "Roma Sur"  },
-              { val: "OS",   label: "Kawiil OS" },
-            ].map(({ val, label }) => (
-              <div key={label} className="py-3">
-                <p className="text-base font-bold text-[#38bdf8]">{val}</p>
-                <p className="text-[10px] uppercase tracking-wide text-gray-400">
-                  {label}
-                </p>
-              </div>
-            ))}
+        {/* ══ QUÉ ES KAWIIL ════════════════════════════════════════ */}
+        <section className="mt-3 overflow-hidden rounded-2xl bg-white shadow-sm">
+          <div className="bg-[#0f172a] px-6 py-5">
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-emerald-400">
+              A dónde estás entrando
+            </p>
+            <h2 className="text-xl font-extrabold leading-snug text-white">
+              Un hub de innovación{" "}
+              <span className="text-[#38bdf8]">contable, legal y fiscal</span>
+            </h2>
+          </div>
+          <div className="p-6">
+            <p className="text-sm leading-relaxed text-gray-700">
+              Kawiil no es un despacho tradicional. Operamos el backoffice de
+              empresas en México — legal, contable, fiscal y nómina — como un
+              solo sistema, <strong>con metodología y tecnología de empresa
+              de producto</strong>. Atendemos desde startups y fintechs hasta
+              empresas extranjeras aterrizando en México.
+            </p>
+            <div className="mt-4 grid grid-cols-3 divide-x overflow-hidden rounded-xl border text-center">
+              {[
+                { val: "+100",  label: "Empresas"     },
+                { val: "8",     label: "Países"        },
+                { val: "<2h",   label: "Respuesta"    },
+              ].map(({ val, label }) => (
+                <div key={label} className="py-3">
+                  <p className="text-base font-bold text-[#38bdf8]">{val}</p>
+                  <p className="text-[10px] uppercase tracking-wide text-gray-400">
+                    {label}
+                  </p>
+                </div>
+              ))}
+            </div>
           </div>
         </section>
 
-        {/* ══ ÁREAS DE PRÁCTICA ════════════════════════════════════ */}
+        {/* ══ EL HUB: SERVICIOS Y ÁREAS ════════════════════════════ */}
         <section className="mt-3 rounded-2xl bg-white p-6 shadow-sm">
           <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-emerald-600">
-            Áreas de práctica
+            El hub por dentro
           </p>
-          <h2 className="mb-4 text-lg font-bold text-gray-900">
-            Dónde vas a trabajar
+          <h2 className="mb-2 text-lg font-bold text-gray-900">
+            Cuatro áreas que operamos como una
           </h2>
+          <p className="mb-4 text-sm leading-relaxed text-gray-600">
+            El día a día se compone de cuatro disciplinas coordinadas por el
+            mismo equipo, vivas en el mismo hub. Sin silos: aquí aprendes cómo
+            se conecta todo.
+          </p>
           <div className="grid grid-cols-2 gap-3">
             {[
-              { icon: "📊", area: "Contable",    desc: "Contabilidad mensual, estados financieros y conciliaciones bancarias." },
+              { icon: "📊", area: "Contable",    desc: "Contabilidad mensual, estados financieros NIF y conciliaciones." },
               { icon: "📋", area: "Fiscal",      desc: "Declaraciones, ISR, IVA, CFDI 4.0 y atención SAT." },
-              { icon: "⚖️", area: "Legal",       desc: "Contratos, asambleas, libros corporativos y marcas." },
+              { icon: "⚖️", area: "Legal",       desc: "Contratos, asambleas, libros corporativos y marcas IMPI." },
               { icon: "👥", area: "Nómina y RH", desc: "Nóminas timbradas, IMSS, INFONAVIT y operación de personal." },
             ].map(({ icon, area, desc }) => (
               <div key={area} className="rounded-xl border border-gray-100 bg-gray-50 p-3">
@@ -357,6 +370,27 @@ export default function PostularVacante() {
                 <p className="text-xs font-semibold text-gray-800">{area}</p>
                 <p className="mt-0.5 text-[11px] leading-relaxed text-gray-500">{desc}</p>
               </div>
+            ))}
+          </div>
+
+          <p className="mb-2 mt-5 text-[10px] font-semibold uppercase tracking-widest text-gray-400">
+            Y prácticas especializadas donde puedes crecer
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {[
+              "PLD · Actividades Vulnerables",
+              "Fintech y Sector Financiero",
+              "Comercio Exterior",
+              "Tesorería",
+              "Litigio",
+              "Softlanding de extranjeras",
+            ].map((p) => (
+              <span
+                key={p}
+                className="rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[11px] text-gray-600"
+              >
+                {p}
+              </span>
             ))}
           </div>
         </section>
@@ -367,26 +401,27 @@ export default function PostularVacante() {
             Cómo trabajamos
           </p>
           <h2 className="mb-2 text-lg font-bold text-gray-900">
-            Un hub para que te desarrolles
+            Sprint, no billable hour
           </h2>
           <p className="mb-4 text-sm leading-relaxed text-gray-600">
-            No somos un despacho tradicional. Operamos con metodología ágil —
-            sprints de 2 semanas, tableros visibles y entregables claros. Todo
-            vive en el Hub Kawiil, nuestro sistema interno.
+            Heredamos lo mejor de los equipos de producto y lo aplicamos a
+            servicios profesionales: ciclos de 2 semanas, tableros visibles,
+            entregables claros y retro mensual. Aquí tu trabajo se ve, se mide
+            y se reconoce.
           </p>
           <div className="space-y-2">
             {[
               {
-                label: "Sprint, no billable hour",
-                desc:  "Ciclos cortos, avances medibles. Sin 'te aviso cuando esté listo'.",
+                label: "Todo vive en el Hub Kawiil",
+                desc:  "Legal, contable, fiscal y nómina en un solo sistema con APIs a SAT, IMSS y CNBV. Cero Excels sueltos, cero papel.",
               },
               {
-                label: "Hub Kawiil",
-                desc:  "Legal, contable, fiscal y nómina en un solo sistema. Cero Excels sueltos.",
+                label: "Autonomía real, no promesas",
+                desc:  "Cartera propia de clientes desde G2. Tú gestionas la relación, con el respaldo del equipo y del socio responsable.",
               },
               {
-                label: "Cartera propia desde G2",
-                desc:  "A partir del nivel Autónomo, gestionas clientes directamente.",
+                label: "Tu criterio deja huella",
+                desc:  "En un equipo de 10, lo que construyes se nota: procesos, metodología y clientes llevan tu firma.",
               },
             ].map(({ label, desc }) => (
               <div key={label} className="flex gap-3 rounded-xl bg-gray-50 px-3 py-2.5">
@@ -404,11 +439,16 @@ export default function PostularVacante() {
         {hasGrade && (
           <section className="mt-3 rounded-2xl bg-white p-6 shadow-sm">
             <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-emerald-600">
-              Sistema de crecimiento
+              Tu carrera en Kawiil
             </p>
-            <h2 className="mb-5 text-lg font-bold text-gray-900">
+            <h2 className="mb-2 text-lg font-bold text-gray-900">
               Tu trayectoria {gradeKey} → G4
             </h2>
+            <p className="mb-5 text-sm leading-relaxed text-gray-600">
+              No entras a un puesto: entras a una trayectoria. Cada nivel tiene
+              criterios claros de avance — no depende de antigüedad ni de
+              favores, depende de ti.
+            </p>
 
             {/* Línea de tiempo */}
             <div className="relative mb-5">
