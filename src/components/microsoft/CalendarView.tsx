@@ -1540,6 +1540,24 @@ export function CalendarView({
             </div>
           ) : (cachedEvent || eventDetail) ? (
             <div className="space-y-4 py-2">
+              {(() => {
+                const ev = cachedEvent || eventDetail;
+                const accId = googleAccountIdFromCalendarId(ev?.calendarId);
+                const acc = accId ? linkedAccounts.find((a) => a.id === accId) : null;
+                const provider = accId ? "Google Calendar" : "Microsoft 365";
+                const accountLabel = accId ? (acc?.email || acc?.display_name || "Google") : "Microsoft 365";
+                const calName = calendarNameFor(ev);
+                const dotColor = accId ? accountColorFor(accId) : (calendarColorFor(ev?.calendarId) || "#0099bc");
+                return (
+                  <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2">
+                    <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: dotColor }} />
+                    <div className="min-w-0 text-xs leading-tight">
+                      <p className="font-medium text-foreground truncate">{accountLabel}</p>
+                      <p className="text-muted-foreground truncate">{provider}{calName ? ` · ${calName}` : ""}</p>
+                    </div>
+                  </div>
+                );
+              })()}
               {(eventDetail?.onlineMeeting?.joinUrl || cachedEvent?.onlineMeeting?.joinUrl || cachedEvent?.onlineMeetingUrl) && (
                 <div className="flex justify-end">
                   <Button variant="outline" size="sm" onClick={() => window.open(eventDetail?.onlineMeeting?.joinUrl || cachedEvent?.onlineMeeting?.joinUrl || cachedEvent?.onlineMeetingUrl, "_blank")}>
