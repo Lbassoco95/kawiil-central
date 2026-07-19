@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
 import { useUserRole } from "@/hooks/useUserRole";
+import { functionInvokeUserMessageAsync } from "@/lib/supabaseInvoke";
 import {
   DEFAULT_CRITERIA,
   DEFAULT_STAGES,
@@ -1179,7 +1180,7 @@ export function useAnalyzeCandidateFit() {
         analysis?: CandidateAiAnalysis;
         error?: string;
       }>("analyze-candidate-fit", { body: { candidate_id: candidate.id } });
-      if (error) throw new Error(error.message || "No se pudo analizar el examen");
+      if (error) throw new Error(await functionInvokeUserMessageAsync(data, error));
       if (data?.error) throw new Error(data.error);
       return data?.analysis ?? null;
     },
@@ -1214,7 +1215,7 @@ export function useExtractCvData() {
         "extract-cv-data",
         { body: { candidate_id: candidate.id } },
       );
-      if (error) throw new Error(error.message || "No se pudo leer el CV");
+      if (error) throw new Error(await functionInvokeUserMessageAsync(data, error));
       if (data?.error) throw new Error(data.error);
       if (!data?.data) throw new Error("El CV no devolvió datos.");
       return data.data;
