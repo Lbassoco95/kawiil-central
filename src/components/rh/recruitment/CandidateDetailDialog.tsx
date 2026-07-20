@@ -61,7 +61,12 @@ import {
   useUploadCandidateExam,
   useAnalyzeCandidateFit,
   useExtractCvData,
+  useUploadCandidatePhoto,
+  useExtractCvPhoto,
+  useCandidatePhotoUrls,
 } from "@/hooks/useRecruitment";
+import { renderCvFirstPageToBase64 } from "@/lib/cvImage";
+import { UserAvatar } from "@/components/shared/UserAvatar";
 
 interface Props {
   candidate: Candidate | null;
@@ -136,9 +141,15 @@ function CandidateDetailInner({
   const uploadExam = useUploadCandidateExam();
   const analyzeFit = useAnalyzeCandidateFit();
   const extractCv = useExtractCvData();
+  const uploadPhoto = useUploadCandidatePhoto();
+  const extractPhoto = useExtractCvPhoto();
+  const { data: photoMap = {} } = useCandidatePhotoUrls([candidate]);
+  const photoUrl = candidate.photo_url ? photoMap[candidate.photo_url] ?? null : null;
   const sendEmail = useSendCandidateEmail();
   const fileRef = useRef<HTMLInputElement>(null);
   const examRef = useRef<HTMLInputElement>(null);
+  const photoRef = useRef<HTMLInputElement>(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
 
   const [note, setNote] = useState("");
   const [emailOpen, setEmailOpen] = useState(false);
@@ -237,6 +248,23 @@ function CandidateDetailInner({
     }
   }
 
+  async function handlePhotoFromCv() {
+    if (!candidate.resume_url) return;
+    setPhotoBusy(true);
+    try {
+      const img = await renderCvFirstPageToBase64(candidate.resume_url);
+      if (!img?.base64) {
+        toast.error("No se pudo leer el CV para extraer la foto.");
+        return;
+      }
+      await extractPhoto.mutateAsync({ candidate, imageBase64: img.base64, mime: img.mime });
+    } catch {
+      /* el hook ya muestra el error */
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
+
   async function handleSendEmail() {
     if (!candidate.email) return toast.error("El candidato no tiene correo.");
     if (!subject.trim() || !emailBody.trim()) return toast.error("Asunto y mensaje son obligatorios.");
@@ -267,6 +295,7 @@ function CandidateDetailInner({
     <>
       <DialogHeader>
         <DialogTitle className="flex flex-wrap items-center gap-2">
+          <UserAvatar name={candidate.full_name} avatarUrl={photoUrl} size="md" />
           {candidate.full_name}
           {currentState && (
             <Badge variant="outline" className={cn(STATE_COLOR_STYLE[currentState.color] ?? STATE_COLOR_STYLE.slate)}>
@@ -342,6 +371,28 @@ function CandidateDetailInner({
               </>
             )}
           </div>
+
+          {/* Foto del candidato */}
+          {isAdmin && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-muted-foreground">Foto:</span>
+              <Button size="sm" variant="ghost" onClick={() => photoRef.current?.click()} disabled={uploadPhoto.isPending}>
+                {uploadPhoto.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1.5 h-3.5 w-3.5" />}
+                {candidate.photo_url ? "Cambiar foto" : "Subir foto"}
+              </Button>
+              <input
+                ref={photoRef} type="file" accept="image/*" className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPhoto.mutate({ candidate, file: f }); e.target.value = ""; }}
+              />
+              {candidate.resume_url && (
+                <Button size="sm" variant="ghost" onClick={handlePhotoFromCv} disabled={photoBusy || extractPhoto.isPending}
+                  title="Detecta y recorta la foto del CV con IA">
+                  {photoBusy || extractPhoto.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}
+                  Traer foto del CV
+                </Button>
+              )}
+            </div>
+          )}
 
           {/* Fase y estado */}
           <div className="grid grid-cols-2 gap-3">

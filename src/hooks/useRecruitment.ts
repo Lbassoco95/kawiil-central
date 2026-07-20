@@ -1067,6 +1067,72 @@ export function useUploadCandidateExam() {
   });
 }
 
+/* ---------------- Foto del candidato ---------------- */
+
+/** Sube (o reemplaza) la foto del candidato y guarda su ruta. */
+export function useUploadCandidatePhoto() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ candidate, file }: { candidate: Candidate; file: File }) => {
+      const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+      const path = `${candidate.organization_id}/${candidate.id}/foto_${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from(CV_BUCKET)
+        .upload(path, file, { upsert: true, contentType: file.type || undefined });
+      if (upErr) throw upErr;
+      const { error } = await db.from("rh_candidates").update({ photo_url: path }).eq("id", candidate.id);
+      if (error) throw error;
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["rh-candidates", vars.candidate.process_id] });
+      qc.invalidateQueries({ queryKey: ["rh-candidate-photos"] });
+      toast.success("Foto actualizada");
+    },
+    onError: (e: Error) => toast.error(e.message || "No se pudo subir la foto"),
+  });
+}
+
+/** Extrae la foto del CV con IA (el navegador manda la 1ª página ya rasterizada). */
+export function useExtractCvPhoto() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ candidate, imageBase64, mime }: { candidate: Candidate; imageBase64: string; mime: string }) => {
+      const { data, error } = await supabase.functions.invoke<{ ok?: boolean; photo_path?: string; error?: string; message?: string }>(
+        "extract-cv-photo",
+        { body: { candidate_id: candidate.id, image_base64: imageBase64, mime } },
+      );
+      if (error) throw new Error(await functionInvokeUserMessageAsync(data, error));
+      if (data?.error) throw new Error(data.error);
+      if (!data?.photo_path) throw new Error(data?.message || "El CV no tiene una foto reconocible.");
+      return data.photo_path;
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["rh-candidates", vars.candidate.process_id] });
+      qc.invalidateQueries({ queryKey: ["rh-candidate-photos"] });
+      toast.success("Foto tomada del CV");
+    },
+    onError: (e: Error) => toast.error(e.message || "No se pudo extraer la foto del CV"),
+  });
+}
+
+/** URLs firmadas (temporales) para mostrar las fotos de un conjunto de candidatos. */
+export function useCandidatePhotoUrls(candidates: { photo_url: string | null }[]) {
+  const paths = candidates.map((c) => c.photo_url).filter((p): p is string => !!p);
+  const key = paths.slice().sort().join(",");
+  return useQuery({
+    queryKey: ["rh-candidate-photos", key],
+    enabled: paths.length > 0,
+    staleTime: 1000 * 60 * 8,
+    queryFn: async (): Promise<Record<string, string>> => {
+      const { data, error } = await supabase.storage.from(CV_BUCKET).createSignedUrls(paths, 60 * 10);
+      if (error || !data) return {};
+      const map: Record<string, string> = {};
+      for (const d of data) if (d.signedUrl && d.path) map[d.path] = d.signedUrl;
+      return map;
+    },
+  });
+}
+
 /* ---------------- Adjuntos múltiples del candidato ---------------- */
 
 /** Lista los archivos adjuntos del candidato (más recientes primero). */

@@ -135,5 +135,7 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = true
   [functions.extract-cv-data]
     verify_jwt = true
+  [functions.extract-cv-photo]
+    verify_jwt = true
   [functions.update-user-email]
     verify_jwt = true

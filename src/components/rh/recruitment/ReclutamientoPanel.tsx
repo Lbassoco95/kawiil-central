@@ -60,10 +60,12 @@ import {
   useIsRecruiter,
   useIsProcessOwner,
   useLastContacts,
+  useCandidatePhotoUrls,
   uploadCandidateCvByIds,
 } from "@/hooks/useRecruitment";
 import { useCelulas } from "@/hooks/useCatalogs";
 import { useQueryClient } from "@tanstack/react-query";
+import { UserAvatar } from "@/components/shared/UserAvatar";
 import { CandidateDetailDialog } from "./CandidateDetailDialog";
 import { StageManagerDialog } from "./StageManagerDialog";
 import { StateManagerDialog } from "./StateManagerDialog";
@@ -266,6 +268,7 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
   const { data: lastContacts = {} } = useLastContacts(candidates.map((c) => c.id));
+  const { data: photoUrls = {} } = useCandidatePhotoUrls(candidates);
 
   const detailLive = useMemo(
     () => (detail ? candidates.find((c) => c.id === detail.id) ?? null : null),
@@ -433,6 +436,7 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
                     candidate={c}
                     state={c.state_id ? stateById.get(c.state_id) : undefined}
                     lastContact={lastContacts[c.id] ?? null}
+                    photoUrl={c.photo_url ? photoUrls[c.photo_url] ?? null : null}
                     draggable={canManage}
                     onClick={() => setDetail(c)}
                   />
@@ -520,12 +524,14 @@ function DraggableCard({
   candidate,
   state,
   lastContact,
+  photoUrl,
   draggable,
   onClick,
 }: {
   candidate: Candidate;
   state: RecruitmentState | undefined;
   lastContact: string | null;
+  photoUrl: string | null;
   draggable: boolean;
   onClick: () => void;
 }) {
@@ -551,7 +557,8 @@ function DraggableCard({
       <Card className="transition-colors hover:bg-muted/50">
         <CardContent className="space-y-1 p-3">
           <div className="flex items-center justify-between gap-2">
-            <span className="flex min-w-0 items-center gap-1.5 text-sm font-medium">
+            <div className="flex min-w-0 items-center gap-1.5 text-sm font-medium">
+              <UserAvatar name={candidate.full_name} avatarUrl={photoUrl} size="sm" className="shrink-0" />
               {candidate.rating > 0 && (
                 <span
                   className={cn("h-2 w-2 shrink-0 rounded-full", SEMAPHORE_DOT[scoreSemaphore(candidate.rating)])}
@@ -559,7 +566,7 @@ function DraggableCard({
                 />
               )}
               <span className="min-w-0 truncate">{candidate.full_name}</span>
-            </span>
+            </div>
             {state && (
               <Badge variant="outline" className={cn("shrink-0 text-[10px]", STATE_COLOR_STYLE[state.color] ?? STATE_COLOR_STYLE.slate)}>
                 {state.name}
