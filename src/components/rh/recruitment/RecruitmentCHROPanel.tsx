@@ -32,7 +32,15 @@ export function RecruitmentCHROPanel() {
   }, [activities]);
 
   const now = Date.now();
-  const active = useMemo(() => candidates.filter((c) => c.status === "active"), [candidates]);
+  // Solo procesos vigentes: se excluyen vacantes cubiertas/cerradas (sus avances ya no aplican).
+  const activeProcIds = useMemo(
+    () => new Set(processes.filter((p) => p.status !== "filled" && p.status !== "closed").map((p) => p.id)),
+    [processes],
+  );
+  const active = useMemo(
+    () => candidates.filter((c) => c.status === "active" && activeProcIds.has(c.process_id)),
+    [candidates, activeProcIds],
+  );
 
   function touchOf(c: Candidate): number {
     return Math.max(lastTouch.get(c.id) ?? 0, new Date(c.updated_at).getTime(), new Date(c.created_at).getTime());
