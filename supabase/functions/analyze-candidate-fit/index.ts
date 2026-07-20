@@ -211,8 +211,8 @@ Deno.serve(async (req) => {
       return json({ error: "No tienes acceso a este candidato." }, 403);
     }
 
-    if (!cand.assessment_file_path) {
-      return json({ error: "Sube primero el PDF del examen / psicométrico." }, 400);
+    if (!cand.assessment_file_path && !cand.resume_url) {
+      return json({ error: "Sube el CV o el PDF del examen / psicométrico para poder analizar." }, 400);
     }
 
     // Contexto: vacante, organización (perfil cultural) y criterios de la rúbrica.
@@ -235,10 +235,10 @@ Deno.serve(async (req) => {
         ? (org.settings as Record<string, unknown>).rh_cultural_profile
         : null) ?? "";
 
-    // PDF del examen (obligatorio) y CV (opcional) como documentos para Claude.
-    const exam = await downloadAsBase64(admin, cand.assessment_file_path);
-    if (!exam) return json({ error: "No se pudo leer el PDF del examen." }, 502);
+    // Examen y/o CV como documentos para Claude (al menos uno).
+    const exam = cand.assessment_file_path ? await downloadAsBase64(admin, cand.assessment_file_path) : null;
     const cv = cand.resume_url ? await downloadAsBase64(admin, cand.resume_url) : null;
+    if (!exam && !cv) return json({ error: "No se pudo leer el CV ni el examen." }, 502);
 
     // Manuales relevantes por RAG (si hay OPENAI_API_KEY).
     const manuals = await retrieveManuals(
@@ -249,10 +249,15 @@ Deno.serve(async (req) => {
 
     const criteriaList = (criteria ?? []) as Array<{ id: string; name: string; weight: number }>;
 
-    const systemPrompt = `Eres un especialista en reclutamiento y selección para Kawiil. Tu trabajo es evaluar qué tanto un candidato se adapta a Kawiil (cultura y valores) y al puesto específico, a partir de su examen psicométrico y su información.
+    const docsDesc = exam && cv ? "su examen psicométrico y su CV"
+      : exam ? "su examen psicométrico"
+      : "su CV";
+
+    const systemPrompt = `Eres un especialista en reclutamiento y selección para Kawiil. Tu trabajo es evaluar qué tanto un candidato se adapta a Kawiil (cultura y valores) y al puesto específico, a partir de ${docsDesc} y su información.
 
 REGLAS:
-- Sé objetivo y prudente; distingue entre evidencia del examen y suposiciones.
+- Sé objetivo y prudente; distingue entre evidencia de los documentos y suposiciones.
+- Si solo hay CV (sin examen psicométrico), básate en trayectoria, experiencia y competencias; sé más cauto con los rasgos de personalidad/cultura y márcalos como "a validar".
 - El fit_score (0-100) debe reflejar el ajuste combinado con la cultura de Kawiil y los requisitos del puesto.
 - Para suggested_rubric_scores usa EXACTAMENTE los criterion_id provistos en la lista de criterios; asigna 1-5 y una justificación breve. Si no hay criterios, regresa una lista vacía.
 - Las preguntas de entrevista deben atacar dudas o banderas concretas que surjan del análisis.
@@ -282,14 +287,16 @@ Notas: ${cand.notes ?? "n/d"}
 ## CRITERIOS DE LA RÚBRICA (usa estos criterion_id en suggested_rubric_scores)
 ${criteriaList.length ? criteriaList.map((c) => `- ${c.name} (peso ${c.weight}) → criterion_id: ${c.id}`).join("\n") : "(la vacante no tiene criterios configurados)"}
 
-Adjunto el PDF del examen / psicométrico${cv ? " y el CV" : ""}. Analiza al candidato y entrega el resultado con la herramienta save_candidate_fit.`;
+Adjunto ${docsDesc}. Analiza al candidato y entrega el resultado con la herramienta save_candidate_fit.`;
 
     const content: unknown[] = [];
-    content.push(
-      exam.kind === "document"
-        ? { type: "document", source: { type: "base64", media_type: exam.mime, data: exam.base64 } }
-        : { type: "image", source: { type: "base64", media_type: exam.mime, data: exam.base64 } },
-    );
+    if (exam) {
+      content.push(
+        exam.kind === "document"
+          ? { type: "document", source: { type: "base64", media_type: exam.mime, data: exam.base64 } }
+          : { type: "image", source: { type: "base64", media_type: exam.mime, data: exam.base64 } },
+      );
+    }
     if (cv) {
       content.push(
         cv.kind === "document"
@@ -363,7 +370,7 @@ Adjunto el PDF del examen / psicométrico${cv ? " y el CV" : ""}. Analiza al can
       organization_id: cand.organization_id,
       candidate_id: cand.id,
       activity_type: "note",
-      content: `Análisis IA del examen — Fit Kawiil: ${fitScore ?? "n/d"}/100`,
+      content: `Análisis IA (${exam && cv ? "examen + CV" : exam ? "examen" : "CV"}) — Fit Kawiil: ${fitScore ?? "n/d"}/100`,
       metadata: { kind: "ai_fit", fit_score: fitScore, model: MODEL },
       created_by: caller.id,
     });

@@ -621,7 +621,10 @@ function CandidateDetailInner({
                 : score >= 70 ? "text-emerald-600"
                 : score >= 40 ? "text-amber-600"
                 : "text-red-600";
-            const canAnalyze = !!candidate.assessment_file_path;
+            const canAnalyze = !!candidate.assessment_file_path || !!candidate.resume_url;
+            const analyzeSource = candidate.assessment_file_path && candidate.resume_url
+              ? "examen + CV"
+              : candidate.assessment_file_path ? "examen" : "CV";
             return (
               <>
                 <div className="flex items-center justify-between gap-2 rounded-lg border bg-muted/30 px-3 py-2">
@@ -640,9 +643,13 @@ function CandidateDetailInner({
                   </span>
                 </div>
 
-                {!canAnalyze && (
+                {!canAnalyze ? (
                   <p className="rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
-                    Sube el PDF del examen / psicométrico en la pestaña <b>Perfil</b> para poder analizarlo.
+                    Sube el <b>CV</b> o el PDF del <b>examen / psicométrico</b> en la pestaña <b>Perfil</b> para poder analizar.
+                  </p>
+                ) : (
+                  <p className="text-[10px] text-muted-foreground">
+                    Se analizará con: <b>{analyzeSource}</b>.
                   </p>
                 )}
 
