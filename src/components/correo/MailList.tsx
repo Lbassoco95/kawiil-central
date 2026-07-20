@@ -113,6 +113,7 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
     : isLinkedGmail
       ? (linkedGmailQuery.error as (Error & { code?: string }) | null)
       : null;
+  const primaryError = !isLinkedAccount ? (primaryQuery.error as Error | null) : null;
 
   const archiveLinkedOutlook = useArchiveLinkedOutlookEmail();
   const markLinkedOutlookRead = useMarkLinkedOutlookEmailRead();
@@ -419,7 +420,20 @@ const now = useMemo(() => new Date(), []);
             </button>
           </div>
         )}
-        {!isLoading && !linkedError && filtered.length === 0 && (
+        {!isLoading && primaryError && (
+          <div className="flex flex-col items-center justify-center py-20 gap-3 text-center px-6">
+            <span className="text-3xl">⚠️</span>
+            <p className="text-[14px] font-semibold text-foreground">No se pudieron cargar los correos</p>
+            <p className="text-[12.5px] text-muted-foreground max-w-sm break-words">{primaryError.message}</p>
+            <button
+              onClick={() => { void refetch(); }}
+              className="mt-1 h-8 px-4 rounded-full bg-primary text-primary-foreground text-[12px] font-semibold hover:bg-primary/90 transition-colors"
+            >
+              Reintentar
+            </button>
+          </div>
+        )}
+        {!isLoading && !linkedError && !primaryError && filtered.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 gap-3 text-center px-6">
             {readFilter === "sinleer" ? (
               <>

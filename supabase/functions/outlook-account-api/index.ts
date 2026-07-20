@@ -195,7 +195,11 @@ Deno.serve(async (req) => {
       const folder = params?.folder || "inbox";
       const top = Math.min(Number(params?.top) || 25, 100);
       const filterUnread = params?.filterUnread === true;
-      const filterParam = filterUnread ? "&$filter=isRead eq false" : "";
+      // Graph exige que la propiedad del $orderby aparezca PRIMERO en el $filter
+      // (si no, responde 400 InefficientFilter).
+      const filterParam = filterUnread
+        ? "&$filter=receivedDateTime ge 1900-01-01T00:00:00Z and isRead eq false"
+        : "";
 
       if (params?.nextLink && typeof params.nextLink === "string") {
         const link = params.nextLink as string;

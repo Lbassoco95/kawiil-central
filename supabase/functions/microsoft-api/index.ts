@@ -1306,7 +1306,11 @@ Deno.serve(async (req) => {
 
         const skipParam = skip > 0 ? `&$skip=${skip}` : "";
         const filterUnread = params?.filterUnread === true;
-        const filterParam = filterUnread ? "&$filter=isRead eq false" : "";
+        // Graph exige que la propiedad del $orderby aparezca PRIMERO en el $filter
+        // (si no, responde 400 InefficientFilter). De ahí el receivedDateTime ge trivial.
+        const filterParam = filterUnread
+          ? "&$filter=receivedDateTime ge 1900-01-01T00:00:00Z and isRead eq false"
+          : "";
         result = await graphRequest(
           accessToken,
           `/me/mailFolders/${folder}/messages?${select}&$top=${top}&$orderby=receivedDateTime desc&$count=true${skipParam}${filterParam}`,
