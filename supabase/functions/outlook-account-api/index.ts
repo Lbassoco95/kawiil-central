@@ -200,6 +200,8 @@ Deno.serve(async (req) => {
       const filterParam = filterUnread
         ? "&$filter=receivedDateTime ge 1900-01-01T00:00:00Z and isRead eq false"
         : "";
+      // Con $filter, el parser de Graph rechaza `sensitivity` en el $select.
+      const listSelect = filterUnread ? MAIL_SELECT.replace(",sensitivity", "") : MAIL_SELECT;
 
       if (params?.nextLink && typeof params.nextLink === "string") {
         const link = params.nextLink as string;
@@ -233,7 +235,7 @@ Deno.serve(async (req) => {
           }
           continue;
         }
-        const path = `/me/mailFolders/${encodeURIComponent(folder)}/messages?${MAIL_SELECT}&$top=${top}&$orderby=receivedDateTime desc&$count=true${filterParam}`;
+        const path = `/me/mailFolders/${encodeURIComponent(folder)}/messages?${listSelect}&$top=${top}&$orderby=receivedDateTime desc&$count=true${filterParam}`;
         const res = await graphFetch(token, path);
         if (!res.ok) {
           // 401/403 = el token no incluye scopes de Mail (cuenta conectada solo para calendario).

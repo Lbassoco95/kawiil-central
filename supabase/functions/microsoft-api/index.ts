@@ -1311,9 +1311,12 @@ Deno.serve(async (req) => {
         const filterParam = filterUnread
           ? "&$filter=receivedDateTime ge 1900-01-01T00:00:00Z and isRead eq false"
           : "";
+        // Con $filter, el parser de Graph (RequestBroker--ParseUri) rechaza `sensitivity`
+        // en el $select: "Could not find a property named 'sensitivity'". Sin filtro sí la acepta.
+        const listSelect = filterUnread ? select.replace(",sensitivity", "") : select;
         result = await graphRequest(
           accessToken,
-          `/me/mailFolders/${folder}/messages?${select}&$top=${top}&$orderby=receivedDateTime desc&$count=true${skipParam}${filterParam}`,
+          `/me/mailFolders/${folder}/messages?${listSelect}&$top=${top}&$orderby=receivedDateTime desc&$count=true${skipParam}${filterParam}`,
           { headers: GRAPH_MAIL_PREFER_IMMUTABLE },
         );
         break;
