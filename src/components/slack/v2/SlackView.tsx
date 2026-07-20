@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import {
   invokeSlackApi,
   invokeSlackFileUpload,
+  formatSlackFileUploadError,
   withHardTimeout,
   markSlackConversationRead,
   isSlackMarkReadFatal,
@@ -32,8 +33,9 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 import { ChannelSidebar } from "./ChannelSidebar";
 import { MessageArea } from "./MessageArea";
-import { SlackComposerNew } from "./SlackComposerNew";
+import { SlackComposerNew, type SlackComposerHandle } from "./SlackComposerNew";
 import { ThreadPanelNew } from "./ThreadPanelNew";
+import { SlackChatFileDropZone } from "../SlackChatFileDropZone";
 import { KawiilContextPanel } from "./KawiilContextPanel";
 import { TypingIndicator } from "./TypingIndicator";
 import { SlackGroupsOrganizerDialog } from "@/components/slack/SlackGroupsOrganizerDialog";
@@ -73,6 +75,33 @@ interface Props {
   isConnecting?: boolean;
 }
 
+/**
+ * Sube archivos a una conversación (o hilo, si se pasa threadTs). El texto viaja
+ * como comentario inicial del primer archivo. Se envían en secuencia y se revisa
+ * `ok` de cada respuesta de Slack: si alguno falla, lanza un error legible en vez
+ * de fallar en silencio (antes el adjunto "no se enviaba" sin avisar).
+ */
+async function uploadSlackFiles(
+  channel: string,
+  files: File[],
+  text: string,
+  threadTs?: string,
+): Promise<void> {
+  const trimmed = text.trim();
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    const fd = new FormData();
+    fd.append("action", "files.upload");
+    fd.append("channel", channel);
+    fd.append("file", file, file.name);
+    fd.append("filename", file.name);
+    if (threadTs) fd.append("thread_ts", threadTs);
+    if (i === 0 && trimmed) fd.append("initial_comment", trimmed);
+    const res = (await invokeSlackFileUpload(fd)) as { ok?: boolean; error?: string };
+    if (!res.ok) throw new Error(formatSlackFileUploadError(res.error));
+  }
+}
+
 // ─── Componente ──────────────────────────────────────────────
 export function SlackView({ connection, onRefreshConversations, onConnect, isConnecting }: Props) {
   const { user } = useAuth();
@@ -85,6 +114,8 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
   const [threadRootTs, setThreadRootTs] = useState<string | null>(null);
   const [groupsDialogOpen, setGroupsDialogOpen] = useState(false);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+  const composerRef = useRef<SlackComposerHandle>(null);
+  const threadComposerRef = useRef<SlackComposerHandle>(null);
   const [taskMsg, setTaskMsg] = useState<SlackMessage | null>(null);
   // En móvil: "sidebar" | "messages"
   const [mobilePanel, setMobilePanel] = useState<"sidebar" | "messages">("sidebar");
@@ -201,6 +232,59 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
     }
     return s;
   }, [sidebarGroupsRaw]);
+
+  // ─── Alias locales de conversaciones (nombres personalizados) ──
+  const { data: aliasRows = [] } = useQuery({
+    queryKey: ["slack-conv-aliases", user?.id],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("slack_conversation_aliases")
+        .select("channel_id, alias")
+        .eq("user_id", user!.id);
+      if (error) throw error;
+      return (data || []) as { channel_id: string; alias: string }[];
+    },
+    enabled: !!user?.id,
+  });
+
+  const aliasMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const r of aliasRows) if (r.alias?.trim()) m[r.channel_id] = r.alias.trim();
+    return m;
+  }, [aliasRows]);
+
+  const renameMutation = useMutation({
+    mutationFn: async ({ channelId, alias }: { channelId: string; alias: string | null }) => {
+      const clean = (alias ?? "").trim();
+      if (!clean) {
+        const { error } = await (supabase as any)
+          .from("slack_conversation_aliases")
+          .delete()
+          .eq("user_id", user!.id)
+          .eq("channel_id", channelId);
+        if (error) throw error;
+        return;
+      }
+      const { data: prof } = await (supabase as any)
+        .from("profiles")
+        .select("organization_id")
+        .eq("user_id", user!.id)
+        .maybeSingle();
+      if (!prof?.organization_id) throw new Error("No se pudo determinar tu organización.");
+      const { error } = await (supabase as any)
+        .from("slack_conversation_aliases")
+        .upsert(
+          { user_id: user!.id, channel_id: channelId, alias: clean, organization_id: prof.organization_id },
+          { onConflict: "user_id,channel_id" },
+        );
+      if (error) throw error;
+    },
+    onSuccess: (_data, vars) => {
+      void qc.invalidateQueries({ queryKey: ["slack-conv-aliases"] });
+      toast.success(vars.alias?.trim() ? "Nombre actualizado" : "Nombre quitado");
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "No se pudo cambiar el nombre"),
+  });
 
   // ─── Historial de mensajes ───────────────────────────────
   const historyQuery = useInfiniteQuery({
@@ -362,7 +446,7 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
         channel: selectedChannel,
         ts: threadRootTs,
         limit: 200,
-      }, 45_000);
+      }, { timeoutMs: 45_000 });
       return data.messages ?? [];
     },
     enabled: !!selectedChannel && !!threadRootTs,
@@ -379,22 +463,7 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
       if (!selectedChannel) throw new Error("Sin canal seleccionado");
 
       if (files && files.length > 0) {
-        // Upload each file; first file carries the message text as initial_comment
-        await Promise.all(
-          files.map((file, i) => {
-            const fd = new FormData();
-            fd.append("action", "files.upload");
-            fd.append("channel", selectedChannel);
-            fd.append("file", file, file.name);
-            fd.append("filename", file.name);
-            if (i === 0 && text.trim()) fd.append("initial_comment", text.trim());
-            return invokeSlackFileUpload(fd);
-          }),
-        );
-        // Post text-only message if there are multiple files (first file already has comment)
-        if (files.length > 1 && text.trim()) {
-          await invokeSlackApi<{ ok: boolean }>({ action: "chat.postMessage", channel: selectedChannel, text }, 30_000);
-        }
+        await uploadSlackFiles(selectedChannel, files, text);
         return;
       }
 
@@ -402,7 +471,7 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
         action: "chat.postMessage",
         channel: selectedChannel,
         text,
-      }, 30_000);
+      }, { timeoutMs: 30_000 });
       if (!data.ok) throw new Error("No se pudo enviar el mensaje");
     },
     onSuccess: () => {
@@ -415,14 +484,18 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
 
   // ─── Enviar respuesta en hilo ────────────────────────────
   const sendReplyMutation = useMutation({
-    mutationFn: async (text: string) => {
+    mutationFn: async ({ text, files }: { text: string; files?: File[] }) => {
       if (!selectedChannel || !threadRootTs) throw new Error("Sin hilo seleccionado");
+      if (files && files.length > 0) {
+        await uploadSlackFiles(selectedChannel, files, text, threadRootTs);
+        return;
+      }
       const data = await invokeSlackApi<{ ok: boolean }>({
         action: "chat.postMessage",
         channel: selectedChannel,
         text,
         thread_ts: threadRootTs,
-      }, 30_000);
+      }, { timeoutMs: 30_000 });
       if (!data.ok) throw new Error("No se pudo enviar la respuesta");
     },
     onSuccess: () => {
@@ -443,7 +516,7 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
         channel: selectedChannel,
         ts,
         name,
-      }, 15_000);
+      }, { timeoutMs: 15_000 });
     },
     onSuccess: () => {
       void historyQuery.refetch();
@@ -477,6 +550,48 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
 
   const profilesQuery = useSlackUserProfiles(userIds);
   const userMap = profilesQuery.data ?? {};
+
+  // ─── Miembros de grupos (MPIM) para nombrarlos "Leo, Ana, …" ──
+  const mpimIds = useMemo(
+    () => conversations.filter((c) => c.is_mpim).map((c) => c.id).sort(),
+    [conversations],
+  );
+  const { data: mpimMembersByChannel = {} } = useQuery({
+    queryKey: ["slack-mpim-members-v2", mpimIds.join(",")],
+    enabled: mpimIds.length > 0,
+    staleTime: 30 * 60_000,
+    queryFn: async () => {
+      const out: Record<string, string[]> = {};
+      for (const id of mpimIds.slice(0, 30)) {
+        try {
+          const d = await invokeSlackApi<{ ok: boolean; members?: string[] }>(
+            { action: "conversations.members", channel: id },
+            { timeoutMs: 15_000 },
+          );
+          if (d.ok && d.members) out[id] = d.members;
+        } catch { /* best-effort */ }
+      }
+      return out;
+    },
+  });
+
+  /** channel_id → "Leo, Ana, Jesús" (nombres de los otros miembros del grupo). */
+  const mpimNameByChannel = useMemo(() => {
+    const out: Record<string, string> = {};
+    const self = connection.slack_user_id;
+    for (const [chId, members] of Object.entries(mpimMembersByChannel)) {
+      const names = members
+        .filter((sid) => sid !== self)
+        .map((sid) => {
+          const u = userMap[sid];
+          return (u?.display_name || u?.real_name || "").trim();
+        })
+        .filter((n) => n.length > 0);
+      const uniq = [...new Set(names)];
+      if (uniq.length) out[chId] = uniq.join(", ");
+    }
+    return out;
+  }, [mpimMembersByChannel, userMap, connection.slack_user_id]);
 
   // ─── Badges no leídos ───────────────────────────────────
   const unreadBadges = useSlackChannelNotificationBadges(user?.id);
@@ -575,13 +690,17 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
   );
 
   const channelName = useMemo(() => {
+    if (aliasMap[selectedChannel]) return aliasMap[selectedChannel];
     if (!currentConv) return selectedChannel;
     if (currentConv.is_im && currentConv.user) {
       const u = userMap[currentConv.user];
       return u?.display_name || u?.real_name || `@${currentConv.user}`;
     }
+    if (currentConv.is_mpim && mpimNameByChannel[selectedChannel]) {
+      return mpimNameByChannel[selectedChannel];
+    }
     return currentConv.name || selectedChannel;
-  }, [currentConv, selectedChannel, userMap]);
+  }, [currentConv, selectedChannel, userMap, aliasMap, mpimNameByChannel]);
 
   // ─── Nombre del usuario actual (para typing indicator) ─────
   const currentUserName = useMemo(() => {
@@ -639,6 +758,8 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
         onSelectChannel={selectChannel}
         unreadByChannel={unreadBadges}
         userMap={userMap}
+        aliasMap={aliasMap}
+        mpimNameByChannel={mpimNameByChannel}
         onNewMessage={() => {}}
         customGroups={customGroupsVm}
         channelsInCustomGroups={channelsInCustomGroups}
@@ -657,35 +778,48 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
         className="sl-msg-col"
         data-mobile-hidden={isMobile && mobilePanel === "sidebar" ? "true" : undefined}
       >
-        <MessageArea
-          channel={currentConv}
-          channelId={selectedChannel}
-          messages={messages}
-          isLoading={historyQuery.isLoading}
-          hasMore={!!historyQuery.hasNextPage}
-          isFetchingNextPage={historyQuery.isFetchingNextPage}
-          onLoadMore={() => void historyQuery.fetchNextPage()}
-          onOpenThread={(ts) => setThreadRootTs(ts)}
-          userMap={userMap}
-          selfUserId={connection.slack_user_id ?? undefined}
-          onOpenAi={() => {}}
-          onOpenActivity={() => {}}
-          onReact={handleReact}
-          onCreateTask={handleCreateTask}
-          onBack={isMobile ? () => setMobilePanel("sidebar") : undefined}
-        />
-        <TypingIndicator typingUsers={typingUsers} />
-        <SlackComposerNew
-          channelName={channelName}
-          isSending={sendMutation.isPending}
-          onSend={(text, files) => {
-            sendMutation.mutate({ text, files });
-            onStopTyping();
-          }}
-          disabled={!selectedChannel}
-          userMap={userMap}
-          onTyping={onTyping}
-        />
+        <SlackChatFileDropZone
+          className="flex-1 min-h-0"
+          enabled={!!selectedChannel}
+          busy={sendMutation.isPending}
+          onDroppedFileList={(fl) => composerRef.current?.addFiles(Array.from(fl))}
+        >
+          <MessageArea
+            channel={currentConv}
+            channelId={selectedChannel}
+            alias={aliasMap[selectedChannel]}
+            mpimName={mpimNameByChannel[selectedChannel]}
+            onRename={(alias) =>
+              selectedChannel && renameMutation.mutate({ channelId: selectedChannel, alias })
+            }
+            messages={messages}
+            isLoading={historyQuery.isLoading}
+            hasMore={!!historyQuery.hasNextPage}
+            isFetchingNextPage={historyQuery.isFetchingNextPage}
+            onLoadMore={() => void historyQuery.fetchNextPage()}
+            onOpenThread={(ts) => setThreadRootTs(ts)}
+            userMap={userMap}
+            selfUserId={connection.slack_user_id ?? undefined}
+            onOpenAi={() => {}}
+            onOpenActivity={() => {}}
+            onReact={handleReact}
+            onCreateTask={handleCreateTask}
+            onBack={isMobile ? () => setMobilePanel("sidebar") : undefined}
+          />
+          <TypingIndicator typingUsers={typingUsers} />
+          <SlackComposerNew
+            ref={composerRef}
+            channelName={channelName}
+            isSending={sendMutation.isPending}
+            onSend={(text, files) => {
+              sendMutation.mutate({ text, files });
+              onStopTyping();
+            }}
+            disabled={!selectedChannel}
+            userMap={userMap}
+            onTyping={onTyping}
+          />
+        </SlackChatFileDropZone>
 
         {/* Panel de hilo sobre los mensajes */}
         <ThreadPanelNew
@@ -696,7 +830,9 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
           replies={threadReplies}
           isLoading={threadQuery.isLoading}
           isSending={sendReplyMutation.isPending}
-          onSendReply={(text) => sendReplyMutation.mutate(text)}
+          composerRef={threadComposerRef}
+          onDropFiles={(files) => threadComposerRef.current?.addFiles(files)}
+          onSendReply={(text, files) => sendReplyMutation.mutate({ text, files })}
           onReact={handleReact}
           onCreateTask={handleCreateTask}
           userMap={userMap}

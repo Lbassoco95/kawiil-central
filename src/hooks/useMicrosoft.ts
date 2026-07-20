@@ -644,7 +644,7 @@ export function useOutlookEmails(folderId = "inbox", search?: string, filterUnre
   const activeFilterUnread = filterUnread && !normalizedSearch;
 
   return useInfiniteQuery({
-    queryKey: ["outlook-emails", normalizedSearch ? "global" : folderId, normalizedSearch, activeFilterUnread],
+    queryKey: ["outlook-emails", normalizedSearch ? "global" : folderId, normalizedSearch, activeFilterUnread || undefined],
     queryFn: async ({ pageParam }: { pageParam: number | string }): Promise<OutlookEmailsPage> => {
       const params: Record<string, unknown> = {
         folder: folderId,

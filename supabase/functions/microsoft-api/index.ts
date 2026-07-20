@@ -1309,7 +1309,7 @@ Deno.serve(async (req) => {
         const filterParam = filterUnread ? "&$filter=isRead eq false" : "";
         result = await graphRequest(
           accessToken,
-          `/me/mailFolders/${folder}/messages?${select}&$top=${top}&$orderby=receivedDateTime desc&$count=true${filterParam}${skipParam}`,
+          `/me/mailFolders/${folder}/messages?${select}&$top=${top}&$orderby=receivedDateTime desc&$count=true${skipParam}${filterParam}`,
           { headers: GRAPH_MAIL_PREFER_IMMUTABLE },
         );
         break;

@@ -183,6 +183,40 @@ async function slackConversationDisplayName(
   return undefined;
 }
 
+/**
+ * Nombre del canal probando varios tokens del workspace. `conversations.info`
+ * falla si el token no está en el canal (privados) o no tiene el scope (usuarios
+ * que conectaron Slack antes de agregarlo). Probando varias conexiones, casi
+ * siempre alguna con acceso resuelve el nombre → la notificación dice el canal.
+ */
+async function resolveChannelDisplayName(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  teamId: string,
+  channelId: string,
+  primaryBearer: string | undefined,
+): Promise<string | undefined> {
+  const seen = new Set<string>();
+  if (primaryBearer) {
+    seen.add(primaryBearer);
+    const n = await slackConversationDisplayName(channelId, primaryBearer);
+    if (n) return n;
+  }
+  const { data: conns } = await supabase
+    .from("user_slack_connections")
+    .select("access_token")
+    .eq("slack_team_id", teamId)
+    .not("access_token", "is", null)
+    .limit(8);
+  for (const c of conns ?? []) {
+    const tok = (c.access_token as string | undefined)?.trim();
+    if (!tok || seen.has(tok)) continue;
+    seen.add(tok);
+    const n = await slackConversationDisplayName(channelId, tok);
+    if (n) return n;
+  }
+  return undefined;
+}
+
 /** Nombre visible del usuario Slack; acepta token de bot o de usuario. */
 async function slackUserDisplayName(
   slackUserId: string,
@@ -209,6 +243,34 @@ async function slackUserDisplayName(
     .map((x) => (typeof x === "string" ? x.trim() : ""))
     .find((x) => x.length > 0);
   return cand || undefined;
+}
+
+/**
+ * Respaldo sin API de Slack: nombre del remitente desde nuestra BD (perfil Kawiil
+ * ligado a ese slack_user_id). Sirve cuando falta el scope users:read o no hay bot,
+ * para que la notificación siga diciendo QUIÉN escribió.
+ */
+async function slackUserDisplayNameFromDb(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  teamId: string,
+  slackUserId: string,
+): Promise<string | undefined> {
+  const { data: conn } = await supabase
+    .from("user_slack_connections")
+    .select("user_id")
+    .eq("slack_team_id", teamId)
+    .eq("slack_user_id", slackUserId)
+    .limit(1)
+    .maybeSingle();
+  const uid = conn?.user_id as string | undefined;
+  if (!uid) return undefined;
+  const { data: prof } = await supabase
+    .from("profiles")
+    .select("full_name")
+    .eq("user_id", uid)
+    .maybeSingle();
+  const n = (prof?.full_name as string | undefined)?.trim();
+  return n || undefined;
 }
 
 /** Bearer para lecturas Slack (users.info, conversations.info): bot si existe; si no, token del remitente o cualquier conexión del equipo. */
@@ -772,11 +834,13 @@ async function handleMessageNotificationEvent(
 
   let channelDisplay: string | undefined;
   let senderName: string | undefined;
-  if (apiBearer) {
-    channelDisplay = await slackConversationDisplayName(channel, apiBearer);
-    if (senderSlackId) {
-      senderName = await slackUserDisplayName(senderSlackId, apiBearer);
-    }
+  channelDisplay = await resolveChannelDisplayName(supabase, teamId, channel, apiBearer);
+  if (apiBearer && senderSlackId) {
+    senderName = await slackUserDisplayName(senderSlackId, apiBearer);
+  }
+  // Respaldo sin depender de scopes de Slack: nombre del remitente desde la BD.
+  if (senderSlackId && !senderName) {
+    senderName = await slackUserDisplayNameFromDb(supabase, teamId, senderSlackId);
   }
 
   const preview =
@@ -786,9 +850,10 @@ async function handleMessageNotificationEvent(
   const rows = [...targets.entries()].map(([user_id, flags]) => {
     const baseType = slackNotificationType(flags);
     const title = slackNotificationTitle(flags, channelType, channelDisplay, senderName);
-    // En menciones, prefijar el body con el remitente para que se lea "Juan: {mensaje}".
+    // Siempre prefijar el body con el remitente para que se lea "Juan: {mensaje}"
+    // (así la notificación dice QUIÉN escribió y QUÉ dijo, aunque el título no lo repita).
     const bodyForRow =
-      flags.mention && senderName && preview
+      senderName && preview
         ? `${senderName}: ${preview}`
         : preview || "(sin texto)";
     return {
