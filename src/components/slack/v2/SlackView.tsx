@@ -273,11 +273,28 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
         );
       if (error) throw error;
     },
+    // Optimista: refleja el nombre al instante (sin esperar red) y revierte si falla.
+    onMutate: async ({ channelId, alias }) => {
+      const key = ["slack-conv-aliases", user?.id];
+      await qc.cancelQueries({ queryKey: key });
+      const prev = qc.getQueryData(key);
+      qc.setQueryData(key, (old: { channel_id: string; alias: string }[] | undefined) => {
+        const rows = (old ?? []).filter((r) => r.channel_id !== channelId);
+        const clean = (alias ?? "").trim();
+        return clean ? [...rows, { channel_id: channelId, alias: clean }] : rows;
+      });
+      return { prev, key };
+    },
+    onError: (err, _vars, ctx) => {
+      if (ctx?.prev !== undefined) qc.setQueryData(ctx.key, ctx.prev);
+      toast.error(err instanceof Error ? err.message : "No se pudo cambiar el nombre");
+    },
     onSuccess: (_data, vars) => {
-      void qc.invalidateQueries({ queryKey: ["slack-conv-aliases"] });
       toast.success(vars.alias?.trim() ? "Nombre actualizado" : "Nombre quitado");
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "No se pudo cambiar el nombre"),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: ["slack-conv-aliases"] });
+    },
   });
 
   // ─── Historial de mensajes ───────────────────────────────
