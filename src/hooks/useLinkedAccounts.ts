@@ -36,6 +36,25 @@ export function useLinkedAccounts() {
   });
 }
 
+/** Renombra una cuenta vinculada (display_name) y lo persiste en Supabase. */
+export function useRenameLinkedAccount() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      const { error } = await (supabase as any)
+        .from("linked_accounts")
+        .update({ display_name: name.trim() || null })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["linked-accounts"] });
+      toast.success("Nombre de la cuenta actualizado");
+    },
+    onError: (err: Error) => toast.error("No se pudo renombrar: " + err.message),
+  });
+}
+
 /** Conecta / desconecta una cuenta de Google (calendario). */
 export function useGoogleConnection() {
   const queryClient = useQueryClient();
@@ -169,5 +188,120 @@ export function useGoogleCalendarEvents(start?: string, end?: string, enabled = 
     },
     enabled: !!user && !!start && !!end && enabled,
     staleTime: 60 * 1000,
+  });
+}
+
+// ───────────────────────── Outlook (cuentas adicionales) ─────────────────────────
+
+/** Conecta / desconecta una cuenta ADICIONAL de Outlook/Microsoft (aparte del buzón principal). */
+export function useOutlookConnection() {
+  const queryClient = useQueryClient();
+
+  const connect = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke("outlook-account-auth");
+      if (error) {
+        const msg = String(error.message || error);
+        if (/edge function|failed to send|not found|non-2xx/i.test(msg)) {
+          throw new Error("La conexión con Outlook todavía no está activada. Falta desplegar las funciones (outlook-account-*).");
+        }
+        throw error;
+      }
+      if (data?.error) throw new Error(data.error);
+      if (!data?.url) throw new Error("No se recibió URL de autorización");
+      window.open(data.url, "outlook-auth", "width=600,height=700");
+      return new Promise<void>((resolve, reject) => {
+        const handler = (event: MessageEvent) => {
+          if (event.data?.type === "outlook-auth-success") {
+            window.removeEventListener("message", handler);
+            resolve();
+          } else if (event.data?.type === "outlook-auth-error") {
+            window.removeEventListener("message", handler);
+            reject(new Error(event.data.error));
+          }
+        };
+        window.addEventListener("message", handler);
+        setTimeout(() => {
+          window.removeEventListener("message", handler);
+          reject(new Error("Timeout - cierra la ventana e intenta de nuevo"));
+        }, 300000);
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["linked-accounts"] });
+      queryClient.invalidateQueries({ queryKey: ["outlook-account-events"] });
+      queryClient.invalidateQueries({ queryKey: ["outlook-account-calendars"] });
+      toast.success("Cuenta de Outlook conectada");
+    },
+    onError: (err: Error) => toast.error("Error al conectar Outlook: " + err.message),
+  });
+
+  const disconnect = useMutation({
+    mutationFn: async (accountId: string) => {
+      const { error } = await (supabase as any).from("linked_accounts").delete().eq("id", accountId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["linked-accounts"] });
+      queryClient.invalidateQueries({ queryKey: ["outlook-account-events"] });
+      toast.success("Cuenta desconectada");
+    },
+    onError: (err: Error) => toast.error("Error al desconectar: " + err.message),
+  });
+
+  return { connect: connect.mutate, isConnecting: connect.isPending, disconnect: disconnect.mutate };
+}
+
+/** Lista los calendarios de las cuentas Outlook adicionales (id namespaced outlook:<acc>:<cal>). */
+export function useOutlookAccountCalendars(enabled = true) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["outlook-account-calendars"],
+    queryFn: async (): Promise<GoogleCalendar[]> => {
+      const { data, error } = await supabase.functions.invoke("outlook-account-api", {
+        body: { action: "calendars" },
+      });
+      if (error) throw error;
+      return (data?.value as GoogleCalendar[]) || [];
+    },
+    enabled: !!user && enabled,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/** Eventos de las cuentas Outlook adicionales (formato Graph, etiquetados con calendarId). */
+export function useOutlookAccountEvents(start?: string, end?: string, enabled = true) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["outlook-account-events", start, end],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke("outlook-account-api", {
+        body: { action: "calendar-events", params: { start, end } },
+      });
+      if (error) throw error;
+      return (data?.value as any[]) || [];
+    },
+    enabled: !!user && !!start && !!end && enabled,
+    staleTime: 60 * 1000,
+  });
+}
+
+/** Crea un evento en el calendario principal de la primera cuenta Outlook adicional. */
+export function useCreateOutlookAccountEvent() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: {
+      summary: string; description?: string; location?: string; date?: string; startDateTime?: string; endDateTime?: string;
+    }): Promise<{ id: string; htmlLink?: string }> => {
+      const { data, error } = await supabase.functions.invoke("outlook-account-api", {
+        body: { action: "create-event", params },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data as { id: string; htmlLink?: string };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["outlook-account-events"] });
+    },
   });
 }

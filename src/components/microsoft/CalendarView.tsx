@@ -50,7 +50,10 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { Link } from "react-router-dom";
 import { CalendarKawiilCard } from "@/components/microsoft/CalendarKawiilCard";
 import { CreateTaskFromEventDialog } from "@/components/microsoft/CreateTaskFromEventDialog";
-import { useLinkedAccounts, useGoogleConnection, useGoogleCalendarEvents, useGoogleCalendars } from "@/hooks/useLinkedAccounts";
+import {
+  useLinkedAccounts, useGoogleConnection, useGoogleCalendarEvents, useGoogleCalendars,
+  useOutlookConnection, useOutlookAccountEvents, useOutlookAccountCalendars, useRenameLinkedAccount,
+} from "@/hooks/useLinkedAccounts";
 import { ColorPickerPopover, paletteColorFor, hexAlpha } from "@/components/microsoft/ColorPickerPopover";
 
 type ViewMode = "day" | "3days" | "week" | "month" | "agenda";
@@ -84,11 +87,15 @@ function accountColorFor(accountId?: string | null): string {
   return ACCOUNT_COLORS[hash % ACCOUNT_COLORS.length];
 }
 
-/** Extrae el accountId de un calendarId namespaced de Google (google:<accId>:<calId>). */
-function googleAccountIdFromCalendarId(calendarId?: string | null): string | null {
-  if (!calendarId || !calendarId.startsWith("google:")) return null;
-  const parts = calendarId.split(":");
-  return parts.length >= 2 ? parts[1] : null;
+/** Extrae el accountId de un calendarId namespaced de una cuenta añadida
+ *  (google:<accId>:<calId> u outlook:<accId>:<calId>). null si es el principal M365. */
+function linkedAccountIdFromCalendarId(calendarId?: string | null): string | null {
+  if (!calendarId) return null;
+  if (calendarId.startsWith("google:") || calendarId.startsWith("outlook:")) {
+    const parts = calendarId.split(":");
+    return parts.length >= 2 ? parts[1] : null;
+  }
+  return null;
 }
 
 const START_HOUR = 6;
@@ -217,6 +224,8 @@ export function CalendarView({
   const [showCreate, setShowCreate] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [showTaskFromEvent, setShowTaskFromEvent] = useState(false);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
   const [showKawiilTasks, setShowKawiilTasks] = useState(true);
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [hiddenCalendarIds, setHiddenCalendarIds] = useState<string[]>(() => {
@@ -326,7 +335,8 @@ export function CalendarView({
     location: "", description: "", isOnlineMeeting: false, isAllDay: false, categories: [] as string[],
   });
 
-  const isGoogleEvent = !!selectedEventId && selectedEventId.startsWith("google:");
+  // Eventos de cuentas añadidas (Google/Outlook adicional) son de solo lectura en este panel.
+  const isGoogleEvent = !!selectedEventId && (selectedEventId.startsWith("google:") || selectedEventId.startsWith("outlook:"));
   const {
     data: eventDetail,
     isLoading: eventDetailLoading,
@@ -417,18 +427,30 @@ export function CalendarView({
 
   const { data: eventsData, isLoading } = useCalendarEvents(rangeStartISO, rangeEndISO, calendarIdsForQuery);
 
-  // Cuentas vinculadas (Microsoft/Google/IMAP) y eventos de Google.
+  // Cuentas vinculadas (Microsoft/Google/IMAP) y sus eventos.
   const { data: linkedAccounts = [] } = useLinkedAccounts();
   const { connect: connectGoogle, isConnecting: googleConnecting, disconnect: disconnectGoogle } = useGoogleConnection();
+  const { connect: connectOutlook, isConnecting: outlookConnecting, disconnect: disconnectOutlook } = useOutlookConnection();
+  const renameAccount = useRenameLinkedAccount();
   const hasGoogle = linkedAccounts.some((a) => a.provider === "google" && a.status === "connected" && a.calendar_enabled);
+  const hasOutlookLinked = linkedAccounts.some((a) => a.provider === "microsoft" && a.status === "connected" && a.calendar_enabled);
   const { data: googleEventsData } = useGoogleCalendarEvents(rangeStartISO, rangeEndISO, hasGoogle);
   const { data: googleCalendars = [] } = useGoogleCalendars(hasGoogle);
+  const { data: outlookEventsData } = useOutlookAccountEvents(rangeStartISO, rangeEndISO, hasOutlookLinked);
+  const { data: outlookCalendars = [] } = useOutlookAccountCalendars(hasOutlookLinked);
+  // Nombre que el usuario asignó a cada cuenta (display_name) o su email.
+  const accountLabelById = useMemo(() => {
+    const m = new Map<string, string>();
+    linkedAccounts.forEach((a) => m.set(a.id, a.display_name || a.email || (a.provider === "microsoft" ? "Outlook" : "Google")));
+    return m;
+  }, [linkedAccounts]);
 
   const allEvents = useMemo(() => {
     const m365 = Array.isArray(eventsData) ? eventsData : [];
     const google = Array.isArray(googleEventsData) ? googleEventsData : [];
-    return [...m365, ...google];
-  }, [eventsData, googleEventsData]);
+    const outlook = Array.isArray(outlookEventsData) ? outlookEventsData : [];
+    return [...m365, ...google, ...outlook];
+  }, [eventsData, googleEventsData, outlookEventsData]);
 
   const events = useMemo(() => {
     return allEvents.filter((e: any) => {
@@ -452,9 +474,10 @@ export function CalendarView({
     const m = new Map<string, { name: string; color: string; hexColor?: string }>();
     calendars.forEach((c, i) => m.set(c.id, { name: c.name, color: calendarAccentColor(c.id, i), hexColor: c.hexColor }));
     googleCalendars.forEach((c) => m.set(c.id, { name: c.name, color: accountColorFor(c._accountId), hexColor: c.hexColor }));
+    outlookCalendars.forEach((c) => m.set(c.id, { name: c.name, color: accountColorFor(c._accountId), hexColor: c.hexColor }));
     return m;
-  }, [calendars, googleCalendars]);
-  const showCalendarColors = calendars.length > 1 || hasGoogle;
+  }, [calendars, googleCalendars, outlookCalendars]);
+  const showCalendarColors = calendars.length > 1 || hasGoogle || hasOutlookLinked;
   // Color de un calendario: 1) override del usuario, 2) color real (Outlook/Google), 3) hash de respaldo.
   const calendarColorFor = (id?: string | null) => {
     if (!id) return undefined;
@@ -466,7 +489,7 @@ export function CalendarView({
   // Acento del evento: si viene de una cuenta añadida (Google), usa el color de la cuenta
   // para distinguirlo del principal; si no, el color propio del calendario.
   const eventAccentColor = (event: any): string | undefined => {
-    const accId = googleAccountIdFromCalendarId(event?.calendarId);
+    const accId = linkedAccountIdFromCalendarId(event?.calendarId);
     if (accId) return calendarColors[event.calendarId] || accountColorFor(accId);
     return calendarColorFor(event?.calendarId);
   };
@@ -477,25 +500,29 @@ export function CalendarView({
   const toggleCalendar = (id: string) => {
     setHiddenCalendarIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
-  // Al quitar una cuenta Google, limpiar sus calendarios ocultos para no dejar basura.
-  const disconnectGoogleAccount = (accountId: string) => {
-    setHiddenCalendarIds((prev) => prev.filter((id) => googleAccountIdFromCalendarId(id) !== accountId));
-    disconnectGoogle(accountId);
+  // Al quitar una cuenta añadida, limpiar sus calendarios ocultos para no dejar basura.
+  const disconnectLinkedAccount = (accountId: string, provider: "google" | "microsoft") => {
+    setHiddenCalendarIds((prev) => prev.filter((id) => linkedAccountIdFromCalendarId(id) !== accountId));
+    if (provider === "google") disconnectGoogle(accountId);
+    else disconnectOutlook(accountId);
   };
 
-  // Calendarios agrupados por cuenta para el panel (Microsoft principal + cada cuenta Google).
+  // Calendarios agrupados por cuenta para el panel (Microsoft principal + cada cuenta añadida).
   const calendarGroups = useMemo(() => {
     const groups: Array<{ key: string; label: string; color?: string; items: Array<{ id: string; name: string; isDefaultCalendar?: boolean }> }> = [];
     if (calendars.length > 0) {
       groups.push({ key: "microsoft", label: "Microsoft 365", items: calendars.map((c) => ({ id: c.id, name: c.name, isDefaultCalendar: c.isDefaultCalendar })) });
     }
-    const googleAccts = linkedAccounts.filter((a) => a.provider === "google");
-    googleAccts.forEach((acc) => {
+    linkedAccounts.filter((a) => a.provider === "google").forEach((acc) => {
       const items = googleCalendars.filter((c) => c._accountId === acc.id).map((c) => ({ id: c.id, name: c.name, isDefaultCalendar: c.isDefaultCalendar }));
-      if (items.length > 0) groups.push({ key: acc.id, label: acc.email || acc.display_name || "Google", color: accountColorFor(acc.id), items });
+      if (items.length > 0) groups.push({ key: acc.id, label: accountLabelById.get(acc.id) || "Google", color: accountColorFor(acc.id), items });
+    });
+    linkedAccounts.filter((a) => a.provider === "microsoft").forEach((acc) => {
+      const items = outlookCalendars.filter((c) => c._accountId === acc.id).map((c) => ({ id: c.id, name: c.name, isDefaultCalendar: c.isDefaultCalendar }));
+      if (items.length > 0) groups.push({ key: acc.id, label: accountLabelById.get(acc.id) || "Outlook", color: accountColorFor(acc.id), items });
     });
     return groups;
-  }, [calendars, googleCalendars, linkedAccounts]);
+  }, [calendars, googleCalendars, outlookCalendars, linkedAccounts, accountLabelById]);
 
   const cachedEvent = useMemo(
     () => (selectedEventId ? events.find((e: any) => e.id === selectedEventId) : null),
@@ -1269,23 +1296,59 @@ export function CalendarView({
               <div className="order-5 border-t border-border/30 pt-3">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Cuentas</p>
                 <div className="space-y-1">
-                  {linkedAccounts.filter((a) => a.provider === "google").map((acc) => (
-                    <div key={acc.id} className="group flex items-center gap-2 rounded-md px-2 py-1 hover:bg-accent">
-                      <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: accountColorFor(acc.id) }} title={acc.status === "connected" ? "Conectada" : "Con error"} />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs text-foreground truncate">{acc.email || acc.display_name || "Google"}</p>
-                        <p className="text-[9px] text-muted-foreground">Google Calendar{acc.status !== "connected" ? " · error" : ""}</p>
+                  {linkedAccounts.filter((a) => a.provider === "google" || a.provider === "microsoft").map((acc) => {
+                    const provider: "google" | "microsoft" = acc.provider === "microsoft" ? "microsoft" : "google";
+                    const providerLabel = provider === "microsoft" ? "Outlook" : "Google Calendar";
+                    const editing = renamingId === acc.id;
+                    return (
+                      <div key={acc.id} className="group flex items-center gap-2 rounded-md px-2 py-1 hover:bg-accent">
+                        <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: accountColorFor(acc.id) }} title={acc.status === "connected" ? "Conectada" : "Con error"} />
+                        <div className="min-w-0 flex-1">
+                          {editing ? (
+                            <Input
+                              autoFocus
+                              value={renameValue}
+                              onChange={(e) => setRenameValue(e.target.value)}
+                              onBlur={() => { renameAccount.mutate({ id: acc.id, name: renameValue }); setRenamingId(null); }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") { renameAccount.mutate({ id: acc.id, name: renameValue }); setRenamingId(null); }
+                                if (e.key === "Escape") setRenamingId(null);
+                              }}
+                              className="h-6 text-xs px-1.5 py-0"
+                              placeholder="Nombre de la cuenta"
+                            />
+                          ) : (
+                            <>
+                              <p className="text-xs text-foreground truncate">{accountLabelById.get(acc.id)}</p>
+                              <p className="text-[9px] text-muted-foreground truncate">
+                                {providerLabel}{acc.display_name && acc.email ? ` · ${acc.email}` : ""}{acc.status !== "connected" ? " · error" : ""}
+                              </p>
+                            </>
+                          )}
+                        </div>
+                        {!editing && (
+                          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => { setRenamingId(acc.id); setRenameValue(acc.display_name || ""); }}
+                              className="p-0.5 text-muted-foreground hover:text-foreground"
+                              title="Renombrar"
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => disconnectLinkedAccount(acc.id, provider)}
+                              className="text-[10px] text-muted-foreground hover:text-destructive px-0.5"
+                              title="Desconectar"
+                            >
+                              Quitar
+                            </button>
+                          </div>
+                        )}
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => disconnectGoogleAccount(acc.id)}
-                        className="text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity shrink-0"
-                        title="Desconectar"
-                      >
-                        Quitar
-                      </button>
-                    </div>
-                  ))}
+                    );
+                  })}
                   <button
                     type="button"
                     onClick={() => connectGoogle()}
@@ -1295,11 +1358,20 @@ export function CalendarView({
                     {googleConnecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
                     <span>Conectar cuenta de Google</span>
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => connectOutlook()}
+                    disabled={outlookConnecting}
+                    className="w-full flex items-center gap-2 rounded-md border border-dashed border-border px-2 py-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                  >
+                    {outlookConnecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                    <span>Conectar cuenta de Outlook</span>
+                  </button>
                 </div>
               </div>
 
-              {/* Calendarios agrupados por cuenta (Microsoft + cada cuenta Google) */}
-              {(calendars.length > 1 || googleCalendars.length > 0) && (
+              {/* Calendarios agrupados por cuenta (Microsoft + cada cuenta añadida) */}
+              {(calendars.length > 1 || googleCalendars.length > 0 || outlookCalendars.length > 0) && (
                 <div className="order-4 border-t border-border/30 pt-3">
                   <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Calendarios</p>
                   <div className="space-y-2">
@@ -1542,10 +1614,10 @@ export function CalendarView({
             <div className="space-y-4 py-2">
               {(() => {
                 const ev = cachedEvent || eventDetail;
-                const accId = googleAccountIdFromCalendarId(ev?.calendarId);
+                const accId = linkedAccountIdFromCalendarId(ev?.calendarId);
                 const acc = accId ? linkedAccounts.find((a) => a.id === accId) : null;
-                const provider = accId ? "Google Calendar" : "Microsoft 365";
-                const accountLabel = accId ? (acc?.email || acc?.display_name || "Google") : "Microsoft 365";
+                const provider = acc ? (acc.provider === "microsoft" ? "Outlook" : "Google Calendar") : "Microsoft 365";
+                const accountLabel = accId ? (accountLabelById.get(accId) || acc?.email || "Cuenta") : "Microsoft 365";
                 const calName = calendarNameFor(ev);
                 const dotColor = accId ? accountColorFor(accId) : (calendarColorFor(ev?.calendarId) || "#0099bc");
                 return (
@@ -1608,7 +1680,7 @@ export function CalendarView({
           ) : null}
           {isGoogleEvent && (cachedEvent || eventDetail) && (
             <p className="text-[11px] text-muted-foreground -mt-1">
-              Evento de Google (solo lectura desde Kawiil). Puedes crear una tarea a partir de él.
+              Evento de una cuenta añadida (solo lectura desde Kawiil). Puedes crear una tarea a partir de él.
             </p>
           )}
           <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:items-center">
