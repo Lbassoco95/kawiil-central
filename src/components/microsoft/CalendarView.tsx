@@ -62,6 +62,7 @@ import {
 import { useCalendarPrefs, useSaveCalendarPrefs } from "@/hooks/useCalendarPrefs";
 import { useWorkLocations } from "@/hooks/useWorkLocations";
 import { WorkLocationChip } from "@/components/microsoft/WorkLocationChip";
+import { EventTravelSection } from "@/components/microsoft/EventTravelSection";
 import { useAuth } from "@/contexts/AuthContext";
 
 type ViewMode = "day" | "3days" | "week" | "month" | "agenda";
@@ -1882,6 +1883,12 @@ export function CalendarView({
                 <Label>Ubicación</Label>
                 <Input value={editForm.location} onChange={(e) => setEditForm({ ...editForm, location: e.target.value })} placeholder="Lugar o dirección" />
               </div>
+              {editForm.location.trim() && !/^https?:\/\//i.test(editForm.location.trim()) && (
+                <EventTravelSection
+                  destination={editForm.location.trim()}
+                  departureISO={editForm.startDate && editForm.startTime ? `${editForm.startDate}T${editForm.startTime}:00` : null}
+                />
+              )}
               <div className="space-y-2">
                 <Label>Invitados</Label>
                 <Input value={editForm.attendees} onChange={(e) => setEditForm({ ...editForm, attendees: e.target.value })} placeholder="email@ejemplo.com" />
