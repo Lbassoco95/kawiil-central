@@ -70,8 +70,10 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
   const isAiTab = AI_TABS.includes(activeTab) && !customFolderOverride;
   const folderId = customFolderOverride ?? TAB_TO_FOLDER[activeTab] ?? "inbox";
 
+  // For non-AI tabs without active search, filter unread server-side so paginated results are actually unread
+  const serverFilterUnread = readFilter === "sinleer" && !isAiTab && !debouncedSearch;
   const { data, isLoading, isFetching, fetchNextPage, hasNextPage, isFetchingNextPage, refetch } =
-    useOutlookEmails(folderId, debouncedSearch || undefined);
+    useOutlookEmails(folderId, debouncedSearch || undefined, serverFilterUnread);
 
   const allEmails = useMemo(
     () => (data?.pages ?? []).flatMap((p) => p.emails as Record<string, unknown>[]),

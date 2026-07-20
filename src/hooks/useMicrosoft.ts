@@ -635,19 +635,22 @@ function parseOdataCount(raw: unknown): number | null {
   return null;
 }
 
-export function useOutlookEmails(folderId = "inbox", search?: string) {
+export function useOutlookEmails(folderId = "inbox", search?: string, filterUnread?: boolean) {
   const { user } = useAuth();
   const PAGE_SIZE = 25;
   /** Con búsqueda activa la API usa /me/messages (todo el buzón), no el id de carpeta. */
   const normalizedSearch = search?.trim() || undefined;
+  /** Server-side unread filter only applies when there's no active search (incompatible with $search). */
+  const activeFilterUnread = filterUnread && !normalizedSearch;
 
   return useInfiniteQuery({
-    queryKey: ["outlook-emails", normalizedSearch ? "global" : folderId, normalizedSearch],
+    queryKey: ["outlook-emails", normalizedSearch ? "global" : folderId, normalizedSearch, activeFilterUnread || undefined],
     queryFn: async ({ pageParam }: { pageParam: number | string }): Promise<OutlookEmailsPage> => {
       const params: Record<string, unknown> = {
         folder: folderId,
         search: normalizedSearch,
         top: PAGE_SIZE,
+        filterUnread: activeFilterUnread || undefined,
       };
       let pageSkip = 0;
       if (typeof pageParam === "string" && pageParam.startsWith("http")) {
