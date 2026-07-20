@@ -8,6 +8,8 @@ import {
   useArchiveLinkedOutlookEmail,
   useMarkGmailRead,
   useArchiveGmail,
+  useGoogleConnection,
+  useOutlookConnection,
 } from "@/hooks/useLinkedAccounts";
 import { useQueryClient } from "@tanstack/react-query";
 import { getLabelStyle } from "./MailLabelPicker";
@@ -106,10 +108,18 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
     isLinkedGmail ? linkedGmailQuery :
     primaryQuery;
 
+  const linkedError = isLinkedOutlook
+    ? (linkedOutlookQuery.error as (Error & { code?: string }) | null)
+    : isLinkedGmail
+      ? (linkedGmailQuery.error as (Error & { code?: string }) | null)
+      : null;
+
   const archiveLinkedOutlook = useArchiveLinkedOutlookEmail();
   const markLinkedOutlookRead = useMarkLinkedOutlookEmailRead();
   const archiveGmailMut = useArchiveGmail();
   const markGmailRead = useMarkGmailRead();
+  const { connect: connectGoogle, isConnecting: googleConnecting } = useGoogleConnection();
+  const { connect: connectOutlook, isConnecting: outlookConnecting } = useOutlookConnection();
 
   const allEmails = useMemo(
     () => (data?.pages ?? []).flatMap((p) => p.emails as Record<string, unknown>[]),
@@ -119,8 +129,11 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
   const allEmailIds = useMemo(() => allEmails.map(e => e.id as string).filter(Boolean), [allEmails]);
   const { data: bulkAssignments = [] } = useEmailLabelAssignmentsBulk(allEmailIds);
 
-  // Reset read filter when tab changes
+  // Reset read filter: "sinleer" on tab change, "todos" when entering a custom/linked folder
   useEffect(() => { setReadFilter("sinleer"); }, [activeTab]);
+  useEffect(() => {
+    if (customFolderOverride) setReadFilter("todos");
+  }, [customFolderOverride]);
 
   const filtered = useMemo(() => {
     let list = allEmails;
@@ -387,7 +400,26 @@ const now = useMemo(() => new Date(), []);
             <Loader2 className="w-4 h-4 animate-spin" /> Cargando mensajes…
           </div>
         )}
-        {!isLoading && filtered.length === 0 && (
+        {!isLoading && linkedError && (
+          <div className="flex flex-col items-center justify-center py-20 gap-3 text-center px-6">
+            <span className="text-3xl">🔑</span>
+            <p className="text-[14px] font-semibold text-foreground">No se pudo cargar esta cuenta</p>
+            <p className="text-[12.5px] text-muted-foreground max-w-sm">
+              {linkedError.code === "REAUTH_REQUIRED"
+                ? "Esta cuenta se conectó solo para calendario. Reconéctala para autorizar el acceso al correo."
+                : linkedError.message}
+            </p>
+            <button
+              onClick={() => (isLinkedGmail ? connectGoogle() : connectOutlook())}
+              disabled={googleConnecting || outlookConnecting}
+              className="mt-1 h-8 px-4 rounded-full bg-primary text-primary-foreground text-[12px] font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+            >
+              {(googleConnecting || outlookConnecting) && <Loader2 className="w-3 h-3 animate-spin" />}
+              Reconectar cuenta {isLinkedGmail ? "de Google" : "de Outlook"}
+            </button>
+          </div>
+        )}
+        {!isLoading && !linkedError && filtered.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 gap-3 text-center px-6">
             {readFilter === "sinleer" ? (
               <>

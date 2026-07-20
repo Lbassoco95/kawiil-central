@@ -223,10 +223,21 @@ Deno.serve(async (req) => {
       let nextLink: string | undefined;
       for (const acc of targetAccounts) {
         const token = await ensureAccessToken(supabaseAdmin, acc);
-        if (!token) continue;
+        if (!token) {
+          if (accountId) {
+            return jsonResp({ error: "Reconecta esta cuenta de Outlook para dar acceso al correo.", code: "REAUTH_REQUIRED" });
+          }
+          continue;
+        }
         const path = `/me/mailFolders/${encodeURIComponent(folder)}/messages?${MAIL_SELECT}&$top=${top}&$orderby=receivedDateTime desc&$count=true${filterParam}`;
         const res = await graphFetch(token, path);
-        if (!res.ok) continue;
+        if (!res.ok) {
+          // 401/403 = el token no incluye scopes de Mail (cuenta conectada solo para calendario).
+          if (accountId && (res.status === 401 || res.status === 403)) {
+            return jsonResp({ error: "Esta cuenta se conectó solo para calendario. Reconéctala para autorizar el correo.", code: "REAUTH_REQUIRED" });
+          }
+          continue;
+        }
         const json = await res.json();
         for (const e of json.value ?? []) {
           allEmails.push({

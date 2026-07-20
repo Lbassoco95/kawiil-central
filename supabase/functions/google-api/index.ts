@@ -280,14 +280,32 @@ Deno.serve(async (req) => {
       let nextPageToken: string | undefined;
       for (const acc of targetAccounts) {
         const token = await ensureAccessToken(supabaseAdmin, acc);
-        if (!token) continue;
+        if (!token) {
+          // Cuenta pedida explícitamente sin token válido → el usuario debe reconectar.
+          if (accountId) {
+            return new Response(
+              JSON.stringify({ error: "Reconecta esta cuenta de Google para dar acceso al correo.", code: "REAUTH_REQUIRED" }),
+              { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+            );
+          }
+          continue;
+        }
         const listQs = new URLSearchParams({ labelIds: labelId, maxResults: String(maxResults) });
         if (params?.pageToken) listQs.set("pageToken", params.pageToken);
         if (q) listQs.set("q", q);
         const listRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${listQs}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (!listRes.ok) continue;
+        if (!listRes.ok) {
+          // 401/403 = el token no incluye los scopes de Gmail (cuenta conectada solo para calendario).
+          if (accountId && (listRes.status === 401 || listRes.status === 403)) {
+            return new Response(
+              JSON.stringify({ error: "Esta cuenta se conectó solo para calendario. Reconéctala para autorizar el correo.", code: "REAUTH_REQUIRED" }),
+              { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+            );
+          }
+          continue;
+        }
         const listJson = await listRes.json();
         const msgIds: string[] = (listJson.messages ?? []).map((m: any) => m.id);
         if (listJson.nextPageToken && accountId) nextPageToken = listJson.nextPageToken;
