@@ -416,6 +416,33 @@ export function MailSidebar({
 
       {/* Navigation items — fixed, never scroll away */}
       <nav className="flex flex-col gap-0.5 px-2 pb-2 shrink-0">
+        {/* Bandeja general: todas las cuentas mezcladas (solo con cuentas vinculadas) */}
+        {hasLinkedAccounts && (() => {
+          const active = activeCustomFolderId === "unified:all";
+          const totalUnread =
+            unreadCount +
+            Object.values(outlookUnreadMap).reduce((n, c) => n + (c ?? 0), 0) +
+            Object.values(gmailUnreadMap).reduce((n, c) => n + (c ?? 0), 0);
+          return (
+            <button
+              onClick={() => { onSelectLabel(null); onSelectFolder("unified:all", "Todas las cuentas"); }}
+              className={cn(
+                "flex items-center gap-2.5 w-full h-8 px-2.5 rounded-md text-[12.5px] transition-colors text-left",
+                active
+                  ? "bg-accent text-foreground font-semibold border-l-2 border-primary pl-[9px]"
+                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+              )}
+            >
+              <span className={cn("shrink-0", active ? "text-primary" : "text-muted-foreground")}>
+                <Mail className="w-[15px] h-[15px]" />
+              </span>
+              <span className="flex-1 truncate">Todas las cuentas</span>
+              {totalUnread > 0 && (
+                <span className="text-[10.5px] font-medium text-muted-foreground shrink-0">{totalUnread}</span>
+              )}
+            </button>
+          );
+        })()}
         {NAV_ITEMS.map((item) => {
           const active = isTabActive(item.id);
           const badge = item.id === "inbox" && unreadCount > 0 ? unreadCount : null;

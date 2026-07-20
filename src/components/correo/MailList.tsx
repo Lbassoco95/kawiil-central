@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { Search, RefreshCw, Loader2, PenLine, FolderOpen, ListFilter, Paperclip } from "lucide-react";
-import { useOutlookEmails, useArchiveEmail, useMarkEmailRead, useMarkEmailUnread, useEmailUserLabels, useEmailLabelAssignmentsBulk } from "@/hooks/useMicrosoft";
+import { useOutlookEmails, useArchiveEmail, useMarkEmailRead, useMarkEmailUnread, useEmailUserLabels, useEmailLabelAssignmentsBulk, useMicrosoftConnection } from "@/hooks/useMicrosoft";
 import {
   useLinkedOutlookEmailsAll,
   useGmailEmailsAll,
@@ -48,6 +48,8 @@ interface Props {
   onSelectTab: (tab: MailTabId) => void;
   selectedEmailId: string | null;
   onSelectEmail: (id: string) => void;
+  /** Doble clic / Enter: abrir la vista completa. */
+  onOpenEmail?: (id: string) => void;
   onCompose: () => void;
   onOpenFolders: () => void;
   onOpenRules: () => void;
@@ -59,7 +61,7 @@ interface Props {
 
 type ReadFilter = "todos" | "sinleer" | "leidos";
 
-export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmail, onCompose, onOpenFolders, onOpenRules, customFolderOverride, customFolderName, onClearCustomFolder, externalLabelFilter }: Props) {
+export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmail, onOpenEmail, onCompose, onOpenFolders, onOpenRules, customFolderOverride, customFolderName, onClearCustomFolder, externalLabelFilter }: Props) {
   const [search, setSearch] = useState("");
   const [readFilter, setReadFilter] = useState<ReadFilter>("sinleer");
   const [attachmentFilter, setAttachmentFilter] = useState(false);
@@ -77,6 +79,8 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
   const debouncedSearch = useDebouncedValue(search, 350);
 
   // Parse linked account folder prefix: "outlook:{accountId}:{folder}" or "gmail:{accountId}:{label}"
+  // "unified:all" = bandeja general con TODAS las cuentas mezcladas.
+  const isUnified = customFolderOverride === "unified:all";
   const linkedFolderParts = (customFolderOverride ?? "").split(":");
   const folderPfx = linkedFolderParts[0];
   const linkedAccId = linkedFolderParts.length >= 3 ? linkedFolderParts[1] : "";
@@ -87,33 +91,62 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
 
   // For AI tabs, load inbox and filter client-side
   const isAiTab = AI_TABS.includes(activeTab) && !customFolderOverride;
-  const primaryFolderId = isLinkedAccount ? "inbox" : (customFolderOverride ?? TAB_TO_FOLDER[activeTab] ?? "inbox");
+  const primaryFolderId = (isLinkedAccount || isUnified) ? "inbox" : (customFolderOverride ?? TAB_TO_FOLDER[activeTab] ?? "inbox");
 
   // Server-side unread filter: only when "Sin leer" is active, no search, not an AI tab, and using primary account
-  const serverFilterUnread = readFilter === "sinleer" && !debouncedSearch && !isAiTab && !isLinkedAccount;
-  const primaryQuery = useOutlookEmails(primaryFolderId, isLinkedAccount ? undefined : debouncedSearch || undefined, serverFilterUnread);
+  const serverFilterUnread = readFilter === "sinleer" && !debouncedSearch && !isAiTab && !isLinkedAccount && !isUnified;
+  const primaryQuery = useOutlookEmails(primaryFolderId, (isLinkedAccount || isUnified) ? undefined : debouncedSearch || undefined, serverFilterUnread);
   const linkedOutlookQuery = useLinkedOutlookEmailsAll({
-    accountId: linkedAccId || undefined,
-    folder: linkedFolderPath || "inbox",
-    enabled: isLinkedOutlook,
+    accountId: isUnified ? undefined : (linkedAccId || undefined),
+    folder: isUnified ? "inbox" : (linkedFolderPath || "inbox"),
+    enabled: isLinkedOutlook || isUnified,
   });
   const linkedGmailQuery = useGmailEmailsAll({
-    accountId: linkedAccId || undefined,
-    labelId: linkedFolderPath || "INBOX",
-    enabled: isLinkedGmail,
+    accountId: isUnified ? undefined : (linkedAccId || undefined),
+    labelId: isUnified ? "INBOX" : (linkedFolderPath || "INBOX"),
+    enabled: isLinkedGmail || isUnified,
   });
+  const { profile } = useMicrosoftConnection();
+  const primaryAccountEmail = (profile?.mail || profile?.userPrincipalName || "") as string;
 
-  const { data, isLoading, isFetching, fetchNextPage, hasNextPage, isFetchingNextPage, refetch } =
+  const activeQuery =
     isLinkedOutlook ? linkedOutlookQuery :
     isLinkedGmail ? linkedGmailQuery :
     primaryQuery;
+  const { data } = activeQuery;
+
+  // Unificado: combinar controles de las tres fuentes; en otros modos, los de la fuente activa.
+  const isLoading = isUnified
+    ? (primaryQuery.isLoading || linkedOutlookQuery.isLoading || linkedGmailQuery.isLoading)
+    : activeQuery.isLoading;
+  const isFetching = isUnified
+    ? (primaryQuery.isFetching || linkedOutlookQuery.isFetching || linkedGmailQuery.isFetching)
+    : activeQuery.isFetching;
+  const hasNextPage = isUnified
+    ? (primaryQuery.hasNextPage || linkedOutlookQuery.hasNextPage || linkedGmailQuery.hasNextPage)
+    : activeQuery.hasNextPage;
+  const isFetchingNextPage = isUnified
+    ? (primaryQuery.isFetchingNextPage || linkedOutlookQuery.isFetchingNextPage || linkedGmailQuery.isFetchingNextPage)
+    : activeQuery.isFetchingNextPage;
+  const fetchNextPage = () => {
+    if (!isUnified) { void activeQuery.fetchNextPage(); return; }
+    if (primaryQuery.hasNextPage) void primaryQuery.fetchNextPage();
+    if (linkedOutlookQuery.hasNextPage) void linkedOutlookQuery.fetchNextPage();
+    if (linkedGmailQuery.hasNextPage) void linkedGmailQuery.fetchNextPage();
+  };
+  const refetch = () => {
+    if (!isUnified) { void activeQuery.refetch(); return; }
+    void primaryQuery.refetch();
+    void linkedOutlookQuery.refetch();
+    void linkedGmailQuery.refetch();
+  };
 
   const linkedError = isLinkedOutlook
     ? (linkedOutlookQuery.error as (Error & { code?: string }) | null)
     : isLinkedGmail
       ? (linkedGmailQuery.error as (Error & { code?: string }) | null)
       : null;
-  const primaryError = !isLinkedAccount ? (primaryQuery.error as Error | null) : null;
+  const primaryError = (!isLinkedAccount && !isUnified) ? (primaryQuery.error as Error | null) : null;
 
   const archiveLinkedOutlook = useArchiveLinkedOutlookEmail();
   const markLinkedOutlookRead = useMarkLinkedOutlookEmailRead();
@@ -122,10 +155,20 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
   const { connect: connectGoogle, isConnecting: googleConnecting } = useGoogleConnection();
   const { connect: connectOutlook, isConnecting: outlookConnecting } = useOutlookConnection();
 
-  const allEmails = useMemo(
-    () => (data?.pages ?? []).flatMap((p) => p.emails as Record<string, unknown>[]),
-    [data]
-  );
+  const allEmails = useMemo(() => {
+    if (!isUnified) {
+      return (data?.pages ?? []).flatMap((p) => p.emails as Record<string, unknown>[]);
+    }
+    // Bandeja general: primaria (etiquetada con su cuenta) + Outlook vinculadas + Gmail, por fecha desc.
+    const primary = (primaryQuery.data?.pages ?? [])
+      .flatMap((p) => p.emails as Record<string, unknown>[])
+      .map((e) => ({ ...e, _accountEmail: primaryAccountEmail || undefined, _source: "primary" }));
+    const linked = (linkedOutlookQuery.data?.pages ?? []).flatMap((p) => p.emails);
+    const gmail = (linkedGmailQuery.data?.pages ?? []).flatMap((p) => p.emails);
+    return [...primary, ...linked, ...gmail].sort((a, b) =>
+      String((b as any).receivedDateTime ?? "").localeCompare(String((a as any).receivedDateTime ?? ""))
+    );
+  }, [isUnified, data, primaryQuery.data, linkedOutlookQuery.data, linkedGmailQuery.data, primaryAccountEmail]);
 
   const allEmailIds = useMemo(() => allEmails.map(e => e.id as string).filter(Boolean), [allEmails]);
   const { data: bulkAssignments = [] } = useEmailLabelAssignmentsBulk(allEmailIds);
@@ -138,6 +181,19 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
 
   const filtered = useMemo(() => {
     let list = allEmails;
+    // Bandeja unificada: búsqueda client-side sobre lo cargado (el $search de Graph es por cuenta)
+    if (isUnified && debouncedSearch) {
+      const q = debouncedSearch.toLowerCase();
+      list = list.filter((e) => {
+        const from = (e.from as any)?.emailAddress;
+        return (
+          String(e.subject ?? "").toLowerCase().includes(q) ||
+          String(e.bodyPreview ?? "").toLowerCase().includes(q) ||
+          String(from?.name ?? "").toLowerCase().includes(q) ||
+          String(from?.address ?? "").toLowerCase().includes(q)
+        );
+      });
+    }
     if (activeTab === "starred") {
       list = list.filter((e) => (e.flag as any)?.flagStatus === "flagged");
     }
@@ -176,7 +232,7 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
       list = list.filter((e) => emailsWithLabel.has(e.id as string));
     }
     return list;
-  }, [allEmails, activeTab, isAiTab, readFilter, attachmentFilter, dateRangeFilter, effectiveLabelFilter, bulkAssignments]);
+  }, [allEmails, activeTab, isAiTab, isUnified, debouncedSearch, readFilter, attachmentFilter, dateRangeFilter, effectiveLabelFilter, bulkAssignments]);
 
   const handleScroll = useCallback(() => {
     const el = listRef.current;
@@ -462,16 +518,22 @@ const now = useMemo(() => new Date(), []);
                 email={email}
                 isActive={selectedEmailId === emailId}
                 onClick={() => onSelectEmail(emailId)}
+                onOpen={onOpenEmail ? () => onOpenEmail(emailId) : undefined}
                 onArchive={() => {
-                  if (isLinkedOutlook) archiveLinkedOutlook.mutate({ accountId: linkedAccId, emailId });
-                  else if (isLinkedGmail) archiveGmailMut.mutate({ accountId: linkedAccId, emailId });
+                  // Rutear por el prefijo del ID del correo (funciona también en la bandeja unificada)
+                  const parts = emailId.split(":");
+                  const accId = parts.length >= 3 ? parts[1] : "";
+                  if (parts[0] === "outlook" && accId) archiveLinkedOutlook.mutate({ accountId: accId, emailId });
+                  else if (parts[0] === "gmail" && accId) archiveGmailMut.mutate({ accountId: accId, emailId });
                   else archiveEmail.mutate(emailId);
                 }}
                 onMarkRead={() => {
-                  if (isLinkedOutlook) {
-                    if (!email.isRead) markLinkedOutlookRead.mutate({ accountId: linkedAccId, emailId });
-                  } else if (isLinkedGmail) {
-                    if (!email.isRead) markGmailRead.mutate({ accountId: linkedAccId, emailId });
+                  const parts = emailId.split(":");
+                  const accId = parts.length >= 3 ? parts[1] : "";
+                  if (parts[0] === "outlook" && accId) {
+                    if (!email.isRead) markLinkedOutlookRead.mutate({ accountId: accId, emailId });
+                  } else if (parts[0] === "gmail" && accId) {
+                    if (!email.isRead) markGmailRead.mutate({ accountId: accId, emailId });
                   } else {
                     if (email.isRead) markUnread.mutate(emailId);
                     else markRead.mutate(emailId);
