@@ -183,6 +183,40 @@ async function slackConversationDisplayName(
   return undefined;
 }
 
+/**
+ * Nombre del canal probando varios tokens del workspace. `conversations.info`
+ * falla si el token no está en el canal (privados) o no tiene el scope (usuarios
+ * que conectaron Slack antes de agregarlo). Probando varias conexiones, casi
+ * siempre alguna con acceso resuelve el nombre → la notificación dice el canal.
+ */
+async function resolveChannelDisplayName(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  teamId: string,
+  channelId: string,
+  primaryBearer: string | undefined,
+): Promise<string | undefined> {
+  const seen = new Set<string>();
+  if (primaryBearer) {
+    seen.add(primaryBearer);
+    const n = await slackConversationDisplayName(channelId, primaryBearer);
+    if (n) return n;
+  }
+  const { data: conns } = await supabase
+    .from("user_slack_connections")
+    .select("access_token")
+    .eq("slack_team_id", teamId)
+    .not("access_token", "is", null)
+    .limit(8);
+  for (const c of conns ?? []) {
+    const tok = (c.access_token as string | undefined)?.trim();
+    if (!tok || seen.has(tok)) continue;
+    seen.add(tok);
+    const n = await slackConversationDisplayName(channelId, tok);
+    if (n) return n;
+  }
+  return undefined;
+}
+
 /** Nombre visible del usuario Slack; acepta token de bot o de usuario. */
 async function slackUserDisplayName(
   slackUserId: string,
@@ -800,11 +834,9 @@ async function handleMessageNotificationEvent(
 
   let channelDisplay: string | undefined;
   let senderName: string | undefined;
-  if (apiBearer) {
-    channelDisplay = await slackConversationDisplayName(channel, apiBearer);
-    if (senderSlackId) {
-      senderName = await slackUserDisplayName(senderSlackId, apiBearer);
-    }
+  channelDisplay = await resolveChannelDisplayName(supabase, teamId, channel, apiBearer);
+  if (apiBearer && senderSlackId) {
+    senderName = await slackUserDisplayName(senderSlackId, apiBearer);
   }
   // Respaldo sin depender de scopes de Slack: nombre del remitente desde la BD.
   if (senderSlackId && !senderName) {
