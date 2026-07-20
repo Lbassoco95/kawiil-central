@@ -265,16 +265,10 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
         if (error) throw error;
         return;
       }
-      const { data: prof } = await (supabase as any)
-        .from("profiles")
-        .select("organization_id")
-        .eq("user_id", user!.id)
-        .maybeSingle();
-      if (!prof?.organization_id) throw new Error("No se pudo determinar tu organización.");
       const { error } = await (supabase as any)
         .from("slack_conversation_aliases")
         .upsert(
-          { user_id: user!.id, channel_id: channelId, alias: clean, organization_id: prof.organization_id },
+          { user_id: user!.id, channel_id: channelId, alias: clean },
           { onConflict: "user_id,channel_id" },
         );
       if (error) throw error;
