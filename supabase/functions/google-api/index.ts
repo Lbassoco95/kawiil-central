@@ -272,6 +272,12 @@ Deno.serve(async (req) => {
 
     if (action === "gmail-emails") {
       const targetAccounts = accountId ? accounts.filter(a => a.id === accountId) : accounts;
+      if (accountId && targetAccounts.length === 0) {
+        return new Response(
+          JSON.stringify({ error: "Esta cuenta no está disponible para correo. Reconéctala para autorizar el acceso.", code: "REAUTH_REQUIRED" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
       const labelId = params?.labelId || "INBOX";
       const maxResults = Math.min(Number(params?.maxResults) || 25, 100);
       const filterUnread = params?.filterUnread === true;
@@ -297,10 +303,18 @@ Deno.serve(async (req) => {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!listRes.ok) {
-          // 401/403 = el token no incluye los scopes de Gmail (cuenta conectada solo para calendario).
-          if (accountId && (listRes.status === 401 || listRes.status === 403)) {
+          if (accountId) {
+            // 401/403 = el token no incluye los scopes de Gmail (cuenta conectada solo para calendario).
+            if (listRes.status === 401 || listRes.status === 403) {
+              return new Response(
+                JSON.stringify({ error: "Esta cuenta se conectó solo para calendario. Reconéctala para autorizar el correo.", code: "REAUTH_REQUIRED" }),
+                { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+              );
+            }
+            // Cualquier otro fallo: exponer el motivo real, nunca lista vacía.
+            const body = await listRes.text();
             return new Response(
-              JSON.stringify({ error: "Esta cuenta se conectó solo para calendario. Reconéctala para autorizar el correo.", code: "REAUTH_REQUIRED" }),
+              JSON.stringify({ error: `Gmail API [${listRes.status}]: ${body.slice(0, 300)}` }),
               { headers: { ...corsHeaders, "Content-Type": "application/json" } },
             );
           }
