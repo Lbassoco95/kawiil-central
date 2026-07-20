@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import {
   invokeSlackApi,
   invokeSlackFileUpload,
+  formatSlackFileUploadError,
   withHardTimeout,
   markSlackConversationRead,
   isSlackMarkReadFatal,
@@ -32,8 +33,9 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 import { ChannelSidebar } from "./ChannelSidebar";
 import { MessageArea } from "./MessageArea";
-import { SlackComposerNew } from "./SlackComposerNew";
+import { SlackComposerNew, type SlackComposerHandle } from "./SlackComposerNew";
 import { ThreadPanelNew } from "./ThreadPanelNew";
+import { SlackChatFileDropZone } from "../SlackChatFileDropZone";
 import { KawiilContextPanel } from "./KawiilContextPanel";
 import { TypingIndicator } from "./TypingIndicator";
 import { SlackGroupsOrganizerDialog } from "@/components/slack/SlackGroupsOrganizerDialog";
@@ -73,6 +75,33 @@ interface Props {
   isConnecting?: boolean;
 }
 
+/**
+ * Sube archivos a una conversación (o hilo, si se pasa threadTs). El texto viaja
+ * como comentario inicial del primer archivo. Se envían en secuencia y se revisa
+ * `ok` de cada respuesta de Slack: si alguno falla, lanza un error legible en vez
+ * de fallar en silencio (antes el adjunto "no se enviaba" sin avisar).
+ */
+async function uploadSlackFiles(
+  channel: string,
+  files: File[],
+  text: string,
+  threadTs?: string,
+): Promise<void> {
+  const trimmed = text.trim();
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    const fd = new FormData();
+    fd.append("action", "files.upload");
+    fd.append("channel", channel);
+    fd.append("file", file, file.name);
+    fd.append("filename", file.name);
+    if (threadTs) fd.append("thread_ts", threadTs);
+    if (i === 0 && trimmed) fd.append("initial_comment", trimmed);
+    const res = (await invokeSlackFileUpload(fd)) as { ok?: boolean; error?: string };
+    if (!res.ok) throw new Error(formatSlackFileUploadError(res.error));
+  }
+}
+
 // ─── Componente ──────────────────────────────────────────────
 export function SlackView({ connection, onRefreshConversations, onConnect, isConnecting }: Props) {
   const { user } = useAuth();
@@ -85,6 +114,8 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
   const [threadRootTs, setThreadRootTs] = useState<string | null>(null);
   const [groupsDialogOpen, setGroupsDialogOpen] = useState(false);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+  const composerRef = useRef<SlackComposerHandle>(null);
+  const threadComposerRef = useRef<SlackComposerHandle>(null);
   const [taskMsg, setTaskMsg] = useState<SlackMessage | null>(null);
   // En móvil: "sidebar" | "messages"
   const [mobilePanel, setMobilePanel] = useState<"sidebar" | "messages">("sidebar");
@@ -362,7 +393,7 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
         channel: selectedChannel,
         ts: threadRootTs,
         limit: 200,
-      }, 45_000);
+      }, { timeoutMs: 45_000 });
       return data.messages ?? [];
     },
     enabled: !!selectedChannel && !!threadRootTs,
@@ -379,22 +410,7 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
       if (!selectedChannel) throw new Error("Sin canal seleccionado");
 
       if (files && files.length > 0) {
-        // Upload each file; first file carries the message text as initial_comment
-        await Promise.all(
-          files.map((file, i) => {
-            const fd = new FormData();
-            fd.append("action", "files.upload");
-            fd.append("channel", selectedChannel);
-            fd.append("file", file, file.name);
-            fd.append("filename", file.name);
-            if (i === 0 && text.trim()) fd.append("initial_comment", text.trim());
-            return invokeSlackFileUpload(fd);
-          }),
-        );
-        // Post text-only message if there are multiple files (first file already has comment)
-        if (files.length > 1 && text.trim()) {
-          await invokeSlackApi<{ ok: boolean }>({ action: "chat.postMessage", channel: selectedChannel, text }, 30_000);
-        }
+        await uploadSlackFiles(selectedChannel, files, text);
         return;
       }
 
@@ -402,7 +418,7 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
         action: "chat.postMessage",
         channel: selectedChannel,
         text,
-      }, 30_000);
+      }, { timeoutMs: 30_000 });
       if (!data.ok) throw new Error("No se pudo enviar el mensaje");
     },
     onSuccess: () => {
@@ -415,14 +431,18 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
 
   // ─── Enviar respuesta en hilo ────────────────────────────
   const sendReplyMutation = useMutation({
-    mutationFn: async (text: string) => {
+    mutationFn: async ({ text, files }: { text: string; files?: File[] }) => {
       if (!selectedChannel || !threadRootTs) throw new Error("Sin hilo seleccionado");
+      if (files && files.length > 0) {
+        await uploadSlackFiles(selectedChannel, files, text, threadRootTs);
+        return;
+      }
       const data = await invokeSlackApi<{ ok: boolean }>({
         action: "chat.postMessage",
         channel: selectedChannel,
         text,
         thread_ts: threadRootTs,
-      }, 30_000);
+      }, { timeoutMs: 30_000 });
       if (!data.ok) throw new Error("No se pudo enviar la respuesta");
     },
     onSuccess: () => {
@@ -443,7 +463,7 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
         channel: selectedChannel,
         ts,
         name,
-      }, 15_000);
+      }, { timeoutMs: 15_000 });
     },
     onSuccess: () => {
       void historyQuery.refetch();
@@ -657,35 +677,43 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
         className="sl-msg-col"
         data-mobile-hidden={isMobile && mobilePanel === "sidebar" ? "true" : undefined}
       >
-        <MessageArea
-          channel={currentConv}
-          channelId={selectedChannel}
-          messages={messages}
-          isLoading={historyQuery.isLoading}
-          hasMore={!!historyQuery.hasNextPage}
-          isFetchingNextPage={historyQuery.isFetchingNextPage}
-          onLoadMore={() => void historyQuery.fetchNextPage()}
-          onOpenThread={(ts) => setThreadRootTs(ts)}
-          userMap={userMap}
-          selfUserId={connection.slack_user_id ?? undefined}
-          onOpenAi={() => {}}
-          onOpenActivity={() => {}}
-          onReact={handleReact}
-          onCreateTask={handleCreateTask}
-          onBack={isMobile ? () => setMobilePanel("sidebar") : undefined}
-        />
-        <TypingIndicator typingUsers={typingUsers} />
-        <SlackComposerNew
-          channelName={channelName}
-          isSending={sendMutation.isPending}
-          onSend={(text, files) => {
-            sendMutation.mutate({ text, files });
-            onStopTyping();
-          }}
-          disabled={!selectedChannel}
-          userMap={userMap}
-          onTyping={onTyping}
-        />
+        <SlackChatFileDropZone
+          className="flex-1 min-h-0"
+          enabled={!!selectedChannel}
+          busy={sendMutation.isPending}
+          onDroppedFileList={(fl) => composerRef.current?.addFiles(Array.from(fl))}
+        >
+          <MessageArea
+            channel={currentConv}
+            channelId={selectedChannel}
+            messages={messages}
+            isLoading={historyQuery.isLoading}
+            hasMore={!!historyQuery.hasNextPage}
+            isFetchingNextPage={historyQuery.isFetchingNextPage}
+            onLoadMore={() => void historyQuery.fetchNextPage()}
+            onOpenThread={(ts) => setThreadRootTs(ts)}
+            userMap={userMap}
+            selfUserId={connection.slack_user_id ?? undefined}
+            onOpenAi={() => {}}
+            onOpenActivity={() => {}}
+            onReact={handleReact}
+            onCreateTask={handleCreateTask}
+            onBack={isMobile ? () => setMobilePanel("sidebar") : undefined}
+          />
+          <TypingIndicator typingUsers={typingUsers} />
+          <SlackComposerNew
+            ref={composerRef}
+            channelName={channelName}
+            isSending={sendMutation.isPending}
+            onSend={(text, files) => {
+              sendMutation.mutate({ text, files });
+              onStopTyping();
+            }}
+            disabled={!selectedChannel}
+            userMap={userMap}
+            onTyping={onTyping}
+          />
+        </SlackChatFileDropZone>
 
         {/* Panel de hilo sobre los mensajes */}
         <ThreadPanelNew
@@ -696,7 +724,9 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
           replies={threadReplies}
           isLoading={threadQuery.isLoading}
           isSending={sendReplyMutation.isPending}
-          onSendReply={(text) => sendReplyMutation.mutate(text)}
+          composerRef={threadComposerRef}
+          onDropFiles={(files) => threadComposerRef.current?.addFiles(files)}
+          onSendReply={(text, files) => sendReplyMutation.mutate({ text, files })}
           onReact={handleReact}
           onCreateTask={handleCreateTask}
           userMap={userMap}

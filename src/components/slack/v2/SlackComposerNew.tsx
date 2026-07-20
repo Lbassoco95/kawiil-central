@@ -1,4 +1,16 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useMemo, useEffect, forwardRef, useImperativeHandle } from "react";
+
+/** API imperativa: permite que el padre (drag & drop) agregue archivos a la cola. */
+export interface SlackComposerHandle {
+  addFiles: (files: File[]) => void;
+}
+
+/** Tamaño legible: 24 KB, 1.3 MB, etc. */
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 interface UserSuggestion {
   id: string;
@@ -19,7 +31,10 @@ interface Props {
 // Emoji rápidos para el picker simple
 const QUICK_EMOJIS = ["😊","👍","❤️","🔥","✅","😂","🎉","👀","🙏","💪","😅","🤔","👏","🚀","💯","😍","🤝","📌","⚠️","❓"];
 
-export function SlackComposerNew({ channelName, isSending, onSend, disabled, userMap = {}, onTyping }: Props) {
+export const SlackComposerNew = forwardRef<SlackComposerHandle, Props>(function SlackComposerNew(
+  { channelName, isSending, onSend, disabled, userMap = {}, onTyping },
+  ref,
+) {
   const [text, setText] = useState("");
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
@@ -159,16 +174,31 @@ export function SlackComposerNew({ channelName, isSending, onSend, disabled, use
   };
 
   // ─── Archivos ────────────────────────────────────────────
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
+  const addFiles = useCallback((files: File[]) => {
     if (!files.length) return;
     setPendingFiles((prev) => [...prev, ...files].slice(0, 5)); // max 5 files
+  }, []);
+
+  // Expone addFiles para el drag & drop del área de chat.
+  useImperativeHandle(ref, () => ({ addFiles }), [addFiles]);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    addFiles(Array.from(e.target.files || []));
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const removeFile = (idx: number) => {
     setPendingFiles((prev) => prev.filter((_, i) => i !== idx));
   };
+
+  // Miniaturas para imágenes pendientes (objectURL); null para no-imágenes.
+  const filePreviews = useMemo(
+    () => pendingFiles.map((f) => (f.type.startsWith("image/") ? URL.createObjectURL(f) : null)),
+    [pendingFiles],
+  );
+  useEffect(() => {
+    return () => filePreviews.forEach((u) => u && URL.revokeObjectURL(u));
+  }, [filePreviews]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (suggestions.length > 0) {
@@ -306,30 +336,60 @@ export function SlackComposerNew({ channelName, isSending, onSend, disabled, use
           onInput={handleInput}
         />
 
-        {/* Archivos pendientes */}
+        {/* Archivos pendientes (con miniatura para imágenes + tamaño) */}
         {pendingFiles.length > 0 && (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "4px 12px 0" }}>
-            {pendingFiles.map((f, i) => (
-              <div key={i} style={{
-                display: "flex", alignItems: "center", gap: 5,
-                background: "hsl(var(--muted))", borderRadius: 6,
-                padding: "3px 8px", fontSize: 11, color: "hsl(var(--foreground))",
-                border: "1px solid hsl(var(--border))",
-              }}>
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
-                </svg>
-                <span style={{ maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {f.name}
-                </span>
-                <button
-                  onMouseDown={(e) => { e.preventDefault(); removeFile(i); }}
-                  style={{ background: "transparent", border: 0, cursor: "pointer", color: "hsl(var(--muted-foreground))", padding: 0, lineHeight: 1, fontSize: 14 }}
-                >
-                  ×
-                </button>
-              </div>
-            ))}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: "6px 12px 0" }}>
+            {pendingFiles.map((f, i) => {
+              const preview = filePreviews[i];
+              return (
+                <div key={i} style={{
+                  position: "relative", display: "flex", alignItems: "center", gap: 8,
+                  background: "hsl(var(--muted))", borderRadius: 8,
+                  padding: preview ? 4 : "6px 26px 6px 8px", color: "hsl(var(--foreground))",
+                  border: "1px solid hsl(var(--border))", maxWidth: 220,
+                }}>
+                  {preview ? (
+                    <img
+                      src={preview}
+                      alt={f.name}
+                      style={{ width: 40, height: 40, borderRadius: 5, objectFit: "cover", flexShrink: 0, display: "block" }}
+                    />
+                  ) : (
+                    <span style={{
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      width: 32, height: 32, borderRadius: 5, flexShrink: 0,
+                      background: "hsl(var(--background))", border: "1px solid hsl(var(--border))",
+                    }}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+                      </svg>
+                    </span>
+                  )}
+                  <div style={{ minWidth: 0, paddingRight: preview ? 20 : 0 }}>
+                    <div style={{ fontSize: 11, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: preview ? 120 : 130 }}>
+                      {f.name}
+                    </div>
+                    <div style={{ fontSize: 10, color: "hsl(var(--muted-foreground))" }}>
+                      {formatFileSize(f.size)}
+                    </div>
+                  </div>
+                  <button
+                    onMouseDown={(e) => { e.preventDefault(); removeFile(i); }}
+                    title="Quitar"
+                    style={{
+                      position: "absolute", top: 2, right: 2,
+                      width: 18, height: 18, borderRadius: "50%",
+                      background: "hsl(var(--background))", border: "1px solid hsl(var(--border))",
+                      cursor: "pointer", color: "hsl(var(--muted-foreground))",
+                      padding: 0, lineHeight: 1, fontSize: 13,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -380,4 +440,4 @@ export function SlackComposerNew({ channelName, isSending, onSend, disabled, use
       </div>
     </div>
   );
-}
+});
