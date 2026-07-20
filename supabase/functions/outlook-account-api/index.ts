@@ -225,6 +225,11 @@ Deno.serve(async (req) => {
         return jsonResp({ value: emails, "@odata.nextLink": json["@odata.nextLink"] });
       }
 
+      // Cuenta pedida explícitamente pero sin fila válida (no existe o mail deshabilitado).
+      if (accountId && targetAccounts.length === 0) {
+        return jsonResp({ error: "Esta cuenta no está disponible para correo. Reconéctala para autorizar el acceso.", code: "REAUTH_REQUIRED" });
+      }
+
       const allEmails: unknown[] = [];
       let nextLink: string | undefined;
       for (const acc of targetAccounts) {
@@ -238,9 +243,15 @@ Deno.serve(async (req) => {
         const path = `/me/mailFolders/${encodeURIComponent(folder)}/messages?${listSelect}&$top=${top}&$orderby=receivedDateTime desc&$count=true${filterParam}`;
         const res = await graphFetch(token, path);
         if (!res.ok) {
-          // 401/403 = el token no incluye scopes de Mail (cuenta conectada solo para calendario).
-          if (accountId && (res.status === 401 || res.status === 403)) {
-            return jsonResp({ error: "Esta cuenta se conectó solo para calendario. Reconéctala para autorizar el correo.", code: "REAUTH_REQUIRED" });
+          // Con cuenta específica NUNCA tragarse el fallo: sin esto la UI muestra
+          // "No hay mensajes" en lugar del motivo real.
+          if (accountId) {
+            // 401/403 = el token no incluye scopes de Mail (cuenta conectada solo para calendario).
+            if (res.status === 401 || res.status === 403) {
+              return jsonResp({ error: "Esta cuenta se conectó solo para calendario. Reconéctala para autorizar el correo.", code: "REAUTH_REQUIRED" });
+            }
+            const body = await res.text();
+            return jsonResp({ error: `Microsoft Graph [${res.status}]: ${body.slice(0, 300)}` });
           }
           continue;
         }
