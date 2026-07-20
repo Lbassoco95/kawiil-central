@@ -18,6 +18,10 @@ function isSameDay(a: string, b: string): boolean {
 interface Props {
   channel: SlackConversation | null;
   channelId: string;
+  /** Nombre local (alias) que el usuario le puso a esta conversación. */
+  alias?: string;
+  /** Guarda (texto) o quita (null/"") el alias de la conversación. */
+  onRename?: (alias: string | null) => void;
   messages: SlackMessage[];
   isLoading: boolean;
   hasMore?: boolean;
@@ -37,6 +41,8 @@ interface Props {
 export function MessageArea({
   channel,
   channelId,
+  alias,
+  onRename,
   messages,
   isLoading,
   hasMore = false,
@@ -55,6 +61,8 @@ export function MessageArea({
   const scrollRef = useRef<HTMLDivElement>(null);
   const prevCountRef = useRef(0);
   const [slowLoad, setSlowLoad] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [renameDraft, setRenameDraft] = useState("");
 
   // Indicador de carga lenta — aparece tras 8s si sigue sin mensajes
   useEffect(() => {
@@ -63,10 +71,23 @@ export function MessageArea({
     return () => clearTimeout(t);
   }, [isLoading, channelId]);
 
-  const channelName =
+  const baseName =
     channel?.name ||
     (channel?.is_im && channel.user && (userMap[channel.user]?.display_name || userMap[channel.user]?.real_name)) ||
     channelId;
+  // El alias local (si existe) manda sobre el nombre calculado.
+  const channelName = alias || baseName;
+
+  const startRename = () => {
+    setRenameDraft(alias || "");
+    setRenaming(true);
+  };
+  const commitRename = () => {
+    setRenaming(false);
+    const next = renameDraft.trim();
+    if (next === (alias || "")) return; // sin cambios
+    onRename?.(next || null);
+  };
 
   const channelDesc =
     (channel as any)?.topic?.value ||
@@ -140,7 +161,58 @@ export function MessageArea({
             {!channel?.is_im && !channel?.is_mpim && (
               <span className="hash">#</span>
             )}
-            {channelName}
+            {renaming ? (
+              <input
+                autoFocus
+                value={renameDraft}
+                onChange={(e) => setRenameDraft(e.target.value)}
+                onBlur={commitRename}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") { e.preventDefault(); commitRename(); }
+                  if (e.key === "Escape") { e.preventDefault(); setRenaming(false); }
+                }}
+                placeholder={baseName}
+                style={{
+                  font: "inherit", color: "inherit",
+                  background: "hsl(var(--background))",
+                  border: "1px solid hsl(var(--primary))",
+                  borderRadius: 6, padding: "1px 6px", minWidth: 140, maxWidth: 260,
+                }}
+              />
+            ) : (
+              <>
+                {channelName}
+                {onRename && channel && (
+                  <button
+                    className="sl-rename-btn"
+                    title="Ponerle un nombre a esta conversación (solo para ti)"
+                    onClick={startRename}
+                    style={{
+                      background: "transparent", border: 0, cursor: "pointer",
+                      color: "hsl(var(--muted-foreground))", padding: 2, marginLeft: 4,
+                      display: "inline-flex", alignItems: "center", verticalAlign: "middle",
+                    }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+                    </svg>
+                  </button>
+                )}
+                {alias && (
+                  <span
+                    title="Quitar el nombre personalizado"
+                    onClick={() => onRename?.(null)}
+                    style={{
+                      cursor: "pointer", marginLeft: 4, fontSize: 10, fontWeight: 500,
+                      color: "hsl(var(--muted-foreground))", border: "1px solid hsl(var(--border))",
+                      borderRadius: 5, padding: "0 5px", verticalAlign: "middle",
+                    }}
+                  >
+                    alias ×
+                  </span>
+                )}
+              </>
+            )}
           </div>
           {channelDesc && (
             <div className="sl-msgs-meta">

@@ -233,6 +233,59 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
     return s;
   }, [sidebarGroupsRaw]);
 
+  // ─── Alias locales de conversaciones (nombres personalizados) ──
+  const { data: aliasRows = [] } = useQuery({
+    queryKey: ["slack-conv-aliases", user?.id],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("slack_conversation_aliases")
+        .select("channel_id, alias")
+        .eq("user_id", user!.id);
+      if (error) throw error;
+      return (data || []) as { channel_id: string; alias: string }[];
+    },
+    enabled: !!user?.id,
+  });
+
+  const aliasMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const r of aliasRows) if (r.alias?.trim()) m[r.channel_id] = r.alias.trim();
+    return m;
+  }, [aliasRows]);
+
+  const renameMutation = useMutation({
+    mutationFn: async ({ channelId, alias }: { channelId: string; alias: string | null }) => {
+      const clean = (alias ?? "").trim();
+      if (!clean) {
+        const { error } = await (supabase as any)
+          .from("slack_conversation_aliases")
+          .delete()
+          .eq("user_id", user!.id)
+          .eq("channel_id", channelId);
+        if (error) throw error;
+        return;
+      }
+      const { data: prof } = await (supabase as any)
+        .from("profiles")
+        .select("organization_id")
+        .eq("user_id", user!.id)
+        .maybeSingle();
+      if (!prof?.organization_id) throw new Error("No se pudo determinar tu organización.");
+      const { error } = await (supabase as any)
+        .from("slack_conversation_aliases")
+        .upsert(
+          { user_id: user!.id, channel_id: channelId, alias: clean, organization_id: prof.organization_id },
+          { onConflict: "user_id,channel_id" },
+        );
+      if (error) throw error;
+    },
+    onSuccess: (_data, vars) => {
+      void qc.invalidateQueries({ queryKey: ["slack-conv-aliases"] });
+      toast.success(vars.alias?.trim() ? "Nombre actualizado" : "Nombre quitado");
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "No se pudo cambiar el nombre"),
+  });
+
   // ─── Historial de mensajes ───────────────────────────────
   const historyQuery = useInfiniteQuery({
     queryKey: ["slack-history-v2", selectedChannel],
@@ -595,13 +648,14 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
   );
 
   const channelName = useMemo(() => {
+    if (aliasMap[selectedChannel]) return aliasMap[selectedChannel];
     if (!currentConv) return selectedChannel;
     if (currentConv.is_im && currentConv.user) {
       const u = userMap[currentConv.user];
       return u?.display_name || u?.real_name || `@${currentConv.user}`;
     }
     return currentConv.name || selectedChannel;
-  }, [currentConv, selectedChannel, userMap]);
+  }, [currentConv, selectedChannel, userMap, aliasMap]);
 
   // ─── Nombre del usuario actual (para typing indicator) ─────
   const currentUserName = useMemo(() => {
@@ -659,6 +713,7 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
         onSelectChannel={selectChannel}
         unreadByChannel={unreadBadges}
         userMap={userMap}
+        aliasMap={aliasMap}
         onNewMessage={() => {}}
         customGroups={customGroupsVm}
         channelsInCustomGroups={channelsInCustomGroups}
@@ -686,6 +741,10 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
           <MessageArea
             channel={currentConv}
             channelId={selectedChannel}
+            alias={aliasMap[selectedChannel]}
+            onRename={(alias) =>
+              selectedChannel && renameMutation.mutate({ channelId: selectedChannel, alias })
+            }
             messages={messages}
             isLoading={historyQuery.isLoading}
             hasMore={!!historyQuery.hasNextPage}
