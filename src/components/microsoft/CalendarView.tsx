@@ -59,6 +59,7 @@ import {
   useCalendarCategories, useEventTags, useCreateCalendarCategory,
   useUpdateCalendarCategory, useDeleteCalendarCategory, useToggleEventTag,
 } from "@/hooks/useCalendarCategories";
+import { useCalendarPrefs, useSaveCalendarPrefs } from "@/hooks/useCalendarPrefs";
 
 type ViewMode = "day" | "3days" | "week" | "month" | "agenda";
 
@@ -491,6 +492,35 @@ export function CalendarView({
   useEffect(() => {
     try { window.localStorage.setItem("kawiil-cal-kawiilcat-filters", JSON.stringify(activeKawiilCatIds)); } catch { /* ignore */ }
   }, [activeKawiilCatIds]);
+
+  // #2 — Preferencias en Supabase (siguen al usuario entre dispositivos).
+  // localStorage es caché inmediata; la BD es la fuente de verdad al cargar.
+  const { data: dbPrefs } = useCalendarPrefs();
+  const savePrefs = useSaveCalendarPrefs();
+  const prefsHydratedRef = useRef(false);
+  useEffect(() => {
+    if (prefsHydratedRef.current || !dbPrefs) return;
+    prefsHydratedRef.current = true;
+    if (Array.isArray(dbPrefs.hiddenCalendarIds)) setHiddenCalendarIds(dbPrefs.hiddenCalendarIds);
+    if (dbPrefs.calendarColors) setCalendarColors(dbPrefs.calendarColors);
+    if (dbPrefs.categoryColors) setCategoryColors(dbPrefs.categoryColors);
+    if (dbPrefs.accountColors) setAccountColors(dbPrefs.accountColors);
+    if (typeof dbPrefs.primaryName === "string") setPrimaryName(dbPrefs.primaryName);
+    if (Array.isArray(dbPrefs.activeCategoryFilters)) setActiveCategoryFilters(dbPrefs.activeCategoryFilters);
+    if (Array.isArray(dbPrefs.activeKawiilCatIds)) setActiveKawiilCatIds(dbPrefs.activeKawiilCatIds);
+  }, [dbPrefs]);
+  useEffect(() => {
+    if (!prefsHydratedRef.current) return;
+    const t = setTimeout(() => {
+      savePrefs.mutate({
+        hiddenCalendarIds, calendarColors, categoryColors, accountColors,
+        primaryName, activeCategoryFilters, activeKawiilCatIds,
+      });
+    }, 800);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hiddenCalendarIds, calendarColors, categoryColors, accountColors, primaryName, activeCategoryFilters, activeKawiilCatIds]);
+
   const categoryById = useMemo(() => {
     const m = new Map<string, { name: string; color: string }>();
     kawiilCategories.forEach((c) => m.set(c.id, { name: c.name, color: c.color }));
