@@ -345,7 +345,12 @@ export function useLinkedOutlookEmailsAll(options?: {
       const { data, error } = await supabase.functions.invoke("outlook-account-api", {
         body: { action: "emails", params: p },
       });
-      if (error || data?.error) return { emails: [], nextLink: undefined } as LinkedEmailPage;
+      if (error) throw error;
+      if (data?.error) {
+        const err = new Error(String(data.error));
+        (err as Error & { code?: string }).code = String(data.code || "");
+        throw err;
+      }
       return {
         emails: (data?.value ?? []) as Record<string, unknown>[],
         nextLink: data?.["@odata.nextLink"] as string | undefined,
@@ -355,6 +360,7 @@ export function useLinkedOutlookEmailsAll(options?: {
     getNextPageParam: (last: LinkedEmailPage) => last.nextLink ?? undefined,
     enabled,
     staleTime: 30_000,
+    retry: 1,
   });
 }
 
@@ -457,7 +463,12 @@ export function useGmailEmailsAll(options?: {
       const { data, error } = await supabase.functions.invoke("google-api", {
         body: { action: "gmail-emails", params: p },
       });
-      if (error || data?.error) return { emails: [], nextPageToken: undefined } as GmailEmailPage;
+      if (error) throw error;
+      if (data?.error) {
+        const err = new Error(String(data.error));
+        (err as Error & { code?: string }).code = String(data.code || "");
+        throw err;
+      }
       return {
         emails: (data?.value ?? []) as Record<string, unknown>[],
         nextPageToken: data?.nextPageToken as string | undefined,
@@ -467,6 +478,7 @@ export function useGmailEmailsAll(options?: {
     getNextPageParam: (last: GmailEmailPage) => last.nextPageToken ?? undefined,
     enabled,
     staleTime: 30_000,
+    retry: 1,
   });
 }
 

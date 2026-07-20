@@ -449,10 +449,13 @@ export function MailSidebar({
 
       <div className="mx-3 border-t border-border/40 shrink-0" />
 
-      {/* Carpetas section — independent scroll so nav items always visible */}
-      <div className="flex flex-col min-h-0 shrink" style={{ maxHeight: "45%" }}>
+      {/* Todo lo de abajo comparte un solo scroll — evita que las secciones se encimen en pantallas bajas */}
+      <div className="flex-1 min-h-0 overflow-y-auto">
+
+      {/* Carpetas section */}
+      <div className="shrink-0">
         {/* Header with search */}
-        <div className="px-2 pt-2.5 pb-1 shrink-0">
+        <div className="px-2 pt-2.5 pb-1">
           <div className="flex items-center justify-between px-2 mb-1.5">
             <p className="text-[9.5px] font-bold uppercase tracking-widest text-muted-foreground/60">
               Carpetas
@@ -491,8 +494,8 @@ export function MailSidebar({
           )}
         </div>
 
-        {/* Scrollable folder list */}
-        <div className="flex-1 overflow-y-auto px-2 pb-2">
+        {/* Folder list */}
+        <div className="px-2 pb-2">
           {customFolders.length === 0 && (
             <p className="text-[11.5px] text-muted-foreground/50 px-2.5 py-1 italic">Sin carpetas</p>
           )}
@@ -517,11 +520,11 @@ export function MailSidebar({
         </div>
       </div>
 
-      <div className="mx-3 border-t border-border/40 shrink-0" />
+      <div className="mx-3 border-t border-border/40" />
 
-      {/* Etiquetas section — takes remaining space */}
-      <div className="flex flex-col flex-1 min-h-0">
-        <div className="flex items-center justify-between px-4 pt-2.5 pb-1 shrink-0">
+      {/* Etiquetas section */}
+      <div className="shrink-0">
+        <div className="flex items-center justify-between px-4 pt-2.5 pb-1">
           <p className="text-[9.5px] font-bold uppercase tracking-widest text-muted-foreground/60">
             Etiquetas
           </p>
@@ -534,7 +537,7 @@ export function MailSidebar({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-2 pb-4">
+        <div className="px-2 pb-4">
           {newLabelOpen && (
             <div className="mx-1 mb-2 p-2 rounded-md bg-muted/40 border border-border/40 space-y-2">
               <input
@@ -603,8 +606,8 @@ export function MailSidebar({
       {/* Linked accounts — Outlook + Gmail */}
       {hasLinkedAccounts && (
         <>
-          <div className="mx-3 border-t border-border/40 shrink-0" />
-          <div className="overflow-y-auto pb-2 shrink-0">
+          <div className="mx-3 border-t border-border/40" />
+          <div className="pb-2">
             {outlookLinked.map(account => (
               <LinkedOutlookSection
                 key={account.id}
@@ -628,8 +631,8 @@ export function MailSidebar({
       )}
 
       {/* Add account buttons */}
-      <div className="mx-3 border-t border-border/40 shrink-0" />
-      <div className="px-3 py-2 shrink-0 flex flex-col gap-1">
+      <div className="mx-3 border-t border-border/40" />
+      <div className="px-3 py-2 flex flex-col gap-1">
         <button
           onClick={() => connectGoogle()}
           disabled={googleConnecting}
@@ -651,6 +654,8 @@ export function MailSidebar({
           Agregar cuenta de Outlook
         </button>
       </div>
+
+      </div>{/* fin scroll compartido */}
     </div>
   );
 }
