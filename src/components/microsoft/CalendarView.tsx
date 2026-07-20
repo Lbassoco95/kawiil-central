@@ -60,12 +60,14 @@ import {
   useUpdateCalendarCategory, useDeleteCalendarCategory, useToggleEventTag,
 } from "@/hooks/useCalendarCategories";
 import { useCalendarPrefs, useSaveCalendarPrefs } from "@/hooks/useCalendarPrefs";
-import { useWorkLocations } from "@/hooks/useWorkLocations";
+import { useWorkLocations, WORK_STATUS_META } from "@/hooks/useWorkLocations";
 import { WorkLocationChip } from "@/components/microsoft/WorkLocationChip";
+import { useTeamAvailability } from "@/hooks/useTeamAvailability";
+import { UserAvatar } from "@/components/shared/UserAvatar";
 import { EventTravelSection } from "@/components/microsoft/EventTravelSection";
 import { useAuth } from "@/contexts/AuthContext";
 
-type ViewMode = "day" | "3days" | "week" | "month" | "agenda";
+type ViewMode = "day" | "3days" | "week" | "month" | "agenda" | "equipo";
 
 /** Colores de acento por calendario (barra lateral izquierda del evento). */
 const CALENDAR_ACCENT_COLORS = [
@@ -431,14 +433,14 @@ export function CalendarView({
 
   const rangeStart = useMemo(() => {
     if (viewMode === "month") return format(startOfMonth(currentDate), "yyyy-MM-dd");
-    if (viewMode === "day" || viewMode === "agenda") return format(currentDate, "yyyy-MM-dd");
+    if (viewMode === "day" || viewMode === "agenda" || viewMode === "equipo") return format(currentDate, "yyyy-MM-dd");
     return format(viewDays[0] || currentDate, "yyyy-MM-dd");
   }, [viewMode, currentDate, viewDays]);
 
   const rangeEnd = useMemo(() => {
     if (viewMode === "month") return format(endOfMonth(currentDate), "yyyy-MM-dd");
     if (viewMode === "agenda") return format(addDays(currentDate, 30), "yyyy-MM-dd");
-    if (viewMode === "day") return format(addDays(currentDate, 1), "yyyy-MM-dd");
+    if (viewMode === "day" || viewMode === "equipo") return format(addDays(currentDate, 1), "yyyy-MM-dd");
     const last = viewDays[viewDays.length - 1] || currentDate;
     return format(addDays(last, 1), "yyyy-MM-dd");
   }, [viewMode, currentDate, viewDays]);
@@ -571,6 +573,17 @@ export function CalendarView({
     workLocations.forEach((w) => { if (w.user_id === authUser?.id) m.set(w.date, w); });
     return m;
   }, [workLocations, authUser?.id]);
+
+  // #4 — Disponibilidad del equipo para el día seleccionado (vista "Equipo").
+  const teamDayYmd = useMemo(() => format(currentDate, "yyyy-MM-dd"), [currentDate]);
+  const { data: teamAvailability = [], isLoading: teamLoading } = useTeamAvailability(
+    `${teamDayYmd}T00:00:00`, `${teamDayYmd}T23:59:59`, viewMode === "equipo",
+  );
+  const workByUserForDay = useMemo(() => {
+    const m = new Map<string, (typeof workLocations)[number]>();
+    workLocations.forEach((w) => { if (w.date === teamDayYmd) m.set(w.user_id, w); });
+    return m;
+  }, [workLocations, teamDayYmd]);
 
   const calendarById = useMemo(() => {
     const m = new Map<string, { name: string; color: string; hexColor?: string }>();
@@ -784,6 +797,7 @@ export function CalendarView({
       }
       case "month": return format(currentDate, "MMMM yyyy", { locale: es });
       case "agenda": return `Agenda · desde ${format(currentDate, "d MMM", { locale: es })}`;
+      case "equipo": return `Equipo · ${format(currentDate, "EEEE d 'de' MMMM", { locale: es })}`;
     }
   }, [viewMode, currentDate]);
 
@@ -798,6 +812,7 @@ export function CalendarView({
       }
       case "month": return format(currentDate, "MMM yyyy", { locale: es });
       case "agenda": return `Agenda · ${format(currentDate, "d MMM", { locale: es })}`;
+      case "equipo": return `Equipo · ${format(currentDate, "EEE d MMM", { locale: es })}`;
     }
   }, [viewMode, currentDate]);
 
@@ -902,7 +917,7 @@ export function CalendarView({
         {/* View mode tabs */}
         {!isMobile && (
           <div className="flex items-center ml-2 shrink-0">
-            {(["day", "3days", "week", "month", "agenda"] as const).map((v) => (
+            {(["day", "3days", "week", "month", "agenda", "equipo"] as const).map((v) => (
               <button
                 key={v}
                 onClick={() => setViewMode(v)}
@@ -913,7 +928,7 @@ export function CalendarView({
                     : "text-muted-foreground border-b-transparent hover:text-foreground"
                 )}
               >
-                {v === "day" ? "Día" : v === "3days" ? "3 Días" : v === "week" ? "Semana" : v === "month" ? "Mes" : "Agenda"}
+                {v === "day" ? "Día" : v === "3days" ? "3 Días" : v === "week" ? "Semana" : v === "month" ? "Mes" : v === "agenda" ? "Agenda" : "Equipo"}
               </button>
             ))}
           </div>
@@ -954,7 +969,7 @@ export function CalendarView({
           )}
 
           {/* Day/3days/Week grid */}
-          {viewMode !== "month" && viewMode !== "agenda" && (
+          {viewMode !== "month" && viewMode !== "agenda" && viewMode !== "equipo" && (
             <div className={getMinWidth()}>
                 {/* Cabecera fija: fechas + "Todo el día" quedan visibles al hacer scroll */}
                 <div className="sticky top-0 z-20 bg-card shadow-sm">
@@ -1333,6 +1348,68 @@ export function CalendarView({
                   </div>
                 );
               })()}
+            </div>
+          )}
+
+          {/* Vista Equipo — disponibilidad de los usuarios de la organización */}
+          {viewMode === "equipo" && (
+            <div className="p-3 sm:p-4 overflow-x-auto">
+              {teamLoading ? (
+                <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+              ) : teamAvailability.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center gap-2">
+                  <Users className="h-8 w-8 text-muted-foreground/50" />
+                  <p className="text-sm text-muted-foreground">Sin disponibilidad para mostrar. Los compañeros deben tener una cuenta de calendario conectada.</p>
+                </div>
+              ) : (
+                <div className="min-w-[720px] space-y-1.5">
+                  <p className="text-[11px] text-muted-foreground mb-1">Ocupado = con título; “Bloqueado” = evento privado. Los espacios en blanco son huecos libres para proponer reuniones.</p>
+                  {/* Regla de horas */}
+                  <div className="flex items-center">
+                    <div className="w-44 shrink-0" />
+                    <div className="relative flex-1 h-4">
+                      {Array.from({ length: Math.floor((END_HOUR - START_HOUR) / 2) + 1 }, (_, i) => START_HOUR + i * 2).map((h) => (
+                        <span key={h} className="absolute text-[9px] text-muted-foreground -translate-x-1/2"
+                          style={{ left: `${((h - START_HOUR) / (END_HOUR - START_HOUR)) * 100}%` }}>{h}:00</span>
+                      ))}
+                    </div>
+                  </div>
+                  {teamAvailability.map((member) => {
+                    const work = workByUserForDay.get(member.userId);
+                    const wm = work ? WORK_STATUS_META[work.status] : null;
+                    const dayStartMin = START_HOUR * 60, dayEndMin = END_HOUR * 60, span = dayEndMin - dayStartMin;
+                    return (
+                      <div key={member.userId} className="flex items-center gap-2">
+                        <div className="w-44 shrink-0 flex items-center gap-2">
+                          <UserAvatar name={member.name} avatarUrl={member.avatarUrl} userId={member.userId} size="sm" />
+                          <div className="min-w-0">
+                            <p className="text-xs text-foreground truncate leading-tight">{member.name}</p>
+                            {wm && <p className="text-[10px] text-muted-foreground truncate leading-tight">{wm.icon} {work?.place || wm.short}</p>}
+                          </div>
+                        </div>
+                        <div className="relative flex-1 h-8 rounded-md bg-muted/30 border border-border/50 overflow-hidden">
+                          {member.blocks.map((b, i) => {
+                            const s = parseEventTime(b.start), e = parseEventTime(b.end);
+                            const sMin = Math.max(s.getHours() * 60 + s.getMinutes(), dayStartMin);
+                            const eMin = Math.min(e.getHours() * 60 + e.getMinutes(), dayEndMin);
+                            if (eMin <= sMin) return null;
+                            const left = ((sMin - dayStartMin) / span) * 100;
+                            const width = ((eMin - sMin) / span) * 100;
+                            return (
+                              <div key={i} title={`${b.title} (${formatMX(s, "HH:mm")}–${formatMX(e, "HH:mm")})`}
+                                className={cn("absolute top-1 bottom-1 rounded px-1 text-[9px] text-white truncate flex items-center",
+                                  b.private ? "bg-slate-400 dark:bg-slate-600" : "bg-primary/80")}
+                                style={{ left: `${left}%`, width: `${Math.max(width, 1.5)}%` }}>
+                                {width > 8 ? b.title : ""}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>
