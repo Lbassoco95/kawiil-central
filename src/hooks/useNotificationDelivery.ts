@@ -257,7 +257,7 @@ export function useNotificationDelivery() {
                 className:
                   "group flex w-full min-w-[min(100vw-1.5rem,20rem)] sm:min-w-[22rem] max-w-[min(100vw-1.5rem,26rem)] " +
                   "cursor-pointer items-start gap-3 rounded-lg border border-border/80 bg-popover p-3 text-left " +
-                  "shadow-xl transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring",
+                  "shadow-xl transition-colors hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring",
               },
               createElement(
                 "div",
