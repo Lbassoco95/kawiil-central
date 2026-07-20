@@ -551,6 +551,48 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
   const profilesQuery = useSlackUserProfiles(userIds);
   const userMap = profilesQuery.data ?? {};
 
+  // ─── Miembros de grupos (MPIM) para nombrarlos "Leo, Ana, …" ──
+  const mpimIds = useMemo(
+    () => conversations.filter((c) => c.is_mpim).map((c) => c.id).sort(),
+    [conversations],
+  );
+  const { data: mpimMembersByChannel = {} } = useQuery({
+    queryKey: ["slack-mpim-members-v2", mpimIds.join(",")],
+    enabled: mpimIds.length > 0,
+    staleTime: 30 * 60_000,
+    queryFn: async () => {
+      const out: Record<string, string[]> = {};
+      for (const id of mpimIds.slice(0, 30)) {
+        try {
+          const d = await invokeSlackApi<{ ok: boolean; members?: string[] }>(
+            { action: "conversations.members", channel: id },
+            { timeoutMs: 15_000 },
+          );
+          if (d.ok && d.members) out[id] = d.members;
+        } catch { /* best-effort */ }
+      }
+      return out;
+    },
+  });
+
+  /** channel_id → "Leo, Ana, Jesús" (nombres de los otros miembros del grupo). */
+  const mpimNameByChannel = useMemo(() => {
+    const out: Record<string, string> = {};
+    const self = connection.slack_user_id;
+    for (const [chId, members] of Object.entries(mpimMembersByChannel)) {
+      const names = members
+        .filter((sid) => sid !== self)
+        .map((sid) => {
+          const u = userMap[sid];
+          return (u?.display_name || u?.real_name || "").trim();
+        })
+        .filter((n) => n.length > 0);
+      const uniq = [...new Set(names)];
+      if (uniq.length) out[chId] = uniq.join(", ");
+    }
+    return out;
+  }, [mpimMembersByChannel, userMap, connection.slack_user_id]);
+
   // ─── Badges no leídos ───────────────────────────────────
   const unreadBadges = useSlackChannelNotificationBadges(user?.id);
 
@@ -654,8 +696,11 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
       const u = userMap[currentConv.user];
       return u?.display_name || u?.real_name || `@${currentConv.user}`;
     }
+    if (currentConv.is_mpim && mpimNameByChannel[selectedChannel]) {
+      return mpimNameByChannel[selectedChannel];
+    }
     return currentConv.name || selectedChannel;
-  }, [currentConv, selectedChannel, userMap, aliasMap]);
+  }, [currentConv, selectedChannel, userMap, aliasMap, mpimNameByChannel]);
 
   // ─── Nombre del usuario actual (para typing indicator) ─────
   const currentUserName = useMemo(() => {
@@ -714,6 +759,7 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
         unreadByChannel={unreadBadges}
         userMap={userMap}
         aliasMap={aliasMap}
+        mpimNameByChannel={mpimNameByChannel}
         onNewMessage={() => {}}
         customGroups={customGroupsVm}
         channelsInCustomGroups={channelsInCustomGroups}
@@ -742,6 +788,7 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
             channel={currentConv}
             channelId={selectedChannel}
             alias={aliasMap[selectedChannel]}
+            mpimName={mpimNameByChannel[selectedChannel]}
             onRename={(alias) =>
               selectedChannel && renameMutation.mutate({ channelId: selectedChannel, alias })
             }

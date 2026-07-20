@@ -13,6 +13,7 @@ function convTitle(
   conv: SlackConversation,
   userMap: Record<string, { display_name?: string; real_name?: string }> = {},
   aliasMap: Record<string, string> = {},
+  mpimNameByChannel: Record<string, string> = {},
 ): string {
   if (aliasMap[conv.id]) return aliasMap[conv.id]; // alias local del usuario, si existe
   if (conv.is_im && conv.user) {
@@ -20,8 +21,10 @@ function convTitle(
     // display_name → real_name → "@id" (nunca el ID crudo sin prefijo)
     return u?.display_name || u?.real_name || `@${conv.user}`;
   }
-  if (conv.is_mpim && conv.name) {
-    return conv.name.replace(/^mpdm-|--\d+$/g, "").replace(/-/g, ", ");
+  if (conv.is_mpim) {
+    // Nombre por integrantes ("Leo, Ana, Jesús"); si no, limpia el "mpdm-…".
+    if (mpimNameByChannel[conv.id]) return mpimNameByChannel[conv.id];
+    if (conv.name) return conv.name.replace(/^mpdm-/, "").replace(/-\d+$/, "").replace(/--/g, ", ");
   }
   return conv.name || conv.id;
 }
@@ -76,6 +79,7 @@ function ChannelRow({
   onClick,
   userMap,
   aliasMap = {},
+  mpimNameByChannel = {},
 }: {
   conv: SlackConversation;
   isActive: boolean;
@@ -83,8 +87,9 @@ function ChannelRow({
   onClick: () => void;
   userMap: Record<string, { display_name?: string; real_name?: string }>;
   aliasMap?: Record<string, string>;
+  mpimNameByChannel?: Record<string, string>;
 }) {
-  const title = convTitle(conv, userMap, aliasMap);
+  const title = convTitle(conv, userMap, aliasMap, mpimNameByChannel);
   const icon = channelIcon(conv);
   const isDm = conv.is_im || conv.is_mpim;
 
@@ -131,6 +136,7 @@ interface Props {
   unreadByChannel: Record<string, number>;
   userMap?: Record<string, { display_name?: string; real_name?: string }>;
   aliasMap?: Record<string, string>;
+  mpimNameByChannel?: Record<string, string>;
   onNewMessage?: () => void;
   onRefresh?: () => void;
   customGroups?: CustomGroup[];
@@ -150,6 +156,7 @@ export function ChannelSidebar({
   unreadByChannel,
   userMap = {},
   aliasMap = {},
+  mpimNameByChannel = {},
   onNewMessage,
   onRefresh,
   customGroups = [],
@@ -165,9 +172,9 @@ export function ChannelSidebar({
     if (!search.trim()) return conversations;
     const q = search.toLowerCase();
     return conversations.filter((c) =>
-      convTitle(c, userMap, aliasMap).toLowerCase().includes(q)
+      convTitle(c, userMap, aliasMap, mpimNameByChannel).toLowerCase().includes(q)
     );
-  }, [conversations, search, userMap, aliasMap]);
+  }, [conversations, search, userMap, aliasMap, mpimNameByChannel]);
 
   const starred  = filtered.filter((c) => (c as any).is_starred);
 
@@ -237,6 +244,7 @@ export function ChannelSidebar({
                 onClick={() => onSelectChannel(c.id)}
                 userMap={userMap}
                 aliasMap={aliasMap}
+                mpimNameByChannel={mpimNameByChannel}
               />
             ))}
           </Section>
@@ -279,6 +287,7 @@ export function ChannelSidebar({
                 onClick={() => onSelectChannel(c.id)}
                 userMap={userMap}
                 aliasMap={aliasMap}
+                mpimNameByChannel={mpimNameByChannel}
               />
             ))}
           </Section>
@@ -295,6 +304,7 @@ export function ChannelSidebar({
                 onClick={() => onSelectChannel(c.id)}
                 userMap={userMap}
                 aliasMap={aliasMap}
+                mpimNameByChannel={mpimNameByChannel}
               />
             ))}
           </Section>
