@@ -1305,9 +1305,11 @@ Deno.serve(async (req) => {
         }
 
         const skipParam = skip > 0 ? `&$skip=${skip}` : "";
+        const filterUnread = params?.filterUnread === true;
+        const filterParam = filterUnread ? "&$filter=isRead eq false" : "";
         result = await graphRequest(
           accessToken,
-          `/me/mailFolders/${folder}/messages?${select}&$top=${top}&$orderby=receivedDateTime desc&$count=true${skipParam}`,
+          `/me/mailFolders/${folder}/messages?${select}&$top=${top}&$orderby=receivedDateTime desc&$count=true${filterParam}${skipParam}`,
           { headers: GRAPH_MAIL_PREFER_IMMUTABLE },
         );
         break;

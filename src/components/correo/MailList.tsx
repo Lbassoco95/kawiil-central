@@ -87,7 +87,9 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
   const isAiTab = AI_TABS.includes(activeTab) && !customFolderOverride;
   const primaryFolderId = isLinkedAccount ? "inbox" : (customFolderOverride ?? TAB_TO_FOLDER[activeTab] ?? "inbox");
 
-  const primaryQuery = useOutlookEmails(primaryFolderId, isLinkedAccount ? undefined : debouncedSearch || undefined);
+  // Server-side unread filter: only when "Sin leer" is active, no search, not an AI tab, and using primary account
+  const serverFilterUnread = readFilter === "sinleer" && !debouncedSearch && !isAiTab && !isLinkedAccount;
+  const primaryQuery = useOutlookEmails(primaryFolderId, isLinkedAccount ? undefined : debouncedSearch || undefined, serverFilterUnread);
   const linkedOutlookQuery = useLinkedOutlookEmailsAll({
     accountId: linkedAccId || undefined,
     folder: linkedFolderPath || "inbox",
@@ -300,7 +302,9 @@ const now = useMemo(() => new Date(), []);
       <div className="flex items-center gap-0 px-3 py-1.5 border-b border-border/30 shrink-0">
         {(["sinleer", "leidos", "todos"] as ReadFilter[]).map((f) => {
           const labelMap: Record<ReadFilter, string> = { sinleer: "Sin leer", leidos: "Leídos", todos: "Todos" };
-          const unreadCount = f === "sinleer" ? allEmails.filter(e => !(e.isRead as boolean)).length : null;
+          // When server is filtering unread, show totalCount from Graph; otherwise count client-side
+          const serverTotal = serverFilterUnread ? ((data?.pages?.[0] as any)?.totalCount ?? null) : null;
+          const unreadCount = f === "sinleer" ? (serverTotal ?? allEmails.filter(e => !(e.isRead as boolean)).length) : null;
           return (
             <button
               key={f}
