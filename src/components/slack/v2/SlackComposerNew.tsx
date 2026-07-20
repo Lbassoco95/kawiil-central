@@ -1,4 +1,9 @@
-import { useState, useRef, useCallback, useMemo, useEffect } from "react";
+import { useState, useRef, useCallback, useMemo, useEffect, forwardRef, useImperativeHandle } from "react";
+
+/** API imperativa: permite que el padre (drag & drop) agregue archivos a la cola. */
+export interface SlackComposerHandle {
+  addFiles: (files: File[]) => void;
+}
 
 /** Tamaño legible: 24 KB, 1.3 MB, etc. */
 function formatFileSize(bytes: number): string {
@@ -26,7 +31,10 @@ interface Props {
 // Emoji rápidos para el picker simple
 const QUICK_EMOJIS = ["😊","👍","❤️","🔥","✅","😂","🎉","👀","🙏","💪","😅","🤔","👏","🚀","💯","😍","🤝","📌","⚠️","❓"];
 
-export function SlackComposerNew({ channelName, isSending, onSend, disabled, userMap = {}, onTyping }: Props) {
+export const SlackComposerNew = forwardRef<SlackComposerHandle, Props>(function SlackComposerNew(
+  { channelName, isSending, onSend, disabled, userMap = {}, onTyping },
+  ref,
+) {
   const [text, setText] = useState("");
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
@@ -166,10 +174,16 @@ export function SlackComposerNew({ channelName, isSending, onSend, disabled, use
   };
 
   // ─── Archivos ────────────────────────────────────────────
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
+  const addFiles = useCallback((files: File[]) => {
     if (!files.length) return;
     setPendingFiles((prev) => [...prev, ...files].slice(0, 5)); // max 5 files
+  }, []);
+
+  // Expone addFiles para el drag & drop del área de chat.
+  useImperativeHandle(ref, () => ({ addFiles }), [addFiles]);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    addFiles(Array.from(e.target.files || []));
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -426,4 +440,4 @@ export function SlackComposerNew({ channelName, isSending, onSend, disabled, use
       </div>
     </div>
   );
-}
+});

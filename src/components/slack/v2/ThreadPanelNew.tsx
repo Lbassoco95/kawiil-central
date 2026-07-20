@@ -1,7 +1,8 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, type RefObject } from "react";
 import type { SlackMessage } from "@/lib/slackApi";
 import { MessageItem } from "./MessageItem";
-import { SlackComposerNew } from "./SlackComposerNew";
+import { SlackComposerNew, type SlackComposerHandle } from "./SlackComposerNew";
+import { SlackChatFileDropZone } from "../SlackChatFileDropZone";
 
 interface Props {
   open: boolean;
@@ -16,6 +17,10 @@ interface Props {
   onCreateTask?: (msg: SlackMessage) => void;
   userMap?: Record<string, { display_name?: string; real_name?: string; avatar_url?: string }>;
   selfUserId?: string;
+  /** Ref al composer del hilo para agregar archivos soltados. */
+  composerRef?: RefObject<SlackComposerHandle>;
+  /** Archivos soltados sobre el hilo (drag & drop). */
+  onDropFiles?: (files: File[]) => void;
 }
 
 export function ThreadPanelNew({
@@ -31,6 +36,8 @@ export function ThreadPanelNew({
   onCreateTask,
   userMap = {},
   selfUserId,
+  composerRef,
+  onDropFiles,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -68,6 +75,12 @@ export function ThreadPanelNew({
           </div>
         </div>
 
+        <SlackChatFileDropZone
+          className="flex-1 min-h-0"
+          enabled={!!rootMessage && !!onDropFiles}
+          busy={isSending}
+          onDroppedFileList={(fl) => onDropFiles?.(Array.from(fl))}
+        >
         {/* Mensajes del hilo */}
         <div className="sl-thread-stream" ref={scrollRef}>
           {isLoading && (
@@ -118,11 +131,13 @@ export function ThreadPanelNew({
 
         {/* Composer del hilo — con @menciones */}
         <SlackComposerNew
+          ref={composerRef}
           channelName="hilo"
           isSending={isSending}
           onSend={onSendReply}
           userMap={userMap}
         />
+        </SlackChatFileDropZone>
       </div>
     </>
   );
