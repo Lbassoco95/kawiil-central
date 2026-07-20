@@ -238,8 +238,8 @@ ${detail.body?.contentType === "html" ? origBody : `<pre style="font-family:inhe
         />
       </div>
 
-      {/* Keyboard hint strip — only over email list area, not the contact panel */}
-      <div className="absolute bottom-0 left-0 right-[290px] z-20 flex items-center gap-4 px-4 py-1.5 bg-card/90 backdrop-blur-sm border-t border-border/30 text-[11px] text-muted-foreground/50 pointer-events-none">
+      {/* Keyboard hint strip — solo sobre la lista de correos; no tapar sidebar (200px) ni panel de contacto */}
+      <div className="absolute bottom-0 left-[200px] right-[290px] z-20 flex items-center gap-4 px-4 py-1.5 bg-card/90 backdrop-blur-sm border-t border-border/30 text-[11px] text-muted-foreground/50 pointer-events-none">
         {[
           { key: "C", label: "Redactar" },
           { key: "F", label: "Reenviar" },

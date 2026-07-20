@@ -702,7 +702,11 @@ export function useOutlookEmails(folderId = "inbox", search?: string, filterUnre
         );
         return { emails: [], pageSkip, totalCount: 0 };
       }
-      if (error) throw error;
+      if (error) {
+        // Incluir el cuerpo del error de la edge function: "non-2xx" a secas no es accionable.
+        const detail = errBody.trim().slice(0, 300);
+        throw new Error(detail ? `${(error as Error).message}: ${detail}` : (error as Error).message);
+      }
       if (data?.error) throw new Error(data.error);
       const emails = data?.value || [];
       const totalCount = parseOdataCount(data?.["@odata.count"]);
