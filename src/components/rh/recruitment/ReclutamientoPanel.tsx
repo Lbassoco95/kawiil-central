@@ -98,6 +98,28 @@ function ProcessList({ onOpen }: { onOpen: (p: RecruitmentProcess) => void }) {
   const celulaName = (id: string | null) => celulas.find((c) => c.id === id)?.name ?? "Sin célula";
   const [dialogOpen, setDialogOpen] = useState(false);
 
+  // Las vacantes cubiertas/cerradas se separan del grid activo (sus procesos ya no están vigentes).
+  const activos = processes.filter((p) => p.status !== "filled" && p.status !== "closed");
+  const archivadas = processes.filter((p) => p.status === "filled" || p.status === "closed");
+
+  const renderCard = (p: RecruitmentProcess) => (
+    <button key={p.id} type="button" onClick={() => onOpen(p)} className="text-left">
+      <Card className="h-full transition-colors hover:bg-muted/40">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-start justify-between gap-2 text-sm">
+            <span className="min-w-0 truncate">{p.title}</span>
+            <Badge variant="outline" className={cn("shrink-0", PROCESS_STATUS_STYLE[p.status])}>
+              {PROCESS_STATUS_LABEL[p.status]}
+            </Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="text-xs text-muted-foreground">
+          {celulaName(p.celula_id)}
+        </CardContent>
+      </Card>
+    </button>
+  );
+
   return (
     <section className="space-y-4">
       <div className="flex items-center justify-between">
@@ -126,25 +148,24 @@ function ProcessList({ onOpen }: { onOpen: (p: RecruitmentProcess) => void }) {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {processes.map((p) => (
-            <button key={p.id} type="button" onClick={() => onOpen(p)} className="text-left">
-              <Card className="h-full transition-colors hover:bg-muted/40">
-                <CardHeader className="pb-2">
-                  <CardTitle className="flex items-start justify-between gap-2 text-sm">
-                    <span className="min-w-0 truncate">{p.title}</span>
-                    <Badge variant="outline" className={cn("shrink-0", PROCESS_STATUS_STYLE[p.status])}>
-                      {PROCESS_STATUS_LABEL[p.status]}
-                    </Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="text-xs text-muted-foreground">
-                  {celulaName(p.celula_id)}
-                </CardContent>
-              </Card>
-            </button>
-          ))}
-        </div>
+        <>
+          {activos.length > 0 ? (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{activos.map(renderCard)}</div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No hay vacantes abiertas.</p>
+          )}
+
+          {archivadas.length > 0 && (
+            <details className="mt-2">
+              <summary className="cursor-pointer py-2 text-xs text-muted-foreground hover:text-foreground">
+                Vacantes cubiertas y cerradas ({archivadas.length})
+              </summary>
+              <div className="mt-2 grid gap-3 opacity-70 sm:grid-cols-2 lg:grid-cols-3">
+                {archivadas.map(renderCard)}
+              </div>
+            </details>
+          )}
+        </>
       )}
 
       <NewProcessDialog open={dialogOpen} onOpenChange={setDialogOpen} />
