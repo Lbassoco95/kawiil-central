@@ -60,6 +60,9 @@ import {
   useUpdateCalendarCategory, useDeleteCalendarCategory, useToggleEventTag,
 } from "@/hooks/useCalendarCategories";
 import { useCalendarPrefs, useSaveCalendarPrefs } from "@/hooks/useCalendarPrefs";
+import { useWorkLocations } from "@/hooks/useWorkLocations";
+import { WorkLocationChip } from "@/components/microsoft/WorkLocationChip";
+import { useAuth } from "@/contexts/AuthContext";
 
 type ViewMode = "day" | "3days" | "week" | "month" | "agenda";
 
@@ -559,6 +562,15 @@ export function CalendarView({
 
   const { data: kawiilTasks = [] } = useTasksForCalendar(rangeStart, rangeEnd);
 
+  // #3 — Ubicación/estatus de trabajo por día del usuario actual.
+  const { user: authUser } = useAuth();
+  const { data: workLocations = [] } = useWorkLocations(rangeStart, rangeEnd);
+  const myWorkByDate = useMemo(() => {
+    const m = new Map<string, (typeof workLocations)[number]>();
+    workLocations.forEach((w) => { if (w.user_id === authUser?.id) m.set(w.date, w); });
+    return m;
+  }, [workLocations, authUser?.id]);
+
   const calendarById = useMemo(() => {
     const m = new Map<string, { name: string; color: string; hexColor?: string }>();
     calendars.forEach((c, i) => m.set(c.id, { name: c.name, color: calendarAccentColor(c.id, i), hexColor: c.hexColor }));
@@ -979,6 +991,9 @@ export function CalendarView({
                               : `${dayTaskCount} tarea${dayTaskCount > 1 ? "s" : ""}`}
                           </Badge>
                         )}
+                        <div className="mt-1 flex justify-center" onClick={(e) => e.stopPropagation()}>
+                          <WorkLocationChip date={format(day, "yyyy-MM-dd")} entry={myWorkByDate.get(format(day, "yyyy-MM-dd"))} compact />
+                        </div>
                       </div>
                     );
                   })}
