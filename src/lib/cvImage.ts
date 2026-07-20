@@ -36,21 +36,28 @@ export async function renderCvFirstPageToBase64(
   // PDF → renderizar la primera página a un canvas y exportar PNG.
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const pdfjsLib: any = await import("pdfjs-dist");
-    const pdfjs = pdfjsLib.default ?? pdfjsLib;
-    pdfjs.disableWorker = true;
+    const pdfjs: any = await import("pdfjs-dist");
+    // Configura el worker (patrón Vite) — sin esto el render sale en blanco.
+    if (!pdfjs.GlobalWorkerOptions.workerSrc) {
+      const workerMod = await import("pdfjs-dist/build/pdf.worker.min.mjs?url");
+      pdfjs.GlobalWorkerOptions.workerSrc = workerMod.default;
+    }
     const doc = await pdfjs.getDocument({ data: buf }).promise;
     const page = await doc.getPage(1);
-    const viewport = page.getViewport({ scale: 2 });
+    const viewport = page.getViewport({ scale: 2.5 });
     const canvas = document.createElement("canvas");
     canvas.width = Math.ceil(viewport.width);
     canvas.height = Math.ceil(viewport.height);
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
-    await page.render({ canvasContext: ctx, viewport }).promise;
-    const dataUrl = canvas.toDataURL("image/png");
-    return { base64: dataUrl.split(",")[1] ?? "", mime: "image/png" };
-  } catch {
+    // Fondo blanco (los PDFs suelen ser transparentes; evita render "negro").
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvasContext: ctx, viewport, background: "#ffffff" }).promise;
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+    return { base64: dataUrl.split(",")[1] ?? "", mime: "image/jpeg" };
+  } catch (e) {
+    console.error("renderCvFirstPageToBase64 error:", e);
     return null;
   }
 }
