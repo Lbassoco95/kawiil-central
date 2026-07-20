@@ -20,6 +20,8 @@ interface Props {
   channelId: string;
   /** Nombre local (alias) que el usuario le puso a esta conversación. */
   alias?: string;
+  /** Nombre por integrantes para grupos (MPIM): "Leo, Ana, Jesús". */
+  mpimName?: string;
   /** Guarda (texto) o quita (null/"") el alias de la conversación. */
   onRename?: (alias: string | null) => void;
   messages: SlackMessage[];
@@ -42,6 +44,7 @@ export function MessageArea({
   channel,
   channelId,
   alias,
+  mpimName,
   onRename,
   messages,
   isLoading,
@@ -72,8 +75,9 @@ export function MessageArea({
   }, [isLoading, channelId]);
 
   const baseName =
-    channel?.name ||
+    (channel?.is_mpim && mpimName) ||
     (channel?.is_im && channel.user && (userMap[channel.user]?.display_name || userMap[channel.user]?.real_name)) ||
+    channel?.name ||
     channelId;
   // El alias local (si existe) manda sobre el nombre calculado.
   const channelName = alias || baseName;
