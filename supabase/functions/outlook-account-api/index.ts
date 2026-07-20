@@ -27,7 +27,7 @@ async function ensureAccessToken(
 
   const clientId = Deno.env.get("MICROSOFT_CLIENT_ID")!.trim();
   const clientSecret = Deno.env.get("MICROSOFT_CLIENT_SECRET")!.trim();
-  const tenantId = Deno.env.get("MICROSOFT_TENANT_ID")!.trim();
+  const tenantId = Deno.env.get("MICROSOFT_LINKED_TENANT_ID")?.trim() || "common";
   const res = await fetch(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },

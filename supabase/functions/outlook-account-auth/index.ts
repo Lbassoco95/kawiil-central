@@ -26,9 +26,12 @@ Deno.serve(async (req) => {
     }
 
     const clientId = Deno.env.get("MICROSOFT_CLIENT_ID")?.trim();
-    const tenantId = Deno.env.get("MICROSOFT_TENANT_ID")?.trim();
+    // Cuentas ADICIONALES: usamos 'common' por defecto para permitir cualquier
+    // organización Microsoft (requiere que la app de Azure sea multitenant).
+    // Se puede fijar un tenant específico con MICROSOFT_LINKED_TENANT_ID.
+    const tenantId = Deno.env.get("MICROSOFT_LINKED_TENANT_ID")?.trim() || "common";
     const redirectUri = `${Deno.env.get("SUPABASE_URL")}/functions/v1/outlook-account-callback`;
-    if (!clientId || !tenantId) {
+    if (!clientId) {
       return new Response(JSON.stringify({ error: "Microsoft credentials not configured" }), { status: 500, headers: corsHeaders });
     }
 

@@ -1227,9 +1227,9 @@ export function CalendarView({
           rightPanelOpen && !isMobile ? "w-[260px]" : "w-0"
         )}>
           <div className="w-[260px] flex-1 overflow-y-auto">
-            <div className="p-3 flex flex-col gap-4">
+            <div className="p-3 pb-24 flex flex-col gap-4">
               {/* Mini calendar */}
-              <div className="order-6 border-t border-border/30 pt-3">
+              <div className="order-2 border-t border-border/30 pt-3">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground capitalize">
                     {format(currentDate, "MMMM yyyy", { locale: es })}
@@ -1494,7 +1494,7 @@ export function CalendarView({
               )}
 
               {/* Today agenda */}
-              <div className="order-2 border-t border-border/30 pt-3">
+              <div className="order-6 border-t border-border/30 pt-3">
                 {todayAgendaCard}
               </div>
 
