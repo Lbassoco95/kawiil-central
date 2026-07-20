@@ -142,19 +142,30 @@ Deno.serve(async (req) => {
       return json({ ok: false, message: "No se pudo ubicar el recuadro de la foto." });
     }
 
-    // 2) Recortar con un margen del 15% (para incluir cabeza/hombros).
+    // 2) Recortar CUADRADO y centrado en la cara (para que el avatar circular
+    //    quede alineado). Se añade un margen del 20% alrededor del recuadro.
     const img = await Image.decode(b64ToBytes(imageB64));
     const W = img.width, H = img.height;
-    const padX = w * 0.15, padY = h * 0.15;
-    x = Math.max(0, x - padX); y = Math.max(0, y - padY);
-    w = Math.min(1 - x, w + padX * 2); h = Math.min(1 - y, h + padY * 2);
 
-    const px = Math.round(x * W), py = Math.round(y * H);
-    const pw = Math.max(1, Math.round(w * W)), ph = Math.max(1, Math.round(h * H));
-    const cw = Math.min(pw, W - px), ch = Math.min(ph, H - py);
-    if (cw < 8 || ch < 8) return json({ ok: false, message: "La foto detectada es demasiado pequeña." });
+    // Recuadro detectado en píxeles + margen.
+    const padX = w * 0.20, padY = h * 0.20;
+    const bx = Math.max(0, x - padX) * W;
+    const by = Math.max(0, y - padY) * H;
+    const bw = Math.min(1, w + padX * 2) * W;
+    const bh = Math.min(1, h + padY * 2) * H;
 
-    img.crop(px, py, cw, ch);
+    // Cuadrado centrado en el centro del recuadro.
+    const ccx = bx + bw / 2, ccy = by + bh / 2;
+    let side = Math.min(Math.max(bw, bh), W, H);
+    let sx = Math.round(ccx - side / 2);
+    let sy = Math.round(ccy - side / 2);
+    side = Math.round(side);
+    sx = Math.max(0, Math.min(sx, W - side));
+    sy = Math.max(0, Math.min(sy, H - side));
+    const s = Math.max(1, Math.min(side, W - sx, H - sy));
+    if (s < 8) return json({ ok: false, message: "La foto detectada es demasiado pequeña." });
+
+    img.crop(sx, sy, s, s);
     const png = await img.encode();
 
     // 3) Subir y guardar la ruta.
