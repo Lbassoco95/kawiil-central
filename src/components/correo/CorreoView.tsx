@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import { MailList } from "./MailList";
 import { MailSidebar } from "./MailSidebar";
 import { MailContactPanel } from "./MailContactPanel";
+import { MailPreviewPanel } from "./MailPreviewPanel";
 import { MailReadingOverlay } from "./MailReadingOverlay";
 import { MailFoldersSheet } from "./MailFoldersSheet";
 import { MailRulesSheet } from "./MailRulesSheet";
@@ -107,9 +108,7 @@ export function CorreoView() {
     }
   }, [user?.id, queryClient]);
 
-  const handleSelectEmail = useCallback((id: string) => {
-    setSelectedEmailId(id);
-    setReadingOpen(true);
+  const markEmailReadRouted = useCallback((id: string) => {
     // Route mark-read to the correct account based on email ID prefix
     const parts = id.split(":");
     const prefix = parts[0];
@@ -122,6 +121,20 @@ export function CorreoView() {
       markRead.mutate(id);
     }
   }, [markRead, markLinkedOutlookRead, markGmailRead]);
+
+  /** Un clic: selecciona y muestra la vista previa en el panel derecho (marca como leído). */
+  const handleSelectEmail = useCallback((id: string) => {
+    setSelectedEmailId(id);
+    setReadingOpen(false);
+    markEmailReadRouted(id);
+  }, [markEmailReadRouted]);
+
+  /** Doble clic / botón Abrir: vista completa con respuesta. */
+  const handleOpenEmail = useCallback((id: string) => {
+    setSelectedEmailId(id);
+    setReadingOpen(true);
+    markEmailReadRouted(id);
+  }, [markEmailReadRouted]);
 
   const handleSelectTab = useCallback((tab: MailTabId) => {
     setActiveTab(tab);
@@ -200,6 +213,7 @@ ${detail.body?.contentType === "html" ? origBody : `<pre style="font-family:inhe
           onSelectTab={handleSelectTab}
           selectedEmailId={selectedEmailId}
           onSelectEmail={handleSelectEmail}
+          onOpenEmail={handleOpenEmail}
           onCompose={() => { setForwardState(null); setComposeOpen(true); }}
           onOpenFolders={() => setFoldersOpen(true)}
           onOpenRules={() => setRulesOpen(true)}
@@ -228,14 +242,22 @@ ${detail.body?.contentType === "html" ? origBody : `<pre style="font-family:inhe
         />
       </div>
 
-      {/* Right: contact panel */}
+      {/* Right: vista previa del correo seleccionado; con la vista completa abierta, panel de contacto */}
       <div className="w-[290px] shrink-0 border-l border-border/30 overflow-hidden">
-        <MailContactPanel
-          emailId={selectedEmailId}
-          onAskAI={() => {}}
-          onCreateTask={() => selectedEmailDetail && handleCreateTask(selectedEmailDetail as EmailShape)}
-          onCreateRule={handleCreateRule}
-        />
+        {selectedEmailId && !readingOpen ? (
+          <MailPreviewPanel
+            emailId={selectedEmailId}
+            onOpen={() => setReadingOpen(true)}
+            onReply={() => { setForwardState(null); setComposeOpen(true); }}
+          />
+        ) : (
+          <MailContactPanel
+            emailId={selectedEmailId}
+            onAskAI={() => {}}
+            onCreateTask={() => selectedEmailDetail && handleCreateTask(selectedEmailDetail as EmailShape)}
+            onCreateRule={handleCreateRule}
+          />
+        )}
       </div>
 
       {/* Keyboard hint strip — solo sobre la lista de correos; no tapar sidebar (200px) ni panel de contacto */}

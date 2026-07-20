@@ -1,6 +1,7 @@
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useEmailDetail } from "@/hooks/useMicrosoft";
 import { toast } from "sonner";
 
 export type AccountProvider = "microsoft" | "google" | "imap";
@@ -527,6 +528,36 @@ export function useGmailInboxMeta() {
     staleTime: 30_000,
     refetchInterval: 60_000,
   });
+}
+
+/** Desglosa un ID de correo con prefijo de cuenta: "outlook:{acc}:{id}" | "gmail:{acc}:{id}" | primario. */
+export function parseEmailAccountRef(emailId: string | null): {
+  provider: "primary" | "outlook" | "gmail";
+  accountId: string | null;
+} {
+  if (!emailId) return { provider: "primary", accountId: null };
+  const parts = emailId.split(":");
+  if (parts.length >= 3 && (parts[0] === "outlook" || parts[0] === "gmail") && parts[1]) {
+    return { provider: parts[0] as "outlook" | "gmail", accountId: parts[1] };
+  }
+  return { provider: "primary", accountId: null };
+}
+
+/** Detalle de un correo ruteado por prefijo de ID (cuenta principal, Outlook vinculado o Gmail). */
+export function useRoutedEmailDetail(emailId: string | null) {
+  const ref = parseEmailAccountRef(emailId);
+  const primary = useEmailDetail(ref.provider === "primary" ? emailId : null);
+  const linkedOutlook = useLinkedOutlookEmailDetail(
+    ref.provider === "outlook" ? ref.accountId : null,
+    ref.provider === "outlook" ? emailId : null,
+  );
+  const gmail = useGmailEmailDetail(
+    ref.provider === "gmail" ? ref.accountId : null,
+    ref.provider === "gmail" ? emailId : null,
+  );
+  if (ref.provider === "outlook") return { ...linkedOutlook, accountRef: ref };
+  if (ref.provider === "gmail") return { ...gmail, accountRef: ref };
+  return { ...primary, accountRef: ref };
 }
 
 export function useMarkGmailRead() {

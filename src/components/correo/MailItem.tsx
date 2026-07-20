@@ -9,12 +9,14 @@ interface Props {
   email: Record<string, unknown>;
   isActive: boolean;
   onClick: () => void;
+  /** Doble clic / Enter: abrir la vista completa (onClick solo previsualiza). */
+  onOpen?: () => void;
   onArchive?: () => void;
   onMarkRead?: () => void;
   labelChips?: { name: string; color: string }[];
 }
 
-export function MailItem({ email, isActive, onClick, onArchive, onMarkRead, labelChips }: Props) {
+export function MailItem({ email, isActive, onClick, onOpen, onArchive, onMarkRead, labelChips }: Props) {
   const from = email.from as { emailAddress?: { name?: string; address?: string } } | undefined;
   const senderName = from?.emailAddress?.name || from?.emailAddress?.address || "Sin remitente";
   const subject = (email.subject as string) || "(sin asunto)";
@@ -63,9 +65,10 @@ export function MailItem({ email, isActive, onClick, onArchive, onMarkRead, labe
         importance === "high" && !isActive && "border-l-destructive",
       )}
       onClick={onClick}
+      onDoubleClick={() => (onOpen ?? onClick)()}
       role="button"
       tabIndex={0}
-      onKeyDown={(e) => e.key === "Enter" && onClick()}
+      onKeyDown={(e) => e.key === "Enter" && (onOpen ?? onClick)()}
     >
       {/* Unread dot */}
       <span className={cn(
