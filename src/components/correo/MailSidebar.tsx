@@ -34,6 +34,8 @@ import {
   useLinkedOutlookInboxMeta,
   useGmailInboxMeta,
   useGmailLabels,
+  useGoogleConnection,
+  useOutlookConnection,
   linkedAccountColor,
   type LinkedAccount,
 } from "@/hooks/useLinkedAccounts";
@@ -384,6 +386,8 @@ export function MailSidebar({
   const { data: linkedAccounts = [] } = useLinkedAccounts();
   const { data: outlookInboxMeta } = useLinkedOutlookInboxMeta();
   const { data: gmailInboxMeta } = useGmailInboxMeta();
+  const { connect: connectGoogle, isConnecting: googleConnecting } = useGoogleConnection();
+  const { connect: connectOutlook, isConnecting: outlookConnecting } = useOutlookConnection();
 
   const outlookUnreadMap = Object.fromEntries(
     (outlookInboxMeta?.accounts ?? []).map(a => [a.accountId, a.unreadItemCount])
@@ -600,7 +604,7 @@ export function MailSidebar({
       {hasLinkedAccounts && (
         <>
           <div className="mx-3 border-t border-border/40 shrink-0" />
-          <div className="overflow-y-auto pb-4 shrink-0">
+          <div className="overflow-y-auto pb-2 shrink-0">
             {outlookLinked.map(account => (
               <LinkedOutlookSection
                 key={account.id}
@@ -622,6 +626,31 @@ export function MailSidebar({
           </div>
         </>
       )}
+
+      {/* Add account buttons */}
+      <div className="mx-3 border-t border-border/40 shrink-0" />
+      <div className="px-3 py-2 shrink-0 flex flex-col gap-1">
+        <button
+          onClick={() => connectGoogle()}
+          disabled={googleConnecting}
+          className="flex items-center gap-1.5 w-full h-7 px-2 rounded-md text-[11px] text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors text-left"
+        >
+          {googleConnecting
+            ? <Loader2 className="w-3 h-3 animate-spin shrink-0" />
+            : <Plus className="w-3 h-3 shrink-0" />}
+          Agregar cuenta de Gmail
+        </button>
+        <button
+          onClick={() => connectOutlook()}
+          disabled={outlookConnecting}
+          className="flex items-center gap-1.5 w-full h-7 px-2 rounded-md text-[11px] text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors text-left"
+        >
+          {outlookConnecting
+            ? <Loader2 className="w-3 h-3 animate-spin shrink-0" />
+            : <Plus className="w-3 h-3 shrink-0" />}
+          Agregar cuenta de Outlook
+        </button>
+      </div>
     </div>
   );
 }

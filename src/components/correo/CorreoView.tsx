@@ -13,6 +13,7 @@ import { MailTaskDrawer } from "./MailTaskDrawer";
 import { MailTranslateDrawer } from "./MailTranslateDrawer";
 import { type MailTabId } from "./MailTabs";
 import { useEmailDetail, useMailFolders, useMarkEmailRead } from "@/hooks/useMicrosoft";
+import { useMarkLinkedOutlookEmailRead, useMarkGmailRead } from "@/hooks/useLinkedAccounts";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -58,6 +59,8 @@ export function CorreoView() {
   const folders = (foldersQueryData?.folders ?? []) as { id: string; displayName: string }[];
   const { data: selectedEmailDetail } = useEmailDetail(selectedEmailId);
   const markRead = useMarkEmailRead();
+  const markLinkedOutlookRead = useMarkLinkedOutlookEmailRead();
+  const markGmailRead = useMarkGmailRead();
 
   const handleAfterSendTemplate = useCallback(async (info: { templateCategory?: string; clientId?: string; clientName?: string }) => {
     const declarationCategories = ["pagos_provisionales", "declaracion_ceros", "envio_anuales", "previos_provisionales", "isn_imss", "envio_nominas"];
@@ -107,9 +110,18 @@ export function CorreoView() {
   const handleSelectEmail = useCallback((id: string) => {
     setSelectedEmailId(id);
     setReadingOpen(true);
-    // Auto-mark as read when opening
-    markRead.mutate(id);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    // Route mark-read to the correct account based on email ID prefix
+    const parts = id.split(":");
+    const prefix = parts[0];
+    const accountId = parts.length >= 3 ? parts[1] : "";
+    if (prefix === "outlook" && accountId) {
+      markLinkedOutlookRead.mutate({ accountId, emailId: id });
+    } else if (prefix === "gmail" && accountId) {
+      markGmailRead.mutate({ accountId, emailId: id });
+    } else {
+      markRead.mutate(id);
+    }
+  }, [markRead, markLinkedOutlookRead, markGmailRead]);
 
   const handleSelectTab = useCallback((tab: MailTabId) => {
     setActiveTab(tab);
