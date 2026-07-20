@@ -182,6 +182,46 @@ export function weightedScore(
   return num / den;
 }
 
+/** Promedio del panel por criterio: promedia las calificaciones de los distintos evaluadores. */
+export function scoreAveragesByCriterion(
+  scores: CandidateScore[],
+): Map<string, { avg: number; count: number }> {
+  const groups = new Map<string, number[]>();
+  for (const s of scores) {
+    const arr = groups.get(s.criterion_id) ?? [];
+    arr.push(s.score);
+    groups.set(s.criterion_id, arr);
+  }
+  const out = new Map<string, { avg: number; count: number }>();
+  for (const [cid, arr] of groups) {
+    out.set(cid, { avg: arr.reduce((a, b) => a + b, 0) / arr.length, count: arr.length });
+  }
+  return out;
+}
+
+/** Calificación ponderada del panel usando el promedio por criterio entre evaluadores. */
+export function panelWeightedScore(
+  criteria: RecruitmentCriterion[],
+  scores: CandidateScore[],
+): number | null {
+  const avgs = scoreAveragesByCriterion(scores);
+  let num = 0;
+  let den = 0;
+  for (const c of criteria) {
+    const a = avgs.get(c.id);
+    if (!a) continue;
+    num += a.avg * c.weight;
+    den += c.weight;
+  }
+  if (den === 0) return null;
+  return num / den;
+}
+
+/** Cuántos evaluadores distintos han calificado al candidato. */
+export function distinctEvaluators(scores: CandidateScore[]): number {
+  return new Set(scores.map((s) => s.scored_by).filter(Boolean)).size;
+}
+
 /** Semáforo: verde ≥ 4, ámbar ≥ 3, rojo < 3. */
 export function scoreSemaphore(score: number | null): "green" | "amber" | "red" | "none" {
   if (score == null) return "none";

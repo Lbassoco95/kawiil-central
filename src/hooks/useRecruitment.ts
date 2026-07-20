@@ -561,7 +561,7 @@ export function useSetCandidateScore() {
             scored_by: user!.id,
             updated_at: new Date().toISOString(),
           },
-          { onConflict: "candidate_id,criterion_id" },
+          { onConflict: "candidate_id,criterion_id,scored_by" },
         );
       if (error) throw error;
     },

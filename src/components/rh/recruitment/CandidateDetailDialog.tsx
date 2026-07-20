@@ -23,6 +23,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { formatMX } from "@/lib/dateUtils";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useAuth } from "@/contexts/AuthContext";
 import { HireCandidateDialog } from "./HireCandidateDialog";
 import { CandidateAttachments } from "./CandidateAttachments";
 import { DocumentPreviewDialog, type PreviewTarget } from "./DocumentPreviewDialog";
@@ -36,6 +37,9 @@ import {
   renderTemplate,
   scoreSemaphore,
   weightedScore,
+  panelWeightedScore,
+  scoreAveragesByCriterion,
+  distinctEvaluators,
   type Candidate,
   type EducationStatus,
   type RecruitmentCriterion,
@@ -120,6 +124,7 @@ function CandidateDetailInner({
   const { data: scores = [] } = useCandidateScores(candidate.id);
   const { data: templates = [] } = useEmailTemplates();
   const { isTransformador } = useUserRole();
+  const { user } = useAuth();
   const del = useDeleteCandidate();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const addNote = useAddCandidateNote();
@@ -172,9 +177,15 @@ function CandidateDetailInner({
     setSubject(renderTemplate(t.subject, templateVars));
     setEmailBody(renderTemplate(t.body, templateVars));
   }
-  const scoreById = new Map(scores.map((s) => [s.criterion_id, s.score]));
-  const avg = weightedScore(criteria, scores);
+  // Evaluación por entrevistador: "mi" rúbrica vs. consolidado del panel.
+  const myScores = scores.filter((s) => s.scored_by === user?.id);
+  const myScoreById = new Map(myScores.map((s) => [s.criterion_id, s.score]));
+  const panelAvgById = scoreAveragesByCriterion(scores);
+  const myAvg = weightedScore(criteria, myScores);
+  const avg = panelWeightedScore(criteria, scores); // consolidado (encabezado)
   const sem = scoreSemaphore(avg);
+  const mySem = scoreSemaphore(myAvg);
+  const evaluators = distinctEvaluators(scores);
 
   function saveProfile() {
     updateCandidate.mutate({
@@ -479,13 +490,25 @@ function CandidateDetailInner({
             <p className="text-sm text-muted-foreground">Configura la rúbrica desde el botón “Rúbrica” del tablero.</p>
           ) : (
             <>
+              <p className="text-xs text-muted-foreground">
+                Tu evaluación es individual. Abajo se muestra el promedio del panel
+                {evaluators > 0 ? ` (${evaluators} ${evaluators === 1 ? "evaluador" : "evaluadores"})` : ""}.
+              </p>
               {criteria.map((c) => {
-                const val = scoreById.get(c.id);
+                const val = myScoreById.get(c.id);
+                const panel = panelAvgById.get(c.id);
                 return (
                   <div key={c.id} className="space-y-1.5">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium">{c.name}</span>
-                      <Badge variant="secondary" className="text-[10px]">peso {Number(c.weight)}</Badge>
+                      <div className="flex items-center gap-2">
+                        {panel && (
+                          <Badge variant="outline" className="text-[10px]" title={`Promedio de ${panel.count} evaluador(es)`}>
+                            panel {panel.avg.toFixed(1)} · {panel.count}
+                          </Badge>
+                        )}
+                        <Badge variant="secondary" className="text-[10px]">peso {Number(c.weight)}</Badge>
+                      </div>
                     </div>
                     <div className="flex gap-1.5">
                       {[1, 2, 3, 4, 5].map((n) => (
@@ -505,16 +528,33 @@ function CandidateDetailInner({
                   </div>
                 );
               })}
-              <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2">
-                <span className="text-sm font-medium">Calificación final</span>
-                {avg == null ? (
-                  <span className="text-sm text-muted-foreground">Sin calificar</span>
-                ) : (
-                  <span className={cn("flex items-center gap-1.5 text-sm font-semibold", SEMAPHORE_TEXT[sem])}>
-                    <span className={cn("h-2.5 w-2.5 rounded-full", SEMAPHORE_DOT[sem])} />
-                    {avg.toFixed(1)} / 5
+
+              <div className="space-y-2 rounded-lg border bg-muted/30 px-3 py-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Mi calificación</span>
+                  {myAvg == null ? (
+                    <span className="text-sm text-muted-foreground">Sin calificar</span>
+                  ) : (
+                    <span className={cn("flex items-center gap-1.5 text-sm font-semibold", SEMAPHORE_TEXT[mySem])}>
+                      <span className={cn("h-2.5 w-2.5 rounded-full", SEMAPHORE_DOT[mySem])} />
+                      {myAvg.toFixed(1)} / 5
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center justify-between border-t pt-2">
+                  <span className="text-sm font-medium">
+                    Consolidado del panel
+                    {evaluators > 0 && <span className="ml-1 text-[10px] text-muted-foreground">({evaluators})</span>}
                   </span>
-                )}
+                  {avg == null ? (
+                    <span className="text-sm text-muted-foreground">Sin calificar</span>
+                  ) : (
+                    <span className={cn("flex items-center gap-1.5 text-sm font-semibold", SEMAPHORE_TEXT[sem])}>
+                      <span className={cn("h-2.5 w-2.5 rounded-full", SEMAPHORE_DOT[sem])} />
+                      {avg.toFixed(1)} / 5
+                    </span>
+                  )}
+                </div>
               </div>
             </>
           )}
@@ -602,7 +642,7 @@ function CandidateDetailInner({
                         {ai.suggested_rubric_scores.map((sug, i) => {
                           const crit = criteria.find((c) => c.id === sug.criterion_id);
                           if (!crit) return null;
-                          const applied = scoreById.get(crit.id) === sug.score;
+                          const applied = myScoreById.get(crit.id) === sug.score;
                           return (
                             <div key={i} className="rounded-md border px-2.5 py-2">
                               <div className="flex items-center justify-between gap-2">
