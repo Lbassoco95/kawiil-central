@@ -304,7 +304,16 @@ Deno.serve(async (req) => {
         });
         if (!listRes.ok) {
           if (accountId) {
-            // 401/403 = el token no incluye los scopes de Gmail (cuenta conectada solo para calendario).
+            const body = await listRes.text();
+            // 403 con accessNotConfigured = la Gmail API no está habilitada en el proyecto
+            // de Google Cloud; reconectar la cuenta NO lo arregla.
+            if (/accessNotConfigured|SERVICE_DISABLED|has not been used in project/i.test(body)) {
+              return new Response(
+                JSON.stringify({ error: "La API de Gmail no está habilitada en el proyecto de Google Cloud de Kawiil. Actívala en console.cloud.google.com → APIs y servicios → Biblioteca → Gmail API → Habilitar. Reconectar la cuenta no resuelve esto." }),
+                { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+              );
+            }
+            // 401/403 restantes = el token no incluye los scopes de Gmail.
             if (listRes.status === 401 || listRes.status === 403) {
               return new Response(
                 JSON.stringify({ error: "Esta cuenta se conectó solo para calendario. Reconéctala para autorizar el correo.", code: "REAUTH_REQUIRED" }),
@@ -312,7 +321,6 @@ Deno.serve(async (req) => {
               );
             }
             // Cualquier otro fallo: exponer el motivo real, nunca lista vacía.
-            const body = await listRes.text();
             return new Response(
               JSON.stringify({ error: `Gmail API [${listRes.status}]: ${body.slice(0, 300)}` }),
               { headers: { ...corsHeaders, "Content-Type": "application/json" } },

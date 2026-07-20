@@ -83,6 +83,9 @@ Deno.serve(async (req) => {
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const expiresAt = new Date(Date.now() + (tokenData.expires_in ?? 3600) * 1000).toISOString();
 
+    // OJO: en una reconexión Google puede NO devolver refresh_token; si lo pisáramos con
+    // null, el refresh fallaría en ~1h y la cuenta quedaría en "error" (desconexión fantasma).
+    // Con undefined, el upsert omite la columna y conserva el refresh_token anterior.
     const { error: dbError } = await supabase
       .from("linked_accounts")
       .upsert(
@@ -93,7 +96,7 @@ Deno.serve(async (req) => {
           display_name: displayName,
           provider_account_id: providerAccountId,
           access_token: tokenData.access_token,
-          refresh_token: tokenData.refresh_token ?? null,
+          refresh_token: tokenData.refresh_token ?? undefined,
           token_expires_at: expiresAt,
           scope: tokenData.scope ?? null,
           status: "connected",
