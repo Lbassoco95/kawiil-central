@@ -1313,16 +1313,25 @@ export function useMarkEmailRead() {
 
   return useMutation({
     mutationFn: async (messageId: string) => {
-      const { data, error } = await supabase.functions.invoke("microsoft-api", {
-        body: { action: "mark-read", params: { messageId } },
-      });
-      const errBody = await readSupabaseFunctionErrorBody(error);
-      if (payloadIndicatesItemNotFound(data, error, errBody)) {
-        return { success: true as const };
+      // Retry once on transient edge-function failures (network blip, cold start)
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const { data, error } = await supabase.functions.invoke("microsoft-api", {
+          body: { action: "mark-read", params: { messageId } },
+        });
+        const errBody = await readSupabaseFunctionErrorBody(error);
+        if (payloadIndicatesItemNotFound(data, error, errBody)) {
+          return { success: true as const };
+        }
+        const isNetworkError = error && String(error?.message || "").includes("Failed to send");
+        if (error && !isNetworkError) throw error;
+        if (!error) {
+          if (data?.error) throw new Error(data.error);
+          return data;
+        }
+        // Network error on first attempt — wait 1.5s and retry
+        if (attempt === 0) await new Promise((r) => setTimeout(r, 1500));
+        else throw error;
       }
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      return data;
     },
     onMutate: async (messageId) => {
       await queryClient.cancelQueries({ queryKey: ["outlook-emails"] });
@@ -1363,11 +1372,12 @@ export function useMarkEmailRead() {
         invalidateInboxUnreadAndMailFolders(queryClient);
       }, 2000);
     },
-    onError: (err: Error, messageId) => {
+    onError: (_err: Error, messageId) => {
       queryClient.invalidateQueries({ queryKey: ["outlook-emails"] });
       queryClient.invalidateQueries({ queryKey: ["email-detail", messageId] });
       invalidateInboxUnreadAndMailFolders(queryClient);
-      toast.error("Error al marcar correo como leído: " + err.message);
+      // Silently ignore: marking as read is best-effort background work,
+      // transient edge-function errors shouldn't surface to the user.
     },
   });
 }

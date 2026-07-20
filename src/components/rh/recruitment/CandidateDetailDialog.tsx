@@ -23,10 +23,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { formatMX } from "@/lib/dateUtils";
 import { useUserRole } from "@/hooks/useUserRole";
-import { useAuth } from "@/contexts/AuthContext";
 import { HireCandidateDialog } from "./HireCandidateDialog";
-import { CandidateAttachments } from "./CandidateAttachments";
-import { DocumentPreviewDialog, type PreviewTarget } from "./DocumentPreviewDialog";
 import {
   ACTIVITY_LABEL,
   EDUCATION_STATUSES,
@@ -37,9 +34,6 @@ import {
   renderTemplate,
   scoreSemaphore,
   weightedScore,
-  panelWeightedScore,
-  scoreAveragesByCriterion,
-  distinctEvaluators,
   type Candidate,
   type EducationStatus,
   type RecruitmentCriterion,
@@ -60,13 +54,8 @@ import {
   useUploadCandidateCv,
   useUploadCandidateExam,
   useAnalyzeCandidateFit,
-  useExtractCvData,
-  useUploadCandidatePhoto,
-  useExtractCvPhoto,
-  useCandidatePhotoUrls,
+  getCvSignedUrl,
 } from "@/hooks/useRecruitment";
-import { renderCvFirstPageToBase64 } from "@/lib/cvImage";
-import { UserAvatar } from "@/components/shared/UserAvatar";
 
 interface Props {
   candidate: Candidate | null;
@@ -129,7 +118,6 @@ function CandidateDetailInner({
   const { data: scores = [] } = useCandidateScores(candidate.id);
   const { data: templates = [] } = useEmailTemplates();
   const { isTransformador } = useUserRole();
-  const { user } = useAuth();
   const del = useDeleteCandidate();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const addNote = useAddCandidateNote();
@@ -140,23 +128,16 @@ function CandidateDetailInner({
   const uploadCv = useUploadCandidateCv();
   const uploadExam = useUploadCandidateExam();
   const analyzeFit = useAnalyzeCandidateFit();
-  const extractCv = useExtractCvData();
-  const uploadPhoto = useUploadCandidatePhoto();
-  const extractPhoto = useExtractCvPhoto();
-  const { data: photoMap = {} } = useCandidatePhotoUrls([candidate]);
-  const photoUrl = candidate.photo_url ? photoMap[candidate.photo_url] ?? null : null;
   const sendEmail = useSendCandidateEmail();
   const fileRef = useRef<HTMLInputElement>(null);
   const examRef = useRef<HTMLInputElement>(null);
-  const photoRef = useRef<HTMLInputElement>(null);
-  const [photoBusy, setPhotoBusy] = useState(false);
 
   const [note, setNote] = useState("");
   const [emailOpen, setEmailOpen] = useState(false);
   const [subject, setSubject] = useState("");
   const [emailBody, setEmailBody] = useState("");
+  const [openingCv, setOpeningCv] = useState(false);
   const [hireOpen, setHireOpen] = useState(false);
-  const [preview, setPreview] = useState<PreviewTarget | null>(null);
 
   // Borrador editable de la ficha (se inicializa una vez por candidato).
   const [form, setForm] = useState({
@@ -188,15 +169,9 @@ function CandidateDetailInner({
     setSubject(renderTemplate(t.subject, templateVars));
     setEmailBody(renderTemplate(t.body, templateVars));
   }
-  // Evaluación por entrevistador: "mi" rúbrica vs. consolidado del panel.
-  const myScores = scores.filter((s) => s.scored_by === user?.id);
-  const myScoreById = new Map(myScores.map((s) => [s.criterion_id, s.score]));
-  const panelAvgById = scoreAveragesByCriterion(scores);
-  const myAvg = weightedScore(criteria, myScores);
-  const avg = panelWeightedScore(criteria, scores); // consolidado (encabezado)
+  const scoreById = new Map(scores.map((s) => [s.criterion_id, s.score]));
+  const avg = weightedScore(criteria, scores);
   const sem = scoreSemaphore(avg);
-  const mySem = scoreSemaphore(myAvg);
-  const evaluators = distinctEvaluators(scores);
 
   function saveProfile() {
     updateCandidate.mutate({
@@ -216,55 +191,6 @@ function CandidateDetailInner({
     });
   }
 
-  async function handlePrefillFromCv() {
-    try {
-      const d = await extractCv.mutateAsync({ candidate });
-      let filled = 0;
-      const keep = (cur: string, next: string | null) => {
-        if (cur.trim() || !next) return cur;
-        filled++;
-        return next;
-      };
-      setForm((f) => ({
-        ...f,
-        university: keep(f.university, d.university),
-        degree: keep(f.degree, d.degree),
-        education_status: f.education_status || (d.education_status ?? ""),
-        years_experience: keep(f.years_experience, d.years_experience != null ? String(d.years_experience) : null),
-        salary_expectation: keep(f.salary_expectation, d.salary_expectation != null ? String(d.salary_expectation) : null),
-        available_from: keep(f.available_from, d.available_from),
-        skills: keep(f.skills, d.skills.length ? d.skills.join(", ") : null),
-        linkedin_url: keep(f.linkedin_url, d.linkedin_url),
-        portfolio_url: keep(f.portfolio_url, d.portfolio_url),
-      }));
-      if (d.education_status && !form.education_status) filled++;
-      toast.success(
-        filled > 0
-          ? `Se prellenaron ${filled} campo(s) desde el CV. Revisa y guarda la ficha.`
-          : "El CV no aportó campos nuevos (los que tiene ya estaban capturados).",
-      );
-    } catch {
-      /* el hook ya muestra el error */
-    }
-  }
-
-  async function handlePhotoFromCv() {
-    if (!candidate.resume_url) return;
-    setPhotoBusy(true);
-    try {
-      const img = await renderCvFirstPageToBase64(candidate.resume_url);
-      if (!img?.base64) {
-        toast.error("No se pudo leer el CV para extraer la foto.");
-        return;
-      }
-      await extractPhoto.mutateAsync({ candidate, imageBase64: img.base64, mime: img.mime });
-    } catch {
-      /* el hook ya muestra el error */
-    } finally {
-      setPhotoBusy(false);
-    }
-  }
-
   async function handleSendEmail() {
     if (!candidate.email) return toast.error("El candidato no tiene correo.");
     if (!subject.trim() || !emailBody.trim()) return toast.error("Asunto y mensaje son obligatorios.");
@@ -279,23 +205,26 @@ function CandidateDetailInner({
     }
   }
 
-  const baseName = (path: string, fallback: string) => path.split("/").pop() || fallback;
-
-  function handleViewCv() {
+  async function handleViewCv() {
     if (!candidate.resume_url) return;
-    setPreview({ path: candidate.resume_url, name: baseName(candidate.resume_url, "CV.pdf") });
+    setOpeningCv(true);
+    const url = await getCvSignedUrl(candidate.resume_url);
+    setOpeningCv(false);
+    if (url) window.open(url, "_blank", "noopener");
+    else toast.error("No se pudo abrir el CV.");
   }
 
-  function handleViewExam() {
+  async function handleViewExam() {
     if (!candidate.assessment_file_path) return;
-    setPreview({ path: candidate.assessment_file_path, name: baseName(candidate.assessment_file_path, "Examen.pdf") });
+    const url = await getCvSignedUrl(candidate.assessment_file_path);
+    if (url) window.open(url, "_blank", "noopener");
+    else toast.error("No se pudo abrir el examen.");
   }
 
   return (
     <>
       <DialogHeader>
         <DialogTitle className="flex flex-wrap items-center gap-2">
-          <UserAvatar name={candidate.full_name} avatarUrl={photoUrl} size="xl" className="h-16 w-16 shrink-0" fallbackClassName="text-lg" />
           {candidate.full_name}
           {currentState && (
             <Badge variant="outline" className={cn(STATE_COLOR_STYLE[currentState.color] ?? STATE_COLOR_STYLE.slate)}>
@@ -344,8 +273,8 @@ function CandidateDetailInner({
           {/* CV */}
           <div className="flex items-center gap-2">
             {candidate.resume_url ? (
-              <Button size="sm" variant="outline" onClick={handleViewCv}>
-                <FileText className="mr-1.5 h-3.5 w-3.5" />
+              <Button size="sm" variant="outline" onClick={handleViewCv} disabled={openingCv}>
+                {openingCv ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <FileText className="mr-1.5 h-3.5 w-3.5" />}
                 Ver CV
               </Button>
             ) : (
@@ -361,38 +290,9 @@ function CandidateDetailInner({
                   ref={fileRef} type="file" accept=".pdf,.doc,.docx,application/pdf" className="hidden"
                   onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadCv.mutate({ candidate, file: f }); e.target.value = ""; }}
                 />
-                {candidate.resume_url && (
-                  <Button size="sm" variant="ghost" onClick={handlePrefillFromCv} disabled={extractCv.isPending}
-                    title="Lee el CV con IA y prellena los campos vacíos de la ficha">
-                    {extractCv.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}
-                    Prellenar desde CV
-                  </Button>
-                )}
               </>
             )}
           </div>
-
-          {/* Foto del candidato */}
-          {isAdmin && (
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs text-muted-foreground">Foto:</span>
-              <Button size="sm" variant="ghost" onClick={() => photoRef.current?.click()} disabled={uploadPhoto.isPending}>
-                {uploadPhoto.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1.5 h-3.5 w-3.5" />}
-                {candidate.photo_url ? "Cambiar foto" : "Subir foto"}
-              </Button>
-              <input
-                ref={photoRef} type="file" accept="image/*" className="hidden"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPhoto.mutate({ candidate, file: f }); e.target.value = ""; }}
-              />
-              {candidate.resume_url && (
-                <Button size="sm" variant="ghost" onClick={handlePhotoFromCv} disabled={photoBusy || extractPhoto.isPending}
-                  title="Detecta y recorta la foto del CV con IA">
-                  {photoBusy || extractPhoto.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}
-                  Traer foto del CV
-                </Button>
-              )}
-            </div>
-          )}
 
           {/* Fase y estado */}
           <div className="grid grid-cols-2 gap-3">
@@ -499,8 +399,6 @@ function CandidateDetailInner({
             <p className="text-[10px] text-muted-foreground">La calificación va en la pestaña Evaluación (rúbrica).</p>
           </div>
 
-          <CandidateAttachments candidate={candidate} isAdmin={isAdmin} />
-
           <div className="flex items-center justify-between gap-2">
             {confirmDelete ? (
               <div className="flex items-center gap-1.5">
@@ -528,10 +426,7 @@ function CandidateDetailInner({
           </div>
           </>
           ) : (
-            <>
-              <ProfileReadOnly candidate={candidate} />
-              <CandidateAttachments candidate={candidate} isAdmin={false} />
-            </>
+            <ProfileReadOnly candidate={candidate} />
           )}
         </TabsContent>
 
@@ -541,25 +436,13 @@ function CandidateDetailInner({
             <p className="text-sm text-muted-foreground">Configura la rúbrica desde el botón “Rúbrica” del tablero.</p>
           ) : (
             <>
-              <p className="text-xs text-muted-foreground">
-                Tu evaluación es individual. Abajo se muestra el promedio del panel
-                {evaluators > 0 ? ` (${evaluators} ${evaluators === 1 ? "evaluador" : "evaluadores"})` : ""}.
-              </p>
               {criteria.map((c) => {
-                const val = myScoreById.get(c.id);
-                const panel = panelAvgById.get(c.id);
+                const val = scoreById.get(c.id);
                 return (
                   <div key={c.id} className="space-y-1.5">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium">{c.name}</span>
-                      <div className="flex items-center gap-2">
-                        {panel && (
-                          <Badge variant="outline" className="text-[10px]" title={`Promedio de ${panel.count} evaluador(es)`}>
-                            panel {panel.avg.toFixed(1)} · {panel.count}
-                          </Badge>
-                        )}
-                        <Badge variant="secondary" className="text-[10px]">peso {Number(c.weight)}</Badge>
-                      </div>
+                      <Badge variant="secondary" className="text-[10px]">peso {Number(c.weight)}</Badge>
                     </div>
                     <div className="flex gap-1.5">
                       {[1, 2, 3, 4, 5].map((n) => (
@@ -579,33 +462,16 @@ function CandidateDetailInner({
                   </div>
                 );
               })}
-
-              <div className="space-y-2 rounded-lg border bg-muted/30 px-3 py-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Mi calificación</span>
-                  {myAvg == null ? (
-                    <span className="text-sm text-muted-foreground">Sin calificar</span>
-                  ) : (
-                    <span className={cn("flex items-center gap-1.5 text-sm font-semibold", SEMAPHORE_TEXT[mySem])}>
-                      <span className={cn("h-2.5 w-2.5 rounded-full", SEMAPHORE_DOT[mySem])} />
-                      {myAvg.toFixed(1)} / 5
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center justify-between border-t pt-2">
-                  <span className="text-sm font-medium">
-                    Consolidado del panel
-                    {evaluators > 0 && <span className="ml-1 text-[10px] text-muted-foreground">({evaluators})</span>}
+              <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2">
+                <span className="text-sm font-medium">Calificación final</span>
+                {avg == null ? (
+                  <span className="text-sm text-muted-foreground">Sin calificar</span>
+                ) : (
+                  <span className={cn("flex items-center gap-1.5 text-sm font-semibold", SEMAPHORE_TEXT[sem])}>
+                    <span className={cn("h-2.5 w-2.5 rounded-full", SEMAPHORE_DOT[sem])} />
+                    {avg.toFixed(1)} / 5
                   </span>
-                  {avg == null ? (
-                    <span className="text-sm text-muted-foreground">Sin calificar</span>
-                  ) : (
-                    <span className={cn("flex items-center gap-1.5 text-sm font-semibold", SEMAPHORE_TEXT[sem])}>
-                      <span className={cn("h-2.5 w-2.5 rounded-full", SEMAPHORE_DOT[sem])} />
-                      {avg.toFixed(1)} / 5
-                    </span>
-                  )}
-                </div>
+                )}
               </div>
             </>
           )}
@@ -629,7 +495,7 @@ function CandidateDetailInner({
                     <p className="text-sm font-medium">Fit con Kawiil</p>
                     {candidate.ai_analyzed_at && (
                       <p className="text-[10px] text-muted-foreground">
-                        Analizado {formatMX(candidate.ai_analyzed_at, "d MMM yyyy, HH:mm")}
+                        Analizado {formatMX(candidate.ai_analyzed_at)}
                         {ai?.used_manuals ? " · con manuales" : ""}
                       </p>
                     )}
@@ -693,7 +559,7 @@ function CandidateDetailInner({
                         {ai.suggested_rubric_scores.map((sug, i) => {
                           const crit = criteria.find((c) => c.id === sug.criterion_id);
                           if (!crit) return null;
-                          const applied = myScoreById.get(crit.id) === sug.score;
+                          const applied = scoreById.get(crit.id) === sug.score;
                           return (
                             <div key={i} className="rounded-md border px-2.5 py-2">
                               <div className="flex items-center justify-between gap-2">
@@ -789,7 +655,6 @@ function CandidateDetailInner({
       </Tabs>
 
       <HireCandidateDialog candidate={candidate} states={states} defaultGrade={processGrade} open={hireOpen} onOpenChange={setHireOpen} />
-      <DocumentPreviewDialog target={preview} open={!!preview} onOpenChange={(o) => !o && setPreview(null)} />
     </>
   );
 }

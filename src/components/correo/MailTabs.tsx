@@ -24,12 +24,15 @@ export function MailTabs({ activeTab, onSelectTab }: Props) {
   // Get email counts from mail folders data
   const folderCounts = useMemo(() => {
     const folders = (foldersData?.folders ?? []) as any[];
-    const counts: Record<string, number> = {};
+    const unread: Record<string, number> = {};
+    const total: Record<string, number> = {};
     for (const f of folders) {
-      counts[f.id] = f.unreadItemCount ?? 0;
-      if (f.wellKnownName) counts[f.wellKnownName] = f.unreadItemCount ?? 0;
+      unread[f.id] = f.unreadItemCount ?? 0;
+      total[f.id] = f.totalItemCount ?? 0;
+      const wk = (f.wellKnownFolderName as string | undefined)?.toLowerCase();
+      if (wk) { unread[wk] = f.unreadItemCount ?? 0; total[wk] = f.totalItemCount ?? 0; }
     }
-    return counts;
+    return { unread, total };
   }, [foldersData]);
 
   // Load inbox emails to count AI-inferred categories
@@ -74,6 +77,8 @@ export function MailTabs({ activeTab, onSelectTab }: Props) {
     if (id === "sat") return aiCounts.sat > 0 ? aiCounts.sat : null;
     if (id === "facturas") return aiCounts.facturas > 0 ? aiCounts.facturas : null;
     if (id === "interno") return aiCounts.interno > 0 ? aiCounts.interno : null;
+    if (id === "drafts") { const n = folderCounts.total["drafts"] ?? 0; return n > 0 ? n : null; }
+    if (id === "sentItems") { const n = folderCounts.unread["sentitems"] ?? folderCounts.unread["sentItems"] ?? 0; return n > 0 ? n : null; }
     return null;
   };
 

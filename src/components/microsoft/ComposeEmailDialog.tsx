@@ -38,6 +38,7 @@ import {
   filesToComposerAttachments,
   parseRecipients,
   validateRecipientGroups,
+  sanitizeSignatureHtml,
   type ComposerAttachment,
 } from "@/lib/emailComposer";
 import { AccountingTemplatePicker, type AccountingTemplatePickerApplied } from "@/components/accounting/AccountingTemplatePicker";
@@ -101,8 +102,8 @@ export function ComposeEmailDialog({
   const [cc, setCc] = useState("");
   const [bcc, setBcc] = useState("");
   const [subject, setSubject] = useState("");
-  const [showCc, setShowCc] = useState(false);
-  const [showBcc, setShowBcc] = useState(false);
+  const [showCc, setShowCc] = useState(true);
+  const [showBcc, setShowBcc] = useState(true);
   const [editorKey, setEditorKey] = useState(0);
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [aiInstruction, setAiInstruction] = useState("");
@@ -218,7 +219,7 @@ export function ComposeEmailDialog({
         signatureAppliedRef.current = true;
         return;
       }
-      const html = `${composeSignature.html}<p><br></p>`;
+      const html = `${sanitizeSignatureHtml(composeSignature.html)}<p><br></p>`;
       editorRef.current?.setHtml(html);
       bodyRef.current = html;
       signatureAppliedRef.current = true;
