@@ -49,11 +49,17 @@ export function EventTravelSection({ destination, departureISO, defaultOrigin }:
       {travel.isError && (
         <p className="text-[11px] text-destructive">{travel.error instanceof Error ? travel.error.message : "No se pudo calcular"}</p>
       )}
-      {travel.data && (
+      {travel.data?.noRoute && (
+        <p className="text-[11px] text-muted-foreground">{travel.data.message || "No se encontró una ruta en coche entre esos puntos."}</p>
+      )}
+      {travel.data && !travel.data.noRoute && (
         <div className="text-sm text-foreground">
           🚗 <span className="font-semibold">{travel.data.durationText}</span>
           {travel.data.withTraffic ? " con tráfico" : ""}
           {travel.data.distanceText ? ` · ${travel.data.distanceText}` : ""}
+          {travel.data.withTraffic && travel.data.baseDurationText && (
+            <span className="block text-[11px] text-muted-foreground mt-0.5">Sin tráfico: {travel.data.baseDurationText}</span>
+          )}
           {suggestedDeparture && (
             <span className="block text-[11px] text-muted-foreground mt-0.5">Sal a las <span className="font-medium text-foreground">{suggestedDeparture}</span> para llegar a tiempo.</span>
           )}
