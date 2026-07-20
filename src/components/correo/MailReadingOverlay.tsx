@@ -1,13 +1,15 @@
 import { cn } from "@/lib/utils";
-import { ArrowLeft, Reply, Forward, Archive, Trash2, CheckSquare, Filter, Tag, FolderInput, ChevronRight, MessageSquare } from "lucide-react";
+import { ArrowLeft, Reply, Forward, Archive, Trash2, CheckSquare, Filter, Tag, FolderInput, ChevronRight, MessageSquare, CalendarPlus, Paperclip, Download, FileArchive, FileText, File } from "lucide-react";
 import { useEmailDetail, useArchiveEmail, useDeleteEmail, useMoveEmail, useMailFolders } from "@/hooks/useMicrosoft";
 import { useResolvedEmailHtml } from "@/hooks/useResolvedEmailHtml";
 import { useEmailAttachments } from "@/hooks/useMicrosoft";
 import { MailLabelPicker } from "./MailLabelPicker";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
+import { fetchMessageAttachmentBlob, inferMimeFromFileName, type OutlookAttachment } from "@/lib/outlookEmailMedia";
+import { toast } from "sonner";
 
 interface EmailShape {
   id?: string;
@@ -28,9 +30,58 @@ interface Props {
   onCreateTask: (email: EmailShape) => void;
   onCreateRule?: () => void;
   onSendToSlack?: () => void;
+  onCreateEvent?: () => void;
 }
 
-export function MailReadingOverlay({ emailId, open, onClose, onCompose, onForward, onCreateTask, onCreateRule, onSendToSlack }: Props) {
+function AttachmentChip({ messageId, att }: { messageId: string; att: OutlookAttachment }) {
+  const [loading, setLoading] = useState(false);
+
+  const isArchive = /\.(zip|rar|7z|tar|gz)$/i.test(att.name || "");
+  const Icon = isArchive ? FileArchive : /\.(pdf|docx?|xlsx?|pptx?|csv|txt)$/i.test(att.name || "") ? FileText : File;
+
+  const download = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await fetchMessageAttachmentBlob(messageId, att.id);
+      const fromApi = (r.contentType || "").toLowerCase();
+      const inferred = inferMimeFromFileName(att.name || r.name || "");
+      const mime = fromApi && fromApi !== "application/octet-stream" ? r.contentType : inferred || "application/octet-stream";
+      const blob = new Blob([r.blob], { type: mime });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = att.name || r.name || "adjunto";
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch (e) {
+      toast.error("No se pudo descargar el adjunto: " + (e instanceof Error ? e.message : "Error desconocido"));
+    } finally {
+      setLoading(false);
+    }
+  }, [messageId, att.id, att.name, att.contentType]);
+
+  const sizeLabel = att.size > 1024 * 1024
+    ? `${(att.size / 1024 / 1024).toFixed(1)} MB`
+    : `${Math.round(att.size / 1024)} KB`;
+
+  return (
+    <button
+      type="button"
+      onClick={download}
+      disabled={loading}
+      className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border/60 bg-muted/30 hover:bg-accent hover:border-border transition-colors text-left min-w-0 max-w-[240px] disabled:opacity-60"
+    >
+      <Icon className="w-4 h-4 text-muted-foreground shrink-0" />
+      <span className="flex-1 min-w-0">
+        <span className="block text-[12px] font-medium truncate">{att.name || "adjunto"}</span>
+        <span className="block text-[10.5px] text-muted-foreground">{sizeLabel}</span>
+      </span>
+      <Download className={cn("w-3.5 h-3.5 text-muted-foreground shrink-0", loading && "animate-bounce")} />
+    </button>
+  );
+}
+
+export function MailReadingOverlay({ emailId, open, onClose, onCompose, onForward, onCreateTask, onCreateRule, onSendToSlack, onCreateEvent }: Props) {
   const { data: emailDetail, isLoading } = useEmailDetail(emailId);
   const { data: attachments = [] } = useEmailAttachments(emailId ?? undefined);
   const { html: resolvedHtml } = useResolvedEmailHtml(
@@ -59,6 +110,8 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onForwar
   const receivedAt = (emailDetail as any)?.receivedDateTime
     ? format(new Date((emailDetail as any).receivedDateTime), "d 'de' MMMM, yyyy HH:mm", { locale: es })
     : "";
+  const sensitivity = (emailDetail as any)?.sensitivity as string | undefined;
+  const isConfidential = sensitivity === "confidential" || sensitivity === "private";
 
   return (
     <div
@@ -173,8 +226,21 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onForwar
           </button>
           <button
             className="h-[30px] w-[30px] flex items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-            title="Enviar a Slack"
-            onClick={onSendToSlack}
+            title="Crear evento en calendario"
+            onClick={onCreateEvent}
+          >
+            <CalendarPlus className="w-3.5 h-3.5" />
+          </button>
+          <button
+            className={cn(
+              "h-[30px] w-[30px] flex items-center justify-center rounded-md transition-colors",
+              isConfidential
+                ? "text-muted-foreground/30 cursor-not-allowed"
+                : "text-muted-foreground hover:bg-accent hover:text-foreground"
+            )}
+            title={isConfidential ? "Correo confidencial — no se puede enviar a Slack" : "Enviar a Slack"}
+            onClick={isConfidential ? undefined : onSendToSlack}
+            disabled={isConfidential}
           >
             <MessageSquare className="w-3.5 h-3.5" />
           </button>
@@ -190,9 +256,17 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onForwar
           </div>
         ) : emailDetail ? (
           <>
-            <h1 className="text-[22px] font-bold tracking-tight text-foreground leading-tight mb-4">
-              {(emailDetail as any).subject || "(sin asunto)"}
-            </h1>
+            <div className="flex items-start gap-2 mb-4">
+              <h1 className="text-[22px] font-bold tracking-tight text-foreground leading-tight flex-1">
+                {(emailDetail as any).subject || "(sin asunto)"}
+              </h1>
+              {isConfidential && (
+                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10.5px] font-semibold shrink-0 mt-1.5 dark:bg-amber-900/30 dark:text-amber-400">
+                  <Lock className="w-3 h-3" />
+                  Confidencial
+                </span>
+              )}
+            </div>
             <div className="flex items-start gap-3 mb-6">
               <div
                 className="w-9 h-9 rounded-full flex items-center justify-center text-white text-[12px] font-bold shrink-0"
@@ -230,6 +304,30 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onForwar
                 {(emailDetail as any).bodyPreview}
               </p>
             )}
+
+            {/* Adjuntos descargables */}
+            {(() => {
+              const downloadable = (attachments as OutlookAttachment[]).filter(
+                (a) =>
+                  !a["@odata.type"]?.includes("itemAttachment") &&
+                  !a["@odata.type"]?.includes("referenceAttachment") &&
+                  !a.isInline,
+              );
+              if (!downloadable.length || !emailId) return null;
+              return (
+                <div className="mt-6 pt-5 border-t border-border/40">
+                  <p className="flex items-center gap-1.5 text-[11.5px] font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                    <Paperclip className="w-3.5 h-3.5" />
+                    {downloadable.length} adjunto{downloadable.length > 1 ? "s" : ""}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {downloadable.map((att) => (
+                      <AttachmentChip key={att.id} messageId={emailId} att={att} />
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
           </>
         ) : null}
       </div>

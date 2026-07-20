@@ -6,6 +6,72 @@ export function stripBidiControlChars(input: string): string {
   return input.replace(/[\u202A-\u202E\u2066-\u2069]/g, "");
 }
 
+/**
+ * Sanitizes Outlook signature HTML so TipTap can render it without showing
+ * raw CSS/markup as text. Strips conditional comments, <style>/<script>/<xml>
+ * blocks, VML namespace elements, html/head/body wrappers, invisible divs,
+ * and any leading text before the first HTML tag (handles mid-attribute slices
+ * from inferSignatureFromSentBodies).
+ */
+export function sanitizeSignatureHtml(html: string): string {
+  if (!html) return "";
+  let s = html;
+
+  // XML/DOCTYPE declarations
+  s = s.replace(/<\?xml[^>]*\?>/gi, "");
+  s = s.replace(/<!DOCTYPE[^>]*>/gi, "");
+
+  // Outlook conditional comments (block content as well as simple comments)
+  s = s.replace(/<!--\[if[^\]]*\]>[\s\S]*?<!\[endif\]-->/gi, "");
+
+  // All remaining HTML comments
+  s = s.replace(/<!--[\s\S]*?-->/g, "");
+
+  // <style>, <script>, <title>, <xml> blocks — their text content leaks as raw text in TipTap
+  s = s.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "");
+  s = s.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "");
+  s = s.replace(/<title[^>]*>[\s\S]*?<\/title>/gi, "");
+  s = s.replace(/<xml[^>]*>[\s\S]*?<\/xml>/gi, "");
+
+  // VML and Office XML namespace elements (v:, o:, w:, m:, etc.) — keep content but drop tags
+  s = s.replace(/<[a-z]+:[a-z][^>]*\/>/gi, "");
+  s = s.replace(/<([a-z]+:[a-z][^>]*)>([\s\S]*?)<\/[a-z]+:[a-z]+>/gi, "$2");
+  s = s.replace(/<\/?[a-z]+:[^>]*>/gi, "");
+
+  // Strip html/head/body wrapper tags (keep their content — TipTap only needs the body fragment)
+  s = s.replace(/<\/?html[^>]*>/gi, "");
+  s = s.replace(/<head[^>]*>[\s\S]*?<\/head>/gi, "");
+  s = s.replace(/<\/?body[^>]*>/gi, "");
+
+  // Void tags that have no visible content
+  s = s.replace(/<meta[^>]*\/?>/gi, "");
+  s = s.replace(/<link[^>]*\/?>/gi, "");
+  s = s.replace(/<base[^>]*\/?>/gi, "");
+
+  // Invisible elements: display:none or height:0 with font-size:0 (Outlook decorative lines)
+  s = s.replace(/<[a-z][^>]* style="[^"]*display\s*:\s*none[^"]*"[^>]*>[\s\S]*?<\/[a-z]+>/gi, "");
+  s = s.replace(/<[a-z][^>]* style="[^"]*height\s*:\s*0(?:px)?[^"]*font-size\s*:\s*0[^"]*"[^>]*\/?>[\s\S]*?(?:<\/[a-z]+>)?/gi, "");
+
+  // Normalize self-closing <br>
+  s = s.replace(/<br\s*\/?>/gi, "<br>");
+
+  s = s.trim();
+
+  // If the string starts before the first HTML tag (mid-attribute slice from inference),
+  // skip any leading text/CSS fragment so TipTap doesn't render it as visible text.
+  if (s && !s.trimStart().startsWith("<")) {
+    const firstTag = s.indexOf("<");
+    if (firstTag !== -1) {
+      s = s.slice(firstTag);
+    } else {
+      // No HTML at all — wrap as plain text paragraph
+      return `<p>${s}</p>`;
+    }
+  }
+
+  return s.trim();
+}
+
 export type ComposerAttachment = {
   name: string;
   contentType: string;

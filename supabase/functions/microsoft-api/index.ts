@@ -678,6 +678,38 @@ function stripQuotedThreadFromBodyHtml(html: string): string {
   return cut < html.length && cut > 12 ? html.slice(0, cut) : html;
 }
 
+/** Limpia un fragmento de HTML de firma para que sea seguro para TipTap. */
+function sanitizeSignatureFragment(raw: string): string {
+  if (!raw) return "";
+  let s = raw;
+  s = s.replace(/<\?xml[^>]*\?>/gi, "");
+  s = s.replace(/<!DOCTYPE[^>]*>/gi, "");
+  s = s.replace(/<!--\[if[^\]]*\]>[\s\S]*?<!\[endif\]-->/gi, "");
+  s = s.replace(/<!--[\s\S]*?-->/g, "");
+  s = s.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "");
+  s = s.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "");
+  s = s.replace(/<title[^>]*>[\s\S]*?<\/title>/gi, "");
+  s = s.replace(/<xml[^>]*>[\s\S]*?<\/xml>/gi, "");
+  s = s.replace(/<[a-z]+:[a-z][^>]*\/>/gi, "");
+  s = s.replace(/<([a-z]+:[a-z][^>]*)>([\s\S]*?)<\/[a-z]+:[a-z]+>/gi, "$2");
+  s = s.replace(/<\/?[a-z]+:[^>]*>/gi, "");
+  s = s.replace(/<\/?html[^>]*>/gi, "");
+  s = s.replace(/<head[^>]*>[\s\S]*?<\/head>/gi, "");
+  s = s.replace(/<\/?body[^>]*>/gi, "");
+  s = s.replace(/<meta[^>]*\/?>/gi, "");
+  s = s.replace(/<link[^>]*\/?>/gi, "");
+  s = s.replace(/<base[^>]*\/?>/gi, "");
+  s = s.replace(/<br\s*\/?>/gi, "<br>");
+  s = s.trim();
+  // If the slice starts mid-attribute (e.g. "rection:ltr;...>"), skip to the first valid tag.
+  if (s && !s.startsWith("<")) {
+    const firstTag = s.indexOf("<");
+    if (firstTag !== -1) s = s.slice(firstTag);
+    else return "";
+  }
+  return s.trim();
+}
+
 function inferSignatureFromSentBodies(
   contents: string[],
 ): { html: string; confidence: "high" | "low" } | null {
@@ -692,7 +724,9 @@ function inferSignatureFromSentBodies(
       const n = tails.filter((x) => x.endsWith(end)).length;
       if (n >= 2) {
         const hasContact = /mailto:|@[a-z0-9.\-]+\.[a-z]{2,}/i.test(end);
-        const html = end.trim().startsWith("<") ? end.trim() : `<p>${end.trim()}</p>`;
+        const rawHtml = end.trim().startsWith("<") ? end.trim() : `<p>${end.trim()}</p>`;
+        const html = sanitizeSignatureFragment(rawHtml);
+        if (!html) continue; // skip if sanitation removed everything
         return { html, confidence: hasContact ? "high" : "low" };
       }
     }
@@ -987,6 +1021,16 @@ Deno.serve(async (req) => {
         const eventPayload = normalizeEventPayload(rawEventPayload);
         const hasOnlineMeeting = !!eventPayload?.isOnlineMeeting;
 
+        // Validate start < end before hitting Graph (saves a round-trip and gives a clearer error)
+        const startDt = eventPayload.start?.dateTime as string | undefined;
+        const endDt = eventPayload.end?.dateTime as string | undefined;
+        if (startDt && endDt && endDt <= startDt) {
+          result = {
+            error: `La hora de fin (${endDt.slice(11, 16)}) debe ser después de la hora de inicio (${startDt.slice(11, 16)}). Si pusiste "12:00 a.m." asegúrate de seleccionar "p.m." para mediodía.`,
+          };
+          break;
+        }
+
         const tryCreate = async (payload: Record<string, any>): Promise<Response> =>
           graphMailFetchWithRetry(accessToken, `/me/events`, {
             method: "POST",
@@ -1235,7 +1279,7 @@ Deno.serve(async (req) => {
         const skip = params?.skip || 0;
         const folder = params?.folder || "inbox";
         const select =
-          "$select=id,subject,bodyPreview,from,toRecipients,receivedDateTime,sentDateTime,createdDateTime,isRead,hasAttachments,importance,conversationId";
+          "$select=id,subject,bodyPreview,from,toRecipients,receivedDateTime,sentDateTime,createdDateTime,isRead,hasAttachments,importance,conversationId,sensitivity";
 
         const rawSearch =
           typeof params?.search === "string" ? params.search.replace(/\s+/g, " ").trim() : "";

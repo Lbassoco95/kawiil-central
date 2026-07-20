@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
-import { Search, RefreshCw, Loader2, PenLine, FolderOpen, ListFilter } from "lucide-react";
+import { Search, RefreshCw, Loader2, PenLine, FolderOpen, ListFilter, Paperclip } from "lucide-react";
 import { useOutlookEmails, useArchiveEmail, useMarkEmailRead, useMarkEmailUnread, useEmailUserLabels, useEmailLabelAssignmentsBulk } from "@/hooks/useMicrosoft";
 import { useQueryClient } from "@tanstack/react-query";
 import { getLabelStyle } from "./MailLabelPicker";
@@ -52,6 +52,9 @@ type ReadFilter = "todos" | "sinleer" | "leidos";
 export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmail, onCompose, onOpenFolders, onOpenRules, customFolderOverride, customFolderName, onClearCustomFolder, externalLabelFilter }: Props) {
   const [search, setSearch] = useState("");
   const [readFilter, setReadFilter] = useState<ReadFilter>("sinleer");
+  const [attachmentFilter, setAttachmentFilter] = useState(false);
+  type DateRangeFilter = "todos" | "hoy" | "semana" | "mes";
+  const [dateRangeFilter, setDateRangeFilter] = useState<DateRangeFilter>("todos");
   const [labelFilter, setLabelFilter] = useState<string | null>(null);
   const effectiveLabelFilter = externalLabelFilter !== undefined ? externalLabelFilter : labelFilter;
   const queryClient = useQueryClient();
@@ -99,6 +102,21 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
     }
     if (readFilter === "sinleer") list = list.filter((e) => !(e.isRead as boolean));
     if (readFilter === "leidos") list = list.filter((e) => e.isRead as boolean);
+    if (attachmentFilter) list = list.filter((e) => !!(e.hasAttachments as boolean));
+    if (dateRangeFilter !== "todos") {
+      const cutoff = new Date();
+      if (dateRangeFilter === "hoy") { cutoff.setHours(0, 0, 0, 0); }
+      else if (dateRangeFilter === "semana") { cutoff.setDate(cutoff.getDate() - 7); cutoff.setHours(0, 0, 0, 0); }
+      else if (dateRangeFilter === "mes") { cutoff.setDate(cutoff.getDate() - 30); cutoff.setHours(0, 0, 0, 0); }
+      list = list.filter((e) => {
+        const ts = emailListTimestamp({
+          receivedDateTime: e.receivedDateTime as string | undefined,
+          sentDateTime: e.sentDateTime as string | undefined,
+          createdDateTime: e.createdDateTime as string | undefined,
+        });
+        return ts >= cutoff.toISOString();
+      });
+    }
     if (effectiveLabelFilter) {
       const emailsWithLabel = new Set(
         bulkAssignments.filter(a => a.label_id === effectiveLabelFilter).map(a => a.email_message_id)
@@ -106,7 +124,7 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
       list = list.filter((e) => emailsWithLabel.has(e.id as string));
     }
     return list;
-  }, [allEmails, activeTab, isAiTab, readFilter, effectiveLabelFilter, bulkAssignments]);
+  }, [allEmails, activeTab, isAiTab, readFilter, attachmentFilter, dateRangeFilter, effectiveLabelFilter, bulkAssignments]);
 
   const handleScroll = useCallback(() => {
     const el = listRef.current;
@@ -242,7 +260,7 @@ const now = useMemo(() => new Date(), []);
         </button>
       </div>
 
-      {/* Read filter */}
+      {/* Read filter + attachment toggle */}
       <div className="flex items-center gap-0 px-3 py-1.5 border-b border-border/30 shrink-0">
         {(["sinleer", "leidos", "todos"] as ReadFilter[]).map((f) => {
           const labelMap: Record<ReadFilter, string> = { sinleer: "Sin leer", leidos: "Leídos", todos: "Todos" };
@@ -262,6 +280,43 @@ const now = useMemo(() => new Date(), []);
             </button>
           );
         })}
+        <div className="flex-1" />
+        <button
+          onClick={() => setAttachmentFilter((v) => !v)}
+          className={cn(
+            "flex items-center gap-1 px-2 py-1 text-[11px] rounded-full transition-colors",
+            attachmentFilter
+              ? "bg-primary/10 text-primary font-semibold"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+          title="Filtrar por correos con adjuntos"
+        >
+          <Paperclip className="w-3 h-3" />
+          Adjuntos
+        </button>
+      </div>
+
+      {/* Date range filter */}
+      <div className="flex items-center gap-0 px-3 py-1 border-b border-border/20 shrink-0">
+        {([
+          { id: "todos", label: "Cualquier fecha" },
+          { id: "hoy",   label: "Hoy" },
+          { id: "semana",label: "Esta semana" },
+          { id: "mes",   label: "Este mes" },
+        ] as { id: DateRangeFilter; label: string }[]).map(({ id, label }) => (
+          <button
+            key={id}
+            onClick={() => setDateRangeFilter(id)}
+            className={cn(
+              "px-2.5 py-1 text-[11px] rounded-full transition-colors whitespace-nowrap",
+              dateRangeFilter === id
+                ? "bg-primary/10 text-primary font-semibold"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       {/* Search row */}

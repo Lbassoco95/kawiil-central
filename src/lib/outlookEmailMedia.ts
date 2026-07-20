@@ -240,16 +240,23 @@ export function findAttachmentForCid(
 ): OutlookAttachment | undefined {
   if (!attachments?.length) return undefined;
   const n = normalizeCid(cidRef);
+  const nNoExt = n.replace(/\.[a-z0-9]{1,5}$/i, "");
   return attachments.find((a) => {
     const t = a["@odata.type"] || "";
     if (t.includes("itemAttachment") || t.includes("referenceAttachment")) return false;
     const cid = a.contentId;
     if (cid) {
       const nc = normalizeCid(cid);
+      const ncNoExt = nc.replace(/\.[a-z0-9]{1,5}$/i, "");
       if (nc === n || nc.includes(n) || n.includes(nc)) return true;
+      if (ncNoExt === nNoExt) return true;
     }
     const name = (a.name || "").trim();
-    if (name && normalizeCid(name) === n) return true;
+    if (name) {
+      const nn = normalizeCid(name);
+      const nnNoExt = nn.replace(/\.[a-z0-9]{1,5}$/i, "");
+      if (nn === n || nnNoExt === nNoExt || nnNoExt === n || nn === nNoExt) return true;
+    }
     return false;
   });
 }
@@ -288,6 +295,20 @@ export function inferMimeFromFileName(name: string): string | null {
   if (/\.xls$/i.test(n)) return "application/vnd.ms-excel";
   if (/\.csv$/i.test(n)) return "text/csv";
   if (/\.tsv$/i.test(n)) return "text/tab-separated-values";
+  if (/\.zip$/i.test(n)) return "application/zip";
+  if (/\.rar$/i.test(n)) return "application/vnd.rar";
+  if (/\.7z$/i.test(n)) return "application/x-7z-compressed";
+  if (/\.tar$/i.test(n)) return "application/x-tar";
+  if (/\.gz$/i.test(n)) return "application/gzip";
+  if (/\.pptx$/i.test(n)) {
+    return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+  }
+  if (/\.ppt$/i.test(n)) return "application/vnd.ms-powerpoint";
+  if (/\.txt$/i.test(n)) return "text/plain";
+  if (/\.xml$/i.test(n)) return "application/xml";
+  if (/\.json$/i.test(n)) return "application/json";
+  if (/\.eml$/i.test(n)) return "message/rfc822";
+  if (/\.msg$/i.test(n)) return "application/vnd.ms-outlook";
   return null;
 }
 
