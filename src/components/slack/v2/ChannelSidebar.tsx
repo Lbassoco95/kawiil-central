@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import type { SlackConversation } from "@/lib/slackApi";
 
 // ─── Helpers ────────────────────────────────────────────────
@@ -167,14 +167,23 @@ export function ChannelSidebar({
   mobileHidden = false,
 }: Props) {
   const [search, setSearch] = useState("");
+  const q = search.trim().toLowerCase();
 
-  const filtered = useMemo(() => {
-    if (!search.trim()) return conversations;
-    const q = search.toLowerCase();
-    return conversations.filter((c) =>
-      convTitle(c, userMap, aliasMap, mpimNameByChannel).toLowerCase().includes(q)
-    );
-  }, [conversations, search, userMap, aliasMap, mpimNameByChannel]);
+  // Coincide por título efectivo (alias, nombre por integrantes, nombre de canal).
+  const matchesQuery = useCallback(
+    (c: SlackConversation) =>
+      !q || convTitle(c, userMap, aliasMap, mpimNameByChannel).toLowerCase().includes(q),
+    [q, userMap, aliasMap, mpimNameByChannel],
+  );
+
+  const filtered = useMemo(
+    () => (q ? conversations.filter(matchesQuery) : conversations),
+    [conversations, q, matchesQuery],
+  );
+
+  /** Conversaciones de un grupo custom, respetando la búsqueda. */
+  const gConvsFiltered = (g: CustomGroup) =>
+    q ? g.conversations.filter(matchesQuery) : g.conversations;
 
   const starred  = filtered.filter((c) => (c as any).is_starred);
 
@@ -251,14 +260,18 @@ export function ChannelSidebar({
         )}
 
         {/* Grupos custom de Supabase */}
-        {customGroups.map((g) => (
+        {customGroups.map((g) => {
+          const convs = gConvsFiltered(g);
+          // Al buscar, oculta grupos sin coincidencias.
+          if (q && convs.length === 0) return null;
+          return (
           <Section key={g.id} title={g.title} defaultOpen>
             {g.conversations.length === 0 ? (
               <div style={{ padding: "4px 12px 6px", fontSize: 11, color: "hsl(var(--sidebar-foreground) / 0.4)", fontStyle: "italic" }}>
                 Sin canales asignados
               </div>
             ) : (
-              g.conversations.map((c) => (
+              convs.map((c) => (
                 <ChannelRow
                   key={c.id}
                   conv={c}
@@ -266,11 +279,14 @@ export function ChannelSidebar({
                   unread={unreadByChannel[c.id] ?? 0}
                   onClick={() => onSelectChannel(c.id)}
                   userMap={userMap}
+                  aliasMap={aliasMap}
+                  mpimNameByChannel={mpimNameByChannel}
                 />
               ))
             )}
           </Section>
-        ))}
+          );
+        })}
 
         {channels.length > 0 && (
           <Section
