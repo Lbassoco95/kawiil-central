@@ -41,6 +41,10 @@ Deno.serve(async (req) => {
       "Mail.Read", "Mail.ReadWrite", "Mail.Send", "MailboxSettings.ReadWrite",
     ].join(" ");
 
+    // prompt=consent (no select_account): fuerza a Microsoft a pedir el consentimiento
+    // de los scopes NUEVOS (Mail.*). Con select_account, una cuenta ya consentida recibe
+    // el token con los permisos viejos (solo calendario) y el correo sigue en 403.
+    // select_account además está implicado en errores AADSTS165000 (cookies del picker).
     const authUrl = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize?` +
       new URLSearchParams({
         client_id: clientId,
@@ -49,7 +53,7 @@ Deno.serve(async (req) => {
         scope: scopes,
         response_mode: "query",
         state: user.id,
-        prompt: "select_account",
+        prompt: "consent",
       }).toString();
 
     return new Response(JSON.stringify({ url: authUrl }), {
