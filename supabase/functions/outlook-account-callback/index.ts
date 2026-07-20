@@ -93,7 +93,8 @@ Deno.serve(async (req) => {
           display_name: displayName,
           provider_account_id: providerAccountId,
           access_token: tokenData.access_token,
-          refresh_token: tokenData.refresh_token ?? null,
+          // undefined (no null): en reconexión sin refresh_token nuevo, conservar el anterior.
+          refresh_token: tokenData.refresh_token ?? undefined,
           token_expires_at: expiresAt,
           scope: tokenData.scope ?? null,
           status: "connected",

@@ -67,7 +67,8 @@ async function graphFetch(token: string, path: string, init?: RequestInit): Prom
 }
 
 const PREFER_TZ = { Prefer: 'outlook.timezone="America/Mexico_City"' };
-const MAIL_SELECT = "$select=id,subject,bodyPreview,from,toRecipients,receivedDateTime,sentDateTime,createdDateTime,isRead,hasAttachments,importance,conversationId,sensitivity";
+// Sin `sensitivity`: Graph la rechaza de forma intermitente en listados (RequestBroker--ParseUri).
+const MAIL_SELECT = "$select=id,subject,bodyPreview,from,toRecipients,receivedDateTime,sentDateTime,createdDateTime,isRead,hasAttachments,importance,conversationId";
 
 function jsonResp(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -200,8 +201,7 @@ Deno.serve(async (req) => {
       const filterParam = filterUnread
         ? "&$filter=receivedDateTime ge 1900-01-01T00:00:00Z and isRead eq false"
         : "";
-      // Con $filter, el parser de Graph rechaza `sensitivity` en el $select.
-      const listSelect = filterUnread ? MAIL_SELECT.replace(",sensitivity", "") : MAIL_SELECT;
+      const listSelect = MAIL_SELECT;
 
       if (params?.nextLink && typeof params.nextLink === "string") {
         const link = params.nextLink as string;

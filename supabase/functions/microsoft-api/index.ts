@@ -1278,8 +1278,11 @@ Deno.serve(async (req) => {
         const top = params?.top || 25;
         const skip = params?.skip || 0;
         const folder = params?.folder || "inbox";
+        // Sin `sensitivity`: el parser de Graph (RequestBroker--ParseUri) la rechaza de forma
+        // intermitente en listados ("Could not find a property named 'sensitivity'"), incluso
+        // sin $filter. El detalle del mensaje sí la trae (esa ruta no falla).
         const select =
-          "$select=id,subject,bodyPreview,from,toRecipients,receivedDateTime,sentDateTime,createdDateTime,isRead,hasAttachments,importance,conversationId,sensitivity";
+          "$select=id,subject,bodyPreview,from,toRecipients,receivedDateTime,sentDateTime,createdDateTime,isRead,hasAttachments,importance,conversationId";
 
         const rawSearch =
           typeof params?.search === "string" ? params.search.replace(/\s+/g, " ").trim() : "";
@@ -1311,12 +1314,9 @@ Deno.serve(async (req) => {
         const filterParam = filterUnread
           ? "&$filter=receivedDateTime ge 1900-01-01T00:00:00Z and isRead eq false"
           : "";
-        // Con $filter, el parser de Graph (RequestBroker--ParseUri) rechaza `sensitivity`
-        // en el $select: "Could not find a property named 'sensitivity'". Sin filtro sí la acepta.
-        const listSelect = filterUnread ? select.replace(",sensitivity", "") : select;
         result = await graphRequest(
           accessToken,
-          `/me/mailFolders/${folder}/messages?${listSelect}&$top=${top}&$orderby=receivedDateTime desc&$count=true${skipParam}${filterParam}`,
+          `/me/mailFolders/${folder}/messages?${select}&$top=${top}&$orderby=receivedDateTime desc&$count=true${skipParam}${filterParam}`,
           { headers: GRAPH_MAIL_PREFER_IMMUTABLE },
         );
         break;
