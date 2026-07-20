@@ -110,6 +110,8 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onForwar
   const receivedAt = (emailDetail as any)?.receivedDateTime
     ? format(new Date((emailDetail as any).receivedDateTime), "d 'de' MMMM, yyyy HH:mm", { locale: es })
     : "";
+  const sensitivity = (emailDetail as any)?.sensitivity as string | undefined;
+  const isConfidential = sensitivity === "confidential" || sensitivity === "private";
 
   return (
     <div
@@ -230,9 +232,15 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onForwar
             <CalendarPlus className="w-3.5 h-3.5" />
           </button>
           <button
-            className="h-[30px] w-[30px] flex items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-            title="Enviar a Slack"
-            onClick={onSendToSlack}
+            className={cn(
+              "h-[30px] w-[30px] flex items-center justify-center rounded-md transition-colors",
+              isConfidential
+                ? "text-muted-foreground/30 cursor-not-allowed"
+                : "text-muted-foreground hover:bg-accent hover:text-foreground"
+            )}
+            title={isConfidential ? "Correo confidencial — no se puede enviar a Slack" : "Enviar a Slack"}
+            onClick={isConfidential ? undefined : onSendToSlack}
+            disabled={isConfidential}
           >
             <MessageSquare className="w-3.5 h-3.5" />
           </button>
@@ -248,9 +256,17 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onForwar
           </div>
         ) : emailDetail ? (
           <>
-            <h1 className="text-[22px] font-bold tracking-tight text-foreground leading-tight mb-4">
-              {(emailDetail as any).subject || "(sin asunto)"}
-            </h1>
+            <div className="flex items-start gap-2 mb-4">
+              <h1 className="text-[22px] font-bold tracking-tight text-foreground leading-tight flex-1">
+                {(emailDetail as any).subject || "(sin asunto)"}
+              </h1>
+              {isConfidential && (
+                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10.5px] font-semibold shrink-0 mt-1.5 dark:bg-amber-900/30 dark:text-amber-400">
+                  <Lock className="w-3 h-3" />
+                  Confidencial
+                </span>
+              )}
+            </div>
             <div className="flex items-start gap-3 mb-6">
               <div
                 className="w-9 h-9 rounded-full flex items-center justify-center text-white text-[12px] font-bold shrink-0"

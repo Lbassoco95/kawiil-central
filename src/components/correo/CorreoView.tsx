@@ -204,7 +204,14 @@ ${detail.body?.contentType === "html" ? origBody : `<pre style="font-family:inhe
           onForward={handleForward}
           onCreateTask={handleCreateTask}
           onCreateRule={handleCreateRule}
-          onSendToSlack={() => setSlackEmailOpen(true)}
+          onSendToSlack={() => {
+            const sens = (selectedEmailDetail as any)?.sensitivity;
+            if (sens === "confidential" || sens === "private") {
+              toast.error("Este correo es confidencial y no puede reenviarse a Slack.");
+              return;
+            }
+            setSlackEmailOpen(true);
+          }}
           onCreateEvent={() => setEventFromEmailOpen(true)}
         />
       </div>

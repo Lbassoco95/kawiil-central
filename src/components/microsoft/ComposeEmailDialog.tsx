@@ -38,6 +38,7 @@ import {
   filesToComposerAttachments,
   parseRecipients,
   validateRecipientGroups,
+  sanitizeSignatureHtml,
   type ComposerAttachment,
 } from "@/lib/emailComposer";
 import { AccountingTemplatePicker, type AccountingTemplatePickerApplied } from "@/components/accounting/AccountingTemplatePicker";
@@ -218,7 +219,7 @@ export function ComposeEmailDialog({
         signatureAppliedRef.current = true;
         return;
       }
-      const html = `${composeSignature.html}<p><br></p>`;
+      const html = `${sanitizeSignatureHtml(composeSignature.html)}<p><br></p>`;
       editorRef.current?.setHtml(html);
       bodyRef.current = html;
       signatureAppliedRef.current = true;

@@ -1245,7 +1245,7 @@ Deno.serve(async (req) => {
         const skip = params?.skip || 0;
         const folder = params?.folder || "inbox";
         const select =
-          "$select=id,subject,bodyPreview,from,toRecipients,receivedDateTime,sentDateTime,createdDateTime,isRead,hasAttachments,importance,conversationId";
+          "$select=id,subject,bodyPreview,from,toRecipients,receivedDateTime,sentDateTime,createdDateTime,isRead,hasAttachments,importance,conversationId,sensitivity";
 
         const rawSearch =
           typeof params?.search === "string" ? params.search.replace(/\s+/g, " ").trim() : "";

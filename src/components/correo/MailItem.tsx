@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { Archive, Check } from "lucide-react";
+import { Archive, Check, Lock, Paperclip } from "lucide-react";
 import { inferEmailChips, emailListTimestamp, formatEmailDate } from "@/lib/emailChips";
 import { getLabelStyle } from "./MailLabelPicker";
 
@@ -19,6 +19,10 @@ export function MailItem({ email, isActive, onClick, onArchive, onMarkRead, labe
   const bodyPreview = (email.bodyPreview as string) || "";
   const unread = !(email.isRead as boolean);
   const importance = (email.importance as string) || "";
+
+  const sensitivity = (email.sensitivity as string) || "normal";
+  const isConfidential = sensitivity === "confidential" || sensitivity === "private";
+  const hasAttachments = !!(email.hasAttachments as boolean);
 
   const chips = inferEmailChips({
     from: email.from as { emailAddress?: { address?: string } },
@@ -76,9 +80,15 @@ export function MailItem({ email, isActive, onClick, onArchive, onMarkRead, labe
       </span>
 
       {/* Subject + preview */}
-      <div className="flex items-baseline overflow-hidden min-w-0">
+      <div className="flex items-center overflow-hidden min-w-0 gap-1.5">
         {chipColor && (
-          <span className="w-1.5 h-1.5 rounded-full mr-2 shrink-0 self-center" style={{ background: chipColor }} />
+          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: chipColor }} />
+        )}
+        {isConfidential && (
+          <Lock className="w-3 h-3 shrink-0 text-amber-500" title="Confidencial" />
+        )}
+        {hasAttachments && (
+          <Paperclip className="w-3 h-3 shrink-0 text-muted-foreground/60" title="Con adjuntos" />
         )}
         <span className={cn(
           "text-[12.5px] truncate shrink-0 max-w-[55%]",
@@ -88,7 +98,7 @@ export function MailItem({ email, isActive, onClick, onArchive, onMarkRead, labe
         </span>
         {bodyPreview && (
           <span className="text-[12.5px] text-muted-foreground/60 truncate flex-1 min-w-0">
-            &nbsp;—&nbsp;{bodyPreview}
+            —&nbsp;{bodyPreview}
           </span>
         )}
       </div>

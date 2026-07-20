@@ -6,6 +6,32 @@ export function stripBidiControlChars(input: string): string {
   return input.replace(/[\u202A-\u202E\u2066-\u2069]/g, "");
 }
 
+/**
+ * Sanitizes Outlook signature HTML so TipTap can render it without showing
+ * raw CSS/markup as text. Removes conditional comments, <style> blocks,
+ * VML/XML namespace elements, and Microsoft-specific processing instructions.
+ * Keeps basic formatting (p, br, strong, em, a, span, div) with inline styles.
+ */
+export function sanitizeSignatureHtml(html: string): string {
+  if (!html) return "";
+  let s = html;
+  // Remove Outlook conditional comments <!--[if ...]>...<![endif]-->
+  s = s.replace(/<!--\[if[^\]]*\]>[\s\S]*?<!\[endif\]-->/gi, "");
+  // Remove <style> blocks (their text content shows raw in TipTap)
+  s = s.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "");
+  // Remove <script> blocks
+  s = s.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "");
+  // Remove VML and Office XML namespace elements (v:, o:, w:, m:, etc.)
+  s = s.replace(/<\/?[a-z]+:[^>]*>/gi, "");
+  // Remove XML processing instructions
+  s = s.replace(/<\?xml[^>]*\?>/gi, "");
+  // Remove HTML comments
+  s = s.replace(/<!--[\s\S]*?-->/g, "");
+  // Normalize self-closing br
+  s = s.replace(/<br\s*\/?>/gi, "<br>");
+  return s.trim();
+}
+
 export type ComposerAttachment = {
   name: string;
   contentType: string;
