@@ -172,6 +172,11 @@ function FileCard({ f, onPreview }: { f: SlackFile; onPreview: (f: SlackFile) =>
 
   return (
     <div
+      role="button"
+      tabIndex={0}
+      onClick={handleOpen}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleOpen(); } }}
+      title="Ver vista previa"
       style={{
         display: "inline-flex",
         alignItems: "center",
@@ -181,6 +186,7 @@ function FileCard({ f, onPreview }: { f: SlackFile; onPreview: (f: SlackFile) =>
         padding: "7px 10px",
         background: "hsl(var(--muted) / 0.3)",
         maxWidth: 320,
+        cursor: "pointer",
       }}
     >
       {/* Icono según tipo */}
@@ -339,6 +345,27 @@ export function MessageItem({
           open={previewFile !== null}
           onOpenChange={(open) => { if (!open) setPreviewFile(null); }}
         />
+
+        {/* Comentar el adjunto como hilo (visible cuando hay archivo y aún no hay respuestas) */}
+        {(message.files?.length ?? 0) > 0 && onOpenThread && (message.reply_count ?? 0) === 0 && (
+          <button
+            type="button"
+            onClick={() => onOpenThread(message.thread_ts || message.ts || "")}
+            title="Comentar este archivo en un hilo"
+            style={{
+              marginTop: 6,
+              display: "inline-flex", alignItems: "center", gap: 5,
+              fontSize: 12, fontWeight: 600, color: "hsl(var(--primary))",
+              background: "transparent", border: "1px solid hsl(var(--primary) / 0.35)",
+              borderRadius: 6, padding: "3px 9px", cursor: "pointer",
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+            Comentar
+          </button>
+        )}
 
         {/* Reacciones */}
         {message.reactions && message.reactions.length > 0 && (
