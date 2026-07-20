@@ -295,7 +295,7 @@ function CandidateDetailInner({
     <>
       <DialogHeader>
         <DialogTitle className="flex flex-wrap items-center gap-2">
-          <UserAvatar name={candidate.full_name} avatarUrl={photoUrl} size="md" />
+          <UserAvatar name={candidate.full_name} avatarUrl={photoUrl} size="xl" className="h-16 w-16 shrink-0" fallbackClassName="text-lg" />
           {candidate.full_name}
           {currentState && (
             <Badge variant="outline" className={cn(STATE_COLOR_STYLE[currentState.color] ?? STATE_COLOR_STYLE.slate)}>

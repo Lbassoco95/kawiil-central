@@ -558,7 +558,7 @@ function DraggableCard({
         <CardContent className="space-y-1 p-3">
           <div className="flex items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-1.5 text-sm font-medium">
-              <UserAvatar name={candidate.full_name} avatarUrl={photoUrl} size="sm" className="shrink-0" />
+              <UserAvatar name={candidate.full_name} avatarUrl={photoUrl} size="md" className="shrink-0" />
               {candidate.rating > 0 && (
                 <span
                   className={cn("h-2 w-2 shrink-0 rounded-full", SEMAPHORE_DOT[scoreSemaphore(candidate.rating)])}
