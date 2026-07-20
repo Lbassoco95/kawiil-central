@@ -65,6 +65,7 @@ import { WorkLocationChip } from "@/components/microsoft/WorkLocationChip";
 import { useTeamAvailability } from "@/hooks/useTeamAvailability";
 import { UserAvatar } from "@/components/shared/UserAvatar";
 import { EventTravelSection } from "@/components/microsoft/EventTravelSection";
+import { PlaceAutocompleteInput } from "@/components/microsoft/PlaceAutocompleteInput";
 import { useAuth } from "@/contexts/AuthContext";
 
 type ViewMode = "day" | "3days" | "week" | "month" | "agenda" | "equipo";
@@ -1861,7 +1862,11 @@ export function CalendarView({
             </div>
             <div className="space-y-2">
               <Label>Ubicación / dirección</Label>
-              <Input placeholder="Oficina, sala, dirección física, etc." value={newEvent.location} onChange={(e) => setNewEvent({ ...newEvent, location: e.target.value })} />
+              <PlaceAutocompleteInput
+                placeholder="Oficina, sala, dirección física, etc."
+                value={newEvent.location}
+                onChange={(v) => setNewEvent({ ...newEvent, location: v })}
+              />
             </div>
             {newEvent.location.trim() && !/^https?:\/\//i.test(newEvent.location.trim()) && (
               <EventTravelSection
@@ -1976,7 +1981,11 @@ export function CalendarView({
               </div>
               <div className="space-y-2">
                 <Label>Ubicación</Label>
-                <Input value={editForm.location} onChange={(e) => setEditForm({ ...editForm, location: e.target.value })} placeholder="Lugar o dirección" />
+                <PlaceAutocompleteInput
+                  value={editForm.location}
+                  onChange={(v) => setEditForm({ ...editForm, location: v })}
+                  placeholder="Lugar o dirección"
+                />
               </div>
               {editForm.location.trim() && !/^https?:\/\//i.test(editForm.location.trim()) && (
                 <EventTravelSection

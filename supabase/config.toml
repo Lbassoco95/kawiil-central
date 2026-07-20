@@ -45,6 +45,8 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = false
   [functions.maps-travel]
     verify_jwt = false
+  [functions.maps-places]
+    verify_jwt = false
   [functions.team-availability]
     verify_jwt = false
   [functions.dropbox-token-exchange]

@@ -1,5 +1,30 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+
+export interface PlacePrediction {
+  placeId: string | null;
+  description: string;
+  mainText: string;
+  secondaryText: string;
+}
+
+/**
+ * Autocompletado de lugares (Google Places) vía edge function. Degrada a lista
+ * vacía si Places API no está habilitada, sin romper la escritura libre.
+ */
+export function usePlacesAutocomplete(input: string) {
+  const query = input.trim();
+  return useQuery({
+    queryKey: ["maps-places", query],
+    enabled: query.length >= 3,
+    staleTime: 60_000,
+    queryFn: async (): Promise<PlacePrediction[]> => {
+      const { data, error } = await supabase.functions.invoke("maps-places", { body: { input: query } });
+      if (error) return [];
+      return (data?.predictions ?? []) as PlacePrediction[];
+    },
+  });
+}
 
 export interface TravelResult {
   durationText: string | null;

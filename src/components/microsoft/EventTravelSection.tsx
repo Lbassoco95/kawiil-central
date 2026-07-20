@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Car, Loader2 } from "lucide-react";
 import { useTravelTime } from "@/hooks/useTravelTime";
+import { PlaceAutocompleteInput } from "@/components/microsoft/PlaceAutocompleteInput";
 import { formatMX } from "@/lib/dateUtils";
 
 interface Props {
@@ -29,11 +29,11 @@ export function EventTravelSection({ destination, departureISO, defaultOrigin }:
     <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
       <Label className="flex items-center gap-1.5"><Car className="h-4 w-4" /> Trayecto</Label>
       <div className="flex items-center gap-2">
-        <Input
+        <PlaceAutocompleteInput
           value={origin}
-          onChange={(e) => setOrigin(e.target.value)}
+          onChange={setOrigin}
           placeholder="Tu punto de salida (dirección o lugar)"
-          className="h-8 text-sm"
+          className="flex-1"
         />
         <Button
           size="sm"
