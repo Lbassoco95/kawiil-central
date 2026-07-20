@@ -3,6 +3,41 @@ import { X, Sparkles, Calendar, User, Flag, AlignLeft } from "lucide-react";
 import { getAvatarGradient, getInitials } from "@/lib/emailChips";
 import { useCreateTask } from "@/hooks/useTasks";
 
+const MONTHS_ES: Record<string, number> = {
+  enero: 1, febrero: 2, marzo: 3, abril: 4, mayo: 5, junio: 6,
+  julio: 7, agosto: 8, septiembre: 9, octubre: 10, noviembre: 11, diciembre: 12,
+};
+
+function extractDueDateFromText(text: string): string {
+  if (!text) return "";
+  const today = new Date();
+  const yr = today.getFullYear();
+
+  // ISO: 2026-03-15
+  const iso = text.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+  if (iso) return iso[0];
+
+  // dd/mm/yyyy or dd/mm/yy
+  const dmy = text.match(/\b(\d{1,2})\/(\d{1,2})\/(\d{2,4})\b/);
+  if (dmy) {
+    const d = dmy[1].padStart(2, "0"), m = dmy[2].padStart(2, "0");
+    const y = dmy[3].length === 2 ? `20${dmy[3]}` : dmy[3];
+    return `${y}-${m}-${d}`;
+  }
+
+  // "15 de agosto de 2026" or "15 de agosto"
+  const spanishRe = /\b(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)(?:\s+(?:de\s+)?(\d{4}))?\b/i;
+  const sm = text.match(spanishRe);
+  if (sm) {
+    const d = sm[1].padStart(2, "0");
+    const month = MONTHS_ES[sm[2].toLowerCase()];
+    const y = sm[3] ? sm[3] : (month < today.getMonth() + 1 ? yr + 1 : yr);
+    return `${y}-${String(month).padStart(2, "0")}-${d}`;
+  }
+
+  return "";
+}
+
 interface EmailShape {
   id?: string;
   subject?: string;
@@ -38,8 +73,10 @@ export function MailTaskDrawer({ open, email, onClose }: Props) {
   useEffect(() => {
     if (!email) return;
     setTitle(email.subject || "");
-    setDesc(email.bodyPreview ? email.bodyPreview.slice(0, 300) : "");
-    setDueDate("");
+    const preview = email.bodyPreview ? email.bodyPreview.slice(0, 500) : "";
+    setDesc(preview.slice(0, 300));
+    const combined = `${email.subject || ""} ${preview}`;
+    setDueDate(extractDueDateFromText(combined));
     setPriority("medium");
     setAssignee("");
   }, [email]);

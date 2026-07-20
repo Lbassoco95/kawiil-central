@@ -102,8 +102,8 @@ export function ComposeEmailDialog({
   const [cc, setCc] = useState("");
   const [bcc, setBcc] = useState("");
   const [subject, setSubject] = useState("");
-  const [showCc, setShowCc] = useState(false);
-  const [showBcc, setShowBcc] = useState(false);
+  const [showCc, setShowCc] = useState(true);
+  const [showBcc, setShowBcc] = useState(true);
   const [editorKey, setEditorKey] = useState(0);
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [aiInstruction, setAiInstruction] = useState("");
