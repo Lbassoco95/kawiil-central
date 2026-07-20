@@ -243,6 +243,18 @@ export function CalendarView({
   const [renameValue, setRenameValue] = useState("");
   const [showKawiilTasks, setShowKawiilTasks] = useState(true);
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
+  // Cuando el panel derecho está abierto en escritorio, corre el botón flotante
+  // de IA a la izquierda del panel para que no lo tape. Se limpia al salir.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const root = document.documentElement;
+    if (rightPanelOpen && !isMobile) {
+      root.style.setProperty("--kawiil-fab-right", "280px");
+    } else {
+      root.style.removeProperty("--kawiil-fab-right");
+    }
+    return () => root.style.removeProperty("--kawiil-fab-right");
+  }, [rightPanelOpen, isMobile]);
   const [hiddenCalendarIds, setHiddenCalendarIds] = useState<string[]>(() => {
     if (typeof window === "undefined") return [];
     try {
@@ -1851,6 +1863,12 @@ export function CalendarView({
               <Label>Ubicación / dirección</Label>
               <Input placeholder="Oficina, sala, dirección física, etc." value={newEvent.location} onChange={(e) => setNewEvent({ ...newEvent, location: e.target.value })} />
             </div>
+            {newEvent.location.trim() && !/^https?:\/\//i.test(newEvent.location.trim()) && (
+              <EventTravelSection
+                destination={newEvent.location.trim()}
+                departureISO={!newEvent.isAllDay && newEvent.startTime ? `${format(selectedDate, "yyyy-MM-dd")}T${newEvent.startTime}:00` : null}
+              />
+            )}
             <div className="flex items-center justify-between gap-2">
               <div>
                 <Label className="text-sm">Reunión de Teams</Label>

@@ -115,6 +115,7 @@ export function FloatingAIChat() {
     return (
       <button
         onClick={() => setOpen(true)}
+        style={!isMobile ? { right: "var(--kawiil-fab-right, 1.5rem)" } : undefined}
         className={cn(
           "fixed right-4 z-50 h-14 w-14 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl hover:scale-105 transition-all flex items-center justify-center group sm:right-6",
           isMobile ? "bottom-[calc(env(safe-area-inset-bottom)+4.5rem)]" : "bottom-6",
@@ -135,6 +136,7 @@ export function FloatingAIChat() {
   if (minimized) {
     return (
       <div
+        style={!isMobile ? { right: "var(--kawiil-fab-right, 1.5rem)" } : undefined}
         className={cn(
           "fixed right-4 z-50 bg-card border border-border rounded-2xl shadow-xl px-4 py-2.5 flex items-center gap-3 cursor-pointer hover:shadow-2xl transition-shadow sm:right-6",
           isMobile ? "bottom-[calc(env(safe-area-inset-bottom)+4.5rem)]" : "bottom-6",
@@ -170,7 +172,7 @@ export function FloatingAIChat() {
         "fixed z-50 bg-card border border-border shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-200",
         isMobile
           ? "inset-x-2 top-2 bottom-[calc(env(safe-area-inset-bottom)+4rem)] rounded-2xl"
-          : "bottom-6 right-6 w-[380px] h-[520px] rounded-2xl",
+          : "bottom-6 right-[var(--kawiil-fab-right,1.5rem)] w-[380px] h-[520px] rounded-2xl",
       )}
     >
       {/* Header */}
