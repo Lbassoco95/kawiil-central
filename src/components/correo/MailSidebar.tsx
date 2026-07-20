@@ -17,6 +17,7 @@ import {
   ChevronRight,
   ChevronDown,
   RefreshCw,
+  Mail,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { type MailTabId } from "./MailTabs";
@@ -28,6 +29,15 @@ import {
   useCreateEmailLabel,
 } from "@/hooks/useMicrosoft";
 import { getLabelStyle, LABEL_COLORS } from "./MailLabelPicker";
+import {
+  useLinkedAccounts,
+  useLinkedOutlookInboxMeta,
+  useGmailInboxMeta,
+  useGmailLabels,
+  linkedAccountColor,
+  type LinkedAccount,
+} from "@/hooks/useLinkedAccounts";
+import { MailAccountBadge } from "./MailAccountBadge";
 
 interface MailSidebarProps {
   activeTab: MailTabId;
@@ -196,6 +206,116 @@ function FolderRow({
   );
 }
 
+// ─── Linked Outlook account section ──────────────────────────────────────────
+function LinkedOutlookSection({
+  account,
+  unreadCount,
+  activeCustomFolderId,
+  onSelectFolder,
+}: {
+  account: LinkedAccount;
+  unreadCount: number;
+  activeCustomFolderId?: string;
+  onSelectFolder: (id: string, name: string) => void;
+}) {
+  const color = linkedAccountColor(account.email || account.id);
+  const label = account.display_name || account.email || "Outlook";
+  const inboxId = `outlook:${account.id}:inbox`;
+  const sentId = `outlook:${account.id}:sentItems`;
+
+  return (
+    <div className="mt-2">
+      <div className="flex items-center gap-1.5 px-4 mb-1">
+        <MailAccountBadge email={account.email || account.id} color={color} size="sm" />
+        <p className="text-[9.5px] font-bold uppercase tracking-widest text-muted-foreground/60 truncate flex-1">
+          {label}
+        </p>
+        {unreadCount > 0 && (
+          <span className="text-[10px] font-medium text-muted-foreground/60 shrink-0">{unreadCount}</span>
+        )}
+      </div>
+      <div className="flex flex-col gap-0.5 px-2">
+        {[
+          { id: inboxId, label: "Bandeja", icon: <Inbox className="w-[13px] h-[13px]" /> },
+          { id: sentId, label: "Enviados", icon: <Send className="w-[13px] h-[13px]" /> },
+        ].map(item => {
+          const active = activeCustomFolderId === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => onSelectFolder(item.id, `${label} · ${item.label}`)}
+              className={cn(
+                "flex items-center gap-2 w-full h-7 px-2 rounded-md text-[12px] transition-colors text-left",
+                active
+                  ? "bg-accent text-foreground font-semibold border-l-2 border-primary pl-[7px]"
+                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+              )}
+            >
+              <span className={cn("shrink-0", active ? "text-primary" : "text-muted-foreground/70")}>{item.icon}</span>
+              <span className="flex-1 truncate">{item.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Linked Gmail account section ─────────────────────────────────────────────
+function LinkedGmailSection({
+  account,
+  unreadCount,
+  activeCustomFolderId,
+  onSelectFolder,
+}: {
+  account: LinkedAccount;
+  unreadCount: number;
+  activeCustomFolderId?: string;
+  onSelectFolder: (id: string, name: string) => void;
+}) {
+  const color = linkedAccountColor(account.email || account.id);
+  const label = account.display_name || account.email || "Gmail";
+  const inboxId = `gmail:${account.id}:INBOX`;
+  const sentId = `gmail:${account.id}:SENT`;
+
+  return (
+    <div className="mt-2">
+      <div className="flex items-center gap-1.5 px-4 mb-1">
+        <MailAccountBadge email={account.email || account.id} color={color} size="sm" />
+        <p className="text-[9.5px] font-bold uppercase tracking-widest text-muted-foreground/60 truncate flex-1">
+          {label}
+        </p>
+        {unreadCount > 0 && (
+          <span className="text-[10px] font-medium text-muted-foreground/60 shrink-0">{unreadCount}</span>
+        )}
+      </div>
+      <div className="flex flex-col gap-0.5 px-2">
+        {[
+          { id: inboxId, label: "Recibidos", icon: <Inbox className="w-[13px] h-[13px]" /> },
+          { id: sentId, label: "Enviados", icon: <Send className="w-[13px] h-[13px]" /> },
+        ].map(item => {
+          const active = activeCustomFolderId === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => onSelectFolder(item.id, `${label} · ${item.label}`)}
+              className={cn(
+                "flex items-center gap-2 w-full h-7 px-2 rounded-md text-[12px] transition-colors text-left",
+                active
+                  ? "bg-accent text-foreground font-semibold border-l-2 border-primary pl-[7px]"
+                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+              )}
+            >
+              <span className={cn("shrink-0", active ? "text-primary" : "text-muted-foreground/70")}>{item.icon}</span>
+              <span className="flex-1 truncate">{item.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function MailSidebar({
   activeTab,
   onSelectTab,
@@ -260,6 +380,20 @@ export function MailSidebar({
     setNewLabelColor("blue");
     setNewLabelOpen(false);
   };
+
+  const { data: linkedAccounts = [] } = useLinkedAccounts();
+  const { data: outlookInboxMeta } = useLinkedOutlookInboxMeta();
+  const { data: gmailInboxMeta } = useGmailInboxMeta();
+
+  const outlookUnreadMap = Object.fromEntries(
+    (outlookInboxMeta?.accounts ?? []).map(a => [a.accountId, a.unreadItemCount])
+  );
+  const gmailUnreadMap = Object.fromEntries(
+    (gmailInboxMeta?.accounts ?? []).map(a => [a.accountId, a.unreadItemCount])
+  );
+  const outlookLinked = linkedAccounts.filter(a => a.provider === "microsoft" && a.mail_enabled);
+  const gmailLinked = linkedAccounts.filter(a => a.provider === "google" && a.mail_enabled);
+  const hasLinkedAccounts = outlookLinked.length > 0 || gmailLinked.length > 0;
 
   const isTabActive = (id: MailTabId) => activeTab === id && !activeCustomFolderId && activeLabelId == null;
 
@@ -461,6 +595,33 @@ export function MailSidebar({
           </div>
         </div>
       </div>
+
+      {/* Linked accounts — Outlook + Gmail */}
+      {hasLinkedAccounts && (
+        <>
+          <div className="mx-3 border-t border-border/40 shrink-0" />
+          <div className="overflow-y-auto pb-4 shrink-0">
+            {outlookLinked.map(account => (
+              <LinkedOutlookSection
+                key={account.id}
+                account={account}
+                unreadCount={outlookUnreadMap[account.id] ?? 0}
+                activeCustomFolderId={activeCustomFolderId}
+                onSelectFolder={onSelectFolder}
+              />
+            ))}
+            {gmailLinked.map(account => (
+              <LinkedGmailSection
+                key={account.id}
+                account={account}
+                unreadCount={gmailUnreadMap[account.id] ?? 0}
+                activeCustomFolderId={activeCustomFolderId}
+                onSelectFolder={onSelectFolder}
+              />
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }

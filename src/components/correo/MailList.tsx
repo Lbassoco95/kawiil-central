@@ -1,6 +1,14 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { Search, RefreshCw, Loader2, PenLine, FolderOpen, ListFilter, Paperclip } from "lucide-react";
 import { useOutlookEmails, useArchiveEmail, useMarkEmailRead, useMarkEmailUnread, useEmailUserLabels, useEmailLabelAssignmentsBulk } from "@/hooks/useMicrosoft";
+import {
+  useLinkedOutlookEmailsAll,
+  useGmailEmailsAll,
+  useMarkLinkedOutlookEmailRead,
+  useArchiveLinkedOutlookEmail,
+  useMarkGmailRead,
+  useArchiveGmail,
+} from "@/hooks/useLinkedAccounts";
 import { useQueryClient } from "@tanstack/react-query";
 import { getLabelStyle } from "./MailLabelPicker";
 import {
@@ -66,12 +74,40 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
 
   const debouncedSearch = useDebouncedValue(search, 350);
 
+  // Parse linked account folder prefix: "outlook:{accountId}:{folder}" or "gmail:{accountId}:{label}"
+  const linkedFolderParts = (customFolderOverride ?? "").split(":");
+  const folderPfx = linkedFolderParts[0];
+  const linkedAccId = linkedFolderParts.length >= 3 ? linkedFolderParts[1] : "";
+  const linkedFolderPath = linkedFolderParts.length >= 3 ? linkedFolderParts.slice(2).join(":") : "";
+  const isLinkedOutlook = folderPfx === "outlook" && !!linkedAccId && !!customFolderOverride;
+  const isLinkedGmail = folderPfx === "gmail" && !!linkedAccId && !!customFolderOverride;
+  const isLinkedAccount = isLinkedOutlook || isLinkedGmail;
+
   // For AI tabs, load inbox and filter client-side
   const isAiTab = AI_TABS.includes(activeTab) && !customFolderOverride;
-  const folderId = customFolderOverride ?? TAB_TO_FOLDER[activeTab] ?? "inbox";
+  const primaryFolderId = isLinkedAccount ? "inbox" : (customFolderOverride ?? TAB_TO_FOLDER[activeTab] ?? "inbox");
+
+  const primaryQuery = useOutlookEmails(primaryFolderId, isLinkedAccount ? undefined : debouncedSearch || undefined);
+  const linkedOutlookQuery = useLinkedOutlookEmailsAll({
+    accountId: linkedAccId || undefined,
+    folder: linkedFolderPath || "inbox",
+    enabled: isLinkedOutlook,
+  });
+  const linkedGmailQuery = useGmailEmailsAll({
+    accountId: linkedAccId || undefined,
+    labelId: linkedFolderPath || "INBOX",
+    enabled: isLinkedGmail,
+  });
 
   const { data, isLoading, isFetching, fetchNextPage, hasNextPage, isFetchingNextPage, refetch } =
-    useOutlookEmails(folderId, debouncedSearch || undefined);
+    isLinkedOutlook ? linkedOutlookQuery :
+    isLinkedGmail ? linkedGmailQuery :
+    primaryQuery;
+
+  const archiveLinkedOutlook = useArchiveLinkedOutlookEmail();
+  const markLinkedOutlookRead = useMarkLinkedOutlookEmailRead();
+  const archiveGmailMut = useArchiveGmail();
+  const markGmailRead = useMarkGmailRead();
 
   const allEmails = useMemo(
     () => (data?.pages ?? []).flatMap((p) => p.emails as Record<string, unknown>[]),
@@ -376,10 +412,20 @@ const now = useMemo(() => new Date(), []);
                 email={email}
                 isActive={selectedEmailId === emailId}
                 onClick={() => onSelectEmail(emailId)}
-                onArchive={() => archiveEmail.mutate(emailId)}
+                onArchive={() => {
+                  if (isLinkedOutlook) archiveLinkedOutlook.mutate({ accountId: linkedAccId, emailId });
+                  else if (isLinkedGmail) archiveGmailMut.mutate({ accountId: linkedAccId, emailId });
+                  else archiveEmail.mutate(emailId);
+                }}
                 onMarkRead={() => {
-                  if (email.isRead) markUnread.mutate(emailId);
-                  else markRead.mutate(emailId);
+                  if (isLinkedOutlook) {
+                    if (!email.isRead) markLinkedOutlookRead.mutate({ accountId: linkedAccId, emailId });
+                  } else if (isLinkedGmail) {
+                    if (!email.isRead) markGmailRead.mutate({ accountId: linkedAccId, emailId });
+                  } else {
+                    if (email.isRead) markUnread.mutate(emailId);
+                    else markRead.mutate(emailId);
+                  }
                 }}
                 labelChips={chips.length > 0 ? chips : undefined}
               />

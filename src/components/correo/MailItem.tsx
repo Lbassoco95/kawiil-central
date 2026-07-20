@@ -2,6 +2,8 @@ import { cn } from "@/lib/utils";
 import { Archive, Check, Lock, Paperclip } from "lucide-react";
 import { inferEmailChips, emailListTimestamp, formatEmailDate } from "@/lib/emailChips";
 import { getLabelStyle } from "./MailLabelPicker";
+import { MailAccountBadge } from "./MailAccountBadge";
+import { linkedAccountColor } from "@/hooks/useLinkedAccounts";
 
 interface Props {
   email: Record<string, unknown>;
@@ -71,11 +73,19 @@ export function MailItem({ email, isActive, onClick, onArchive, onMarkRead, labe
         !unread && "opacity-0"
       )} />
 
-      {/* Sender */}
+      {/* Sender — with optional linked-account badge */}
       <span className={cn(
-        "text-[12.5px] truncate pr-3 shrink-0",
+        "flex items-center gap-1.5 text-[12.5px] truncate pr-3 shrink-0",
         unread ? "font-bold text-foreground" : "font-medium text-muted-foreground"
       )}>
+        {email._accountEmail && (
+          <MailAccountBadge
+            email={email._accountEmail as string}
+            color={linkedAccountColor(email._accountEmail as string)}
+            size="sm"
+            className="shrink-0"
+          />
+        )}
         {senderName}
       </span>
 

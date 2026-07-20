@@ -41,6 +41,8 @@ Deno.serve(async (req) => {
       "email",
       "profile",
       "https://www.googleapis.com/auth/calendar",
+      "https://www.googleapis.com/auth/gmail.modify",
+      "https://www.googleapis.com/auth/gmail.send",
     ].join(" ");
 
     const authUrl = "https://accounts.google.com/o/oauth2/v2/auth?" +

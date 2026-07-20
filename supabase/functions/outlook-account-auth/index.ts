@@ -38,6 +38,7 @@ Deno.serve(async (req) => {
     const scopes = [
       "openid", "profile", "email", "offline_access",
       "Calendars.ReadWrite", "User.Read",
+      "Mail.Read", "Mail.ReadWrite", "Mail.Send", "MailboxSettings.ReadWrite",
     ].join(" ");
 
     const authUrl = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize?` +

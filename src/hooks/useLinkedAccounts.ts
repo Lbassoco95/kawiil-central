@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -302,6 +302,247 @@ export function useCreateOutlookAccountEvent() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["outlook-account-events"] });
+    },
+  });
+}
+
+// ─── Account color utility ────────────────────────────────────────────────────
+const LINKED_ACCOUNT_COLORS = [
+  "hsl(210 100% 47%)",
+  "hsl(157 72% 36%)",
+  "hsl(32 90% 48%)",
+  "hsl(282 60% 45%)",
+  "hsl(340 82% 52%)",
+  "hsl(174 72% 35%)",
+];
+
+export function linkedAccountColor(email: string): string {
+  let hash = 0;
+  for (let i = 0; i < email.length; i++) hash = (hash * 31 + email.charCodeAt(i)) & 0xffffffff;
+  return LINKED_ACCOUNT_COLORS[Math.abs(hash) % LINKED_ACCOUNT_COLORS.length];
+}
+
+// ─── Linked Outlook Email Hooks ───────────────────────────────────────────────
+
+export interface LinkedEmailPage {
+  emails: Record<string, unknown>[];
+  nextLink?: string;
+}
+
+export function useLinkedOutlookEmailsAll(options?: {
+  accountId?: string;
+  folder?: string;
+  filterUnread?: boolean;
+  enabled?: boolean;
+}) {
+  const { accountId, folder = "inbox", filterUnread, enabled = true } = options ?? {};
+  return useInfiniteQuery({
+    queryKey: ["linked-outlook-emails", accountId ?? "all", folder, filterUnread],
+    queryFn: async ({ pageParam }: { pageParam: string | number }) => {
+      const p: Record<string, unknown> = { accountId, folder, top: 25, filterUnread: filterUnread || undefined };
+      if (typeof pageParam === "string" && pageParam.startsWith("http")) p.nextLink = pageParam;
+      else if (typeof pageParam === "number" && pageParam > 0) p.skip = pageParam;
+      const { data, error } = await supabase.functions.invoke("outlook-account-api", {
+        body: { action: "emails", params: p },
+      });
+      if (error || data?.error) return { emails: [], nextLink: undefined } as LinkedEmailPage;
+      return {
+        emails: (data?.value ?? []) as Record<string, unknown>[],
+        nextLink: data?.["@odata.nextLink"] as string | undefined,
+      } as LinkedEmailPage;
+    },
+    initialPageParam: 0 as string | number,
+    getNextPageParam: (last: LinkedEmailPage) => last.nextLink ?? undefined,
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
+export function useLinkedOutlookEmailDetail(accountId: string | null, emailId: string | null) {
+  return useQuery({
+    queryKey: ["linked-outlook-email-detail", accountId, emailId],
+    queryFn: async () => {
+      if (!accountId || !emailId) return null;
+      const { data, error } = await supabase.functions.invoke("outlook-account-api", {
+        body: { action: "email-detail", params: { accountId, emailId } },
+      });
+      if (error || data?.error) return null;
+      return data as Record<string, unknown>;
+    },
+    enabled: !!accountId && !!emailId,
+    staleTime: 60_000,
+  });
+}
+
+export function useLinkedOutlookMailFolders(accountId: string | null) {
+  return useQuery({
+    queryKey: ["linked-outlook-mail-folders", accountId],
+    queryFn: async () => {
+      if (!accountId) return { folders: [] as Record<string, unknown>[] };
+      const { data, error } = await supabase.functions.invoke("outlook-account-api", {
+        body: { action: "mail-folders", params: { accountId } },
+      });
+      if (error || data?.error) return { folders: [] as Record<string, unknown>[] };
+      return { folders: (data?.folders ?? []) as Record<string, unknown>[], accountId };
+    },
+    enabled: !!accountId,
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function useLinkedOutlookInboxMeta() {
+  return useQuery({
+    queryKey: ["linked-outlook-inbox-meta"],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke("outlook-account-api", {
+        body: { action: "inbox-meta", params: {} },
+      });
+      if (error || data?.error) return { accounts: [] as { accountId: string; email: string; unreadItemCount: number }[] };
+      return { accounts: (data?.accounts ?? []) as { accountId: string; email: string; unreadItemCount: number }[] };
+    },
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+}
+
+export function useMarkLinkedOutlookEmailRead() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ accountId, emailId }: { accountId: string; emailId: string }) => {
+      await supabase.functions.invoke("outlook-account-api", {
+        body: { action: "mark-read", params: { accountId, emailId } },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["linked-outlook-emails"] });
+      queryClient.invalidateQueries({ queryKey: ["linked-outlook-inbox-meta"] });
+    },
+  });
+}
+
+export function useArchiveLinkedOutlookEmail() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ accountId, emailId }: { accountId: string; emailId: string }) => {
+      await supabase.functions.invoke("outlook-account-api", {
+        body: { action: "archive-email", params: { accountId, emailId } },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["linked-outlook-emails"] });
+      queryClient.invalidateQueries({ queryKey: ["linked-outlook-inbox-meta"] });
+    },
+  });
+}
+
+// ─── Gmail Email Hooks ────────────────────────────────────────────────────────
+
+export interface GmailEmailPage {
+  emails: Record<string, unknown>[];
+  nextPageToken?: string;
+}
+
+export function useGmailEmailsAll(options?: {
+  accountId?: string;
+  labelId?: string;
+  filterUnread?: boolean;
+  enabled?: boolean;
+}) {
+  const { accountId, labelId = "INBOX", filterUnread, enabled = true } = options ?? {};
+  return useInfiniteQuery({
+    queryKey: ["gmail-emails", accountId ?? "all", labelId, filterUnread],
+    queryFn: async ({ pageParam }: { pageParam: string | undefined }) => {
+      const p: Record<string, unknown> = { accountId, labelId, maxResults: 25, filterUnread: filterUnread || undefined };
+      if (pageParam) p.pageToken = pageParam;
+      const { data, error } = await supabase.functions.invoke("google-api", {
+        body: { action: "gmail-emails", params: p },
+      });
+      if (error || data?.error) return { emails: [], nextPageToken: undefined } as GmailEmailPage;
+      return {
+        emails: (data?.value ?? []) as Record<string, unknown>[],
+        nextPageToken: data?.nextPageToken as string | undefined,
+      } as GmailEmailPage;
+    },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last: GmailEmailPage) => last.nextPageToken ?? undefined,
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
+export function useGmailEmailDetail(accountId: string | null, emailId: string | null) {
+  return useQuery({
+    queryKey: ["gmail-email-detail", accountId, emailId],
+    queryFn: async () => {
+      if (!accountId || !emailId) return null;
+      const { data, error } = await supabase.functions.invoke("google-api", {
+        body: { action: "gmail-detail", params: { accountId, emailId } },
+      });
+      if (error || data?.error) return null;
+      return data as Record<string, unknown>;
+    },
+    enabled: !!accountId && !!emailId,
+    staleTime: 60_000,
+  });
+}
+
+export function useGmailLabels(accountId: string | null) {
+  return useQuery({
+    queryKey: ["gmail-labels", accountId],
+    queryFn: async () => {
+      if (!accountId) return { value: [] as Record<string, unknown>[] };
+      const { data, error } = await supabase.functions.invoke("google-api", {
+        body: { action: "gmail-labels", params: { accountId } },
+      });
+      if (error || data?.error) return { value: [] as Record<string, unknown>[] };
+      return { value: (data?.value ?? []) as Record<string, unknown>[], accountId };
+    },
+    enabled: !!accountId,
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function useGmailInboxMeta() {
+  return useQuery({
+    queryKey: ["gmail-inbox-meta"],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke("google-api", {
+        body: { action: "gmail-inbox-meta", params: {} },
+      });
+      if (error || data?.error) return { accounts: [] as { accountId: string; email: string; unreadItemCount: number }[] };
+      return { accounts: (data?.accounts ?? []) as { accountId: string; email: string; unreadItemCount: number }[] };
+    },
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+}
+
+export function useMarkGmailRead() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ accountId, emailId }: { accountId: string; emailId: string }) => {
+      await supabase.functions.invoke("google-api", {
+        body: { action: "gmail-mark-read", params: { accountId, emailId } },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["gmail-emails"] });
+      queryClient.invalidateQueries({ queryKey: ["gmail-inbox-meta"] });
+    },
+  });
+}
+
+export function useArchiveGmail() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ accountId, emailId }: { accountId: string; emailId: string }) => {
+      await supabase.functions.invoke("google-api", {
+        body: { action: "gmail-archive", params: { accountId, emailId } },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["gmail-emails"] });
+      queryClient.invalidateQueries({ queryKey: ["gmail-inbox-meta"] });
     },
   });
 }
