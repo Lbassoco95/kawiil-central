@@ -87,6 +87,10 @@ function accountColorFor(accountId?: string | null): string {
   return ACCOUNT_COLORS[hash % ACCOUNT_COLORS.length];
 }
 
+// Identidad de la cuenta principal de Microsoft (Kawiil), que no vive en linked_accounts.
+const PRIMARY_MS_ID = "microsoft-primary";
+const PRIMARY_MS_COLOR = "#0099bc"; // teal Kawiil por defecto (editable)
+
 /** Extrae el accountId de un calendarId namespaced de una cuenta añadida
  *  (google:<accId>:<calId> u outlook:<accId>:<calId>). null si es el principal M365. */
 function linkedAccountIdFromCalendarId(calendarId?: string | null): string | null {
@@ -259,6 +263,26 @@ export function CalendarView({
   const resetCalendarColor = (id: string) => setCalendarColors((p) => { const n = { ...p }; delete n[id]; return n; });
   const setCategoryColor = (name: string, color: string) => setCategoryColors((p) => ({ ...p, [name]: color }));
   const resetCategoryColor = (name: string) => setCategoryColors((p) => { const n = { ...p }; delete n[name]; return n; });
+
+  // Color por cuenta (editable, incluye la principal de Microsoft) persistido.
+  const [accountColors, setAccountColors] = useState<Record<string, string>>(() => {
+    if (typeof window === "undefined") return {};
+    try { return JSON.parse(window.localStorage.getItem("kawiil-cal-account-colors") || "{}"); } catch { return {}; }
+  });
+  useEffect(() => {
+    try { window.localStorage.setItem("kawiil-cal-account-colors", JSON.stringify(accountColors)); } catch { /* ignore */ }
+  }, [accountColors]);
+  const setAccountColor = (id: string, color: string) => setAccountColors((p) => ({ ...p, [id]: color }));
+  const resetAccountColor = (id: string) => setAccountColors((p) => { const n = { ...p }; delete n[id]; return n; });
+  // Nombre editable de la cuenta principal de Microsoft (las vinculadas usan display_name en BD).
+  const [primaryName, setPrimaryName] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    try { return window.localStorage.getItem("kawiil-cal-primary-name") || ""; } catch { return ""; }
+  });
+  useEffect(() => {
+    try { window.localStorage.setItem("kawiil-cal-primary-name", primaryName); } catch { /* ignore */ }
+  }, [primaryName]);
+  const primaryLabel = primaryName || "Microsoft 365 (Kawiil)";
 
   const [activeCategoryFilters, setActiveCategoryFilters] = useState<string[]>(() => {
     if (typeof window === "undefined") return [];
@@ -441,9 +465,12 @@ export function CalendarView({
   // Nombre que el usuario asignó a cada cuenta (display_name) o su email.
   const accountLabelById = useMemo(() => {
     const m = new Map<string, string>();
+    m.set(PRIMARY_MS_ID, primaryLabel);
     linkedAccounts.forEach((a) => m.set(a.id, a.display_name || a.email || (a.provider === "microsoft" ? "Outlook" : "Google")));
     return m;
-  }, [linkedAccounts]);
+  }, [linkedAccounts, primaryLabel]);
+  // Color de una cuenta: override del usuario → default (teal para principal, hash para el resto).
+  const accountColorForId = (id: string) => accountColors[id] || (id === PRIMARY_MS_ID ? PRIMARY_MS_COLOR : accountColorFor(id));
 
   const allEvents = useMemo(() => {
     const m365 = Array.isArray(eventsData) ? eventsData : [];
@@ -473,10 +500,10 @@ export function CalendarView({
   const calendarById = useMemo(() => {
     const m = new Map<string, { name: string; color: string; hexColor?: string }>();
     calendars.forEach((c, i) => m.set(c.id, { name: c.name, color: calendarAccentColor(c.id, i), hexColor: c.hexColor }));
-    googleCalendars.forEach((c) => m.set(c.id, { name: c.name, color: accountColorFor(c._accountId), hexColor: c.hexColor }));
-    outlookCalendars.forEach((c) => m.set(c.id, { name: c.name, color: accountColorFor(c._accountId), hexColor: c.hexColor }));
+    googleCalendars.forEach((c) => m.set(c.id, { name: c.name, color: accountColorForId(c._accountId), hexColor: c.hexColor }));
+    outlookCalendars.forEach((c) => m.set(c.id, { name: c.name, color: accountColorForId(c._accountId), hexColor: c.hexColor }));
     return m;
-  }, [calendars, googleCalendars, outlookCalendars]);
+  }, [calendars, googleCalendars, outlookCalendars, accountColors]);
   const showCalendarColors = calendars.length > 1 || hasGoogle || hasOutlookLinked;
   // Color de un calendario: 1) override del usuario, 2) color real (Outlook/Google), 3) hash de respaldo.
   const calendarColorFor = (id?: string | null) => {
@@ -486,12 +513,12 @@ export function CalendarView({
     const hx = cal?.hexColor;
     return (hx && /^#[0-9a-fA-F]{6}$/.test(hx) ? hx : undefined) || cal?.color || calendarAccentColor(id);
   };
-  // Acento del evento: si viene de una cuenta añadida (Google), usa el color de la cuenta
-  // para distinguirlo del principal; si no, el color propio del calendario.
+  // Acento del evento = color de la CUENTA de origen (para identificar de dónde viene),
+  // salvo que el usuario haya fijado un color específico para ese calendario.
   const eventAccentColor = (event: any): string | undefined => {
+    if (event?.calendarId && calendarColors[event.calendarId]) return calendarColors[event.calendarId];
     const accId = linkedAccountIdFromCalendarId(event?.calendarId);
-    if (accId) return calendarColors[event.calendarId] || accountColorFor(accId);
-    return calendarColorFor(event?.calendarId);
+    return accId ? accountColorForId(accId) : accountColorForId(PRIMARY_MS_ID);
   };
   // Color de una categoría: override del usuario o color determinista de la paleta.
   const categoryColorFor = (name?: string | null) => categoryColors[name || ""] || paletteColorFor(name);
@@ -511,18 +538,18 @@ export function CalendarView({
   const calendarGroups = useMemo(() => {
     const groups: Array<{ key: string; label: string; color?: string; items: Array<{ id: string; name: string; isDefaultCalendar?: boolean }> }> = [];
     if (calendars.length > 0) {
-      groups.push({ key: "microsoft", label: "Microsoft 365", items: calendars.map((c) => ({ id: c.id, name: c.name, isDefaultCalendar: c.isDefaultCalendar })) });
+      groups.push({ key: "microsoft", label: primaryLabel, color: accountColorForId(PRIMARY_MS_ID), items: calendars.map((c) => ({ id: c.id, name: c.name, isDefaultCalendar: c.isDefaultCalendar })) });
     }
     linkedAccounts.filter((a) => a.provider === "google").forEach((acc) => {
       const items = googleCalendars.filter((c) => c._accountId === acc.id).map((c) => ({ id: c.id, name: c.name, isDefaultCalendar: c.isDefaultCalendar }));
-      if (items.length > 0) groups.push({ key: acc.id, label: accountLabelById.get(acc.id) || "Google", color: accountColorFor(acc.id), items });
+      if (items.length > 0) groups.push({ key: acc.id, label: accountLabelById.get(acc.id) || "Google", color: accountColorForId(acc.id), items });
     });
     linkedAccounts.filter((a) => a.provider === "microsoft").forEach((acc) => {
       const items = outlookCalendars.filter((c) => c._accountId === acc.id).map((c) => ({ id: c.id, name: c.name, isDefaultCalendar: c.isDefaultCalendar }));
-      if (items.length > 0) groups.push({ key: acc.id, label: accountLabelById.get(acc.id) || "Outlook", color: accountColorFor(acc.id), items });
+      if (items.length > 0) groups.push({ key: acc.id, label: accountLabelById.get(acc.id) || "Outlook", color: accountColorForId(acc.id), items });
     });
     return groups;
-  }, [calendars, googleCalendars, outlookCalendars, linkedAccounts, accountLabelById]);
+  }, [calendars, googleCalendars, outlookCalendars, linkedAccounts, accountLabelById, primaryLabel, accountColors]);
 
   const cachedEvent = useMemo(
     () => (selectedEventId ? events.find((e: any) => e.id === selectedEventId) : null),
@@ -1296,13 +1323,60 @@ export function CalendarView({
               <div className="order-5 border-t border-border/30 pt-3">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Cuentas</p>
                 <div className="space-y-1">
+                  {/* Cuenta principal de Microsoft (Kawiil): editable nombre + color, no se puede quitar */}
+                  {calendars.length > 0 && (
+                    <div className="group flex items-center gap-2 rounded-md px-2 py-1 hover:bg-accent">
+                      <ColorPickerPopover
+                        value={accountColorForId(PRIMARY_MS_ID)}
+                        onChange={(c) => setAccountColor(PRIMARY_MS_ID, c)}
+                        onReset={accountColors[PRIMARY_MS_ID] ? () => resetAccountColor(PRIMARY_MS_ID) : undefined}
+                        ariaLabel="Color de la cuenta principal"
+                      />
+                      <div className="min-w-0 flex-1">
+                        {renamingId === PRIMARY_MS_ID ? (
+                          <Input
+                            autoFocus
+                            value={renameValue}
+                            onChange={(e) => setRenameValue(e.target.value)}
+                            onBlur={() => { setPrimaryName(renameValue.trim()); setRenamingId(null); }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") { setPrimaryName(renameValue.trim()); setRenamingId(null); }
+                              if (e.key === "Escape") setRenamingId(null);
+                            }}
+                            className="h-6 text-xs px-1.5 py-0"
+                            placeholder="Nombre de la cuenta"
+                          />
+                        ) : (
+                          <>
+                            <p className="text-xs text-foreground truncate">{primaryLabel}</p>
+                            <p className="text-[9px] text-muted-foreground truncate">Microsoft 365 · principal</p>
+                          </>
+                        )}
+                      </div>
+                      {renamingId !== PRIMARY_MS_ID && (
+                        <button
+                          type="button"
+                          onClick={() => { setRenamingId(PRIMARY_MS_ID); setRenameValue(primaryName); }}
+                          className="p-0.5 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                          title="Renombrar"
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
+                  )}
                   {linkedAccounts.filter((a) => a.provider === "google" || a.provider === "microsoft").map((acc) => {
                     const provider: "google" | "microsoft" = acc.provider === "microsoft" ? "microsoft" : "google";
                     const providerLabel = provider === "microsoft" ? "Outlook" : "Google Calendar";
                     const editing = renamingId === acc.id;
                     return (
                       <div key={acc.id} className="group flex items-center gap-2 rounded-md px-2 py-1 hover:bg-accent">
-                        <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: accountColorFor(acc.id) }} title={acc.status === "connected" ? "Conectada" : "Con error"} />
+                        <ColorPickerPopover
+                          value={accountColorForId(acc.id)}
+                          onChange={(c) => setAccountColor(acc.id, c)}
+                          onReset={accountColors[acc.id] ? () => resetAccountColor(acc.id) : undefined}
+                          ariaLabel={`Color de ${accountLabelById.get(acc.id)}`}
+                        />
                         <div className="min-w-0 flex-1">
                           {editing ? (
                             <Input
@@ -1619,7 +1693,7 @@ export function CalendarView({
                 const provider = acc ? (acc.provider === "microsoft" ? "Outlook" : "Google Calendar") : "Microsoft 365";
                 const accountLabel = accId ? (accountLabelById.get(accId) || acc?.email || "Cuenta") : "Microsoft 365";
                 const calName = calendarNameFor(ev);
-                const dotColor = accId ? accountColorFor(accId) : (calendarColorFor(ev?.calendarId) || "#0099bc");
+                const dotColor = accId ? accountColorForId(accId) : accountColorForId(PRIMARY_MS_ID);
                 return (
                   <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2">
                     <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: dotColor }} />
