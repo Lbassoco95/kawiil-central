@@ -11,7 +11,7 @@ interface Props {
   replies: SlackMessage[];
   isLoading: boolean;
   isSending?: boolean;
-  onSendReply: (text: string) => void;
+  onSendReply: (text: string, files?: File[]) => void;
   onReact?: (ts: string, emoji: string) => void;
   onCreateTask?: (msg: SlackMessage) => void;
   userMap?: Record<string, { display_name?: string; real_name?: string; avatar_url?: string }>;
