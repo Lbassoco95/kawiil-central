@@ -55,6 +55,10 @@ import {
   useOutlookConnection, useOutlookAccountEvents, useOutlookAccountCalendars, useRenameLinkedAccount,
 } from "@/hooks/useLinkedAccounts";
 import { ColorPickerPopover, paletteColorFor, hexAlpha } from "@/components/microsoft/ColorPickerPopover";
+import {
+  useCalendarCategories, useEventTags, useCreateCalendarCategory,
+  useUpdateCalendarCategory, useDeleteCalendarCategory, useToggleEventTag,
+} from "@/hooks/useCalendarCategories";
 
 type ViewMode = "day" | "3days" | "week" | "month" | "agenda";
 
@@ -472,6 +476,29 @@ export function CalendarView({
   // Color de una cuenta: override del usuario → default (teal para principal, hash para el resto).
   const accountColorForId = (id: string) => accountColors[id] || (id === PRIMARY_MS_ID ? PRIMARY_MS_COLOR : accountColorFor(id));
 
+  // Categorías Kawiil (compartidas por org, aplicables a eventos de cualquier cuenta) y sus etiquetas.
+  const { data: kawiilCategories = [] } = useCalendarCategories();
+  const { data: eventTags = {} } = useEventTags();
+  const createCategory = useCreateCalendarCategory();
+  const updateCategory = useUpdateCalendarCategory();
+  const deleteCategory = useDeleteCalendarCategory();
+  const toggleEventTag = useToggleEventTag();
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [activeKawiilCatIds, setActiveKawiilCatIds] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    try { return JSON.parse(window.localStorage.getItem("kawiil-cal-kawiilcat-filters") || "[]"); } catch { return []; }
+  });
+  useEffect(() => {
+    try { window.localStorage.setItem("kawiil-cal-kawiilcat-filters", JSON.stringify(activeKawiilCatIds)); } catch { /* ignore */ }
+  }, [activeKawiilCatIds]);
+  const categoryById = useMemo(() => {
+    const m = new Map<string, { name: string; color: string }>();
+    kawiilCategories.forEach((c) => m.set(c.id, { name: c.name, color: c.color }));
+    return m;
+  }, [kawiilCategories]);
+  const eventCategoryChips = (eventId?: string | null) =>
+    ((eventId && eventTags[eventId]) || []).map((cid) => categoryById.get(cid)).filter(Boolean) as Array<{ name: string; color: string }>;
+
   const allEvents = useMemo(() => {
     const m365 = Array.isArray(eventsData) ? eventsData : [];
     const google = Array.isArray(googleEventsData) ? googleEventsData : [];
@@ -483,7 +510,12 @@ export function CalendarView({
     return allEvents.filter((e: any) => {
       // Ocultar por calendario (M365 se filtra en el servidor; Google, aquí por calendarId).
       if (e.calendarId && hiddenCalendarIds.includes(e.calendarId)) return false;
-      // Filtro por categorías activas.
+      // Filtro por etiquetas Kawiil (aplican a eventos de cualquier cuenta).
+      if (activeKawiilCatIds.length > 0) {
+        const tags = eventTags[e.id] || [];
+        if (!tags.some((t) => activeKawiilCatIds.includes(t))) return false;
+      }
+      // Filtro por categorías nativas de Outlook.
       if (activeCategoryFilters.length > 0) {
         const cats: string[] = Array.isArray(e.categories) ? e.categories : [];
         if (cats.length === 0) return false;
@@ -491,7 +523,7 @@ export function CalendarView({
       }
       return true;
     });
-  }, [allEvents, activeCategoryFilters, hiddenCalendarIds]);
+  }, [allEvents, activeCategoryFilters, hiddenCalendarIds, activeKawiilCatIds, eventTags]);
   const createEvent = useCreateCalendarEvent();
   const deleteEvent = useDeleteCalendarEvent();
 
@@ -1048,6 +1080,7 @@ export function CalendarView({
                               const innerStyle: Record<string, string | number> = {};
                               if (catHex) { innerStyle.backgroundColor = hexAlpha(catHex, 0.15); innerStyle.borderColor = hexAlpha(catHex, 0.45); }
                               if (accent) { innerStyle.borderLeftWidth = 3; innerStyle.borderLeftColor = accent; }
+                              const catChips = eventCategoryChips(event.id);
 
                               return (
                                 <div key={event.id} className={cn("absolute px-0.5", draggedEvent?.id === event.id && "opacity-40")}
@@ -1064,12 +1097,22 @@ export function CalendarView({
                                         {compact ? (
                                           <div className="font-semibold leading-[1.15] break-words line-clamp-2">
                                             <span className="font-normal opacity-70 mr-1">{startStr}</span>{event.subject}
+                                            {catChips.map((c, i) => (
+                                              <span key={i} className="ml-1 inline-block h-2 w-2 rounded-full align-middle" style={{ backgroundColor: c.color }} title={c.name} />
+                                            ))}
                                           </div>
                                         ) : (
                                           <>
                                             <div className="text-[10px] opacity-70 leading-tight">{endStr ? `${startStr}–${endStr}` : startStr}</div>
                                             <div className="font-semibold leading-[1.15] break-words line-clamp-3">{event.subject}</div>
                                             {showLocation && <div className="text-[9px] opacity-70 truncate mt-0.5">{event.location.displayName}</div>}
+                                            {catChips.length > 0 && (
+                                              <div className="flex items-center gap-0.5 mt-0.5 flex-wrap">
+                                                {catChips.map((c, i) => (
+                                                  <span key={i} className="h-2 w-2 rounded-full" style={{ backgroundColor: c.color }} title={c.name} />
+                                                ))}
+                                              </div>
+                                            )}
                                           </>
                                         )}
                                       </div>
@@ -1554,6 +1597,73 @@ export function CalendarView({
                 </div>
               )}
 
+              {/* Etiquetas Kawiil (categorías propias, aplican a eventos de cualquier cuenta) */}
+              <div className="order-3 border-t border-border/30 pt-3">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Etiquetas Kawiil</p>
+                <div className="space-y-0.5">
+                  {kawiilCategories.map((cat) => {
+                    const active = activeKawiilCatIds.includes(cat.id);
+                    const editing = renamingId === `cat:${cat.id}`;
+                    return (
+                      <div key={cat.id} className={cn("group w-full flex items-center gap-2 rounded-md px-2 py-1 text-[11px] transition-colors", active ? "bg-primary/10 text-foreground" : "hover:bg-accent/50 text-muted-foreground")}>
+                        <ColorPickerPopover
+                          value={cat.color}
+                          onChange={(c) => updateCategory.mutate({ id: cat.id, color: c })}
+                          ariaLabel={`Color de ${cat.name}`}
+                          size={11}
+                        />
+                        {editing ? (
+                          <Input
+                            autoFocus
+                            value={renameValue}
+                            onChange={(e) => setRenameValue(e.target.value)}
+                            onBlur={() => { if (renameValue.trim()) updateCategory.mutate({ id: cat.id, name: renameValue }); setRenamingId(null); }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") { if (renameValue.trim()) updateCategory.mutate({ id: cat.id, name: renameValue }); setRenamingId(null); }
+                              if (e.key === "Escape") setRenamingId(null);
+                            }}
+                            className="h-6 text-xs px-1.5 py-0 flex-1"
+                          />
+                        ) : (
+                          <button type="button" onClick={() => setActiveKawiilCatIds((p) => p.includes(cat.id) ? p.filter((x) => x !== cat.id) : [...p, cat.id])} className="flex-1 min-w-0 text-left truncate" title="Filtrar por esta etiqueta">
+                            {cat.name}{active && <span className="text-primary text-[10px] ml-1">●</span>}
+                          </button>
+                        )}
+                        {!editing && (
+                          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                            <button type="button" onClick={() => { setRenamingId(`cat:${cat.id}`); setRenameValue(cat.name); }} className="p-0.5 hover:text-foreground" title="Renombrar"><Pencil className="h-3 w-3" /></button>
+                            <button type="button" onClick={() => deleteCategory.mutate(cat.id)} className="p-0.5 hover:text-destructive" title="Eliminar"><Trash2 className="h-3 w-3" /></button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  <div className="flex items-center gap-1 pt-1">
+                    <Input
+                      value={newCategoryName}
+                      onChange={(e) => setNewCategoryName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && newCategoryName.trim()) {
+                          createCategory.mutate({ name: newCategoryName, color: paletteColorFor(newCategoryName) });
+                          setNewCategoryName("");
+                        }
+                      }}
+                      placeholder="Nueva etiqueta (ej. Cliente)"
+                      className="h-7 text-xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => { if (newCategoryName.trim()) { createCategory.mutate({ name: newCategoryName, color: paletteColorFor(newCategoryName) }); setNewCategoryName(""); } }}
+                      disabled={!newCategoryName.trim() || createCategory.isPending}
+                      className="shrink-0 p-1.5 rounded-md border border-dashed border-border text-muted-foreground hover:bg-accent hover:text-foreground"
+                      title="Agregar etiqueta"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               {/* AI analysis card */}
               {aiEvents && aiEvents.length > 0 && (
                 <div className="order-1">
@@ -1750,6 +1860,29 @@ export function CalendarView({
                   <Input placeholder="Ej: Personal, Trabajo" value={editForm.categories.join(", ")} onChange={(e) => setEditForm({ ...editForm, categories: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })} />
                 )}
               </div>
+              {/* Etiquetas Kawiil: aplican a eventos de cualquier cuenta (Google/Outlook/M365) */}
+              {selectedEventId && (
+                <div className="space-y-2">
+                  <Label>Etiquetas Kawiil <span className="text-[10px] font-normal text-muted-foreground">· aplican a cualquier cuenta</span></Label>
+                  {kawiilCategories.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {kawiilCategories.map((cat) => {
+                        const checked = (eventTags[selectedEventId] || []).includes(cat.id);
+                        return (
+                          <label key={cat.id} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                            <Checkbox checked={checked} onCheckedChange={() => toggleEventTag.mutate({ eventId: selectedEventId, categoryId: cat.id, active: !checked })} />
+                            <span className="inline-flex items-center gap-1">
+                              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: cat.color }} />{cat.name}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Crea categorías en el panel derecho (sección “Etiquetas Kawiil”) para aplicarlas aquí.</p>
+                  )}
+                </div>
+              )}
             </div>
           ) : null}
           {isGoogleEvent && (cachedEvent || eventDetail) && (
