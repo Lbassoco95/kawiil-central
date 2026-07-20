@@ -92,6 +92,7 @@ Deno.serve(async (req) => {
 
     const supabaseAdmin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const { action, params } = await req.json();
+    const accountId = params?.accountId as string | undefined;
 
     const { data: accountsRaw } = await supabaseAdmin
       .from("linked_accounts")
@@ -217,6 +218,201 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ error: json?.error?.message || "create_failed" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
       return new Response(JSON.stringify({ id: json.id, htmlLink: json.htmlLink }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // ─── GMAIL EMAIL ACTIONS ───────────────────────────────────────────────
+
+    function decodeBase64Url(data: string): string {
+      try { return atob(data.replace(/-/g, "+").replace(/_/g, "/")); } catch { return ""; }
+    }
+
+    function extractGmailBody(payload: any): { html?: string; text?: string } {
+      if (!payload) return {};
+      if (payload.mimeType === "text/html" && payload.body?.data) return { html: decodeBase64Url(payload.body.data) };
+      if (payload.mimeType === "text/plain" && payload.body?.data) return { text: decodeBase64Url(payload.body.data) };
+      if (payload.parts) {
+        let html: string | undefined, text: string | undefined;
+        for (const p of payload.parts) { const r = extractGmailBody(p); if (r.html) html = r.html; if (r.text && !text) text = r.text; }
+        return { html, text };
+      }
+      return {};
+    }
+
+    function parseGmailAddr(raw: string): { name: string; address: string } {
+      const m = raw.match(/^(.+?)\s*<([^>]+)>$/);
+      if (m) return { name: m[1].trim().replace(/^"(.*)"$/, "$1"), address: m[2].trim() };
+      return { name: "", address: raw.trim() };
+    }
+
+    function normalizeGmailMsg(msg: any, accId: string, accEmail: string) {
+      const hdrs: Array<{ name: string; value: string }> = msg.payload?.headers || [];
+      const hdr = (n: string) => hdrs.find((h: any) => h.name.toLowerCase() === n.toLowerCase())?.value || "";
+      const from = parseGmailAddr(hdr("from"));
+      const dateStr = hdr("date");
+      const receivedDateTime = dateStr ? (() => { try { return new Date(dateStr).toISOString(); } catch { return new Date().toISOString(); } })() : new Date().toISOString();
+      return {
+        id: `gmail:${accId}:${msg.id}`,
+        subject: hdr("subject") || "(sin asunto)",
+        bodyPreview: msg.snippet || "",
+        from: { emailAddress: { name: from.name, address: from.address } },
+        toRecipients: (hdr("to") || "").split(",").filter(Boolean).map((t: string) => {
+          const p = parseGmailAddr(t.trim()); return { emailAddress: { name: p.name, address: p.address } };
+        }),
+        receivedDateTime,
+        isRead: !(msg.labelIds?.includes("UNREAD") ?? false),
+        hasAttachments: !!(msg.payload?.parts?.some((p: any) => p.filename && p.filename.length > 0)),
+        importance: "normal",
+        conversationId: `gmail:${accId}:${msg.threadId}`,
+        _source: "gmail",
+        _accountId: accId,
+        _provider: "google",
+        _accountEmail: accEmail,
+      };
+    }
+
+    if (action === "gmail-emails") {
+      const targetAccounts = accountId ? accounts.filter(a => a.id === accountId) : accounts;
+      const labelId = params?.labelId || "INBOX";
+      const maxResults = Math.min(Number(params?.maxResults) || 25, 100);
+      const filterUnread = params?.filterUnread === true;
+      const q = filterUnread ? "is:unread" : "";
+      const allEmails: unknown[] = [];
+      let nextPageToken: string | undefined;
+      for (const acc of targetAccounts) {
+        const token = await ensureAccessToken(supabaseAdmin, acc);
+        if (!token) continue;
+        const listQs = new URLSearchParams({ labelIds: labelId, maxResults: String(maxResults) });
+        if (params?.pageToken) listQs.set("pageToken", params.pageToken);
+        if (q) listQs.set("q", q);
+        const listRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${listQs}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!listRes.ok) continue;
+        const listJson = await listRes.json();
+        const msgIds: string[] = (listJson.messages ?? []).map((m: any) => m.id);
+        if (listJson.nextPageToken && accountId) nextPageToken = listJson.nextPageToken;
+        const metaFetches = msgIds.map((id: string) =>
+          fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date&metadataHeaders=To`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }).then(r => r.ok ? r.json() : null)
+        );
+        const metas = await Promise.all(metaFetches);
+        for (const meta of metas) { if (meta) allEmails.push(normalizeGmailMsg(meta, acc.id, acc.email || "")); }
+      }
+      (allEmails as any[]).sort((a, b) => String(b.receivedDateTime ?? "").localeCompare(String(a.receivedDateTime ?? "")));
+      return new Response(JSON.stringify({ value: allEmails, nextPageToken }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    if (action === "gmail-detail") {
+      const acc = accountId ? accounts.find(a => a.id === accountId) : accounts[0];
+      if (!acc) return new Response(JSON.stringify({ error: "no_account" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const token = await ensureAccessToken(supabaseAdmin, acc);
+      if (!token) return new Response(JSON.stringify({ error: "no_valid_token" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const rawId = String(params?.emailId || "").replace(/^gmail:[^:]+:/, "");
+      const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${rawId}?format=full`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) return new Response(JSON.stringify({ error: "not_found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const msg = await res.json();
+      const hdrs: Array<{ name: string; value: string }> = msg.payload?.headers || [];
+      const hdr = (n: string) => hdrs.find((h: any) => h.name.toLowerCase() === n.toLowerCase())?.value || "";
+      const { html, text } = extractGmailBody(msg.payload);
+      const normalized = normalizeGmailMsg(msg, acc.id, acc.email || "");
+      return new Response(JSON.stringify({
+        ...normalized,
+        body: { contentType: html ? "html" : "text", content: html || (text ? text.replace(/\n/g, "<br>") : "") },
+        internetMessageId: hdr("message-id"),
+        references: hdr("references"),
+        inReplyTo: hdr("in-reply-to"),
+        ccRecipients: (hdr("cc") || "").split(",").filter(Boolean).map((t: string) => {
+          const p = parseGmailAddr(t.trim()); return { emailAddress: { name: p.name, address: p.address } };
+        }),
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    if (action === "gmail-labels") {
+      const acc = accountId ? accounts.find(a => a.id === accountId) : accounts[0];
+      if (!acc) return new Response(JSON.stringify({ value: [] }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const token = await ensureAccessToken(supabaseAdmin, acc);
+      if (!token) return new Response(JSON.stringify({ value: [] }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/labels", { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) return new Response(JSON.stringify({ value: [] }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const json = await res.json();
+      const SYSTEM_LABELS = new Set(["INBOX", "SENT", "DRAFT", "TRASH", "SPAM", "STARRED"]);
+      const labels = (json.labels ?? [])
+        .filter((l: any) => l.type !== "system" || SYSTEM_LABELS.has(l.id))
+        .map((l: any) => ({ id: `gmail:${acc.id}:${l.id}`, name: l.name, type: l.type, _accountId: acc.id, _rawId: l.id }));
+      return new Response(JSON.stringify({ value: labels, _accountId: acc.id }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    if (action === "gmail-inbox-meta") {
+      const targetAccounts = accountId ? accounts.filter(a => a.id === accountId) : accounts;
+      const metaList: unknown[] = [];
+      for (const acc of targetAccounts) {
+        const token = await ensureAccessToken(supabaseAdmin, acc);
+        if (!token) continue;
+        const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/labels/INBOX", { headers: { Authorization: `Bearer ${token}` } });
+        if (!res.ok) continue;
+        const json = await res.json();
+        metaList.push({ accountId: acc.id, email: acc.email, unreadItemCount: json.messagesUnread ?? 0 });
+      }
+      return new Response(JSON.stringify({ accounts: metaList }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    if (action === "gmail-mark-read") {
+      const acc = accountId ? accounts.find(a => a.id === accountId) : accounts[0];
+      if (!acc) return new Response(JSON.stringify({ error: "no_account" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const token = await ensureAccessToken(supabaseAdmin, acc);
+      if (!token) return new Response(JSON.stringify({ error: "no_valid_token" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const rawId = String(params?.emailId || "").replace(/^gmail:[^:]+:/, "");
+      await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${rawId}/modify`, {
+        method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ removeLabelIds: ["UNREAD"] }),
+      });
+      return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    if (action === "gmail-archive") {
+      const acc = accountId ? accounts.find(a => a.id === accountId) : accounts[0];
+      if (!acc) return new Response(JSON.stringify({ error: "no_account" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const token = await ensureAccessToken(supabaseAdmin, acc);
+      if (!token) return new Response(JSON.stringify({ error: "no_valid_token" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const rawId = String(params?.emailId || "").replace(/^gmail:[^:]+:/, "");
+      await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${rawId}/modify`, {
+        method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ removeLabelIds: ["INBOX"] }),
+      });
+      return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    if (action === "gmail-send") {
+      const acc = accountId ? accounts.find(a => a.id === accountId) : accounts[0];
+      if (!acc) return new Response(JSON.stringify({ error: "no_account" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const token = await ensureAccessToken(supabaseAdmin, acc);
+      if (!token) return new Response(JSON.stringify({ error: "no_valid_token" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const toList: string[] = params?.to || [];
+      const ccList: string[] = params?.cc || [];
+      const subjectB64 = btoa(unescape(encodeURIComponent(params?.subject || "(sin asunto)")));
+      const bodyB64 = btoa(unescape(encodeURIComponent(params?.bodyHtml || "")));
+      const lines = [
+        `From: ${acc.email}`,
+        `To: ${toList.join(", ")}`,
+        ...(ccList.length ? [`Cc: ${ccList.join(", ")}`] : []),
+        `Subject: =?UTF-8?B?${subjectB64}?=`,
+        "MIME-Version: 1.0",
+        "Content-Type: text/html; charset=utf-8",
+        "Content-Transfer-Encoding: base64",
+        "",
+        bodyB64,
+      ];
+      const raw = btoa(lines.join("\r\n")).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+      const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
+        method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ raw }),
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        return new Response(JSON.stringify({ error: (errJson as any)?.error?.message || "send_failed" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     return new Response(JSON.stringify({ error: "unknown_action" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });

@@ -8,14 +8,15 @@ const corsHeaders = {
 interface MsAccountRow {
   id: string;
   email: string | null;
+  display_name: string | null;
   access_token: string | null;
   refresh_token: string | null;
   token_expires_at: string | null;
   calendar_enabled: boolean;
+  mail_enabled: boolean;
   status: string;
 }
 
-/** Refresca el access_token de Microsoft si expiró; devuelve un token válido o null. */
 async function ensureAccessToken(
   supabaseAdmin: ReturnType<typeof createClient>,
   account: MsAccountRow,
@@ -54,47 +55,65 @@ async function ensureAccessToken(
   return data.access_token;
 }
 
+async function graphFetch(token: string, path: string, init?: RequestInit): Promise<Response> {
+  return fetch(`https://graph.microsoft.com/v1.0${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Prefer': 'IdType="ImmutableId"',
+      ...(init?.headers as Record<string, string> ?? {}),
+    },
+  });
+}
+
 const PREFER_TZ = { Prefer: 'outlook.timezone="America/Mexico_City"' };
+const MAIL_SELECT = "$select=id,subject,bodyPreview,from,toRecipients,receivedDateTime,sentDateTime,createdDateTime,isRead,hasAttachments,importance,conversationId,sensitivity";
+
+function jsonResp(data: unknown, status = 200): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
-    }
+    if (!authHeader?.startsWith("Bearer ")) return jsonResp({ error: "Unauthorized" }, 401);
+
     const supabaseAuth = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_ANON_KEY")!,
       { global: { headers: { Authorization: authHeader } } },
     );
     const { data: { user }, error: userError } = await supabaseAuth.auth.getUser();
-    if (userError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
-    }
+    if (userError || !user) return jsonResp({ error: "Unauthorized" }, 401);
 
     const supabaseAdmin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const { action, params } = await req.json();
 
     const { data: accountsRaw } = await supabaseAdmin
       .from("linked_accounts")
-      .select("id, email, access_token, refresh_token, token_expires_at, calendar_enabled, status")
+      .select("id, email, display_name, access_token, refresh_token, token_expires_at, calendar_enabled, mail_enabled, status")
       .eq("user_id", user.id)
       .eq("provider", "microsoft");
     const accounts = (accountsRaw ?? []) as MsAccountRow[];
-    if (accounts.length === 0) {
-      return new Response(JSON.stringify({ value: [] }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
+    if (accounts.length === 0) return jsonResp({ value: [] });
 
+    const getAccount = (accountId?: string): MsAccountRow | null => {
+      if (accountId) return accounts.find(a => a.id === accountId) ?? null;
+      return accounts.find(a => a.mail_enabled) ?? accounts[0] ?? null;
+    };
+
+    // ─── CALENDAR ACTIONS ────────────────────────────────────────────────────
     if (action === "calendars") {
-      const all: any[] = [];
+      const all: unknown[] = [];
       for (const acc of accounts) {
         const token = await ensureAccessToken(supabaseAdmin, acc);
         if (!token) continue;
-        const res = await fetch("https://graph.microsoft.com/v1.0/me/calendars?$select=id,name,hexColor,color,isDefaultCalendar,canEdit&$top=100", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await graphFetch(token, "/me/calendars?$select=id,name,hexColor,color,isDefaultCalendar,canEdit&$top=100");
         if (!res.ok) continue;
         const json = await res.json();
         for (const item of json.value ?? []) {
@@ -109,33 +128,22 @@ Deno.serve(async (req) => {
           });
         }
       }
-      return new Response(JSON.stringify({ value: all }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return jsonResp({ value: all });
     }
 
     if (action === "calendar-events") {
       const start = params?.start || new Date().toISOString();
       const end = params?.end || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
       const qs = `startDateTime=${start}&endDateTime=${end}&$orderby=start/dateTime&$top=200`;
-      const merged: any[] = [];
-
+      const merged: unknown[] = [];
       for (const acc of accounts) {
         if (!acc.calendar_enabled) continue;
         const token = await ensureAccessToken(supabaseAdmin, acc);
         if (!token) continue;
-
-        // Calendarios de esta cuenta
-        const calRes = await fetch("https://graph.microsoft.com/v1.0/me/calendars?$select=id,name&$top=100", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const calRes = await graphFetch(token, "/me/calendars?$select=id,name&$top=100");
         const calJson = calRes.ok ? await calRes.json() : { value: [] };
-        const cals = (calJson.value ?? []) as Array<{ id: string; name: string }>;
-        if (cals.length === 0) continue;
-
-        for (const cal of cals) {
-          const evRes = await fetch(
-            `https://graph.microsoft.com/v1.0/me/calendars/${encodeURIComponent(cal.id)}/calendarview?${qs}`,
-            { headers: { Authorization: `Bearer ${token}`, ...PREFER_TZ } },
-          );
+        for (const cal of calJson.value ?? []) {
+          const evRes = await graphFetch(token, `/me/calendars/${encodeURIComponent(cal.id)}/calendarview?${qs}`, { headers: PREFER_TZ });
           if (!evRes.ok) continue;
           const evJson = await evRes.json();
           const nsCalId = `outlook:${acc.id}:${cal.id}`;
@@ -144,15 +152,15 @@ Deno.serve(async (req) => {
           }
         }
       }
-      merged.sort((a, b) => String(a.start?.dateTime ?? "").localeCompare(String(b.start?.dateTime ?? "")));
-      return new Response(JSON.stringify({ value: merged }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      (merged as any[]).sort((a, b) => String(a.start?.dateTime ?? "").localeCompare(String(b.start?.dateTime ?? "")));
+      return jsonResp({ value: merged });
     }
 
     if (action === "create-event") {
-      const acc = accounts.find((a) => a.calendar_enabled) || accounts[0];
+      const acc = getAccount(params?.accountId);
+      if (!acc) return jsonResp({ error: "no_account" }, 400);
       const token = await ensureAccessToken(supabaseAdmin, acc);
-      if (!token) return new Response(JSON.stringify({ error: "no_valid_token" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-
+      if (!token) return jsonResp({ error: "no_valid_token" }, 400);
       const tz = "America/Mexico_City";
       const body: Record<string, unknown> = { subject: params?.summary || "(sin título)" };
       if (params?.startDateTime) {
@@ -167,18 +175,202 @@ Deno.serve(async (req) => {
       }
       if (params?.description) body.body = { contentType: "text", content: params.description };
       if (params?.location) body.location = { displayName: params.location };
-
-      const res = await fetch("https://graph.microsoft.com/v1.0/me/events", {
+      const res = await graphFetch(token, "/me/events", {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
       const json = await res.json();
-      if (!res.ok) return new Response(JSON.stringify({ error: json?.error?.message || "create_failed" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      return new Response(JSON.stringify({ id: json.id, htmlLink: json.webLink }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      if (!res.ok) return jsonResp({ error: json?.error?.message || "create_failed" }, 400);
+      return jsonResp({ id: json.id, htmlLink: json.webLink });
     }
 
-    return new Response(JSON.stringify({ error: "unknown_action" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    // ─── EMAIL ACTIONS ───────────────────────────────────────────────────────
+
+    if (action === "emails") {
+      const accountId = params?.accountId as string | undefined;
+      const targetAccounts = accountId
+        ? accounts.filter(a => a.id === accountId && a.mail_enabled)
+        : accounts.filter(a => a.mail_enabled);
+      const folder = params?.folder || "inbox";
+      const top = Math.min(Number(params?.top) || 25, 100);
+      const filterUnread = params?.filterUnread === true;
+      const filterParam = filterUnread ? "&$filter=isRead eq false" : "";
+
+      if (params?.nextLink && typeof params.nextLink === "string") {
+        const link = params.nextLink as string;
+        if (!link.startsWith("https://graph.microsoft.com/v1.0/")) return jsonResp({ error: "nextLink invalido" }, 400);
+        const u = new URL(link);
+        const path = u.pathname.slice("/v1.0".length) + u.search;
+        const acc = getAccount(accountId);
+        if (!acc) return jsonResp({ value: [] });
+        const token = await ensureAccessToken(supabaseAdmin, acc);
+        if (!token) return jsonResp({ value: [] });
+        const res = await graphFetch(token, path);
+        const json = res.ok ? await res.json() : { value: [] };
+        const emails = (json.value ?? []).map((e: any) => ({
+          ...e,
+          id: `outlook:${acc.id}:${e.id}`,
+          _source: "outlook",
+          _accountId: acc.id,
+          _provider: "microsoft",
+          _accountEmail: acc.email || "",
+        }));
+        return jsonResp({ value: emails, "@odata.nextLink": json["@odata.nextLink"] });
+      }
+
+      const allEmails: unknown[] = [];
+      let nextLink: string | undefined;
+      for (const acc of targetAccounts) {
+        const token = await ensureAccessToken(supabaseAdmin, acc);
+        if (!token) continue;
+        const path = `/me/mailFolders/${encodeURIComponent(folder)}/messages?${MAIL_SELECT}&$top=${top}&$orderby=receivedDateTime desc&$count=true${filterParam}`;
+        const res = await graphFetch(token, path);
+        if (!res.ok) continue;
+        const json = await res.json();
+        for (const e of json.value ?? []) {
+          allEmails.push({
+            ...e,
+            id: `outlook:${acc.id}:${e.id}`,
+            _source: "outlook",
+            _accountId: acc.id,
+            _provider: "microsoft",
+            _accountEmail: acc.email || "",
+          });
+        }
+        if (accountId && json["@odata.nextLink"]) nextLink = json["@odata.nextLink"];
+      }
+      (allEmails as any[]).sort((a, b) =>
+        String(b.receivedDateTime ?? "").localeCompare(String(a.receivedDateTime ?? ""))
+      );
+      return jsonResp({ value: allEmails, "@odata.nextLink": nextLink, "@odata.count": allEmails.length });
+    }
+
+    if (action === "email-detail") {
+      const acc = getAccount(params?.accountId);
+      if (!acc) return jsonResp({ error: "no_account" }, 400);
+      const token = await ensureAccessToken(supabaseAdmin, acc);
+      if (!token) return jsonResp({ error: "no_valid_token" }, 400);
+      const rawId = String(params?.emailId || "").replace(/^outlook:[^:]+:/, "");
+      if (!rawId) return jsonResp({ error: "emailId requerido" }, 400);
+      const res = await graphFetch(token,
+        `/me/messages/${encodeURIComponent(rawId)}?$select=id,subject,body,bodyPreview,from,toRecipients,ccRecipients,bccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,importance,sensitivity,internetMessageId,conversationId,webLink`
+      );
+      if (!res.ok) return jsonResp({ error: "not_found" }, 404);
+      const json = await res.json();
+      return jsonResp({
+        ...json,
+        id: `outlook:${acc.id}:${json.id}`,
+        _source: "outlook",
+        _accountId: acc.id,
+        _provider: "microsoft",
+        _accountEmail: acc.email || "",
+      });
+    }
+
+    if (action === "mail-folders") {
+      const acc = getAccount(params?.accountId);
+      if (!acc) return jsonResp({ value: [] });
+      const token = await ensureAccessToken(supabaseAdmin, acc);
+      if (!token) return jsonResp({ value: [] });
+      const res = await graphFetch(token,
+        "/me/mailFolders?$select=id,displayName,wellKnownFolderName,unreadItemCount,totalItemCount&$top=100"
+      );
+      if (!res.ok) return jsonResp({ value: [] });
+      const json = await res.json();
+      const folders = (json.value ?? []).map((f: any) => ({
+        ...f,
+        id: `outlook:${acc.id}:${f.id}`,
+        _accountId: acc.id,
+        _rawId: f.id,
+      }));
+      return jsonResp({ folders, _accountId: acc.id });
+    }
+
+    if (action === "inbox-meta") {
+      const targetAccounts = params?.accountId
+        ? accounts.filter(a => a.id === params.accountId && a.mail_enabled)
+        : accounts.filter(a => a.mail_enabled);
+      const metaList: unknown[] = [];
+      for (const acc of targetAccounts) {
+        const token = await ensureAccessToken(supabaseAdmin, acc);
+        if (!token) continue;
+        const res = await graphFetch(token, "/me/mailFolders/inbox?$select=id,unreadItemCount,totalItemCount");
+        if (!res.ok) continue;
+        const json = await res.json();
+        metaList.push({ accountId: acc.id, email: acc.email, unreadItemCount: json.unreadItemCount ?? 0 });
+      }
+      return jsonResp({ accounts: metaList });
+    }
+
+    if (action === "send-email") {
+      const acc = getAccount(params?.accountId);
+      if (!acc) return jsonResp({ error: "no_account" }, 400);
+      const token = await ensureAccessToken(supabaseAdmin, acc);
+      if (!token) return jsonResp({ error: "no_valid_token" }, 400);
+      const makeRecipients = (addrs: string[]) => addrs.map(a => ({ emailAddress: { address: a } }));
+      const message: Record<string, unknown> = {
+        subject: params?.subject || "(sin asunto)",
+        body: { contentType: "HTML", content: params?.bodyHtml || "" },
+        toRecipients: makeRecipients(params?.to || []),
+      };
+      if (params?.cc?.length) message.ccRecipients = makeRecipients(params.cc);
+      if (params?.bcc?.length) message.bccRecipients = makeRecipients(params.bcc);
+      const res = await graphFetch(token, "/me/sendMail", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message, saveToSentItems: true }),
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        return jsonResp({ error: (errJson as any)?.error?.message || "send_failed" }, 400);
+      }
+      return jsonResp({ success: true });
+    }
+
+    if (action === "mark-read") {
+      const acc = getAccount(params?.accountId);
+      if (!acc) return jsonResp({ error: "no_account" }, 400);
+      const token = await ensureAccessToken(supabaseAdmin, acc);
+      if (!token) return jsonResp({ error: "no_valid_token" }, 400);
+      const rawId = String(params?.emailId || "").replace(/^outlook:[^:]+:/, "");
+      await graphFetch(token, `/me/messages/${encodeURIComponent(rawId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isRead: true }),
+      });
+      return jsonResp({ success: true });
+    }
+
+    if (action === "mark-unread") {
+      const acc = getAccount(params?.accountId);
+      if (!acc) return jsonResp({ error: "no_account" }, 400);
+      const token = await ensureAccessToken(supabaseAdmin, acc);
+      if (!token) return jsonResp({ error: "no_valid_token" }, 400);
+      const rawId = String(params?.emailId || "").replace(/^outlook:[^:]+:/, "");
+      await graphFetch(token, `/me/messages/${encodeURIComponent(rawId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isRead: false }),
+      });
+      return jsonResp({ success: true });
+    }
+
+    if (action === "archive-email") {
+      const acc = getAccount(params?.accountId);
+      if (!acc) return jsonResp({ error: "no_account" }, 400);
+      const token = await ensureAccessToken(supabaseAdmin, acc);
+      if (!token) return jsonResp({ error: "no_valid_token" }, 400);
+      const rawId = String(params?.emailId || "").replace(/^outlook:[^:]+:/, "");
+      await graphFetch(token, `/me/messages/${encodeURIComponent(rawId)}/move`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ destinationId: "archive" }),
+      });
+      return jsonResp({ success: true });
+    }
+
+    return jsonResp({ error: "unknown_action" }, 400);
   } catch (error) {
     console.error("Error in outlook-account-api:", error);
     return new Response(JSON.stringify({ error: (error as Error).message }), { status: 500, headers: corsHeaders });

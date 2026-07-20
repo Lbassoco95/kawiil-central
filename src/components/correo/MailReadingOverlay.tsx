@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
 import { ArrowLeft, Reply, Forward, Archive, Trash2, CheckSquare, Filter, Tag, FolderInput, ChevronRight, MessageSquare, CalendarPlus, Paperclip, Download, FileArchive, FileText, File } from "lucide-react";
 import { useEmailDetail, useArchiveEmail, useDeleteEmail, useMoveEmail, useMailFolders } from "@/hooks/useMicrosoft";
+import { useLinkedOutlookEmailDetail, useGmailEmailDetail } from "@/hooks/useLinkedAccounts";
 import { useResolvedEmailHtml } from "@/hooks/useResolvedEmailHtml";
 import { useEmailAttachments } from "@/hooks/useMicrosoft";
 import { MailLabelPicker } from "./MailLabelPicker";
@@ -82,8 +83,32 @@ function AttachmentChip({ messageId, att }: { messageId: string; att: OutlookAtt
 }
 
 export function MailReadingOverlay({ emailId, open, onClose, onCompose, onForward, onCreateTask, onCreateRule, onSendToSlack, onCreateEvent }: Props) {
-  const { data: emailDetail, isLoading } = useEmailDetail(emailId);
-  const { data: attachments = [] } = useEmailAttachments(emailId ?? undefined);
+  // Route detail fetch by ID prefix: "outlook:{accountId}:{id}" or "gmail:{accountId}:{id}"
+  const emailParts = (emailId ?? "").split(":");
+  const emailPfx = emailParts[0];
+  const emailAccId = emailParts.length >= 3 ? emailParts[1] : "";
+  const isLinkedOutlookEmail = emailPfx === "outlook" && !!emailAccId && !!emailId;
+  const isLinkedGmailEmail = emailPfx === "gmail" && !!emailAccId && !!emailId;
+  const isPrimaryEmail = !isLinkedOutlookEmail && !isLinkedGmailEmail;
+
+  const { data: primaryDetail, isLoading: primaryLoading } = useEmailDetail(isPrimaryEmail ? emailId : null);
+  const { data: linkedOutlookDetail, isLoading: linkedOutlookLoading } = useLinkedOutlookEmailDetail(
+    isLinkedOutlookEmail ? emailAccId : null,
+    isLinkedOutlookEmail ? emailId : null,
+  );
+  const { data: linkedGmailDetail, isLoading: linkedGmailLoading } = useGmailEmailDetail(
+    isLinkedGmailEmail ? emailAccId : null,
+    isLinkedGmailEmail ? emailId : null,
+  );
+
+  const emailDetail = isLinkedOutlookEmail ? linkedOutlookDetail :
+    isLinkedGmailEmail ? linkedGmailDetail :
+    primaryDetail;
+  const isLoading = isLinkedOutlookEmail ? linkedOutlookLoading :
+    isLinkedGmailEmail ? linkedGmailLoading :
+    primaryLoading;
+
+  const { data: attachments = [] } = useEmailAttachments(isPrimaryEmail ? (emailId ?? undefined) : undefined);
   const { html: resolvedHtml } = useResolvedEmailHtml(
     emailId ?? undefined,
     (emailDetail as any)?.body?.contentType === "html" ? (emailDetail as any)?.body?.content : undefined,

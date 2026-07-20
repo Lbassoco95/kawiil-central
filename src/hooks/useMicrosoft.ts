@@ -640,7 +640,7 @@ export function useOutlookEmails(folderId = "inbox", search?: string, filterUnre
   const PAGE_SIZE = 25;
   /** Con búsqueda activa la API usa /me/messages (todo el buzón), no el id de carpeta. */
   const normalizedSearch = search?.trim() || undefined;
-  /** Server-side unread filter only applies when there's no active search (incompatible with $search). */
+  /** $filter=isRead eq false no es compatible con $search; solo aplica sin búsqueda activa. */
   const activeFilterUnread = filterUnread && !normalizedSearch;
 
   return useInfiniteQuery({
