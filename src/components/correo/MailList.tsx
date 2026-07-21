@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { Search, RefreshCw, Loader2, PenLine, FolderOpen, ListFilter, Paperclip } from "lucide-react";
-import { useOutlookEmails, useArchiveEmail, useMarkEmailRead, useMarkEmailUnread, useEmailUserLabels, useEmailLabelAssignmentsBulk, useMicrosoftConnection } from "@/hooks/useMicrosoft";
+import { useOutlookEmails, useArchiveEmail, useMarkEmailRead, useMarkEmailUnread, useEmailUserLabels, useEmailLabelAssignmentsBulk, useMicrosoftConnection, useMailFolders } from "@/hooks/useMicrosoft";
 import {
   useLinkedOutlookEmailsAll,
   useGmailEmailsAll,
@@ -10,6 +10,8 @@ import {
   useArchiveGmail,
   useGoogleConnection,
   useOutlookConnection,
+  useLinkedOutlookInboxMeta,
+  useGmailInboxMeta,
 } from "@/hooks/useLinkedAccounts";
 import { useQueryClient } from "@tanstack/react-query";
 import { getLabelStyle } from "./MailLabelPicker";
@@ -164,6 +166,25 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
   const markGmailRead = useMarkGmailRead();
   const { connect: connectGoogle, isConnecting: googleConnecting } = useGoogleConnection();
   const { connect: connectOutlook, isConnecting: outlookConnecting } = useOutlookConnection();
+
+  // Total REAL de no leídos para la vista general "Todas las cuentas": no leídos de la
+  // bandeja principal (Graph) + no leídos reales de cada cuenta vinculada (inbox-meta).
+  const { data: foldersForCount } = useMailFolders();
+  const { data: outlookMetaCount } = useLinkedOutlookInboxMeta();
+  const { data: gmailMetaCount } = useGmailInboxMeta();
+  const unifiedUnreadTotal = useMemo(() => {
+    if (!isUnified) return null;
+    const folders = (foldersForCount?.folders ?? []) as any[];
+    const inbox = folders.find(
+      (f) => (f.wellKnownFolderName || "").toLowerCase() === "inbox" ||
+             String(f.displayName || "").toLowerCase().trim() === "bandeja de entrada" ||
+             String(f.displayName || "").toLowerCase().trim() === "inbox",
+    );
+    const primary = inbox?.unreadItemCount ?? 0;
+    const outlook = (outlookMetaCount?.accounts ?? []).reduce((n, a) => n + (a.unreadItemCount ?? 0), 0);
+    const gmail = (gmailMetaCount?.accounts ?? []).reduce((n, a) => n + (a.unreadItemCount ?? 0), 0);
+    return primary + outlook + gmail;
+  }, [isUnified, foldersForCount, outlookMetaCount, gmailMetaCount]);
 
   const allEmails = useMemo(() => {
     if (!isUnified) {
@@ -382,9 +403,13 @@ const now = useMemo(() => new Date(), []);
       <div className="flex items-center gap-0 px-3 py-1.5 border-b border-border/30 shrink-0">
         {(["sinleer", "leidos", "todos"] as ReadFilter[]).map((f) => {
           const labelMap: Record<ReadFilter, string> = { sinleer: "Sin leer", leidos: "Leídos", todos: "Todos" };
-          // When server is filtering unread, show totalCount from Graph; otherwise count client-side
+          // Vista general: total REAL sumado de todas las cuentas. Vista principal: totalCount de
+          // Graph cuando filtra unread. En otros casos, conteo entre lo cargado.
           const serverTotal = serverFilterUnread ? ((data?.pages?.[0] as any)?.totalCount ?? null) : null;
-          const unreadCount = f === "sinleer" ? (serverTotal ?? allEmails.filter(e => !(e.isRead as boolean)).length) : null;
+          const unreadCount = f === "sinleer"
+            ? (isUnified ? (unifiedUnreadTotal ?? allEmails.filter(e => !(e.isRead as boolean)).length)
+                         : (serverTotal ?? allEmails.filter(e => !(e.isRead as boolean)).length))
+            : null;
           return (
             <button
               key={f}
