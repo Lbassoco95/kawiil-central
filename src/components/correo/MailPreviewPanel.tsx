@@ -10,39 +10,61 @@ import { MailAccountBadge } from "./MailAccountBadge";
 
 interface Props {
   emailId: string | null;
+  /** Correo ya cargado en la lista: metadatos + snippet para mostrar al instante. */
+  seed?: Record<string, unknown> | null;
   onOpen: () => void;
   onReply: () => void;
+}
+
+/** Envuelve el HTML del correo en un documento responsivo (imágenes y tablas se ajustan al ancho). */
+function responsiveSrcDoc(inner: string): string {
+  return `<!doctype html><html><head><meta charset="utf-8">` +
+    `<meta name="viewport" content="width=device-width, initial-scale=1">` +
+    `<base target="_blank">` +
+    `<style>` +
+    `html,body{margin:0;padding:12px;box-sizing:border-box;overflow-x:hidden}` +
+    `body{font-family:system-ui,-apple-system,sans-serif;font-size:13px;line-height:1.6;color:#374151;word-wrap:break-word;overflow-wrap:anywhere}` +
+    `img{max-width:100%!important;height:auto!important}` +
+    `table{max-width:100%!important;width:auto!important;border-collapse:collapse}` +
+    `*{max-width:100%}` +
+    `a{color:#2563eb}` +
+    `pre{white-space:pre-wrap;word-wrap:break-word}` +
+    `</style></head><body>${inner}</body></html>`;
 }
 
 /**
  * Vista previa del correo seleccionado (columna derecha).
  * Un clic en la lista lo muestra aquí; "Abrir" pasa a la vista completa con respuesta.
+ * Muestra al instante los datos del correo ya cargado (seed) y descarga el cuerpo completo en segundo plano.
  */
-export function MailPreviewPanel({ emailId, onOpen, onReply }: Props) {
+export function MailPreviewPanel({ emailId, seed, onOpen, onReply }: Props) {
   const { data: detail, isLoading, accountRef } = useRoutedEmailDetail(emailId);
   const { profile } = useMicrosoftConnection();
   const colorForAccount = useAccountColor();
 
-  const d = detail as any;
-  const senderName = d?.from?.emailAddress?.name || d?.from?.emailAddress?.address || "";
-  const senderEmail = d?.from?.emailAddress?.address || "";
-  const subject = d?.subject || "(sin asunto)";
-  const receivedAt = d?.receivedDateTime
-    ? format(new Date(d.receivedDateTime), "EEEE d 'de' MMMM, HH:mm", { locale: es })
-    : "";
-  const hasAttachments = !!d?.hasAttachments;
+  const d = (detail as any) ?? {};
+  const s = (seed as any) ?? {};
+  // Metadatos: preferimos el detalle completo; si aún no llega, usamos la semilla de la lista.
+  const senderName = d?.from?.emailAddress?.name || d?.from?.emailAddress?.address
+    || s?.from?.emailAddress?.name || s?.from?.emailAddress?.address || "";
+  const senderEmail = d?.from?.emailAddress?.address || s?.from?.emailAddress?.address || "";
+  const subject = d?.subject || s?.subject || "(sin asunto)";
+  const ts = d?.receivedDateTime || s?.receivedDateTime;
+  const receivedAt = ts ? format(new Date(ts), "EEEE d 'de' MMMM, HH:mm", { locale: es }) : "";
+  const hasAttachments = !!(d?.hasAttachments ?? s?.hasAttachments);
 
   // Cuenta a la que pertenece: los vinculados traen _accountEmail; el primario usa el perfil.
   const accountEmail: string =
-    (d?._accountEmail as string) ||
+    (d?._accountEmail as string) || (s?._accountEmail as string) ||
     (accountRef.provider === "primary" ? (profile?.mail || profile?.userPrincipalName || "") : "");
+  const accountId = (d?._accountId as string) || (s?._accountId as string) || undefined;
   const accountLabel = accountRef.provider === "primary" ? "Cuenta principal" : accountEmail;
 
   const bodyHtml = useMemo(() => {
     const content = d?.body?.content as string | undefined;
     if (!content) return "";
-    if (d?.body?.contentType === "html") return content;
-    return `<pre style="font-family:inherit;white-space:pre-wrap;margin:0">${content}</pre>`;
+    if (d?.body?.contentType === "html") return responsiveSrcDoc(content);
+    return responsiveSrcDoc(`<pre>${content}</pre>`);
   }, [d]);
 
   if (!emailId) {
@@ -57,21 +79,7 @@ export function MailPreviewPanel({ emailId, onOpen, onReply }: Props) {
     );
   }
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-full gap-2 text-[12.5px] text-muted-foreground">
-        <Loader2 className="w-4 h-4 animate-spin" /> Cargando vista previa…
-      </div>
-    );
-  }
-
-  if (!d) {
-    return (
-      <div className="flex items-center justify-center h-full px-6 text-center">
-        <p className="text-[12.5px] text-muted-foreground">No se pudo cargar la vista previa de este correo.</p>
-      </div>
-    );
-  }
+  const snippet = (s?.bodyPreview as string) || (d?.bodyPreview as string) || "";
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -80,7 +88,7 @@ export function MailPreviewPanel({ emailId, onOpen, onReply }: Props) {
         {accountEmail && (
           <MailAccountBadge
             email={accountEmail}
-            color={colorForAccount(accountRef.provider === "primary" ? undefined : accountRef.accountId)}
+            color={colorForAccount(accountRef.provider === "primary" ? undefined : accountId)}
             size="sm"
           />
         )}
@@ -89,7 +97,7 @@ export function MailPreviewPanel({ emailId, onOpen, onReply }: Props) {
         </span>
       </div>
 
-      {/* Encabezado */}
+      {/* Encabezado — visible al instante desde la semilla */}
       <div className="shrink-0 px-4 pt-3 pb-2 border-b border-border/30 space-y-1.5">
         <p className="text-[13.5px] font-semibold text-foreground leading-snug break-words">
           {hasAttachments && <Paperclip className="inline w-3.5 h-3.5 mr-1 text-muted-foreground/70" />}
@@ -104,19 +112,26 @@ export function MailPreviewPanel({ emailId, onOpen, onReply }: Props) {
         {receivedAt && <p className="text-[11px] text-muted-foreground">{receivedAt}</p>}
       </div>
 
-      {/* Cuerpo */}
-      <div className="flex-1 min-h-0 bg-white">
+      {/* Cuerpo — cuerpo completo cuando llega; mientras, el snippet de la lista */}
+      <div className="flex-1 min-h-0 bg-white relative">
         {bodyHtml ? (
           <iframe
             title="Vista previa del correo"
-            sandbox=""
+            sandbox="allow-same-origin"
             srcDoc={bodyHtml}
             className="w-full h-full border-0"
           />
         ) : (
-          <p className="p-4 text-[12.5px] text-muted-foreground whitespace-pre-wrap">
-            {d?.bodyPreview || "Sin contenido"}
-          </p>
+          <div className="p-4">
+            {isLoading && (
+              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/70 mb-2">
+                <Loader2 className="w-3 h-3 animate-spin" /> Cargando contenido…
+              </div>
+            )}
+            <p className="text-[12.5px] text-muted-foreground whitespace-pre-wrap break-words">
+              {snippet || (isLoading ? "" : "Sin contenido")}
+            </p>
+          </div>
         )}
       </div>
 

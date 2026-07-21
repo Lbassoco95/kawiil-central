@@ -40,6 +40,9 @@ export function CorreoView() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<MailTabId>("inbox");
   const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
+  // Correo ya cargado en la lista: alimenta la vista previa al instante (metadatos + snippet)
+  // mientras se descarga el cuerpo completo, para que la previsualización no se sienta lenta.
+  const [selectedEmailSeed, setSelectedEmailSeed] = useState<Record<string, unknown> | null>(null);
   const [readingOpen, setReadingOpen] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
   const [forwardState, setForwardState] = useState<ForwardState | null>(null);
@@ -123,14 +126,16 @@ export function CorreoView() {
   }, [markRead, markLinkedOutlookRead, markGmailRead]);
 
   /** Un clic: solo selecciona y previsualiza — NO marca como leído (eso pasa al abrir). */
-  const handleSelectEmail = useCallback((id: string) => {
+  const handleSelectEmail = useCallback((id: string, seed?: Record<string, unknown>) => {
     setSelectedEmailId(id);
+    setSelectedEmailSeed(seed ?? null);
     setReadingOpen(false);
   }, []);
 
   /** Doble clic / botón Abrir: vista completa con respuesta; aquí sí se marca como leído. */
-  const handleOpenEmail = useCallback((id: string) => {
+  const handleOpenEmail = useCallback((id: string, seed?: Record<string, unknown>) => {
     setSelectedEmailId(id);
+    if (seed) setSelectedEmailSeed(seed);
     setReadingOpen(true);
     markEmailReadRouted(id);
   }, [markEmailReadRouted]);
@@ -246,6 +251,7 @@ ${detail.body?.contentType === "html" ? origBody : `<pre style="font-family:inhe
         {selectedEmailId && !readingOpen ? (
           <MailPreviewPanel
             emailId={selectedEmailId}
+            seed={selectedEmailSeed}
             onOpen={() => handleOpenEmail(selectedEmailId)}
             onReply={() => { setForwardState(null); setComposeOpen(true); }}
           />

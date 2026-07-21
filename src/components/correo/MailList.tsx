@@ -47,9 +47,9 @@ interface Props {
   activeTab: MailTabId;
   onSelectTab: (tab: MailTabId) => void;
   selectedEmailId: string | null;
-  onSelectEmail: (id: string) => void;
+  onSelectEmail: (id: string, seed?: Record<string, unknown>) => void;
   /** Doble clic / Enter: abrir la vista completa. */
-  onOpenEmail?: (id: string) => void;
+  onOpenEmail?: (id: string, seed?: Record<string, unknown>) => void;
   onCompose: () => void;
   onOpenFolders: () => void;
   onOpenRules: () => void;
@@ -93,17 +93,27 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
   const isAiTab = AI_TABS.includes(activeTab) && !customFolderOverride;
   const primaryFolderId = (isLinkedAccount || isUnified) ? "inbox" : (customFolderOverride ?? TAB_TO_FOLDER[activeTab] ?? "inbox");
 
-  // Server-side unread filter: only when "Sin leer" is active, no search, not an AI tab, and using primary account
-  const serverFilterUnread = readFilter === "sinleer" && !debouncedSearch && !isAiTab && !isLinkedAccount && !isUnified;
-  const primaryQuery = useOutlookEmails(primaryFolderId, (isLinkedAccount || isUnified) ? undefined : debouncedSearch || undefined, serverFilterUnread);
+  // Filtro "Sin leer" server-side: en vista principal (solo primary) y también en la vista
+  // unificada (todas las cuentas), para que "Sin leer" traiga los no leídos REALES de cada
+  // cuenta y no solo los que ya estaban cargados.
+  const wantUnread = readFilter === "sinleer" && !debouncedSearch && !isAiTab;
+  const serverFilterUnread = wantUnread && !isLinkedAccount && !isUnified;
+  const unifiedUnread = wantUnread && isUnified;
+  const primaryQuery = useOutlookEmails(
+    primaryFolderId,
+    (isLinkedAccount || isUnified) ? undefined : debouncedSearch || undefined,
+    isUnified ? unifiedUnread : serverFilterUnread,
+  );
   const linkedOutlookQuery = useLinkedOutlookEmailsAll({
     accountId: isUnified ? undefined : (linkedAccId || undefined),
     folder: isUnified ? "inbox" : (linkedFolderPath || "inbox"),
+    filterUnread: isUnified ? unifiedUnread : undefined,
     enabled: isLinkedOutlook || isUnified,
   });
   const linkedGmailQuery = useGmailEmailsAll({
     accountId: isUnified ? undefined : (linkedAccId || undefined),
     labelId: isUnified ? "INBOX" : (linkedFolderPath || "INBOX"),
+    filterUnread: isUnified ? unifiedUnread : undefined,
     enabled: isLinkedGmail || isUnified,
   });
   const { profile } = useMicrosoftConnection();
@@ -517,8 +527,8 @@ const now = useMemo(() => new Date(), []);
                 key={emailId}
                 email={email}
                 isActive={selectedEmailId === emailId}
-                onClick={() => onSelectEmail(emailId)}
-                onOpen={onOpenEmail ? () => onOpenEmail(emailId) : undefined}
+                onClick={() => onSelectEmail(emailId, email)}
+                onOpen={onOpenEmail ? () => onOpenEmail(emailId, email) : undefined}
                 onArchive={() => {
                   // Rutear por el prefijo del ID del correo (funciona también en la bandeja unificada)
                   const parts = emailId.split(":");
