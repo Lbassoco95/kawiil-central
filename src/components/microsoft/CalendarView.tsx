@@ -407,9 +407,15 @@ export function CalendarView({
   }, [viewMode]);
 
   const [newEvent, setNewEvent] = useState({
-    subject: "", startTime: "09:00", endTime: "10:00", attendees: "",
+    subject: "", date: "", startTime: "09:00", endTime: "10:00", attendees: "",
     location: "", description: "", isOnlineMeeting: false, isAllDay: false, categories: [] as string[],
   });
+  // Al abrir "Nuevo evento", precarga la fecha con el día seleccionado (editable
+  // por si se eligió el día equivocado).
+  useEffect(() => {
+    if (showCreate) setNewEvent((p) => ({ ...p, date: format(selectedDate, "yyyy-MM-dd") }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showCreate, selectedDate]);
 
   // Eventos de cuentas añadidas (Google/Outlook adicional) son de solo lectura en este panel.
   const isGoogleEvent = !!selectedEventId && (selectedEventId.startsWith("google:") || selectedEventId.startsWith("outlook:"));
@@ -782,9 +788,10 @@ export function CalendarView({
 
   const handleCreateEvent = () => {
     if (!newEvent.subject) return;
-    const dateStr = format(selectedDate, "yyyy-MM-dd");
+    const dateStr = newEvent.date || format(selectedDate, "yyyy-MM-dd");
+    const baseDate = newEvent.date ? new Date(`${newEvent.date}T00:00:00`) : selectedDate;
     const attendees = newEvent.attendees.split(",").map((s) => s.trim()).filter(Boolean).map((address) => ({ emailAddress: { address }, type: "required" }));
-    const nextDayStr = format(addDays(selectedDate, 1), "yyyy-MM-dd");
+    const nextDayStr = format(addDays(baseDate, 1), "yyyy-MM-dd");
 
     const baseEvent: any = newEvent.isAllDay
       ? { subject: newEvent.subject, isAllDay: true, start: { dateTime: `${dateStr}T00:00:00`, timeZone: CDMX_TZ }, end: { dateTime: `${nextDayStr}T00:00:00`, timeZone: CDMX_TZ } }
@@ -799,7 +806,7 @@ export function CalendarView({
     createEvent.mutate(baseEvent, {
       onSuccess: () => {
         setShowCreate(false);
-        setNewEvent({ subject: "", startTime: "09:00", endTime: "10:00", attendees: "", location: "", description: "", isOnlineMeeting: false, isAllDay: false, categories: [] });
+        setNewEvent({ subject: "", date: "", startTime: "09:00", endTime: "10:00", attendees: "", location: "", description: "", isOnlineMeeting: false, isAllDay: false, categories: [] });
       },
     });
   };
@@ -1859,9 +1866,9 @@ export function CalendarView({
 
       {/* Create event dialog */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-md max-h-[90vh] overflow-y-auto overflow-x-hidden">
           <DialogHeader>
-            <DialogTitle>Nuevo evento – {format(selectedDate, "EEEE d 'de' MMMM, yyyy", { locale: es })}</DialogTitle>
+            <DialogTitle className="pr-6">Nuevo evento – {newEvent.date ? format(new Date(`${newEvent.date}T00:00:00`), "EEEE d 'de' MMMM, yyyy", { locale: es }) : format(selectedDate, "EEEE d 'de' MMMM, yyyy", { locale: es })}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
@@ -1872,13 +1879,17 @@ export function CalendarView({
               <Label className="text-sm">Día completo</Label>
               <Switch checked={newEvent.isAllDay} onCheckedChange={(checked) => setNewEvent({ ...newEvent, isAllDay: checked })} />
             </div>
+            <div className="space-y-2">
+              <Label>Fecha (CDMX)</Label>
+              <Input type="date" value={newEvent.date} onChange={(e) => setNewEvent({ ...newEvent, date: e.target.value })} />
+            </div>
             {!newEvent.isAllDay && (
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
+                <div className="space-y-2 min-w-0">
                   <Label>Hora inicio (CDMX)</Label>
                   <Input type="time" value={newEvent.startTime} onChange={(e) => setNewEvent({ ...newEvent, startTime: e.target.value })} />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 min-w-0">
                   <Label>Hora fin (CDMX)</Label>
                   <Input type="time" value={newEvent.endTime} onChange={(e) => setNewEvent({ ...newEvent, endTime: e.target.value })} />
                 </div>
@@ -1950,7 +1961,7 @@ export function CalendarView({
 
       {/* Edit event dialog */}
       <Dialog open={!!selectedEventId} onOpenChange={(open) => !open && setSelectedEventId(null)}>
-        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-lg max-h-[90vh] overflow-y-auto overflow-x-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><Pencil className="h-4 w-4" /> Ver y editar evento</DialogTitle>
           </DialogHeader>
@@ -2009,12 +2020,12 @@ export function CalendarView({
                 <Input value={editForm.subject} onChange={(e) => setEditForm({ ...editForm, subject: e.target.value })} />
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1"><Label>Fecha inicio</Label><Input type="date" value={editForm.startDate} onChange={(e) => setEditForm({ ...editForm, startDate: e.target.value })} /></div>
-                <div className="space-y-1"><Label>Hora inicio</Label><Input type="time" value={editForm.startTime} onChange={(e) => setEditForm({ ...editForm, startTime: e.target.value })} /></div>
+                <div className="space-y-1 min-w-0"><Label>Fecha inicio</Label><Input type="date" value={editForm.startDate} onChange={(e) => setEditForm({ ...editForm, startDate: e.target.value })} /></div>
+                <div className="space-y-1 min-w-0"><Label>Hora inicio</Label><Input type="time" value={editForm.startTime} onChange={(e) => setEditForm({ ...editForm, startTime: e.target.value })} /></div>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1"><Label>Fecha fin</Label><Input type="date" value={editForm.endDate} onChange={(e) => setEditForm({ ...editForm, endDate: e.target.value })} /></div>
-                <div className="space-y-1"><Label>Hora fin</Label><Input type="time" value={editForm.endTime} onChange={(e) => setEditForm({ ...editForm, endTime: e.target.value })} /></div>
+                <div className="space-y-1 min-w-0"><Label>Fecha fin</Label><Input type="date" value={editForm.endDate} onChange={(e) => setEditForm({ ...editForm, endDate: e.target.value })} /></div>
+                <div className="space-y-1 min-w-0"><Label>Hora fin</Label><Input type="time" value={editForm.endTime} onChange={(e) => setEditForm({ ...editForm, endTime: e.target.value })} /></div>
               </div>
               <div className="space-y-2">
                 <Label>Ubicación</Label>

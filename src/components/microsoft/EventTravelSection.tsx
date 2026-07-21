@@ -33,7 +33,7 @@ export function EventTravelSection({ destination, departureISO, defaultOrigin }:
           value={origin}
           onChange={setOrigin}
           placeholder="Tu punto de salida (dirección o lugar)"
-          className="flex-1"
+          className="flex-1 min-w-0"
         />
         <Button
           size="sm"
