@@ -42,6 +42,23 @@ import {
 } from "@/hooks/useLinkedAccounts";
 import { MailAccountBadge } from "./MailAccountBadge";
 
+// Identidad de la cuenta principal de Kawiil (Microsoft 365), compartida con el
+// calendario: nombre y color se leen de los MISMOS valores de localStorage que usa
+// el calendario, para que ambos módulos muestren la cuenta de forma consistente.
+const PRIMARY_MS_COLOR = "#0099bc";
+function readPrimaryName(): string {
+  try {
+    return (typeof window !== "undefined" && window.localStorage.getItem("kawiil-cal-primary-name")) || "";
+  } catch { return ""; }
+}
+function readPrimaryColor(): string {
+  try {
+    if (typeof window === "undefined") return PRIMARY_MS_COLOR;
+    const map = JSON.parse(window.localStorage.getItem("kawiil-cal-account-colors") || "{}");
+    return map["microsoft-primary"] || PRIMARY_MS_COLOR;
+  } catch { return PRIMARY_MS_COLOR; }
+}
+
 interface MailSidebarProps {
   activeTab: MailTabId;
   onSelectTab: (tab: MailTabId) => void;
@@ -400,10 +417,13 @@ export function MailSidebar({
   const gmailLinked = linkedAccounts.filter(a => a.provider === "google" && a.mail_enabled);
   const hasLinkedAccounts = outlookLinked.length > 0 || gmailLinked.length > 0;
 
-  // Cuenta principal de Kawiil (buzón que se dio de alta primero, vive en microsoft_tokens)
+  // Cuenta principal de Kawiil (buzón que se dio de alta primero, vive en microsoft_tokens).
+  // Nombre y color se toman del calendario (renombre + color personalizados) para
+  // que sea la misma identidad en ambos módulos; default "Microsoft 365 (Kawiil)".
   const { profile: primaryProfile } = useMicrosoftConnection();
   const primaryEmail = (primaryProfile?.mail || primaryProfile?.userPrincipalName || "") as string;
-  const primaryName = (primaryProfile?.displayName as string) || primaryEmail || "Kawiil";
+  const primaryName = readPrimaryName() || "Microsoft 365 (Kawiil)";
+  const primaryColor = readPrimaryColor();
 
   const isTabActive = (id: MailTabId) => activeTab === id && !activeCustomFolderId && activeLabelId == null;
 
@@ -454,7 +474,7 @@ export function MailSidebar({
           <div className="flex items-center gap-1.5 px-2.5 mt-1 mb-0.5">
             <MailAccountBadge
               email={primaryEmail || "K"}
-              color={linkedAccountColor(primaryEmail || "kawiil")}
+              color={primaryColor}
               size="sm"
             />
             <p className="text-[9.5px] font-bold uppercase tracking-widest text-muted-foreground/60 truncate flex-1" title={primaryEmail}>
