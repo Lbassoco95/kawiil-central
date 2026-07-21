@@ -33,9 +33,16 @@ interface Props {
   defaultClientId?: string;
   defaultArea?: string;
   defaultPhaseKey?: string;
+  /** Valores iniciales opcionales (p. ej. al crear una tarea desde un correo). */
+  defaultTitle?: string;
+  defaultDescription?: string;
+  defaultDueDate?: string;
+  defaultPriority?: string;
+  /** Callback tras crear la tarea con éxito (además de cerrar el diálogo). */
+  onCreated?: () => void;
 }
 
-export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultClientId, defaultArea, defaultPhaseKey }: Props) {
+export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultClientId, defaultArea, defaultPhaseKey, defaultTitle, defaultDescription, defaultDueDate, defaultPriority, onCreated }: Props) {
   const { user } = useAuth();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -69,11 +76,14 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
     if (!open) return;
     setShowAdvanced(true);
     if (user?.id) setAssignedTo(user.id);
-    setDueDate(defaultDueDatePlusThreeBusinessDays());
+    setDueDate(defaultDueDate || defaultDueDatePlusThreeBusinessDays());
     if (defaultArea !== undefined) setArea(defaultArea || "");
     if (defaultClientId !== undefined) setClientId(defaultClientId || "");
     if (defaultProjectId !== undefined) setProjectId(defaultProjectId || "");
-  }, [open, user?.id, defaultArea, defaultClientId, defaultProjectId]);
+    if (defaultTitle !== undefined) setTitle(defaultTitle || "");
+    if (defaultDescription !== undefined) setDescription(defaultDescription || "");
+    if (defaultPriority !== undefined) setPriority(defaultPriority || "media");
+  }, [open, user?.id, defaultArea, defaultClientId, defaultProjectId, defaultTitle, defaultDescription, defaultDueDate, defaultPriority]);
 
   const profileOptions = useMemo(
     () =>
@@ -145,6 +155,7 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
         onSuccess: () => {
           onOpenChange(false);
           resetForm();
+          onCreated?.();
         },
       }
     );
