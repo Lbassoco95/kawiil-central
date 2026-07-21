@@ -281,10 +281,14 @@ Deno.serve(async (req) => {
       if (!token) return jsonResp({ error: "no_valid_token" }, 400);
       const rawId = String(params?.emailId || "").replace(/^outlook:[^:]+:/, "");
       if (!rawId) return jsonResp({ error: "emailId requerido" }, 400);
-      const res = await graphFetch(token,
-        `/me/messages/${encodeURIComponent(rawId)}?$select=id,subject,body,bodyPreview,from,toRecipients,ccRecipients,bccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,importance,sensitivity,internetMessageId,conversationId,webLink`
-      );
-      if (!res.ok) return jsonResp({ error: "not_found" }, 404);
+      // Sin $select: Graph rechaza intermitentemente `sensitivity` en el $select
+      // (RequestBroker--ParseUri), lo que dejaba la vista grande en blanco. El GET completo
+      // devuelve body y todos los campos por defecto sin ese riesgo.
+      const res = await graphFetch(token, `/me/messages/${encodeURIComponent(rawId)}`);
+      if (!res.ok) {
+        const body = await res.text();
+        return jsonResp({ error: `Graph [${res.status}]: ${body.slice(0, 200)}` }, res.status === 404 ? 404 : 400);
+      }
       const json = await res.json();
       return jsonResp({
         ...json,
