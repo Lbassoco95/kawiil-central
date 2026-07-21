@@ -97,12 +97,49 @@ CalDAV, fuera de alcance por ahora). Plan:
 
 ---
 
+## 3b. Trayecto con tráfico + autocompletado de lugares (Google Maps)
+
+Al abrir/crear un evento con **Ubicación**, se puede calcular el **tiempo de
+trayecto con tráfico** (y la hora sugerida de salida), y los campos de ubicación
+y punto de salida ofrecen **autocompletado de lugares**. Todo pasa por edge
+functions para que la API key viva **solo en el servidor**.
+
+- `maps-travel` → Google **Distance Matrix API** (`departure_time`,
+  `traffic_model=best_guess`, `region=mx`, `units=metric`, `language=es`).
+  Devuelve duración con tráfico + base + distancia. 500 si falta la key; maneja
+  `ZERO_RESULTS`/`NOT_FOUND`/`REQUEST_DENIED` sin romper la UI.
+- `maps-places` → Google **Places API (New)** (`places:autocomplete`,
+  `regionCode=MX`, `languageCode=es`). Degrada a lista vacía + motivo si falla.
+- Frontend: `useTravelTime`, `usePlacesAutocomplete`, componentes
+  `EventTravelSection` y `PlaceAutocompleteInput`.
+
+### Configuración en Google Cloud (acción manual)
+
+1. Habilitar **Distance Matrix API** y **Places API (New)** (¡la *New*, no la
+   legacy!) en el mismo proyecto, con **billing activo**.
+2. Secret en Supabase: `GOOGLE_MAPS_API_KEY`.
+3. Restricciones de la API key:
+   - **Aplicación = Ninguno**. La restricción por *HTTP referrer* (Sitios web)
+     **rompe** las llamadas server-side (la edge function no manda referrer);
+     el síntoma es "Places API no está habilitada o la key no la permite".
+   - **API = restringir** a *Distance Matrix API* + *Places API (New)*.
+4. Desplegar: `supabase functions deploy maps-travel maps-places --no-verify-jwt`.
+
+> ⚠️ **Pendiente de seguridad:** la key actual se expuso en un chat y quedó sin
+> candado de dominio. **Rotarla**: crear una nueva (App = Ninguno, API restringida
+> a Distance Matrix + Places API New), cargarla en `GOOGLE_MAPS_API_KEY` y borrar
+> la anterior.
+
+---
+
 ## 4. Roadmap sugerido
 
 1. ✅ Anti-encimamiento de eventos (carriles).
 2. ✅ Crear tarea/actividad desde un evento.
 3. ✅ Vista Agenda + multi-calendario dentro de M365.
 4. ✅ Google Calendar (multi-cuenta) — falta configurar credenciales.
-5. ⬜ Unificar Microsoft en `linked_accounts`.
-6. ⬜ IMAP/SMTP para correo (con caché + cron).
+5. ✅ Trayecto con tráfico + autocompletado de lugares (Distance Matrix + Places New).
+6. ⬜ Unificar Microsoft en `linked_accounts`.
+7. ⬜ IMAP/SMTP para correo (con caché + cron).
+8. ⬜ Rotar la `GOOGLE_MAPS_API_KEY` expuesta.
 7. ⬜ Cifrado de secretos IMAP (Vault/pgsodium).
