@@ -122,14 +122,13 @@ export function CorreoView() {
     }
   }, [markRead, markLinkedOutlookRead, markGmailRead]);
 
-  /** Un clic: selecciona y muestra la vista previa en el panel derecho (marca como leído). */
+  /** Un clic: solo selecciona y previsualiza — NO marca como leído (eso pasa al abrir). */
   const handleSelectEmail = useCallback((id: string) => {
     setSelectedEmailId(id);
     setReadingOpen(false);
-    markEmailReadRouted(id);
-  }, [markEmailReadRouted]);
+  }, []);
 
-  /** Doble clic / botón Abrir: vista completa con respuesta. */
+  /** Doble clic / botón Abrir: vista completa con respuesta; aquí sí se marca como leído. */
   const handleOpenEmail = useCallback((id: string) => {
     setSelectedEmailId(id);
     setReadingOpen(true);
@@ -247,7 +246,7 @@ ${detail.body?.contentType === "html" ? origBody : `<pre style="font-family:inhe
         {selectedEmailId && !readingOpen ? (
           <MailPreviewPanel
             emailId={selectedEmailId}
-            onOpen={() => setReadingOpen(true)}
+            onOpen={() => handleOpenEmail(selectedEmailId)}
             onReply={() => { setForwardState(null); setComposeOpen(true); }}
           />
         ) : (
