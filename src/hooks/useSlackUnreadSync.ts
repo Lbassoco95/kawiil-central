@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchSlackUnreadSnapshot } from "@/lib/slackApi";
 import { loadSlackReadMap } from "@/lib/slackReadCursor";
-import { markSlackChannelNotificationsRead } from "@/hooks/useSlackChannelNotificationBadges";
 
 /** Throttle entre invalidaciones por `visibilitychange` para no machacar slack-api al alternar pestañas. */
 const VISIBILITY_REFETCH_THROTTLE_MS = 2_000;
@@ -44,7 +43,6 @@ export function useSlackUnreadSync({
   holdUnreadSnapshot = false,
 }: Params) {
   const qc = useQueryClient();
-  const inFlightReadRef = useRef<Set<string>>(new Set());
 
   const localUnreadSig = useMemo(
     () => unreadCountsSignature(localUnreadByChannel),
@@ -103,33 +101,10 @@ export function useSlackUnreadSync({
     const remote = unreadSnapshotQuery.data;
     if (!remote) return;
 
-    const toMark: string[] = [];
-    for (const ch of pollChannelIds) {
-      const localCount = localUnreadByChannel[ch] ?? 0;
-      const remoteCount = remote[ch] ?? 0;
-      if (localCount > 0 && remoteCount === 0 && !inFlightReadRef.current.has(ch)) {
-        toMark.push(ch);
-      }
-    }
-
-    if (toMark.length > 0) {
-      for (const ch of toMark) inFlightReadRef.current.add(ch);
-      void Promise.all(toMark.map((ch) => markSlackChannelNotificationsRead(userId, ch)))
-        .then(async () => {
-          for (const ch of toMark) {
-            void qc.invalidateQueries({ queryKey: ["slack-channel-info", ch] });
-          }
-          await qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", userId] });
-          await qc.invalidateQueries({ queryKey: ["user-notifications", userId] });
-          await qc.invalidateQueries({ queryKey: ["unread-notifications-count", userId] });
-        })
-        .catch((err) => {
-          console.warn("[slack-unread-sync] markRead falló (silenciado):", err);
-        })
-        .finally(() => {
-          for (const ch of toMark) inFlightReadRef.current.delete(ch);
-        });
-    }
+    // NOTA: NO auto-marcamos como leídas las notificaciones de Kawiil cuando Slack
+    // reporta el canal como leído. Las notificaciones deben mantenerse hasta que el
+    // usuario abra la conversación DENTRO de Kawiil (selectChannel → markSlackChannelNotificationsRead).
+    // Antes esto limpiaba badges al abrir el módulo sin haber entrado al mensaje.
 
     if (selectedChannel) {
       const remoteCurrent = remote[selectedChannel] ?? 0;
