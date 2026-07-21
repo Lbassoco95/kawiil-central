@@ -1,6 +1,7 @@
 import { useMemo } from "react";
-import { useEmailDetail, useEmailLabelAssignments } from "@/hooks/useMicrosoft";
+import { useEmailLabelAssignments } from "@/hooks/useMicrosoft";
 import { useOutlookEmails } from "@/hooks/useMicrosoft";
+import { useRoutedEmailDetail } from "@/hooks/useLinkedAccounts";
 import { inferEmailChips, emailListTimestamp, formatEmailDate } from "@/lib/emailChips";
 import { cn } from "@/lib/utils";
 import { Sparkles, Mail, CheckSquare, Link2, Filter, Tag } from "lucide-react";
@@ -39,7 +40,8 @@ const CHIP_STYLES: Record<string, { bg: string; text: string }> = {
 };
 
 export function MailContactPanel({ emailId, onAskAI, onCreateTask, onCreateRule }: Props) {
-  const { data: emailDetail } = useEmailDetail(emailId);
+  // Detalle ruteado por prefijo de ID: funciona con la cuenta principal Y las vinculadas.
+  const { data: emailDetail } = useRoutedEmailDetail(emailId);
   const { data: labelAssignments = [] } = useEmailLabelAssignments(emailId);
 
   const senderName = (emailDetail as any)?.from?.emailAddress?.name || "";
