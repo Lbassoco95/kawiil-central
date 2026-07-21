@@ -8,7 +8,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Wallet, DollarSign, Clock, CheckCircle, XCircle, Landmark, LayoutDashboard, BarChart3, HandCoins, RefreshCcw } from "lucide-react";
+import { Plus, Wallet, DollarSign, Clock, CheckCircle, XCircle, Landmark, LayoutDashboard, BarChart3, HandCoins, RefreshCcw, CalendarClock, ReceiptText } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useExpenses, Expense } from "@/hooks/useExpenses";
 import { useFinanceAccess } from "@/hooks/useFinanceAccess";
@@ -20,6 +20,8 @@ import { SavioFinanceDashboard } from "@/components/finanzas/SavioFinanceDashboa
 import { FinanceExecutiveSummary } from "@/components/finanzas/FinanceExecutiveSummary";
 import { FinanceCashflowAlerts } from "@/components/finanzas/FinanceCashflowAlerts";
 import { FinanceIntelligenceBoards } from "@/components/finanzas/FinanceIntelligenceBoards";
+import { FinancePlanningDashboard } from "@/components/finanzas/FinancePlanningDashboard";
+import { BankStatementsSection } from "@/components/finanzas/BankStatementsSection";
 import { KpiTile } from "@/components/finanzas/KpiTile";
 import { PageHeader, type PageHeaderStat } from "@/components/shared/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -46,7 +48,7 @@ const CATEGORY_FILTERS = [
   { value: "contratacion_externa", label: "Contratación ext." },
 ];
 
-type FinanceTab = "resumen" | "gastos" | "savio" | "tableros";
+type FinanceTab = "resumen" | "gastos" | "planeacion" | "movimientos" | "savio" | "tableros";
 
 export default function Finanzas() {
   const { user } = useAuth();
@@ -436,6 +438,12 @@ export default function Finanzas() {
                 <TabsTrigger value="gastos" className="text-xs gap-1.5">
                   <Wallet className="h-3.5 w-3.5" /> Gastos internos
                 </TabsTrigger>
+                <TabsTrigger value="planeacion" className="text-xs gap-1.5">
+                  <CalendarClock className="h-3.5 w-3.5" /> Planeación
+                </TabsTrigger>
+                <TabsTrigger value="movimientos" className="text-xs gap-1.5">
+                  <ReceiptText className="h-3.5 w-3.5" /> Movimientos
+                </TabsTrigger>
                 <TabsTrigger value="savio" className="text-xs gap-1.5">
                   <Landmark className="h-3.5 w-3.5" /> Ingresos facturados
                 </TabsTrigger>
@@ -465,6 +473,14 @@ export default function Finanzas() {
                 {gastosSection}
               </TabsContent>
 
+              <TabsContent value="planeacion" className="mt-0">
+                <FinancePlanningDashboard expenses={expenses} />
+              </TabsContent>
+
+              <TabsContent value="movimientos" className="mt-0">
+                <BankStatementsSection />
+              </TabsContent>
+
               <TabsContent value="savio" className="mt-0">
                 <SavioFinanceDashboard />
               </TabsContent>
@@ -483,6 +499,12 @@ export default function Finanzas() {
                 <TabsTrigger value="gastos" className="text-xs gap-1.5">
                   <Wallet className="h-3.5 w-3.5" /> Gastos internos
                 </TabsTrigger>
+                <TabsTrigger value="planeacion" className="text-xs gap-1.5">
+                  <CalendarClock className="h-3.5 w-3.5" /> Planeación
+                </TabsTrigger>
+                <TabsTrigger value="movimientos" className="text-xs gap-1.5">
+                  <ReceiptText className="h-3.5 w-3.5" /> Movimientos
+                </TabsTrigger>
               </TabsList>
               </div>
 
@@ -497,6 +519,14 @@ export default function Finanzas() {
 
               <TabsContent value="gastos" className="mt-0">
                 {gastosSection}
+              </TabsContent>
+
+              <TabsContent value="planeacion" className="mt-0">
+                <FinancePlanningDashboard expenses={expenses} />
+              </TabsContent>
+
+              <TabsContent value="movimientos" className="mt-0">
+                <BankStatementsSection />
               </TabsContent>
             </Tabs>
           )

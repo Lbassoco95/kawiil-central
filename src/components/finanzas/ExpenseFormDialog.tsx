@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Sparkles, Loader2, Wallet, X } from "lucide-react";
+import { Sparkles, Loader2, Wallet, X, Plus } from "lucide-react";
 import {
   Dialog, DialogContent,
 } from "@/components/ui/dialog";
@@ -20,6 +20,9 @@ import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { useClients } from "@/hooks/useClients";
 import { useProjects } from "@/hooks/useProjects";
 import { useCreateExpense } from "@/hooks/useExpenses";
+import { useGroupCompanies } from "@/hooks/useGroupCompanies";
+import { GroupCompanyManagerDialog } from "@/components/finanzas/GroupCompanyManagerDialog";
+import { parseReceiptWithAi } from "@/lib/financeReceiptParse";
 import { FileDropzone } from "@/components/shared/FileDropzone";
 import { expensesLimits } from "@/lib/fileIntake/limits";
 import {
@@ -46,9 +49,10 @@ const schema = z
     description: z.string().min(1, "La descripción es requerida"),
     client_id: z.string().optional().or(z.literal("")),
     project_id: z.string().optional().or(z.literal("")),
+    group_company_id: z.string().optional().or(z.literal("")),
     expense_date: z.string().min(1, "La fecha es requerida"),
-    // A cuenta de quién es el gasto (obligatorio): cliente / reembolso al
-    // trabajador / Kawiil (interno).
+    // A cuenta de quién es el gasto (obligatorio): cliente / empresa del grupo /
+    // reembolso al trabajador / Kawiil (interno).
     charge_to: z.string().min(1, "Indica a cuenta de quién es el gasto"),
     notes: z.string().optional().or(z.literal("")),
   })
@@ -58,6 +62,13 @@ const schema = z
         path: ["client_id"],
         code: z.ZodIssueCode.custom,
         message: "Selecciona el cliente al que se le cobrará",
+      });
+    }
+    if (val.charge_to === "empresa_grupo" && !val.group_company_id) {
+      ctx.addIssue({
+        path: ["group_company_id"],
+        code: z.ZodIssueCode.custom,
+        message: "Selecciona la empresa del grupo que nos debe",
       });
     }
   });
@@ -75,12 +86,15 @@ export function ExpenseFormDialog({ open, onOpenChange }: Props) {
   const createExpense = useCreateExpense();
   const { data: clients = [] } = useClients();
   const { data: projects = [] } = useProjects();
+  const { data: groupCompanies = [] } = useGroupCompanies();
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [dupOpen, setDupOpen] = useState(false);
   const [dupName, setDupName] = useState("");
   const dupResolver = useRef<((c: DuplicateResolutionChoice) => void) | null>(null);
   const [aiClassifying, setAiClassifying] = useState(false);
   const [aiHint, setAiHint] = useState<string | null>(null);
+  const [aiReading, setAiReading] = useState(false);
+  const [showGroupManager, setShowGroupManager] = useState(false);
 
   const duplicatePrompt = useCallback((fileName: string) => {
     setDupName(fileName);
@@ -122,6 +136,7 @@ export function ExpenseFormDialog({ open, onOpenChange }: Props) {
       description: "",
       client_id: "",
       project_id: "",
+      group_company_id: "",
       expense_date: new Date().toISOString().slice(0, 10),
       charge_to: "",
       notes: "",
@@ -136,6 +151,40 @@ export function ExpenseFormDialog({ open, onOpenChange }: Props) {
   const projectOptions = projects
     .filter((p: any) => !watchClient || p.client_id === watchClient)
     .map((p: any) => ({ value: p.id, label: p.name }));
+  const groupCompanyOptions = groupCompanies.map((g) => ({ value: g.id, label: g.name }));
+
+  const handleReadReceipt = async () => {
+    const file = pendingFiles.find(
+      (f) => f.type.startsWith("image/") || f.type.includes("pdf") || /\.(png|jpe?g|webp|pdf)$/i.test(f.name),
+    );
+    if (!file) {
+      toast.error("Adjunta primero una foto o PDF del comprobante.");
+      return;
+    }
+    setAiReading(true);
+    try {
+      const r = await parseReceiptWithAi(file);
+      if (typeof r.amount === "number" && r.amount > 0) {
+        form.setValue("amount", r.amount, { shouldValidate: true, shouldDirty: true });
+      }
+      if (r.currency) form.setValue("currency", r.currency, { shouldDirty: true });
+      if (r.date && /^\d{4}-\d{2}-\d{2}$/.test(r.date)) {
+        form.setValue("expense_date", r.date, { shouldDirty: true });
+      }
+      if (r.description || r.vendor) {
+        const desc = [r.description, r.vendor && `(${r.vendor})`].filter(Boolean).join(" ");
+        form.setValue("description", desc, { shouldValidate: true, shouldDirty: true });
+      }
+      if (r.suggested_category) {
+        form.setValue("category", r.suggested_category, { shouldValidate: true, shouldDirty: true });
+      }
+      toast.success("Comprobante leído: revisa y ajusta los datos.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo leer el comprobante.");
+    } finally {
+      setAiReading(false);
+    }
+  };
 
   const handleAiClassify = async () => {
     const description = form.getValues("description").trim();
@@ -198,9 +247,11 @@ Datos del gasto:
     const reimbursement_type =
       values.charge_to === "cliente"
         ? "cobrar_cliente"
-        : values.charge_to === "reembolsar_trabajador"
-          ? "reembolsar_trabajador"
-          : null;
+        : values.charge_to === "empresa_grupo"
+          ? "cobrar_empresa_grupo"
+          : values.charge_to === "reembolsar_trabajador"
+            ? "reembolsar_trabajador"
+            : null;
     await createExpense.mutateAsync({
       category: values.category,
       amount: values.amount,
@@ -208,6 +259,7 @@ Datos del gasto:
       description: values.description,
       client_id: values.client_id || null,
       project_id: values.project_id || null,
+      group_company_id: values.charge_to === "empresa_grupo" ? values.group_company_id || null : null,
       expense_date: values.expense_date,
       reimbursement_type,
       notes: values.notes || null,
@@ -308,18 +360,52 @@ Datos del gasto:
                     </FormControl>
                     <SelectContent>
                       <SelectItem value="cliente">A cuenta del cliente (se le cobra)</SelectItem>
+                      <SelectItem value="empresa_grupo">A cuenta de empresa del grupo (nos debe)</SelectItem>
                       <SelectItem value="reembolsar_trabajador">Reembolso a trabajador (lo pagó de su bolsa)</SelectItem>
                       <SelectItem value="kawiil">A cuenta de Kawiil (gasto interno)</SelectItem>
                     </SelectContent>
                   </Select>
                   <p className="text-[11px] text-muted-foreground">
-                    Define quién absorbe el gasto: se le cobra al cliente, se reembolsa a quien
-                    lo pagó, o lo asume el despacho.
+                    Define quién absorbe el gasto: se le cobra al cliente o a una empresa del grupo,
+                    se reembolsa a quien lo pagó, o lo asume el despacho.
                   </p>
                   <FormMessage />
                 </FormItem>
               )}
             />
+
+            {watchChargeTo === "empresa_grupo" && (
+              <FormField
+                control={form.control}
+                name="group_company_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <div className="flex items-center justify-between gap-2">
+                      <FormLabel>Empresa del grupo <span className="text-destructive">*</span></FormLabel>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-[11px] text-primary hover:bg-primary/10"
+                        onClick={() => setShowGroupManager(true)}
+                      >
+                        <Plus className="h-3 w-3 mr-0.5" /> Administrar
+                      </Button>
+                    </div>
+                    <SearchableSelect
+                      options={[{ value: "", label: "Seleccionar…" }, ...groupCompanyOptions]}
+                      value={field.value || ""}
+                      onValueChange={field.onChange}
+                      placeholder="Selecciona empresa…"
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      Esta empresa nos debe el monto; se rastrea como cuenta por cobrar.
+                    </p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             <FormField
               control={form.control}
@@ -436,7 +522,21 @@ Datos del gasto:
             />
 
             <div className="space-y-2">
-              <FormLabel className="text-sm font-medium">Comprobantes (opcional)</FormLabel>
+              <div className="flex items-center justify-between gap-2">
+                <FormLabel className="text-sm font-medium">Comprobantes (opcional)</FormLabel>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleReadReceipt}
+                  disabled={aiReading || pendingFiles.length === 0}
+                  className="h-7 gap-1 px-2 text-[11px] text-primary hover:bg-primary/10"
+                  title="La IA lee la foto o PDF del comprobante y autollena monto, fecha y concepto."
+                >
+                  {aiReading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                  {aiReading ? "Leyendo…" : "Leer comprobante con IA"}
+                </Button>
+              </div>
               <p className="text-xs text-muted-foreground">
                 Facturas, tickets o capturas. Hasta {MAX_EXPENSE_FILES} archivos, 20 MB c/u. Puedes arrastrar un .zip y se expanden.
               </p>
@@ -469,6 +569,7 @@ Datos del gasto:
       fileName={dupName}
       onResolve={onDupResolve}
     />
+    <GroupCompanyManagerDialog open={showGroupManager} onOpenChange={setShowGroupManager} />
     </>
   );
 }
