@@ -73,7 +73,7 @@ import { useDeleteTask } from "@/hooks/useTasks";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { DocumentChecklistButton } from "@/components/shared/DocumentChecklistButton";
 import { createNotifications } from "@/lib/notificationHelpers";
-import { renderTextWithMentionHighlights } from "@/lib/renderMentionHighlights";
+import { renderRichText } from "@/lib/renderRichText";
 import { useNavigate } from "react-router-dom";
 
 interface CommentAttachment {
@@ -442,41 +442,6 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
   const removeChecklistItem = (itemId: string) => {
     updateChecklist(checklist.filter((c) => c.id !== itemId));
   };
-
-  const LINK_REGEX = /📎\s*\[([^\]]+)\]\(([^)]+)\)/g;
-
-  const renderCommentContent = (content: string) => {
-    // First parse attachment links
-    const elements: React.ReactNode[] = [];
-    let lastIndex = 0;
-    let linkMatch;
-    const tempContent = content;
-    const linkRegex = new RegExp(LINK_REGEX.source, "g");
-
-    while ((linkMatch = linkRegex.exec(tempContent)) !== null) {
-      const before = tempContent.slice(lastIndex, linkMatch.index);
-      if (before) elements.push(...renderMentions(before, elements.length));
-      elements.push(
-        <a
-          key={`link-${linkMatch.index}`}
-          href={linkMatch[2]}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 text-xs text-primary hover:underline break-all max-w-full"
-        >
-          📎 <span className="truncate max-w-[200px]">{linkMatch[1]}</span>
-          <ExternalLink className="h-3 w-3 shrink-0 inline" />
-        </a>
-      );
-      lastIndex = linkMatch.index + linkMatch[0].length;
-    }
-    const remaining = tempContent.slice(lastIndex);
-    if (remaining) elements.push(...renderMentions(remaining, elements.length));
-    return elements.length > 0 ? elements : content;
-  };
-
-  const renderMentions = (text: string, keyOffset: number): React.ReactNode[] =>
-    renderTextWithMentionHighlights(text, `cm-${keyOffset}`);
 
   const handleStatusChange = (status: string) => setPending("status", status);
 
@@ -877,7 +842,7 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
                   <h3>
                     <FileText className="h-3 w-3" /> Descripción
                   </h3>
-                  <div className="desc">{task.description}</div>
+                  <div className="desc">{renderRichText(task.description, "desc")}</div>
                 </section>
               )}
 
@@ -1219,7 +1184,7 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
                             <span className="who">{c.profile?.full_name || "Usuario"}</span>
                             <span className="when">{formatMX(c.created_at, "dd MMM HH:mm")}</span>
                           </div>
-                          <div className="text">{renderCommentContent(c.content)}</div>
+                          <div className="text">{renderRichText(c.content, `cm-${c.id}`)}</div>
                         </div>
                       </div>
                     ))}
