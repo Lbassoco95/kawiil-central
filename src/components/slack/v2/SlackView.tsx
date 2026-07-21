@@ -323,7 +323,7 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
       let data: { ok: boolean; messages?: SlackMessage[]; response_metadata?: { next_cursor?: string } };
       try {
         data = await withHardTimeout(
-          invokeSlackApi<typeof data>(payload, isFirst ? HISTORY_FIRST_MS : HISTORY_NEXT_MS),
+          invokeSlackApi<typeof data>(payload, { timeoutMs: isFirst ? HISTORY_FIRST_MS : HISTORY_NEXT_MS }),
           isFirst ? HISTORY_FIRST_HARD : HISTORY_NEXT_HARD,
         );
       } catch {
@@ -348,7 +348,7 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
       // la app nativa, etc.). Antes se apagaba para siempre tras cargar páginas viejas.
       const pages = query.state.data?.pages?.length ?? 0;
       if (pages > 3) return false; // canal con scroll profundo: evita refetch costoso de muchas páginas
-      return 20_000;
+      return 60_000; // antes 20s; se apoya en realtime para lo inmediato
     },
     refetchIntervalInBackground: false,
     placeholderData: () => {
@@ -444,7 +444,7 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
                 const p = pageParam ? { ...base, cursor: pageParam as string } : base;
                 try {
                   const data = await withHardTimeout(
-                    invokeSlackApi<{ ok: boolean; messages?: SlackMessage[]; response_metadata?: { next_cursor?: string } }>(p, HISTORY_FIRST_MS),
+                    invokeSlackApi<{ ok: boolean; messages?: SlackMessage[]; response_metadata?: { next_cursor?: string } }>(p, { timeoutMs: HISTORY_FIRST_MS }),
                     HISTORY_FIRST_HARD,
                   );
                   return { messages: (data.messages ?? []).slice().reverse(), nextCursor: data.response_metadata?.next_cursor };
@@ -588,17 +588,16 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
     enabled: mpimIds.length > 0,
     staleTime: 30 * 60_000,
     queryFn: async () => {
-      const out: Record<string, string[]> = {};
-      for (const id of mpimIds.slice(0, 30)) {
-        try {
-          const d = await invokeSlackApi<{ ok: boolean; members?: string[] }>(
-            { action: "conversations.members", channel: id },
-            { timeoutMs: 15_000 },
-          );
-          if (d.ok && d.members) out[id] = d.members;
-        } catch { /* best-effort */ }
+      // Una sola invocación (batch, concurrencia en la edge) en vez de N llamadas.
+      try {
+        const d = await invokeSlackApi<{ ok: boolean; members_by_channel?: Record<string, string[]> }>(
+          { action: "conversations.members.batch", channel_ids: mpimIds.slice(0, 40) },
+          { timeoutMs: 30_000 },
+        );
+        return d.ok && d.members_by_channel ? d.members_by_channel : {};
+      } catch {
+        return {};
       }
-      return out;
     },
   });
 
@@ -710,7 +709,7 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
               ok: boolean;
               messages?: SlackMessage[];
               response_metadata?: { next_cursor?: string };
-            }>({ action: "conversations.history", channel: channelId, limit: 40 }, HISTORY_FIRST_MS);
+            }>({ action: "conversations.history", channel: channelId, limit: 40 }, { timeoutMs: HISTORY_FIRST_MS });
             const msgs = (data.messages ?? []).slice().reverse();
             if (msgs.length) saveSlackHistoryCache(channelId, msgs);
             return { messages: msgs, nextCursor: data.response_metadata?.next_cursor };

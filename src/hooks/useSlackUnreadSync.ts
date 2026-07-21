@@ -63,8 +63,9 @@ export function useSlackUnreadSync({
     staleTime: 30_000,
     refetchOnWindowFocus: true,
     refetchInterval: () => {
-      if (typeof document === "undefined") return 120_000;
-      return document.visibilityState === "visible" ? 15_000 : 120_000;
+      if (typeof document === "undefined") return 180_000;
+      // Antes 15s: saturaba conversations.list (Tier 2, ~20/min) → 429. 60s visible.
+      return document.visibilityState === "visible" ? 60_000 : 180_000;
     },
   });
 
