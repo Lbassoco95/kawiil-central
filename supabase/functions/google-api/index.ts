@@ -224,12 +224,19 @@ Deno.serve(async (req) => {
 
     function decodeBase64Url(data: string, charset = "utf-8"): string {
       try {
-        // atob da un string binario (1 char = 1 byte); hay que decodificar los bytes
-        // con el charset real o los acentos salen como mojibake ("atenciÃ³n" en vez de "atención").
+        // atob da un string binario (1 char = 1 byte); hay que decodificar los bytes con el
+        // charset real o los acentos salen como mojibake ("atenciÃ³n" en vez de "atención").
         const bin = atob(data.replace(/-/g, "+").replace(/_/g, "/"));
         const bytes = new Uint8Array(bin.length);
         for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-        try { return new TextDecoder(charset).decode(bytes); }
+        // UTF-8 PRIMERO con validación estricta: muchos correos (gobierno/banca) declaran
+        // un charset legacy (iso-8859-1) pero su contenido real ES UTF-8. Respetar el charset
+        // declarado los rompería. Si el contenido es UTF-8 válido, ganó UTF-8; si no, usamos
+        // el charset declarado (o windows-1252 como respaldo latino).
+        try { return new TextDecoder("utf-8", { fatal: true }).decode(bytes); }
+        catch { /* no es UTF-8 válido → legacy */ }
+        const legacy = charset && charset !== "utf-8" ? charset : "windows-1252";
+        try { return new TextDecoder(legacy).decode(bytes); }
         catch { return new TextDecoder("utf-8").decode(bytes); }
       } catch { return ""; }
     }
