@@ -532,7 +532,9 @@ export function useUpdateCalendarEvent() {
         if (msg.includes("Unexpected end of JSON") || msg.includes("json")) {
           return { success: true, eventId, payload };
         }
-        throw res.error;
+        // "non-2xx" a secas no es accionable: incluir el motivo real de Graph.
+        const detail = (errBody || "").trim().slice(0, 300);
+        throw new Error(detail ? `${msg}: ${detail}` : msg);
       }
       if (res.data?.code === "ITEM_NOT_FOUND") {
         throw new Error("El evento no fue encontrado. Puede que haya sido eliminado o modificado.");
