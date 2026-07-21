@@ -229,11 +229,13 @@ async function slackCall(token: string, method: SlackMethod, params: Record<stri
     if (v !== undefined && v !== "") body.set(k, String(v));
   }
   const sleepRate = (ms: number) => new Promise((r) => setTimeout(r, ms));
-  // Rate limit: reintento corto y tope de espera bajo. Antes dormía hasta 60s por
-  // llamada (×2 reintentos = ~120s) y reventaba el wall-clock del isolate → timeouts.
-  // Mejor fallar rápido con slack_http_429 y que el cliente reintente con su backoff.
+  // Rate limit: honrar Retry-After de Slack con tope PRUDENTE. Antes eran 60s×2
+  // (~120s) que reventaba el isolate; luego probamos 6s (demasiado corto: si Slack
+  // pedía 30-60s, la llamada nunca alcanzaba a limpiar el cooldown y "no cargaba
+  // nada"). 25s con 1 reintento: suficiente para el Retry-After típico y sin colgar
+  // el isolate.
   const maxRateRetries = 1;
-  const MAX_RATE_SLEEP_MS = 6_000;
+  const MAX_RATE_SLEEP_MS = 25_000;
 
   for (let rateAttempt = 0; rateAttempt <= maxRateRetries; rateAttempt++) {
     const controller = new AbortController();
