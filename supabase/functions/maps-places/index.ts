@@ -60,10 +60,13 @@ Deno.serve(async (req) => {
 
     if (!res.ok) {
       // p.ej. Places API (New) sin habilitar en el proyecto -> degradar sin romper UI.
-      const status = data?.error?.status || data?.error?.message || res.status;
-      console.error("Places autocomplete error:", status);
-      const notEnabled = res.status === 403 || /SERVICE_DISABLED|PERMISSION_DENIED/i.test(String(status));
-      return json({ error: notEnabled ? "places_not_enabled" : "places_error", predictions: [] }, 200);
+      const gStatus = data?.error?.status || "";
+      const gMessage = data?.error?.message || "";
+      console.error("Places autocomplete error:", res.status, gStatus, gMessage);
+      const notEnabled = res.status === 403 || /SERVICE_DISABLED|PERMISSION_DENIED|API_KEY/i.test(`${gStatus} ${gMessage}`);
+      // detail sin exponer la key: solo el status HTTP y el status/mensaje de Google.
+      const detail = `HTTP ${res.status}${gStatus ? ` ${gStatus}` : ""}${gMessage ? `: ${gMessage}` : ""}`;
+      return json({ error: notEnabled ? "places_not_enabled" : "places_error", detail, predictions: [] }, 200);
     }
 
     const predictions = (data.suggestions ?? [])
