@@ -8,6 +8,8 @@ export type MailTabId = "inbox" | "starred" | "clientes" | "sat" | "facturas" | 
 interface Props {
   activeTab: MailTabId;
   onSelectTab: (tab: MailTabId) => void;
+  /** En "Todas las cuentas": el badge de Bandeja muestra el total de todas las cuentas. */
+  inboxUnreadOverride?: number;
 }
 
 const CHIP_DOTS: Partial<Record<MailTabId, string>> = {
@@ -17,8 +19,9 @@ const CHIP_DOTS: Partial<Record<MailTabId, string>> = {
   interno: "hsl(157 72% 36%)",
 };
 
-export function MailTabs({ activeTab, onSelectTab }: Props) {
-  const { data: inboxUnread = 0 } = useUnreadEmailCount();
+export function MailTabs({ activeTab, onSelectTab, inboxUnreadOverride }: Props) {
+  const { data: inboxUnreadPrimary = 0 } = useUnreadEmailCount();
+  const inboxUnread = inboxUnreadOverride ?? inboxUnreadPrimary;
   const { data: foldersData } = useMailFolders();
 
   // Get email counts from mail folders data

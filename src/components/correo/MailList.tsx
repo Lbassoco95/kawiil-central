@@ -314,7 +314,11 @@ const now = useMemo(() => new Date(), []);
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Tabs */}
-      <MailTabs activeTab={activeTab} onSelectTab={onSelectTab} />
+      <MailTabs
+        activeTab={activeTab}
+        onSelectTab={onSelectTab}
+        inboxUnreadOverride={isUnified ? (unifiedUnreadTotal ?? undefined) : undefined}
+      />
 
       {/* Custom folder breadcrumb */}
       {customFolderOverride && (
