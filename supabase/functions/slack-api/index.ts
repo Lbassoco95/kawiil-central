@@ -229,7 +229,11 @@ async function slackCall(token: string, method: SlackMethod, params: Record<stri
     if (v !== undefined && v !== "") body.set(k, String(v));
   }
   const sleepRate = (ms: number) => new Promise((r) => setTimeout(r, ms));
-  const maxRateRetries = 2;
+  // Rate limit: reintento corto y tope de espera bajo. Antes dormía hasta 60s por
+  // llamada (×2 reintentos = ~120s) y reventaba el wall-clock del isolate → timeouts.
+  // Mejor fallar rápido con slack_http_429 y que el cliente reintente con su backoff.
+  const maxRateRetries = 1;
+  const MAX_RATE_SLEEP_MS = 6_000;
 
   for (let rateAttempt = 0; rateAttempt <= maxRateRetries; rateAttempt++) {
     const controller = new AbortController();
@@ -247,7 +251,7 @@ async function slackCall(token: string, method: SlackMethod, params: Record<stri
       if (res.status === 429) {
         const retryAfter = Number(res.headers.get("Retry-After")) || 0;
         if (rateAttempt < maxRateRetries) {
-          const ms = retryAfter > 0 ? Math.min(60_000, retryAfter * 1000) : 2000 * (rateAttempt + 1);
+          const ms = retryAfter > 0 ? Math.min(MAX_RATE_SLEEP_MS, retryAfter * 1000) : 2000 * (rateAttempt + 1);
           await sleepRate(ms);
           continue;
         }
@@ -260,7 +264,7 @@ async function slackCall(token: string, method: SlackMethod, params: Record<stri
       if (json && json.ok === false && (json.error === "ratelimited" || json.error === "rate_limited") &&
         rateAttempt < maxRateRetries) {
         const ra = Number(json.retry_after) || 0;
-        const ms = ra > 0 ? Math.min(60_000, (ra + 1) * 1000) : 2000 * (rateAttempt + 1);
+        const ms = ra > 0 ? Math.min(MAX_RATE_SLEEP_MS, (ra + 1) * 1000) : 2000 * (rateAttempt + 1);
         await sleepRate(ms);
         continue;
       }
