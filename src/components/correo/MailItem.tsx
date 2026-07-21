@@ -3,7 +3,7 @@ import { Archive, Check, Lock, Paperclip } from "lucide-react";
 import { inferEmailChips, emailListTimestamp, formatEmailDate } from "@/lib/emailChips";
 import { getLabelStyle } from "./MailLabelPicker";
 import { MailAccountBadge } from "./MailAccountBadge";
-import { linkedAccountColor } from "@/hooks/useLinkedAccounts";
+import { useAccountColor } from "@/lib/accountColors";
 
 interface Props {
   email: Record<string, unknown>;
@@ -17,6 +17,7 @@ interface Props {
 }
 
 export function MailItem({ email, isActive, onClick, onOpen, onArchive, onMarkRead, labelChips }: Props) {
+  const colorForAccount = useAccountColor();
   const from = email.from as { emailAddress?: { name?: string; address?: string } } | undefined;
   const senderName = from?.emailAddress?.name || from?.emailAddress?.address || "Sin remitente";
   const subject = (email.subject as string) || "(sin asunto)";
@@ -84,7 +85,7 @@ export function MailItem({ email, isActive, onClick, onOpen, onArchive, onMarkRe
         {email._accountEmail && (
           <MailAccountBadge
             email={email._accountEmail as string}
-            color={linkedAccountColor(email._accountEmail as string)}
+            color={colorForAccount(email._accountId as string | undefined)}
             size="sm"
             className="shrink-0"
           />
