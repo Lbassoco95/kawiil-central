@@ -1,7 +1,8 @@
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { useEmailDetail } from "@/hooks/useMicrosoft";
+import { useEmailDetail, useEmailAttachments } from "@/hooks/useMicrosoft";
+import { fetchMessageAttachmentBlob } from "@/lib/outlookEmailMedia";
 import { toast } from "sonner";
 
 export type AccountProvider = "microsoft" | "google" | "imap";
@@ -558,6 +559,80 @@ export function useRoutedEmailDetail(emailId: string | null) {
   if (ref.provider === "outlook") return { ...linkedOutlook, accountRef: ref };
   if (ref.provider === "gmail") return { ...gmail, accountRef: ref };
   return { ...primary, accountRef: ref };
+}
+
+// ─── Adjuntos ruteados por cuenta ─────────────────────────────────────────────
+
+export interface EmailAttachmentMeta {
+  id: string;
+  name: string;
+  contentType: string;
+  size: number;
+  isInline?: boolean;
+  contentId?: string;
+  "@odata.type"?: string;
+}
+
+/** Lista de adjuntos de un correo, ruteada por prefijo de ID (principal, Outlook o Gmail). */
+export function useRoutedEmailAttachments(emailId: string | null) {
+  const ref = parseEmailAccountRef(emailId);
+  const primary = useEmailAttachments(ref.provider === "primary" ? (emailId ?? undefined) : undefined);
+  const linkedOutlook = useQuery({
+    queryKey: ["linked-outlook-attachments", ref.accountId, emailId],
+    queryFn: async (): Promise<EmailAttachmentMeta[]> => {
+      const { data, error } = await supabase.functions.invoke("outlook-account-api", {
+        body: { action: "email-attachments", params: { accountId: ref.accountId, emailId } },
+      });
+      if (error || data?.error) return [];
+      return (data?.value ?? []) as EmailAttachmentMeta[];
+    },
+    enabled: ref.provider === "outlook" && !!emailId,
+    staleTime: 5 * 60_000,
+  });
+  const gmail = useQuery({
+    queryKey: ["gmail-attachments", ref.accountId, emailId],
+    queryFn: async (): Promise<EmailAttachmentMeta[]> => {
+      const { data, error } = await supabase.functions.invoke("google-api", {
+        body: { action: "gmail-attachments", params: { accountId: ref.accountId, emailId } },
+      });
+      if (error || data?.error) return [];
+      return (data?.value ?? []) as EmailAttachmentMeta[];
+    },
+    enabled: ref.provider === "gmail" && !!emailId,
+    staleTime: 5 * 60_000,
+  });
+  if (ref.provider === "outlook") return linkedOutlook;
+  if (ref.provider === "gmail") return gmail;
+  return primary as unknown as typeof linkedOutlook;
+}
+
+function base64ToBlob(b64: string, contentType: string): Blob {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type: contentType || "application/octet-stream" });
+}
+
+/** Descarga los bytes de un adjunto, ruteando por prefijo de ID. Devuelve un Blob. */
+export async function fetchRoutedAttachmentBlob(
+  emailId: string,
+  att: EmailAttachmentMeta,
+): Promise<{ blob: Blob; name: string; contentType: string }> {
+  const ref = parseEmailAccountRef(emailId);
+  if (ref.provider === "primary") {
+    const r = await fetchMessageAttachmentBlob(emailId, att.id);
+    return { blob: r.blob, name: att.name || r.name || "adjunto", contentType: r.contentType || att.contentType };
+  }
+  const fn = ref.provider === "outlook" ? "outlook-account-api" : "google-api";
+  const actionName = ref.provider === "outlook" ? "attachment-content" : "gmail-attachment-content";
+  const { data, error } = await supabase.functions.invoke(fn, {
+    body: { action: actionName, params: { accountId: ref.accountId, emailId, attachmentId: att.id, name: att.name, contentType: att.contentType } },
+  });
+  if (error || data?.error || !data?.contentBytes) {
+    throw new Error(data?.error || "No se pudo descargar el adjunto.");
+  }
+  const contentType = data.contentType || att.contentType || "application/octet-stream";
+  return { blob: base64ToBlob(data.contentBytes, contentType), name: data.name || att.name || "adjunto", contentType };
 }
 
 export function useMarkGmailRead() {

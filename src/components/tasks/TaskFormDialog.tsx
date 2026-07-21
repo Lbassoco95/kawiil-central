@@ -38,11 +38,15 @@ interface Props {
   defaultDescription?: string;
   defaultDueDate?: string;
   defaultPriority?: string;
+  /** Origen: correo desde el que se crea la tarea (para vincularla y mostrarla como relacionada). */
+  sourceEmailId?: string;
+  sourceEmailSubject?: string;
+  sourceEmailFrom?: string;
   /** Callback tras crear la tarea con éxito (además de cerrar el diálogo). */
   onCreated?: () => void;
 }
 
-export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultClientId, defaultArea, defaultPhaseKey, defaultTitle, defaultDescription, defaultDueDate, defaultPriority, onCreated }: Props) {
+export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultClientId, defaultArea, defaultPhaseKey, defaultTitle, defaultDescription, defaultDueDate, defaultPriority, sourceEmailId, sourceEmailSubject, sourceEmailFrom, onCreated }: Props) {
   const { user } = useAuth();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -150,6 +154,9 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
           isRecurring && dueDate
             ? calculateNextOccurrenceDate(dueDate, recurrencePattern)
             : undefined,
+        source_email_id: sourceEmailId || undefined,
+        source_email_subject: sourceEmailSubject || undefined,
+        source_email_from: sourceEmailFrom || undefined,
       },
       {
         onSuccess: () => {

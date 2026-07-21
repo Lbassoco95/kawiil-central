@@ -1,7 +1,9 @@
 import { useMemo } from "react";
+import { Link } from "react-router-dom";
 import { useEmailLabelAssignments } from "@/hooks/useMicrosoft";
 import { useOutlookEmails } from "@/hooks/useMicrosoft";
 import { useRoutedEmailDetail } from "@/hooks/useLinkedAccounts";
+import { useTasksBySourceEmail } from "@/hooks/useTasks";
 import { inferEmailChips, emailListTimestamp, formatEmailDate } from "@/lib/emailChips";
 import { cn } from "@/lib/utils";
 import { Sparkles, Mail, CheckSquare, Link2, Filter, Tag } from "lucide-react";
@@ -43,6 +45,7 @@ export function MailContactPanel({ emailId, onAskAI, onCreateTask, onCreateRule 
   // Detalle ruteado por prefijo de ID: funciona con la cuenta principal Y las vinculadas.
   const { data: emailDetail } = useRoutedEmailDetail(emailId);
   const { data: labelAssignments = [] } = useEmailLabelAssignments(emailId);
+  const { data: relatedTasks = [] } = useTasksBySourceEmail(emailId);
 
   const senderName = (emailDetail as any)?.from?.emailAddress?.name || "";
   const senderEmail = (emailDetail as any)?.from?.emailAddress?.address || "";
@@ -210,12 +213,45 @@ export function MailContactPanel({ emailId, onAskAI, onCreateTask, onCreateRule 
           </div>
         )}
 
-        {/* Tasks placeholder */}
+        {/* Tareas relacionadas — creadas desde este correo */}
         <div className="px-5 py-3.5 border-b border-border/30">
           <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2.5 flex items-center gap-1.5">
             <CheckSquare className="w-[11px] h-[11px]" /> Tareas relacionadas
+            {relatedTasks.length > 0 && (
+              <span className="text-muted-foreground/60 font-medium">· {relatedTasks.length}</span>
+            )}
           </p>
-          <p className="text-[12px] text-muted-foreground/50 italic">Sin tareas vinculadas</p>
+          {relatedTasks.length === 0 ? (
+            <p className="text-[12px] text-muted-foreground/50 italic">Sin tareas vinculadas</p>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              {relatedTasks.map((t) => (
+                <Link
+                  key={t.id}
+                  to={`/tareas?task=${t.id}`}
+                  className="flex items-start gap-2 py-1 group"
+                >
+                  <span className={cn(
+                    "w-1.5 h-1.5 rounded-full mt-1.5 shrink-0",
+                    t.status === "completed" || t.status === "completado" ? "bg-emerald-500" : "bg-primary",
+                  )} />
+                  <span className="flex-1 min-w-0">
+                    <span className={cn(
+                      "block text-[12px] leading-snug truncate group-hover:text-primary transition-colors",
+                      t.status === "completed" || t.status === "completado" ? "line-through text-muted-foreground/60" : "text-foreground",
+                    )}>
+                      {t.title}
+                    </span>
+                    {t.due_date && (
+                      <span className="block text-[10.5px] text-muted-foreground">
+                        Vence {formatEmailDate(t.due_date)}
+                      </span>
+                    )}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Context */}
