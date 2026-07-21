@@ -188,13 +188,14 @@ export function CalendarKawiilCard({
 
   // Tabs + cuerpo reutilizables (en la tarjeta angosta y en el diálogo ancho).
   const renderTabs = () => (
-    <div className="flex items-center gap-1 border-b border-sky-200/40 px-3 pt-2 dark:border-sky-900/30">
+    <div className="flex items-center gap-1 overflow-x-auto border-b border-sky-200/40 px-3 pt-2 dark:border-sky-900/30 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {TAB_DEFS.map((t) => {
         const active = tab === t.id;
         const Icon = t.icon;
+        const isConflicts = t.id === "conflicts";
         const count = t.id === "highlights"
           ? summary?.highlights.length ?? 0
-          : t.id === "conflicts"
+          : isConflicts
             ? summary?.conflicts.length ?? 0
             : 0;
         return (
@@ -203,16 +204,21 @@ export function CalendarKawiilCard({
             type="button"
             onClick={() => setTab(t.id)}
             className={cn(
-              "flex items-center gap-1.5 rounded-t-md border-b-2 px-2 py-1.5 text-[11px] font-medium transition-colors",
+              "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-t-md border-b-2 px-2 py-1.5 text-[11px] font-medium transition-colors",
               active
                 ? "border-sky-500 text-sky-700 dark:text-sky-300"
                 : "border-transparent text-muted-foreground hover:text-foreground",
             )}
           >
-            <Icon className="h-3 w-3" />
+            <Icon className="h-3 w-3 shrink-0" />
             {t.label}
             {count > 0 && (
-              <span className="ml-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-sky-100 px-1 text-[9px] font-semibold text-sky-700 dark:bg-sky-900/40 dark:text-sky-300">
+              <span className={cn(
+                "ml-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[9px] font-semibold",
+                isConflicts
+                  ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+                  : "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300",
+              )}>
                 {count}
               </span>
             )}
@@ -325,11 +331,13 @@ export function CalendarKawiilCard({
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-0.5 shrink-0">
           {showConflictBadge && (
-            <span className="inline-flex items-center gap-1 rounded-full border border-amber-300/60 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:border-amber-800/40 dark:bg-amber-950/30 dark:text-amber-300">
-              <AlertTriangle className="h-3 w-3" />
-              {conflictsCount} conflicto{conflictsCount === 1 ? "" : "s"}
+            <span
+              className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-amber-100 px-1 text-[10px] font-bold text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
+              title={`${conflictsCount} conflicto${conflictsCount === 1 ? "" : "s"}`}
+            >
+              {conflictsCount}
             </span>
           )}
           <Button
