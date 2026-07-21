@@ -37,26 +37,18 @@ import {
   useGmailLabels,
   useGoogleConnection,
   useOutlookConnection,
-  linkedAccountColor,
   type LinkedAccount,
 } from "@/hooks/useLinkedAccounts";
+import { useAccountColor } from "@/lib/accountColors";
 import { MailAccountBadge } from "./MailAccountBadge";
 
-// Identidad de la cuenta principal de Kawiil (Microsoft 365), compartida con el
-// calendario: nombre y color se leen de los MISMOS valores de localStorage que usa
-// el calendario, para que ambos módulos muestren la cuenta de forma consistente.
-const PRIMARY_MS_COLOR = "#0099bc";
+// Nombre de la cuenta principal de Kawiil (Microsoft 365), compartido con el calendario:
+// se lee del MISMO valor de localStorage que usa el calendario. El color se resuelve con
+// useAccountColor() (BD + localStorage), consistente con todas las demás cuentas.
 function readPrimaryName(): string {
   try {
     return (typeof window !== "undefined" && window.localStorage.getItem("kawiil-cal-primary-name")) || "";
   } catch { return ""; }
-}
-function readPrimaryColor(): string {
-  try {
-    if (typeof window === "undefined") return PRIMARY_MS_COLOR;
-    const map = JSON.parse(window.localStorage.getItem("kawiil-cal-account-colors") || "{}");
-    return map["microsoft-primary"] || PRIMARY_MS_COLOR;
-  } catch { return PRIMARY_MS_COLOR; }
 }
 
 interface MailSidebarProps {
@@ -238,7 +230,8 @@ function LinkedOutlookSection({
   activeCustomFolderId?: string;
   onSelectFolder: (id: string, name: string) => void;
 }) {
-  const color = linkedAccountColor(account.email || account.id);
+  const colorForAccount = useAccountColor();
+  const color = colorForAccount(account.id);
   const label = account.display_name || account.email || "Outlook";
   const inboxId = `outlook:${account.id}:inbox`;
   const sentId = `outlook:${account.id}:sentItems`;
@@ -293,7 +286,8 @@ function LinkedGmailSection({
   activeCustomFolderId?: string;
   onSelectFolder: (id: string, name: string) => void;
 }) {
-  const color = linkedAccountColor(account.email || account.id);
+  const colorForAccount = useAccountColor();
+  const color = colorForAccount(account.id);
   const label = account.display_name || account.email || "Gmail";
   const inboxId = `gmail:${account.id}:INBOX`;
   const sentId = `gmail:${account.id}:SENT`;
@@ -345,9 +339,10 @@ export function MailSidebar({
   activeLabelId,
   onSelectLabel,
 }: MailSidebarProps) {
-  // Derive unread count from the same React Query cache that MailList uses
+  const colorForAccount = useAccountColor();
+  // Fallback: no leídos entre los correos ya cargados (por si aún no llega la lista de carpetas).
   const { data: inboxData } = useOutlookEmails("inbox");
-  const unreadCount = useMemo(() => {
+  const loadedUnread = useMemo(() => {
     return (inboxData?.pages ?? [])
       .flatMap((p) => p.emails as any[])
       .filter((e) => !e.isRead)
@@ -387,6 +382,17 @@ export function MailSidebar({
     [allFolders],
   );
 
+  // No leídos REALES de la Bandeja principal: el unreadItemCount que Graph reporta para la
+  // carpeta inbox (mismo número que la pestaña "Bandeja NN"), no solo los correos ya cargados.
+  const unreadCount = useMemo(() => {
+    const inbox = allFolders.find(
+      (f) => (f.wellKnownFolderName || "").toLowerCase() === "inbox" ||
+             f.displayName.toLowerCase().trim() === "bandeja de entrada" ||
+             f.displayName.toLowerCase().trim() === "inbox",
+    );
+    return inbox?.unreadItemCount ?? loadedUnread;
+  }, [allFolders, loadedUnread]);
+
   const filteredFolders = useMemo(() => {
     const q = folderSearch.trim().toLowerCase();
     if (!q) return customFolders;
@@ -423,7 +429,6 @@ export function MailSidebar({
   const { profile: primaryProfile } = useMicrosoftConnection();
   const primaryEmail = (primaryProfile?.mail || primaryProfile?.userPrincipalName || "") as string;
   const primaryName = readPrimaryName() || "Microsoft 365 (Kawiil)";
-  const primaryColor = readPrimaryColor();
 
   const isTabActive = (id: MailTabId) => activeTab === id && !activeCustomFolderId && activeLabelId == null;
 
@@ -474,7 +479,7 @@ export function MailSidebar({
           <div className="flex items-center gap-1.5 px-2.5 mt-1 mb-0.5">
             <MailAccountBadge
               email={primaryEmail || "K"}
-              color={primaryColor}
+              color={colorForAccount(undefined)}
               size="sm"
             />
             <p className="text-[9.5px] font-bold uppercase tracking-widest text-muted-foreground/60 truncate flex-1" title={primaryEmail}>

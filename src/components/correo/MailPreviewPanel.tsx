@@ -4,7 +4,8 @@ import { Mail, Reply, Maximize2, Loader2, Paperclip } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { useMicrosoftConnection } from "@/hooks/useMicrosoft";
-import { useRoutedEmailDetail, linkedAccountColor } from "@/hooks/useLinkedAccounts";
+import { useRoutedEmailDetail } from "@/hooks/useLinkedAccounts";
+import { useAccountColor } from "@/lib/accountColors";
 import { MailAccountBadge } from "./MailAccountBadge";
 
 interface Props {
@@ -20,6 +21,7 @@ interface Props {
 export function MailPreviewPanel({ emailId, onOpen, onReply }: Props) {
   const { data: detail, isLoading, accountRef } = useRoutedEmailDetail(emailId);
   const { profile } = useMicrosoftConnection();
+  const colorForAccount = useAccountColor();
 
   const d = detail as any;
   const senderName = d?.from?.emailAddress?.name || d?.from?.emailAddress?.address || "";
@@ -78,7 +80,7 @@ export function MailPreviewPanel({ emailId, onOpen, onReply }: Props) {
         {accountEmail && (
           <MailAccountBadge
             email={accountEmail}
-            color={linkedAccountColor(accountEmail)}
+            color={colorForAccount(accountRef.provider === "primary" ? undefined : accountRef.accountId)}
             size="sm"
           />
         )}
