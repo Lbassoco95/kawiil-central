@@ -186,6 +186,21 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
     return primary + outlook + gmail;
   }, [isUnified, foldersForCount, outlookMetaCount, gmailMetaCount]);
 
+  // Conteo del contexto ACTUAL para el badge "Bandeja" de la pestaña:
+  // Todas las cuentas → total; cuenta vinculada seleccionada → esa cuenta; principal → propio de MailTabs.
+  const contextInboxUnread = useMemo<number | undefined>(() => {
+    if (isUnified) return unifiedUnreadTotal ?? undefined;
+    if (isLinkedOutlook) {
+      const acc = (outlookMetaCount?.accounts ?? []).find(a => a.accountId === linkedAccId);
+      return acc?.unreadItemCount ?? undefined;
+    }
+    if (isLinkedGmail) {
+      const acc = (gmailMetaCount?.accounts ?? []).find(a => a.accountId === linkedAccId);
+      return acc?.unreadItemCount ?? undefined;
+    }
+    return undefined; // vista principal: MailTabs usa su propio conteo de Kawiil
+  }, [isUnified, unifiedUnreadTotal, isLinkedOutlook, isLinkedGmail, linkedAccId, outlookMetaCount, gmailMetaCount]);
+
   const allEmails = useMemo(() => {
     if (!isUnified) {
       return (data?.pages ?? []).flatMap((p) => p.emails as Record<string, unknown>[]);
@@ -317,7 +332,7 @@ const now = useMemo(() => new Date(), []);
       <MailTabs
         activeTab={activeTab}
         onSelectTab={onSelectTab}
-        inboxUnreadOverride={isUnified ? (unifiedUnreadTotal ?? undefined) : undefined}
+        inboxUnreadOverride={contextInboxUnread}
       />
 
       {/* Custom folder breadcrumb */}
@@ -407,12 +422,12 @@ const now = useMemo(() => new Date(), []);
       <div className="flex items-center gap-0 px-3 py-1.5 border-b border-border/30 shrink-0">
         {(["sinleer", "leidos", "todos"] as ReadFilter[]).map((f) => {
           const labelMap: Record<ReadFilter, string> = { sinleer: "Sin leer", leidos: "Leídos", todos: "Todos" };
-          // Vista general: total REAL sumado de todas las cuentas. Vista principal: totalCount de
-          // Graph cuando filtra unread. En otros casos, conteo entre lo cargado.
+          // "Sin leer (N)" coherente con el badge de la pestaña: total real del contexto actual
+          // (todas las cuentas o la cuenta vinculada); en la vista principal, el totalCount de Graph.
           const serverTotal = serverFilterUnread ? ((data?.pages?.[0] as any)?.totalCount ?? null) : null;
+          const loadedUnread = allEmails.filter(e => !(e.isRead as boolean)).length;
           const unreadCount = f === "sinleer"
-            ? (isUnified ? (unifiedUnreadTotal ?? allEmails.filter(e => !(e.isRead as boolean)).length)
-                         : (serverTotal ?? allEmails.filter(e => !(e.isRead as boolean)).length))
+            ? (contextInboxUnread ?? serverTotal ?? loadedUnread)
             : null;
           return (
             <button
