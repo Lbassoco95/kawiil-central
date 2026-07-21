@@ -222,14 +222,29 @@ Deno.serve(async (req) => {
 
     // ─── GMAIL EMAIL ACTIONS ───────────────────────────────────────────────
 
-    function decodeBase64Url(data: string): string {
-      try { return atob(data.replace(/-/g, "+").replace(/_/g, "/")); } catch { return ""; }
+    function decodeBase64Url(data: string, charset = "utf-8"): string {
+      try {
+        // atob da un string binario (1 char = 1 byte); hay que decodificar los bytes
+        // con el charset real o los acentos salen como mojibake ("atenciÃ³n" en vez de "atención").
+        const bin = atob(data.replace(/-/g, "+").replace(/_/g, "/"));
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        try { return new TextDecoder(charset).decode(bytes); }
+        catch { return new TextDecoder("utf-8").decode(bytes); }
+      } catch { return ""; }
+    }
+
+    /** Charset declarado en el Content-Type de la parte MIME (default utf-8). */
+    function partCharset(payload: any): string {
+      const ct = (payload?.headers || []).find((h: any) => String(h.name).toLowerCase() === "content-type")?.value || "";
+      const m = String(ct).match(/charset="?([^";\s]+)"?/i);
+      return m ? m[1].toLowerCase() : "utf-8";
     }
 
     function extractGmailBody(payload: any): { html?: string; text?: string } {
       if (!payload) return {};
-      if (payload.mimeType === "text/html" && payload.body?.data) return { html: decodeBase64Url(payload.body.data) };
-      if (payload.mimeType === "text/plain" && payload.body?.data) return { text: decodeBase64Url(payload.body.data) };
+      if (payload.mimeType === "text/html" && payload.body?.data) return { html: decodeBase64Url(payload.body.data, partCharset(payload)) };
+      if (payload.mimeType === "text/plain" && payload.body?.data) return { text: decodeBase64Url(payload.body.data, partCharset(payload)) };
       if (payload.parts) {
         let html: string | undefined, text: string | undefined;
         for (const p of payload.parts) { const r = extractGmailBody(p); if (r.html) html = r.html; if (r.text && !text) text = r.text; }
@@ -244,9 +259,32 @@ Deno.serve(async (req) => {
       return { name: "", address: raw.trim() };
     }
 
+    /** Decodifica encoded-words RFC 2047 en headers: "=?UTF-8?B?...?=" / "=?UTF-8?Q?...?=". */
+    function decodeRfc2047(value: string): string {
+      if (!value.includes("=?")) return value;
+      // Palabras codificadas adyacentes se unen sin el espacio intermedio (RFC 2047 §6.2).
+      const joined = value.replace(/(\?=)\s+(=\?)/g, "$1$2");
+      return joined.replace(/=\?([^?]+)\?([BbQq])\?([^?]*)\?=/g, (_m, charset, enc, text) => {
+        try {
+          let bin: string;
+          if (String(enc).toUpperCase() === "B") {
+            bin = atob(text);
+          } else {
+            bin = text
+              .replace(/_/g, " ")
+              .replace(/=([0-9A-Fa-f]{2})/g, (_s: string, h: string) => String.fromCharCode(parseInt(h, 16)));
+          }
+          const bytes = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i) & 0xff;
+          return new TextDecoder(String(charset).toLowerCase()).decode(bytes);
+        } catch { return text; }
+      });
+    }
+
     function normalizeGmailMsg(msg: any, accId: string, accEmail: string) {
       const hdrs: Array<{ name: string; value: string }> = msg.payload?.headers || [];
-      const hdr = (n: string) => hdrs.find((h: any) => h.name.toLowerCase() === n.toLowerCase())?.value || "";
+      const hdr = (n: string) =>
+        decodeRfc2047(hdrs.find((h: any) => h.name.toLowerCase() === n.toLowerCase())?.value || "");
       const from = parseGmailAddr(hdr("from"));
       const dateStr = hdr("date");
       const receivedDateTime = dateStr ? (() => { try { return new Date(dateStr).toISOString(); } catch { return new Date().toISOString(); } })() : new Date().toISOString();
@@ -353,7 +391,8 @@ Deno.serve(async (req) => {
       if (!res.ok) return new Response(JSON.stringify({ error: "not_found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       const msg = await res.json();
       const hdrs: Array<{ name: string; value: string }> = msg.payload?.headers || [];
-      const hdr = (n: string) => hdrs.find((h: any) => h.name.toLowerCase() === n.toLowerCase())?.value || "";
+      const hdr = (n: string) =>
+        decodeRfc2047(hdrs.find((h: any) => h.name.toLowerCase() === n.toLowerCase())?.value || "");
       const { html, text } = extractGmailBody(msg.payload);
       const normalized = normalizeGmailMsg(msg, acc.id, acc.email || "");
       return new Response(JSON.stringify({
