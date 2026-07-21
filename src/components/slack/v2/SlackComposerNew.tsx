@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useMemo, useEffect, forwardRef, useImperativeHandle } from "react";
+import { search as emojiSearch, get as emojiGet } from "node-emoji";
 
 /** API imperativa: permite que el padre (drag & drop) agregue archivos a la cola. */
 export interface SlackComposerHandle {
@@ -38,6 +39,8 @@ export const SlackComposerNew = forwardRef<SlackComposerHandle, Props>(function 
   const [text, setText] = useState("");
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
+  const [emojiQuery, setEmojiQuery] = useState<string | null>(null);
+  const [emojiIndex, setEmojiIndex] = useState(0);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const inputRef = useRef<HTMLDivElement>(null);
@@ -51,6 +54,7 @@ export const SlackComposerNew = forwardRef<SlackComposerHandle, Props>(function 
     setPendingFiles([]);
     if (inputRef.current) inputRef.current.innerText = "";
     setMentionQuery(null);
+    setEmojiQuery(null);
     setShowEmojiPicker(false);
   }, [text, pendingFiles, isSending, disabled, onSend]);
 
@@ -102,18 +106,84 @@ export const SlackComposerNew = forwardRef<SlackComposerHandle, Props>(function 
     if (raw.trim()) onTyping?.();
 
     const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0) { setMentionQuery(null); return; }
+    if (!sel || sel.rangeCount === 0) { setMentionQuery(null); setEmojiQuery(null); return; }
     const range = sel.getRangeAt(0);
-    const nodeText = range.startContainer.textContent ?? "";
+    const node = range.startContainer;
+    const nodeText = node.textContent ?? "";
     const pos = range.startOffset;
     const before = nodeText.slice(0, pos);
+
+    // @menciones
     const atIdx = before.lastIndexOf("@");
-    if (atIdx === -1) { setMentionQuery(null); return; }
-    const query = before.slice(atIdx + 1);
-    if (query.includes(" ")) { setMentionQuery(null); return; }
-    setMentionQuery(query);
-    setMentionIndex(0);
+    if (atIdx !== -1) {
+      const query = before.slice(atIdx + 1);
+      if (!query.includes(" ")) { setEmojiQuery(null); setMentionQuery(query); setMentionIndex(0); return; }
+    }
+    setMentionQuery(null);
+
+    // Auto-convertir un shortcode completo ":nombre:" recién cerrado → emoji.
+    const complete = before.match(/(?:^|\s):([a-z0-9_+-]{2,}):$/i);
+    if (complete && node.nodeType === Node.TEXT_NODE) {
+      const char = emojiGet(complete[1]);
+      if (char && char !== complete[1] && !char.startsWith(":")) {
+        const tokenLen = complete[1].length + 2; // ":" + nombre + ":"
+        const start = pos - tokenLen;
+        node.textContent = nodeText.slice(0, start) + char + nodeText.slice(pos);
+        const caret = start + char.length;
+        const r = document.createRange();
+        r.setStart(node, caret);
+        r.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(r);
+        setEmojiQuery(null);
+        setText(inputRef.current?.innerText ?? "");
+        return;
+      }
+    }
+
+    // Autocompletar emojis mientras se escribe ":palabra"
+    const colonIdx = before.lastIndexOf(":");
+    if (colonIdx !== -1) {
+      const q = before.slice(colonIdx + 1);
+      const prevOk = colonIdx === 0 || /\s/.test(before[colonIdx - 1]);
+      if (prevOk && q.length >= 2 && /^[a-z0-9_+-]+$/i.test(q)) {
+        setEmojiQuery(q); setEmojiIndex(0); return;
+      }
+    }
+    setEmojiQuery(null);
   }, [onTyping]);
+
+  const emojiSuggestions = useMemo(() => {
+    if (!emojiQuery || emojiQuery.length < 2) return [];
+    try {
+      return emojiSearch(emojiQuery).slice(0, 8);
+    } catch {
+      return [];
+    }
+  }, [emojiQuery]);
+
+  const insertEmojiSuggestion = useCallback((em: { emoji: string; name: string }) => {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0 || !inputRef.current) return;
+    const range = sel.getRangeAt(0);
+    const node = range.startContainer;
+    const offset = range.startOffset;
+    const rawText = node.textContent ?? "";
+    const colonIdx = rawText.lastIndexOf(":", offset - 1);
+    if (colonIdx !== -1 && node.nodeType === Node.TEXT_NODE) {
+      const newText = `${rawText.slice(0, colonIdx)}${em.emoji} ${rawText.slice(offset)}`;
+      node.textContent = newText;
+      const caret = colonIdx + em.emoji.length + 1;
+      const r = document.createRange();
+      r.setStart(node, caret);
+      r.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(r);
+    }
+    setEmojiQuery(null);
+    setText(inputRef.current.innerText);
+    inputRef.current.focus();
+  }, []);
 
   const suggestions = mentionQuery !== null
     ? Object.entries(userMap)
@@ -212,6 +282,17 @@ export const SlackComposerNew = forwardRef<SlackComposerHandle, Props>(function 
       }
       if (e.key === "Escape") { setMentionQuery(null); return; }
     }
+    if (emojiSuggestions.length > 0) {
+      if (e.key === "ArrowDown") { e.preventDefault(); setEmojiIndex((i) => (i + 1) % emojiSuggestions.length); return; }
+      if (e.key === "ArrowUp") { e.preventDefault(); setEmojiIndex((i) => (i - 1 + emojiSuggestions.length) % emojiSuggestions.length); return; }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        const em = emojiSuggestions[emojiIndex];
+        if (em) insertEmojiSuggestion(em);
+        return;
+      }
+      if (e.key === "Escape") { setEmojiQuery(null); return; }
+    }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -258,6 +339,22 @@ export const SlackComposerNew = forwardRef<SlackComposerHandle, Props>(function 
               </button>
             );
           })}
+        </div>
+      )}
+
+      {/* Autocompletar emojis con ":" */}
+      {emojiSuggestions.length > 0 && (
+        <div className="sl-mention-popup">
+          {emojiSuggestions.map((em, i) => (
+            <button
+              key={em.name}
+              className={`sl-mention-item${i === emojiIndex ? " active" : ""}`}
+              onMouseDown={(e) => { e.preventDefault(); insertEmojiSuggestion(em); }}
+            >
+              <span style={{ fontSize: 18, width: 22, textAlign: "center" }}>{em.emoji}</span>
+              <span className="sl-mention-name">:{em.name}:</span>
+            </button>
+          ))}
         </div>
       )}
 
