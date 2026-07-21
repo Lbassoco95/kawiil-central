@@ -249,6 +249,25 @@ export function useTaskDetail(taskId: string | undefined) {
   };
 }
 
+/** Tareas creadas desde un correo específico (para "Tareas relacionadas" en el módulo Correo). */
+export function useTasksBySourceEmail(sourceEmailId: string | null | undefined) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["tasks-by-source-email", sourceEmailId],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("tasks")
+        .select("id, title, status, priority, due_date, assigned_to")
+        .eq("source_email_id", sourceEmailId)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as Array<{ id: string; title: string; status: string; priority: string; due_date: string | null; assigned_to: string | null }>;
+    },
+    enabled: !!user && !!sourceEmailId,
+    staleTime: 30_000,
+  });
+}
+
 export function useCreateTask() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -276,6 +295,10 @@ export function useCreateTask() {
       recurrence_pattern?: string;
       recurrence_type?: string;
       next_recurrence_date?: string;
+      // Origen: correo desde el que se creó la tarea (para "Tareas relacionadas" en Correo).
+      source_email_id?: string;
+      source_email_subject?: string;
+      source_email_from?: string;
     }) => {
       const { data: profile } = await supabase
         .from("profiles")
@@ -298,7 +321,7 @@ export function useCreateTask() {
               const name = extractDropboxFilenameFromUrl(url);
               return { url, added_at: new Date().toISOString(), ...(name ? { name } : {}) };
             }) ?? [],
-        } as TablesInsert<"tasks">)
+        } as unknown as TablesInsert<"tasks">)
         .select()
         .single();
 
@@ -320,6 +343,9 @@ export function useCreateTask() {
       queryClient.invalidateQueries({ queryKey: ["assigned-steps"] });
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       queryClient.invalidateQueries({ queryKey: ["project"] });
+      if (variables.source_email_id) {
+        queryClient.invalidateQueries({ queryKey: ["tasks-by-source-email", variables.source_email_id] });
+      }
       if (variables.project_id) {
         queryClient.invalidateQueries({ queryKey: ["project-tasks", variables.project_id] });
         queryClient.invalidateQueries({ queryKey: ["compliance-tasks", variables.project_id] });

@@ -300,6 +300,45 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Lista de adjuntos de un correo vinculado (metadatos, sin bytes).
+    if (action === "email-attachments") {
+      const acc = getAccount(params?.accountId);
+      if (!acc) return jsonResp({ value: [] });
+      const token = await ensureAccessToken(supabaseAdmin, acc);
+      if (!token) return jsonResp({ value: [] });
+      const rawId = String(params?.emailId || "").replace(/^outlook:[^:]+:/, "");
+      if (!rawId) return jsonResp({ value: [] });
+      const res = await graphFetch(token,
+        `/me/messages/${encodeURIComponent(rawId)}/attachments?$select=id,name,contentType,size,isInline&$top=100`
+      );
+      if (!res.ok) return jsonResp({ value: [] });
+      const json = await res.json();
+      return jsonResp({ value: json.value ?? [] });
+    }
+
+    // Bytes de un adjunto (base64) para descargar/visualizar.
+    if (action === "attachment-content") {
+      const acc = getAccount(params?.accountId);
+      if (!acc) return jsonResp({ error: "no_account" }, 400);
+      const token = await ensureAccessToken(supabaseAdmin, acc);
+      if (!token) return jsonResp({ error: "no_valid_token" }, 400);
+      const rawId = String(params?.emailId || "").replace(/^outlook:[^:]+:/, "");
+      const attId = String(params?.attachmentId || "");
+      if (!rawId || !attId) return jsonResp({ error: "emailId y attachmentId requeridos" }, 400);
+      const res = await graphFetch(token,
+        `/me/messages/${encodeURIComponent(rawId)}/attachments/${encodeURIComponent(attId)}`
+      );
+      if (!res.ok) return jsonResp({ error: "not_found" }, 404);
+      const json = await res.json();
+      // fileAttachment trae contentBytes (base64). Los itemAttachment/reference no se soportan aquí.
+      return jsonResp({
+        name: json.name,
+        contentType: json.contentType || "application/octet-stream",
+        size: json.size,
+        contentBytes: json.contentBytes || "",
+      });
+    }
+
     if (action === "mail-folders") {
       const acc = getAccount(params?.accountId);
       if (!acc) return jsonResp({ value: [] });

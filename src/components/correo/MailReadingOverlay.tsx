@@ -1,15 +1,14 @@
 import { cn } from "@/lib/utils";
-import { ArrowLeft, Reply, Forward, Archive, Trash2, CheckSquare, Filter, Tag, FolderInput, ChevronRight, MessageSquare, CalendarPlus, Paperclip, Download, FileArchive, FileText, File } from "lucide-react";
+import { ArrowLeft, Reply, Forward, Archive, Trash2, CheckSquare, Filter, Tag, FolderInput, ChevronRight, MessageSquare, CalendarPlus, Paperclip, Download, FileArchive, FileText, File, Eye } from "lucide-react";
 import { useEmailDetail, useArchiveEmail, useDeleteEmail, useMoveEmail, useMailFolders } from "@/hooks/useMicrosoft";
-import { useLinkedOutlookEmailDetail, useGmailEmailDetail } from "@/hooks/useLinkedAccounts";
+import { useLinkedOutlookEmailDetail, useGmailEmailDetail, useRoutedEmailAttachments, fetchRoutedAttachmentBlob, type EmailAttachmentMeta } from "@/hooks/useLinkedAccounts";
 import { useResolvedEmailHtml } from "@/hooks/useResolvedEmailHtml";
-import { useEmailAttachments } from "@/hooks/useMicrosoft";
 import { MailLabelPicker } from "./MailLabelPicker";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useMemo, useState, useCallback } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { fetchMessageAttachmentBlob, inferMimeFromFileName, type OutlookAttachment } from "@/lib/outlookEmailMedia";
+import { inferMimeFromFileName, type OutlookAttachment } from "@/lib/outlookEmailMedia";
 import { toast } from "sonner";
 
 interface EmailShape {
@@ -39,19 +38,26 @@ function AttachmentChip({ messageId, att }: { messageId: string; att: OutlookAtt
 
   const isArchive = /\.(zip|rar|7z|tar|gz)$/i.test(att.name || "");
   const Icon = isArchive ? FileArchive : /\.(pdf|docx?|xlsx?|pptx?|csv|txt)$/i.test(att.name || "") ? FileText : File;
+  // Tipos que el navegador puede mostrar directo (PDF e imágenes) → botón "Ver".
+  const isViewable = /\.(pdf|png|jpe?g|gif|webp|svg|bmp)$/i.test(att.name || "");
+
+  const resolveBlobUrl = useCallback(async () => {
+    // fetchRoutedAttachmentBlob rutea por prefijo del ID (principal / outlook / gmail).
+    const r = await fetchRoutedAttachmentBlob(messageId, att as unknown as EmailAttachmentMeta);
+    const fromApi = (r.contentType || "").toLowerCase();
+    const inferred = inferMimeFromFileName(att.name || r.name || "");
+    const mime = fromApi && fromApi !== "application/octet-stream" ? r.contentType : inferred || "application/octet-stream";
+    const blob = new Blob([r.blob], { type: mime });
+    return { url: URL.createObjectURL(blob), name: att.name || r.name || "adjunto" };
+  }, [messageId, att]);
 
   const download = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await fetchMessageAttachmentBlob(messageId, att.id);
-      const fromApi = (r.contentType || "").toLowerCase();
-      const inferred = inferMimeFromFileName(att.name || r.name || "");
-      const mime = fromApi && fromApi !== "application/octet-stream" ? r.contentType : inferred || "application/octet-stream";
-      const blob = new Blob([r.blob], { type: mime });
-      const url = URL.createObjectURL(blob);
+      const { url, name } = await resolveBlobUrl();
       const a = document.createElement("a");
       a.href = url;
-      a.download = att.name || r.name || "adjunto";
+      a.download = name;
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 5000);
     } catch (e) {
@@ -59,26 +65,53 @@ function AttachmentChip({ messageId, att }: { messageId: string; att: OutlookAtt
     } finally {
       setLoading(false);
     }
-  }, [messageId, att.id, att.name, att.contentType]);
+  }, [resolveBlobUrl]);
+
+  const view = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { url } = await resolveBlobUrl();
+      window.open(url, "_blank", "noopener,noreferrer");
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (e) {
+      toast.error("No se pudo abrir el adjunto: " + (e instanceof Error ? e.message : "Error desconocido"));
+    } finally {
+      setLoading(false);
+    }
+  }, [resolveBlobUrl]);
 
   const sizeLabel = att.size > 1024 * 1024
     ? `${(att.size / 1024 / 1024).toFixed(1)} MB`
     : `${Math.round(att.size / 1024)} KB`;
 
   return (
-    <button
-      type="button"
-      onClick={download}
-      disabled={loading}
-      className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border/60 bg-muted/30 hover:bg-accent hover:border-border transition-colors text-left min-w-0 max-w-[240px] disabled:opacity-60"
-    >
+    <div className="flex items-center gap-1 px-3 py-2 rounded-lg border border-border/60 bg-muted/30 hover:border-border transition-colors min-w-0 max-w-[260px]">
       <Icon className="w-4 h-4 text-muted-foreground shrink-0" />
       <span className="flex-1 min-w-0">
         <span className="block text-[12px] font-medium truncate">{att.name || "adjunto"}</span>
         <span className="block text-[10.5px] text-muted-foreground">{sizeLabel}</span>
       </span>
-      <Download className={cn("w-3.5 h-3.5 text-muted-foreground shrink-0", loading && "animate-bounce")} />
-    </button>
+      {isViewable && (
+        <button
+          type="button"
+          onClick={view}
+          disabled={loading}
+          title="Ver"
+          className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-accent text-muted-foreground hover:text-foreground disabled:opacity-60 shrink-0"
+        >
+          <Eye className="w-3.5 h-3.5" />
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={download}
+        disabled={loading}
+        title="Descargar"
+        className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-accent text-muted-foreground hover:text-foreground disabled:opacity-60 shrink-0"
+      >
+        <Download className={cn("w-3.5 h-3.5", loading && "animate-bounce")} />
+      </button>
+    </div>
   );
 }
 
@@ -108,7 +141,7 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onForwar
     isLinkedGmailEmail ? linkedGmailLoading :
     primaryLoading;
 
-  const { data: attachments = [] } = useEmailAttachments(isPrimaryEmail ? (emailId ?? undefined) : undefined);
+  const { data: attachments = [] } = useRoutedEmailAttachments(emailId ?? null);
   const { html: resolvedHtml } = useResolvedEmailHtml(
     emailId ?? undefined,
     (emailDetail as any)?.body?.contentType === "html" ? (emailDetail as any)?.body?.content : undefined,

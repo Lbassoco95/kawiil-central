@@ -313,6 +313,9 @@ ${detail.body?.contentType === "html" ? origBody : `<pre style="font-family:inhe
       <TaskFormDialog
         open={!!taskEmail}
         onOpenChange={(o) => { if (!o) setTaskEmail(null); }}
+        sourceEmailId={taskEmail?.id || undefined}
+        sourceEmailSubject={taskEmail?.subject || undefined}
+        sourceEmailFrom={taskEmail?.from?.emailAddress?.address || taskEmail?.from?.emailAddress?.name || undefined}
         defaultTitle={taskEmail?.subject || ""}
         defaultDescription={(() => {
           if (!taskEmail) return "";

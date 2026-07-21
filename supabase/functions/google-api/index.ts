@@ -414,6 +414,50 @@ Deno.serve(async (req) => {
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    // Lista de adjuntos de un correo de Gmail (recorre las partes MIME con filename).
+    if (action === "gmail-attachments") {
+      const acc = accountId ? accounts.find(a => a.id === accountId) : accounts[0];
+      if (!acc) return new Response(JSON.stringify({ value: [] }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const token = await ensureAccessToken(supabaseAdmin, acc);
+      if (!token) return new Response(JSON.stringify({ value: [] }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const rawId = String(params?.emailId || "").replace(/^gmail:[^:]+:/, "");
+      const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${rawId}?format=full`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) return new Response(JSON.stringify({ value: [] }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const msg = await res.json();
+      const out: any[] = [];
+      const walk = (p: any) => {
+        if (!p) return;
+        if (p.filename && p.filename.length > 0 && p.body?.attachmentId) {
+          out.push({ id: p.body.attachmentId, name: p.filename, contentType: p.mimeType || "application/octet-stream", size: p.body.size ?? 0, isInline: false });
+        }
+        (p.parts || []).forEach(walk);
+      };
+      walk(msg.payload);
+      return new Response(JSON.stringify({ value: out }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // Bytes de un adjunto de Gmail (base64) para descargar/visualizar.
+    if (action === "gmail-attachment-content") {
+      const acc = accountId ? accounts.find(a => a.id === accountId) : accounts[0];
+      if (!acc) return new Response(JSON.stringify({ error: "no_account" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const token = await ensureAccessToken(supabaseAdmin, acc);
+      if (!token) return new Response(JSON.stringify({ error: "no_valid_token" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const rawId = String(params?.emailId || "").replace(/^gmail:[^:]+:/, "");
+      const attId = String(params?.attachmentId || "");
+      if (!rawId || !attId) return new Response(JSON.stringify({ error: "emailId y attachmentId requeridos" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${rawId}/attachments/${attId}`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) return new Response(JSON.stringify({ error: "not_found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const json = await res.json();
+      // Gmail devuelve base64url; convertir a base64 estándar para el frontend.
+      const b64 = String(json.data || "").replace(/-/g, "+").replace(/_/g, "/");
+      return new Response(JSON.stringify({
+        contentType: String(params?.contentType || "application/octet-stream"),
+        name: String(params?.name || "adjunto"),
+        size: json.size,
+        contentBytes: b64,
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     if (action === "gmail-labels") {
       const acc = accountId ? accounts.find(a => a.id === accountId) : accounts[0];
       if (!acc) return new Response(JSON.stringify({ value: [] }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
