@@ -243,14 +243,23 @@ export function CalendarView({
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [showKawiilTasks, setShowKawiilTasks] = useState(true);
-  const [rightPanelOpen, setRightPanelOpen] = useState(true);
+  const [rightPanelOpen, setRightPanelOpen] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    try {
+      const raw = window.localStorage.getItem("kawiil-cal-right-panel-open");
+      return raw == null ? true : raw === "1";
+    } catch { return true; }
+  });
+  useEffect(() => {
+    try { window.localStorage.setItem("kawiil-cal-right-panel-open", rightPanelOpen ? "1" : "0"); } catch { /* ignore */ }
+  }, [rightPanelOpen]);
   // Cuando el panel derecho está abierto en escritorio, corre el botón flotante
-  // de IA a la izquierda del panel para que no lo tape. Se limpia al salir.
+  // de IA a la izquierda del panel (ancho 320px + margen) para que no lo tape.
   useEffect(() => {
     if (typeof document === "undefined") return;
     const root = document.documentElement;
     if (rightPanelOpen && !isMobile) {
-      root.style.setProperty("--kawiil-fab-right", "280px");
+      root.style.setProperty("--kawiil-fab-right", "340px");
     } else {
       root.style.removeProperty("--kawiil-fab-right");
     }
@@ -1430,9 +1439,9 @@ export function CalendarView({
         {/* Right panel — collapsible */}
         <div className={cn(
           "shrink-0 border-l border-border/30 flex flex-col overflow-hidden transition-all duration-200",
-          rightPanelOpen && !isMobile ? "w-[260px]" : "w-0"
+          rightPanelOpen && !isMobile ? "w-[320px]" : "w-0"
         )}>
-          <div className="w-[260px] flex-1 overflow-y-auto">
+          <div className="w-[320px] flex-1 overflow-y-auto">
             <div className="p-3 pb-24 flex flex-col gap-4">
               {/* Mini calendar */}
               <div className="order-2 border-t border-border/30 pt-3">
