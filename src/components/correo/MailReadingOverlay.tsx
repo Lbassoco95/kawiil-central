@@ -354,7 +354,21 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onForwar
               );
             })()}
           </>
-        ) : null}
+        ) : (
+          <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-6">
+            <span className="text-3xl">⚠️</span>
+            <p className="text-[14px] font-semibold text-foreground">No se pudo abrir este correo</p>
+            <p className="text-[12.5px] text-muted-foreground max-w-sm">
+              El contenido no se pudo cargar. Vuelve a la lista e inténtalo de nuevo, o abre otro correo.
+            </p>
+            <button
+              onClick={onClose}
+              className="mt-1 h-8 px-4 rounded-full bg-primary text-primary-foreground text-[12px] font-semibold hover:bg-primary/90 transition-colors"
+            >
+              ← Volver a la lista
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
