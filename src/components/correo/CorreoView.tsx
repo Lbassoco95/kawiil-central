@@ -10,7 +10,7 @@ import { ComposeEmailDialog } from "@/components/microsoft/ComposeEmailDialog";
 import { CreateMailRuleDialog } from "@/components/microsoft/CreateMailRuleDialog";
 import { SendEmailToSlackDialog } from "@/components/microsoft/SendEmailToSlackDialog";
 import { CreateEventFromEmailDialog } from "./CreateEventFromEmailDialog";
-import { MailTaskDrawer } from "./MailTaskDrawer";
+import { TaskFormDialog } from "@/components/tasks/TaskFormDialog";
 import { MailTranslateDrawer } from "./MailTranslateDrawer";
 import { type MailTabId } from "./MailTabs";
 import { useEmailDetail, useMailFolders, useMarkEmailRead } from "@/hooks/useMicrosoft";
@@ -310,10 +310,22 @@ ${detail.body?.contentType === "html" ? origBody : `<pre style="font-family:inhe
         senderName={ruleSenderName}
         folders={folders}
       />
-      <MailTaskDrawer
+      <TaskFormDialog
         open={!!taskEmail}
-        email={taskEmail}
-        onClose={() => setTaskEmail(null)}
+        onOpenChange={(o) => { if (!o) setTaskEmail(null); }}
+        defaultTitle={taskEmail?.subject || ""}
+        defaultDescription={(() => {
+          if (!taskEmail) return "";
+          const from = taskEmail.from?.emailAddress;
+          const remitente = from?.name || from?.address || "";
+          const snippet = (taskEmail.bodyPreview || "").slice(0, 500).trim();
+          const partes = [
+            remitente ? `Correo de: ${remitente}${from?.address && from?.address !== remitente ? ` <${from.address}>` : ""}` : "",
+            taskEmail.subject ? `Asunto: ${taskEmail.subject}` : "",
+            snippet ? `\n${snippet}` : "",
+          ].filter(Boolean);
+          return partes.join("\n");
+        })()}
       />
       <MailTranslateDrawer
         open={!!translateEmail}
