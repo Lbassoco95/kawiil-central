@@ -57,12 +57,18 @@ export function PlaceAutocompleteInput({ value, onChange, placeholder, className
   const showList = open && debounced.trim().length >= 3 && predictions.length > 0;
   // Diagnóstico: solo cuando hay término suficiente, no está cargando, no hay
   // sugerencias y el servicio reportó un error.
-  const showError = open && debounced.trim().length >= 3 && !isFetching && predictions.length === 0 && !!placesError;
-  const errorLabel = placesError === "maps_not_configured"
+  const enoughChars = open && debounced.trim().length >= 3;
+  const showSearching = enoughChars && isFetching;
+  // Siempre mostramos un texto cuando terminó la búsqueda y no hubo resultados,
+  // con el motivo si el servicio lo reportó (diagnóstico).
+  const showEmpty = enoughChars && !isFetching && predictions.length === 0;
+  const emptyLabel = placesError === "maps_not_configured"
     ? "Google Maps no está configurado en el servidor."
     : placesError === "places_not_enabled"
       ? "Places API no está habilitada o la key no la permite."
-      : `Sin sugerencias (${placesError}${data?.detail ? `: ${data.detail}` : ""}).`;
+      : placesError
+        ? `Sin sugerencias (${placesError}${data?.detail ? `: ${data.detail}` : ""}).`
+        : `Sin resultados para «${debounced.trim()}».`;
 
   return (
     <div ref={containerRef} className={cn("relative", className)}>
@@ -77,8 +83,11 @@ export function PlaceAutocompleteInput({ value, onChange, placeholder, className
         />
         {isFetching && <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />}
       </div>
-      {showError && (
-        <p className="mt-1 text-[11px] text-muted-foreground">{errorLabel}</p>
+      {showSearching && (
+        <p className="mt-1 text-[11px] text-muted-foreground">Buscando lugares…</p>
+      )}
+      {showEmpty && (
+        <p className="mt-1 text-[11px] text-muted-foreground">{emptyLabel}</p>
       )}
       {showList && (
         <ul className="absolute z-50 mt-1 w-full max-h-60 overflow-y-auto rounded-md border border-border bg-popover shadow-lg py-1 text-sm">
