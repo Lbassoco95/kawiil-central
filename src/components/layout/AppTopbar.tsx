@@ -35,7 +35,7 @@ export function AppTopbar({ isFullWidth = false }: AppTopbarProps) {
     >
       <div
         className={cn(
-          "flex items-center gap-4",
+          "flex items-center gap-2 overflow-hidden sm:gap-3 xl:gap-4",
           isFullWidth ? "w-full max-w-none px-0" : "max-w-7xl mx-auto",
         )}
       >
@@ -49,7 +49,7 @@ export function AppTopbar({ isFullWidth = false }: AppTopbarProps) {
             <Menu className="h-4 w-4" />
           </button>
         )}
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 basis-0">
           <h1 className="truncate text-[15px] font-semibold leading-tight text-foreground sm:text-base md:text-[17px]">
             {greeting},{" "}
             <span className="text-primary">{firstName}</span>{" "}
@@ -68,33 +68,37 @@ export function AppTopbar({ isFullWidth = false }: AppTopbarProps) {
           </h1>
         </div>
 
-        <button
-          type="button"
-          onClick={openCommandPalette}
-          aria-label="Abrir buscador global"
-          className={cn(
-            "group relative inline-flex items-center gap-2 rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground transition hover:bg-muted",
-            isMobile ? "h-9 w-9 justify-center px-0" : "min-w-[260px] justify-between",
-          )}
-        >
-          <span className="flex items-center gap-2">
-            <Search className="h-3.5 w-3.5" />
-            {!isMobile && <span>Buscar en Kawiil…</span>}
-          </span>
-          {!isMobile && (
-            <kbd className="ml-2 rounded border border-border/60 bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-              {modKey}K
-            </kbd>
-          )}
-        </button>
+        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+          <button
+            type="button"
+            onClick={openCommandPalette}
+            aria-label="Abrir buscador global"
+            className={cn(
+              "group relative inline-flex shrink-0 items-center gap-2 rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground transition hover:bg-muted",
+              isMobile
+                ? "h-9 w-9 justify-center px-0"
+                : "min-w-[180px] justify-between lg:min-w-[220px] xl:min-w-[260px]",
+            )}
+          >
+            <span className="flex items-center gap-2">
+              <Search className="h-3.5 w-3.5" />
+              {!isMobile && <span>Buscar en Kawiil…</span>}
+            </span>
+            {!isMobile && (
+              <kbd className="ml-2 hidden rounded border border-border/60 bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground lg:inline">
+                {modKey}K
+              </kbd>
+            )}
+          </button>
 
-        <JornadaTopbarWidget />
+          <JornadaTopbarWidget />
 
-        <TooltipProvider delayDuration={150}>
-          <RealtimeStatusIndicator />
-        </TooltipProvider>
+          <TooltipProvider delayDuration={150}>
+            <RealtimeStatusIndicator />
+          </TooltipProvider>
 
-        <TopbarWidgets />
+          <TopbarWidgets />
+        </div>
       </div>
     </div>
   );
