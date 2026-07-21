@@ -159,10 +159,10 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
     if (!isUnified) {
       return (data?.pages ?? []).flatMap((p) => p.emails as Record<string, unknown>[]);
     }
-    // Bandeja general: primaria (etiquetada con su cuenta) + Outlook vinculadas + Gmail, por fecha desc.
+    // Bandeja general: principal Kawiil (etiquetada con su cuenta) + Outlook vinculadas + Gmail, por fecha desc.
     const primary = (primaryQuery.data?.pages ?? [])
       .flatMap((p) => p.emails as Record<string, unknown>[])
-      .map((e) => ({ ...e, _accountEmail: primaryAccountEmail || undefined, _source: "primary" }));
+      .map((e) => ({ ...e, _accountEmail: primaryAccountEmail || "Kawiil", _source: "primary" }));
     const linked = (linkedOutlookQuery.data?.pages ?? []).flatMap((p) => p.emails);
     const gmail = (linkedGmailQuery.data?.pages ?? []).flatMap((p) => p.emails);
     return [...primary, ...linked, ...gmail].sort((a, b) =>

@@ -27,6 +27,7 @@ import {
   useChildFolders,
   useEmailUserLabels,
   useCreateEmailLabel,
+  useMicrosoftConnection,
 } from "@/hooks/useMicrosoft";
 import { getLabelStyle, LABEL_COLORS } from "./MailLabelPicker";
 import {
@@ -399,6 +400,11 @@ export function MailSidebar({
   const gmailLinked = linkedAccounts.filter(a => a.provider === "google" && a.mail_enabled);
   const hasLinkedAccounts = outlookLinked.length > 0 || gmailLinked.length > 0;
 
+  // Cuenta principal de Kawiil (buzón que se dio de alta primero, vive en microsoft_tokens)
+  const { profile: primaryProfile } = useMicrosoftConnection();
+  const primaryEmail = (primaryProfile?.mail || primaryProfile?.userPrincipalName || "") as string;
+  const primaryName = (primaryProfile?.displayName as string) || primaryEmail || "Kawiil";
+
   const isTabActive = (id: MailTabId) => activeTab === id && !activeCustomFolderId && activeLabelId == null;
 
   return (
@@ -443,6 +449,19 @@ export function MailSidebar({
             </button>
           );
         })()}
+        {/* Encabezado de la cuenta principal de Kawiil — la separa visualmente de las vinculadas */}
+        {hasLinkedAccounts && (
+          <div className="flex items-center gap-1.5 px-2.5 mt-1 mb-0.5">
+            <MailAccountBadge
+              email={primaryEmail || "K"}
+              color={linkedAccountColor(primaryEmail || "kawiil")}
+              size="sm"
+            />
+            <p className="text-[9.5px] font-bold uppercase tracking-widest text-muted-foreground/60 truncate flex-1" title={primaryEmail}>
+              {primaryName}
+            </p>
+          </div>
+        )}
         {NAV_ITEMS.map((item) => {
           const active = isTabActive(item.id);
           const badge = item.id === "inbox" && unreadCount > 0 ? unreadCount : null;
