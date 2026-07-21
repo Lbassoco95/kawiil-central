@@ -66,7 +66,7 @@ export interface TravelResult {
 }
 
 /** Intenta leer el cuerpo JSON del error de una edge function (FunctionsHttpError). */
-async function readErrorBody(error: unknown): Promise<{ error?: string; message?: string } | null> {
+async function readErrorBody(error: unknown): Promise<{ error?: string; message?: string; detail?: string } | null> {
   const ctx = (error as { context?: unknown })?.context;
   if (ctx instanceof Response) {
     try {
@@ -76,7 +76,7 @@ async function readErrorBody(error: unknown): Promise<{ error?: string; message?
     }
   }
   // A veces el contexto ya viene como objeto.
-  if (ctx && typeof ctx === "object") return ctx as { error?: string; message?: string };
+  if (ctx && typeof ctx === "object") return ctx as { error?: string; message?: string; detail?: string };
   return null;
 }
 
@@ -91,7 +91,8 @@ export function useTravelTime() {
         if (body?.error === "maps_not_configured") {
           throw new Error(body.message || "Falta configurar Google Maps en el servidor.");
         }
-        if (body?.message) throw new Error(body.message);
+        // Incluye el detalle exacto de Google (p. ej. REQUEST_DENIED: motivo) para diagnóstico.
+        if (body?.message) throw new Error(body.detail ? `${body.message} — ${body.detail}` : body.message);
         if (body?.error) throw new Error(body.error);
 
         const msg = String(error.message || error);

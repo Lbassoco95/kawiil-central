@@ -65,7 +65,7 @@ export function PlaceAutocompleteInput({ value, onChange, placeholder, className
   const emptyLabel = placesError === "maps_not_configured"
     ? "Google Maps no está configurado en el servidor."
     : placesError === "places_not_enabled"
-      ? "Places API no está habilitada o la key no la permite."
+      ? `Places API no disponible${data?.detail ? ` — ${data.detail}` : " (habilita Places API New y permítela en la key)"}.`
       : placesError
         ? `Sin sugerencias (${placesError}${data?.detail ? `: ${data.detail}` : ""}).`
         : `Sin resultados para «${debounced.trim()}».`;
