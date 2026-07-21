@@ -1,3 +1,4 @@
+// Redeploy: recarga el secret GOOGLE_MAPS_API_KEY tras rotar la key (2026-07).
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
