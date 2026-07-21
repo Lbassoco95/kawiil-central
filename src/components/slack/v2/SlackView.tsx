@@ -426,9 +426,12 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
           void qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", uid] });
 
           if (notifChannel === channelId) {
-            // Canal abierto: mostrar mensaje y marcar leído
+            // Canal abierto: mostrar mensaje y marcar leído. Invalida los badges
+            // DESPUÉS de marcar (si no, el refetch veía aún la notificación sin leer).
             void historyQuery.refetch();
-            void markSlackChannelNotificationsRead(uid, channelId);
+            void markSlackChannelNotificationsRead(uid, channelId).then(() => {
+              void qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", uid] });
+            });
           } else {
             // Otro canal: pre-cargar en background para que esté listo al hacer clic
             void qc.prefetchInfiniteQuery({
@@ -619,6 +622,22 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
 
   // ─── Badges no leídos ───────────────────────────────────
   const unreadBadges = useSlackChannelNotificationBadges(user?.id);
+
+  // Marca como leído el canal que estás VIENDO en cuanto tenga badge, sin depender
+  // del historial de Slack (que puede tardar/fallar). Así abrir la conversación
+  // limpia la notificación de forma confiable. Solo afecta al canal seleccionado.
+  const lastBadgeMarkRef = useRef<string>("");
+  useEffect(() => {
+    if (!user?.id || !selectedChannel) return;
+    const count = unreadBadges[selectedChannel] ?? 0;
+    if (count <= 0) return;
+    const key = `${selectedChannel}:${count}`;
+    if (lastBadgeMarkRef.current === key) return; // ya lo intentamos para este conteo
+    lastBadgeMarkRef.current = key;
+    void markSlackChannelNotificationsRead(user.id, selectedChannel)
+      .then(() => qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", user.id] }))
+      .catch(() => { /* best-effort */ });
+  }, [selectedChannel, unreadBadges, user?.id, qc]);
 
   // Canales con badge para sincronizar contra Slack (máx 18, priorizando mayor conteo)
   const syncChannelIds = useMemo(() => {
