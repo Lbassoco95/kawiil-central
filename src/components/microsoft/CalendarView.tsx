@@ -103,6 +103,25 @@ function accountColorFor(accountId?: string | null): string {
 const PRIMARY_MS_ID = "microsoft-primary";
 const PRIMARY_MS_COLOR = "#0099bc"; // teal Kawiil por defecto (editable)
 
+// Detecta un enlace de videollamada dentro de un texto (p. ej. la Ubicación) y
+// devuelve el proveedor para mostrarlo como botón "Unirse", igual que Teams.
+function detectMeetingUrl(text?: unknown): { url: string; label: string } | null {
+  const t = (typeof text === "string" ? text : "").trim();
+  const m = t.match(/https?:\/\/[^\s]+/i);
+  if (!m) return null;
+  const url = m[0];
+  const h = url.toLowerCase();
+  const label =
+    h.includes("zoom.us") ? "Zoom" :
+    h.includes("meet.google") ? "Google Meet" :
+    (h.includes("teams.microsoft") || h.includes("teams.live")) ? "Teams" :
+    h.includes("webex") ? "Webex" :
+    h.includes("whereby") ? "Whereby" :
+    (h.includes("gotomeet") || h.includes("gotomeeting")) ? "GoToMeeting" :
+    "Videollamada";
+  return { url, label };
+}
+
 /** Extrae el accountId de un calendarId namespaced de una cuenta añadida
  *  (google:<accId>:<calId> u outlook:<accId>:<calId>). null si es el principal M365. */
 function linkedAccountIdFromCalendarId(calendarId?: string | null): string | null {
@@ -1154,7 +1173,7 @@ export function CalendarView({
                               const endStr = endDt ? formatMX(endDt, "HH:mm") : "";
                               const primaryCategory: string | undefined = event.categories?.[0];
                               const catHex = primaryCategory ? categoryColorFor(primaryCategory) : undefined;
-                              const meetingUrl = event.onlineMeeting?.joinUrl || event.onlineMeetingUrl;
+                              const meetingUrl = event.onlineMeeting?.joinUrl || event.onlineMeetingUrl || detectMeetingUrl(event.location?.displayName || event.location)?.url;
                               const accent = showCalendarColors ? eventAccentColor(event) : undefined;
                               // Contenido adaptativo según la altura del evento (evita recortes ilegibles):
                               // compacto = eventos cortos (~30 min) → solo el título.
@@ -1872,10 +1891,19 @@ export function CalendarView({
             <div className="space-y-2">
               <Label>Ubicación / dirección</Label>
               <PlaceAutocompleteInput
-                placeholder="Oficina, sala, dirección física, etc."
+                placeholder="Oficina, dirección o enlace de reunión"
                 value={newEvent.location}
                 onChange={(v) => setNewEvent({ ...newEvent, location: v })}
               />
+              {(() => {
+                const meeting = detectMeetingUrl(newEvent.location);
+                if (!meeting) return null;
+                return (
+                  <Button variant="outline" size="sm" className="w-full justify-center" onClick={() => window.open(meeting.url, "_blank")}>
+                    <Video className="mr-1 h-4 w-4" /> Unirse ({meeting.label})
+                  </Button>
+                );
+              })()}
             </div>
             {newEvent.location.trim() && !/^https?:\/\//i.test(newEvent.location.trim()) && (
               <EventTravelSection
@@ -1993,8 +2021,17 @@ export function CalendarView({
                 <PlaceAutocompleteInput
                   value={editForm.location}
                   onChange={(v) => setEditForm({ ...editForm, location: v })}
-                  placeholder="Lugar o dirección"
+                  placeholder="Lugar, dirección o enlace de reunión"
                 />
+                {(() => {
+                  const meeting = detectMeetingUrl(editForm.location);
+                  if (!meeting) return null;
+                  return (
+                    <Button variant="outline" size="sm" className="w-full justify-center" onClick={() => window.open(meeting.url, "_blank")}>
+                      <Video className="mr-1 h-4 w-4" /> Unirse ({meeting.label})
+                    </Button>
+                  );
+                })()}
               </div>
               {editForm.location.trim() && !/^https?:\/\//i.test(editForm.location.trim()) && (
                 <EventTravelSection
