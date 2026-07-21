@@ -13,8 +13,8 @@ import { CreateEventFromEmailDialog } from "./CreateEventFromEmailDialog";
 import { TaskFormDialog } from "@/components/tasks/TaskFormDialog";
 import { MailTranslateDrawer } from "./MailTranslateDrawer";
 import { type MailTabId } from "./MailTabs";
-import { useEmailDetail, useMailFolders, useMarkEmailRead } from "@/hooks/useMicrosoft";
-import { useMarkLinkedOutlookEmailRead, useMarkGmailRead } from "@/hooks/useLinkedAccounts";
+import { useMailFolders, useMarkEmailRead } from "@/hooks/useMicrosoft";
+import { useMarkLinkedOutlookEmailRead, useMarkGmailRead, useRoutedEmailDetail } from "@/hooks/useLinkedAccounts";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -61,7 +61,9 @@ export function CorreoView() {
 
   const { data: foldersQueryData } = useMailFolders();
   const folders = (foldersQueryData?.folders ?? []) as { id: string; displayName: string }[];
-  const { data: selectedEmailDetail } = useEmailDetail(selectedEmailId);
+  // Detalle ruteado por prefijo de ID: funciona con la cuenta principal Y las vinculadas
+  // (necesario para Reenviar, crear regla, Slack, crear evento desde correos vinculados).
+  const { data: selectedEmailDetail } = useRoutedEmailDetail(selectedEmailId);
   const markRead = useMarkEmailRead();
   const markLinkedOutlookRead = useMarkLinkedOutlookEmailRead();
   const markGmailRead = useMarkGmailRead();
