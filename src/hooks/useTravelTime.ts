@@ -8,6 +8,13 @@ export interface PlacePrediction {
   secondaryText: string;
 }
 
+export interface PlacesResult {
+  predictions: PlacePrediction[];
+  /** Motivo cuando no hay sugerencias por un error del servicio (para diagnóstico). */
+  error?: string;
+  detail?: string;
+}
+
 /**
  * Autocompletado de lugares (Google Places) vía edge function. Degrada a lista
  * vacía si Places API no está habilitada, sin romper la escritura libre.
@@ -18,10 +25,24 @@ export function usePlacesAutocomplete(input: string) {
     queryKey: ["maps-places", query],
     enabled: query.length >= 3,
     staleTime: 60_000,
-    queryFn: async (): Promise<PlacePrediction[]> => {
+    queryFn: async (): Promise<PlacesResult> => {
       const { data, error } = await supabase.functions.invoke("maps-places", { body: { input: query } });
-      if (error) return [];
-      return (data?.predictions ?? []) as PlacePrediction[];
+      if (error) {
+        // Intenta leer el cuerpo del error (500/403) para diagnóstico.
+        const ctx = (error as { context?: unknown })?.context;
+        if (ctx instanceof Response) {
+          try {
+            const body = await ctx.clone().json();
+            return { predictions: [], error: body?.error || "invoke_error", detail: body?.detail };
+          } catch { /* ignore */ }
+        }
+        return { predictions: [], error: "invoke_error", detail: String((error as Error)?.message || error) };
+      }
+      return {
+        predictions: (data?.predictions ?? []) as PlacePrediction[],
+        error: data?.error,
+        detail: data?.detail,
+      };
     },
   });
 }

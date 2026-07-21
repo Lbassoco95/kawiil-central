@@ -34,7 +34,9 @@ export function PlaceAutocompleteInput({ value, onChange, placeholder, className
     return () => clearTimeout(t);
   }, [term]);
 
-  const { data: predictions = [], isFetching } = usePlacesAutocomplete(debounced);
+  const { data, isFetching } = usePlacesAutocomplete(debounced);
+  const predictions = data?.predictions ?? [];
+  const placesError = data?.error;
 
   // Cerrar al hacer clic fuera.
   useEffect(() => {
@@ -53,6 +55,14 @@ export function PlaceAutocompleteInput({ value, onChange, placeholder, className
   };
 
   const showList = open && debounced.trim().length >= 3 && predictions.length > 0;
+  // Diagnóstico: solo cuando hay término suficiente, no está cargando, no hay
+  // sugerencias y el servicio reportó un error.
+  const showError = open && debounced.trim().length >= 3 && !isFetching && predictions.length === 0 && !!placesError;
+  const errorLabel = placesError === "maps_not_configured"
+    ? "Google Maps no está configurado en el servidor."
+    : placesError === "places_not_enabled"
+      ? "Places API no está habilitada o la key no la permite."
+      : `Sin sugerencias (${placesError}${data?.detail ? `: ${data.detail}` : ""}).`;
 
   return (
     <div ref={containerRef} className={cn("relative", className)}>
@@ -67,6 +77,9 @@ export function PlaceAutocompleteInput({ value, onChange, placeholder, className
         />
         {isFetching && <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />}
       </div>
+      {showError && (
+        <p className="mt-1 text-[11px] text-muted-foreground">{errorLabel}</p>
+      )}
       {showList && (
         <ul className="absolute z-50 mt-1 w-full max-h-60 overflow-y-auto rounded-md border border-border bg-popover shadow-lg py-1 text-sm">
           {predictions.map((p, i) => (
