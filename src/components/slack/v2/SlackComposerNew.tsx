@@ -293,7 +293,8 @@ export const SlackComposerNew = forwardRef<SlackComposerHandle, Props>(function 
       }
       if (e.key === "Escape") { setEmojiQuery(null); return; }
     }
-    if (e.key === "Enter" && !e.shiftKey) {
+    // Enviar con ⌘/Ctrl+Enter. Enter solo (o Shift+Enter) inserta salto de línea.
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       handleSend();
     }
@@ -521,7 +522,7 @@ export const SlackComposerNew = forwardRef<SlackComposerHandle, Props>(function 
             className="sl-send"
             disabled={!canSend}
             onClick={handleSend}
-            title="Enviar (Enter)"
+            title="Enviar (⌘/Ctrl + Enter)"
           >
             {isSending ? (
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: "spin 1s linear infinite" }}>

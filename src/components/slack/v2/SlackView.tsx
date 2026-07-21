@@ -297,6 +297,19 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
     },
   });
 
+  // Con el panel de hilo abierto, corre el FAB de IA a la izquierda del panel
+  // para que no tape el botón de enviar del composer del hilo.
+  useEffect(() => {
+    if (isMobile) return;
+    const root = document.documentElement;
+    if (threadRootTs) {
+      root.style.setProperty("--kawiil-fab-right", "calc(480px + 1.5rem)");
+    } else {
+      root.style.removeProperty("--kawiil-fab-right");
+    }
+    return () => { root.style.removeProperty("--kawiil-fab-right"); };
+  }, [threadRootTs, isMobile]);
+
   // ─── Historial de mensajes ───────────────────────────────
   const historyQuery = useInfiniteQuery({
     queryKey: ["slack-history-v2", selectedChannel],
