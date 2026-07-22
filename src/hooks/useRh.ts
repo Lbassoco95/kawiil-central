@@ -582,6 +582,24 @@ export function useOrgAttendance(workDate?: string) {
   });
 }
 
+/** G4: jornadas del equipo en un rango de fechas (opcionalmente de un colaborador). */
+export function useOrgAttendanceRange(from: string, to: string, userId?: string) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["rh-org-attendance-range", from, to, userId ?? "all"],
+    queryFn: async (): Promise<RhAttendance[]> => {
+      let q = db.from("rh_attendance").select("*").gte("work_date", from).lte("work_date", to);
+      if (userId) q = q.eq("user_id", userId);
+      const { data, error } = await q
+        .order("work_date", { ascending: false })
+        .order("check_in_at", { ascending: true });
+      if (error) throw error;
+      return (data as RhAttendance[]) ?? [];
+    },
+    enabled: !!user && !!from && !!to,
+  });
+}
+
 /* ============================================================
  * Corrección de salida (jornadas cerradas a la fuerza)
  * ========================================================== */

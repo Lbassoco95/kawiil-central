@@ -18,6 +18,8 @@ import { MyAttendanceList } from "./MyAttendanceList";
 import { SolicitudesPanel } from "./SolicitudesPanel";
 import { TeamScheduleManager } from "./TeamScheduleManager";
 import { TeamAttendanceBoard } from "./TeamAttendanceBoard";
+import { TeamJornadaHistory } from "./TeamJornadaHistory";
+import { TeamRequestsHistory } from "./TeamRequestsHistory";
 import { TeamLivePresence } from "./TeamLivePresence";
 import { TeamAbsencesToday, TeamAbsenceCalendar } from "./TeamAbsences";
 import { OfficeLocationsManager } from "./OfficeLocationsManager";
@@ -112,8 +114,9 @@ export function RecursosHumanosPanel() {
           </div>
         </TabsContent>
 
-        <TabsContent value="solicitudes" className="mt-5">
+        <TabsContent value="solicitudes" className="mt-5 space-y-5">
           <SolicitudesPanel />
+          {isTransformador && <TeamRequestsHistory />}
         </TabsContent>
 
         <TabsContent value="expediente" className="mt-5">
@@ -144,6 +147,7 @@ export function RecursosHumanosPanel() {
                 </div>
                 <TeamAbsenceCalendar />
                 <TeamAttendanceBoard />
+                <TeamJornadaHistory />
               </div>
             </TabsContent>
             <TabsContent value="turnos" className="mt-5">
