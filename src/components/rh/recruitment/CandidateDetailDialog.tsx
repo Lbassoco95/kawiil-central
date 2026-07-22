@@ -65,7 +65,7 @@ import {
   useExtractCvPhoto,
   useCandidatePhotoUrls,
 } from "@/hooks/useRecruitment";
-import { renderCvFirstPageToBase64 } from "@/lib/cvImage";
+import { renderCvFirstPageToBase64, renderCvToImages } from "@/lib/cvImage";
 import { UserAvatar } from "@/components/shared/UserAvatar";
 
 interface Props {
@@ -218,7 +218,9 @@ function CandidateDetailInner({
 
   async function handlePrefillFromCv() {
     try {
-      const d = await extractCv.mutateAsync({ candidate });
+      // Rasterizamos el CV en el navegador y mandamos imágenes (evita PDFs que la IA rechaza).
+      const images = candidate.resume_url ? await renderCvToImages(candidate.resume_url, 3) : [];
+      const d = await extractCv.mutateAsync({ candidate, images: images.length ? images : undefined });
       let filled = 0;
       const keep = (cur: string, next: string | null) => {
         if (cur.trim() || !next) return cur;
