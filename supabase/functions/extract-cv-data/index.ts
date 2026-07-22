@@ -142,8 +142,9 @@ Deno.serve(async (req) => {
       return json({ error: "No tienes acceso a este candidato." }, 403);
     }
 
-    // El cliente puede mandar el CV ya rasterizado (imágenes) para evitar PDFs
-    // atípicos que la IA rechaza. Si no, se lee el archivo del bucket como respaldo.
+    // El cliente manda el contenido del CV ya procesado (texto o imágenes) para
+    // evitar PDFs atípicos que la IA rechaza. Si no, se lee el archivo del bucket.
+    const cvText = typeof body.cv_text === "string" ? body.cv_text.trim() : "";
     const clientImages = Array.isArray(body.images)
       ? (body.images as Array<{ base64?: string; mime?: string }>)
           .filter((im) => typeof im?.base64 === "string" && im.base64.length > 0)
@@ -151,7 +152,9 @@ Deno.serve(async (req) => {
       : [];
 
     const content: unknown[] = [];
-    if (clientImages.length > 0) {
+    if (cvText.length >= 20) {
+      content.push({ type: "text", text: `Contenido del CV (texto):\n\n${cvText.slice(0, 60000)}` });
+    } else if (clientImages.length > 0) {
       for (const im of clientImages) {
         content.push({ type: "image", source: { type: "base64", media_type: im.mime || "image/jpeg", data: im.base64 } });
       }
@@ -159,6 +162,10 @@ Deno.serve(async (req) => {
       if (!cand.resume_url) return json({ error: "El candidato no tiene CV cargado." }, 400);
       const cv = await downloadAsBase64(admin, cand.resume_url);
       if (!cv) return json({ error: "No se pudo leer el CV." }, 502);
+      // Si dice ser PDF pero no lo es (no empieza con %PDF), evita el 400 de la IA.
+      if (cv.kind === "document" && !cv.base64.startsWith("JVBERi")) {
+        return json({ error: "El CV no es un PDF/imagen válido para la IA. Resúbelo como PDF (o usa 'Subir foto' manual)." }, 400);
+      }
       content.push(
         cv.kind === "document"
           ? { type: "document", source: { type: "base64", media_type: cv.mime, data: cv.base64 } }
