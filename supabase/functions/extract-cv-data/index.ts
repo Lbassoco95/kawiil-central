@@ -142,10 +142,29 @@ Deno.serve(async (req) => {
       return json({ error: "No tienes acceso a este candidato." }, 403);
     }
 
-    if (!cand.resume_url) return json({ error: "El candidato no tiene CV cargado." }, 400);
+    // El cliente puede mandar el CV ya rasterizado (imágenes) para evitar PDFs
+    // atípicos que la IA rechaza. Si no, se lee el archivo del bucket como respaldo.
+    const clientImages = Array.isArray(body.images)
+      ? (body.images as Array<{ base64?: string; mime?: string }>)
+          .filter((im) => typeof im?.base64 === "string" && im.base64.length > 0)
+          .slice(0, 5)
+      : [];
 
-    const cv = await downloadAsBase64(admin, cand.resume_url);
-    if (!cv) return json({ error: "No se pudo leer el CV." }, 502);
+    const content: unknown[] = [];
+    if (clientImages.length > 0) {
+      for (const im of clientImages) {
+        content.push({ type: "image", source: { type: "base64", media_type: im.mime || "image/jpeg", data: im.base64 } });
+      }
+    } else {
+      if (!cand.resume_url) return json({ error: "El candidato no tiene CV cargado." }, 400);
+      const cv = await downloadAsBase64(admin, cand.resume_url);
+      if (!cv) return json({ error: "No se pudo leer el CV." }, 502);
+      content.push(
+        cv.kind === "document"
+          ? { type: "document", source: { type: "base64", media_type: cv.mime, data: cv.base64 } }
+          : { type: "image", source: { type: "base64", media_type: cv.mime, data: cv.base64 } },
+      );
+    }
 
     const systemPrompt = `Eres un asistente de reclutamiento. Extrae del CV los datos que sirven para prellenar la ficha del candidato.
 
@@ -157,12 +176,7 @@ REGLAS:
 - skills: herramientas/software (Excel, CONTPAQi, SAT, ERPs, etc.), no habilidades blandas.
 - Responde SIEMPRE usando la herramienta save_cv_data.`;
 
-    const content: unknown[] = [
-      cv.kind === "document"
-        ? { type: "document", source: { type: "base64", media_type: cv.mime, data: cv.base64 } }
-        : { type: "image", source: { type: "base64", media_type: cv.mime, data: cv.base64 } },
-      { type: "text", text: `Extrae los datos del CV de ${cand.full_name} con la herramienta save_cv_data.` },
-    ];
+    content.push({ type: "text", text: `Extrae los datos del CV de ${cand.full_name} con la herramienta save_cv_data.` });
 
     const aiResp = await fetch(ANTHROPIC_API_URL, {
       method: "POST",

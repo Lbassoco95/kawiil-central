@@ -236,9 +236,14 @@ Deno.serve(async (req) => {
         : null) ?? "";
 
     // Examen y/o CV como documentos para Claude (al menos uno).
-    const exam = cand.assessment_file_path ? await downloadAsBase64(admin, cand.assessment_file_path) : null;
-    const cv = cand.resume_url ? await downloadAsBase64(admin, cand.resume_url) : null;
-    if (!exam && !cv) return json({ error: "No se pudo leer el CV ni el examen." }, 502);
+    // Si un "PDF" no empieza con %PDF (JVBERi en base64) no es válido para la IA y se omite.
+    const validDoc = (d: { base64: string; kind: string } | null) =>
+      d && (d.kind !== "document" || d.base64.startsWith("JVBERi")) ? d : null;
+    const exam = validDoc(cand.assessment_file_path ? await downloadAsBase64(admin, cand.assessment_file_path) : null);
+    const cv = validDoc(cand.resume_url ? await downloadAsBase64(admin, cand.resume_url) : null);
+    if (!exam && !cv) {
+      return json({ error: "No se pudo leer un CV/examen válido (debe ser PDF o imagen). Vuelve a subirlo." }, 502);
+    }
 
     // Manuales relevantes por RAG (si hay OPENAI_API_KEY).
     const manuals = await retrieveManuals(
