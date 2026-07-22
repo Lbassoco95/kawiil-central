@@ -65,7 +65,7 @@ import {
   useExtractCvPhoto,
   useCandidatePhotoUrls,
 } from "@/hooks/useRecruitment";
-import { renderCvFirstPageToBase64, renderCvToImages } from "@/lib/cvImage";
+import { renderCvFirstPageToBase64, extractCvContent } from "@/lib/cvImage";
 import { UserAvatar } from "@/components/shared/UserAvatar";
 
 interface Props {
@@ -218,9 +218,18 @@ function CandidateDetailInner({
 
   async function handlePrefillFromCv() {
     try {
-      // Rasterizamos el CV en el navegador y mandamos imágenes (evita PDFs que la IA rechaza).
-      const images = candidate.resume_url ? await renderCvToImages(candidate.resume_url, 3) : [];
-      const d = await extractCv.mutateAsync({ candidate, images: images.length ? images : undefined });
+      // Extrae el CV en el navegador (texto con unpdf; imágenes si es escaneado) para
+      // evitar mandar PDFs que la IA rechaza.
+      const cv = candidate.resume_url ? await extractCvContent(candidate.resume_url, 3) : { text: "", images: [] };
+      if (candidate.resume_url && !cv.text && cv.images.length === 0) {
+        toast.error("No se pudo leer el CV (súbelo como PDF o imagen).");
+        return;
+      }
+      const d = await extractCv.mutateAsync({
+        candidate,
+        text: cv.text || undefined,
+        images: cv.images.length ? cv.images : undefined,
+      });
       let filled = 0;
       const keep = (cur: string, next: string | null) => {
         if (cur.trim() || !next) return cur;

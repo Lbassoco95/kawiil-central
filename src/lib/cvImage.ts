@@ -80,6 +80,45 @@ export async function renderCvToImages(path: string, maxPages = 3): Promise<CvIm
   }
 }
 
+/**
+ * Extrae el contenido del CV para la IA de forma robusta:
+ *  - Imagen → se devuelve como imagen.
+ *  - PDF → se extrae el TEXTO con unpdf (evita mandar el PDF crudo, que la IA a veces
+ *    rechaza). Si casi no hay texto (CV escaneado), se rasteriza a imágenes.
+ *  - Otro (p. ej. .docx) → sin texto ni imágenes (el llamador avisa al usuario).
+ */
+export async function extractCvContent(
+  path: string,
+  maxPages = 3,
+): Promise<{ text: string; images: CvImage[] }> {
+  const dl = await downloadCv(path);
+  if (!dl) return { text: "", images: [] };
+  const { buf, ext } = dl;
+
+  if (["jpg", "jpeg", "png", "webp"].includes(ext)) {
+    const mime = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
+    return { text: "", images: [{ base64: base64FromBytes(buf), mime }] };
+  }
+
+  if (ext === "pdf") {
+    // 1) Texto con unpdf (proven en el resto de la app).
+    let text = "";
+    try {
+      const { extractText, getDocumentProxy } = await import("unpdf");
+      const pdf = await getDocumentProxy(buf);
+      const res = await extractText(pdf, { mergePages: true });
+      text = (Array.isArray(res.text) ? res.text.join("\n") : res.text ?? "").trim();
+    } catch (e) {
+      console.warn("unpdf extractText falló:", e);
+    }
+    if (text.length >= 40) return { text, images: [] };
+    // 2) Poco/nada de texto → rasterizar (CV escaneado).
+    return { text, images: await renderCvToImages(path, maxPages) };
+  }
+
+  return { text: "", images: [] };
+}
+
 /** Primera página del CV como imagen (para extraer la foto). */
 export async function renderCvFirstPageToBase64(path: string): Promise<CvImage | null> {
   const dl = await downloadCv(path);

@@ -1276,10 +1276,10 @@ export interface ExtractedCvData {
 /** Extrae datos del CV con IA para prellenar la ficha (no escribe en la base). */
 export function useExtractCvData() {
   return useMutation({
-    mutationFn: async ({ candidate, images }: { candidate: Candidate; images?: { base64: string; mime: string }[] }): Promise<ExtractedCvData> => {
+    mutationFn: async ({ candidate, text, images }: { candidate: Candidate; text?: string; images?: { base64: string; mime: string }[] }): Promise<ExtractedCvData> => {
       const { data, error } = await supabase.functions.invoke<{ ok?: boolean; data?: ExtractedCvData; error?: string }>(
         "extract-cv-data",
-        { body: { candidate_id: candidate.id, images: images ?? undefined } },
+        { body: { candidate_id: candidate.id, cv_text: text || undefined, images: images ?? undefined } },
       );
       if (error) throw new Error(await functionInvokeUserMessageAsync(data, error));
       if (data?.error) throw new Error(data.error);
