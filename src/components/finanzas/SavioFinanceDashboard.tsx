@@ -8,6 +8,7 @@ import {
   FileText,
   DatabaseZap,
   LayoutDashboard,
+  Link2,
   Loader2,
   Plug,
   Radio,
@@ -53,6 +54,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSavioWebhookEvents, type SavioFinanceEvent } from "@/hooks/useSavioWebhookEvents";
 import { useSavioFinanceApiData } from "@/hooks/useSavioFinanceApi";
 import { useSavioSyncRuns, useTriggerSavioSync } from "@/hooks/useSavioSync";
+import { SavioLinkWizard } from "@/components/finanzas/SavioLinkWizard";
 import {
   extractSavioAmount,
   extractSavioSummary,
@@ -135,6 +137,7 @@ export function SavioFinanceDashboard() {
   const triggerSync = useTriggerSavioSync();
   const { data: syncRuns = [] } = useSavioSyncRuns();
   const lastSyncAt = syncRuns[0]?.created_at ?? null;
+  const [linkWizardOpen, setLinkWizardOpen] = useState(false);
 
   const { data: kawiilClients = [] } = useClients();
   const savioOnlyRows = useMemo(
@@ -342,6 +345,17 @@ export function SavioFinanceDashboard() {
           </Button>
           <Button
             type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 text-xs"
+            onClick={() => setLinkWizardOpen(true)}
+            title="Empareja clientes locales con clientes de Savio"
+          >
+            <Link2 className="h-3.5 w-3.5 mr-1" />
+            Enlazar clientes
+          </Button>
+          <Button
+            type="button"
             variant="outline"
             size="sm"
             className="h-8 text-xs"
@@ -470,6 +484,8 @@ export function SavioFinanceDashboard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <SavioLinkWizard open={linkWizardOpen} onOpenChange={setLinkWizardOpen} />
 
       <Tabs value={section} onValueChange={(v) => setSection(v as "resumen" | "clientes" | "webhooks")} className="space-y-4">
         <div className="surface-toolbar inline-flex w-full max-w-full p-2 md:max-w-2xl">
