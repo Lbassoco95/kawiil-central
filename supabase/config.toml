@@ -153,6 +153,8 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = false
   [functions.sw-transfer-target]
     verify_jwt = false
+  [functions.sw-extension-target]
+    verify_jwt = false
   [functions.sw-folio]
     verify_jwt = false
   [functions.sw-brief]

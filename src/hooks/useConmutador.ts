@@ -7,6 +7,7 @@ import {
   type G4PorCelula,
   type SwitchboardCall,
   type SwitchboardConfig,
+  type SwitchboardExtension,
   type Urgencia,
 } from "@/lib/conmutador";
 
@@ -81,6 +82,84 @@ export function useOrgProfiles() {
         .order("full_name", { ascending: true });
       if (error) throw error;
       return (data ?? []) as { user_id: string; full_name: string }[];
+    },
+  });
+}
+
+// ---- Extensiones (softphone por persona) ----
+export function useExtensions() {
+  return useQuery({
+    queryKey: ["switchboard-extensions"],
+    queryFn: async (): Promise<SwitchboardExtension[]> => {
+      const { data, error } = await db
+        .from("v_switchboard_directory")
+        .select("*")
+        .order("extension", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as SwitchboardExtension[];
+    },
+  });
+}
+
+export interface ExtensionInput {
+  user_id: string;
+  extension: string;
+  sip_endpoint: string | null;
+  is_active?: boolean;
+}
+
+export function useUpsertExtension() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ input }: { input: ExtensionInput }) => {
+      // Resuelve la org del usuario logueado para la fila.
+      const { data: auth } = await supabase.auth.getUser();
+      const uid = auth.user?.id;
+      if (!uid) throw new Error("Sesión no válida");
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("organization_id")
+        .eq("user_id", uid)
+        .maybeSingle();
+      const org = (prof as { organization_id?: string } | null)?.organization_id;
+      if (!org) throw new Error("No se pudo determinar la organización");
+      const { error } = await db
+        .from("switchboard_extensions")
+        .upsert(
+          {
+            organization_id: org,
+            user_id: input.user_id,
+            extension: input.extension.trim(),
+            sip_endpoint: input.sip_endpoint?.trim() || null,
+            is_active: input.is_active ?? true,
+          },
+          { onConflict: "organization_id,user_id" },
+        );
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["switchboard-extensions"] });
+      toast.success("Extensión guardada");
+    },
+    onError: (e: unknown) => {
+      toast.error(`No se pudo guardar: ${e instanceof Error ? e.message : String(e)}`);
+    },
+  });
+}
+
+export function useDeleteExtension() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ userId }: { userId: string }) => {
+      const { error } = await db.from("switchboard_extensions").delete().eq("user_id", userId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["switchboard-extensions"] });
+      toast.success("Extensión eliminada");
+    },
+    onError: (e: unknown) => {
+      toast.error(`No se pudo eliminar: ${e instanceof Error ? e.message : String(e)}`);
     },
   });
 }

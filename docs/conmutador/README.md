@@ -10,6 +10,7 @@ toca — todo sin exponer datos internos al llamante.
 ```
 Llamante ──▶ Telnyx (DID + SIP Trunk) ──▶ ElevenLabs (agente de voz "Kawa")
                                              │  tools (webhooks) durante la llamada
+                                             ├─▶ sw-extension-target(extensión/persona → SIP)
                                              ├─▶ sw-classify        (Claude Haiku)
                                              ├─▶ sw-urgency         (reglas + Haiku)
                                              ├─▶ sw-transfer-target (G4 desde RH)
@@ -28,9 +29,18 @@ Llamante ──▶ Telnyx (DID + SIP Trunk) ──▶ ElevenLabs (agente de voz 
 |-------|-----------|
 | Prompt base + tools + SIP | `docs/conmutador/prompts/` |
 | Preguntas por célula | `docs/conmutador/prompts/celula-*.md` |
+| Extensiones e IVR híbrido | `docs/conmutador/prompts/extensiones-ivr.md` |
 | Migración (tablas + vista + RLS) | `supabase/migrations/20260723120000_switchboard_module.sql` |
+| Migración extensiones | `supabase/migrations/20260723130000_switchboard_extensions.sql` |
 | Edge Functions | `supabase/functions/sw-*` |
 | UI React | `src/pages/Conmutador*` / `src/components/conmutador/` |
+
+## Recepción: menú AI-first híbrido
+
+El agente conecta **directo** si el llamante pide a una persona por nombre o da su
+**extensión** (`sw-extension-target` → SIP REFER al softphone), o **rutea por
+célula** si no. Modelo telefónico: 1 DID público + N extensiones internas
+(softphone SIP). Detalle en `prompts/extensiones-ivr.md`.
 
 ## Células y mapeo al catálogo de RH
 

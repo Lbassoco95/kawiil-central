@@ -76,6 +76,16 @@ export interface G4PorCelula {
   source: "override" | "rh" | null;
 }
 
+export interface SwitchboardExtension {
+  id: string;
+  organization_id: string;
+  user_id: string;
+  extension: string;
+  sip_endpoint: string | null;
+  is_active: boolean;
+  nombre?: string | null; // desde v_switchboard_directory
+}
+
 export function formatFechaHora(iso: string): string {
   try {
     return new Date(iso).toLocaleString("es-MX", {

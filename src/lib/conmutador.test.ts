@@ -6,6 +6,7 @@ import {
   CELULAS,
   detectUrgencyCriteria,
   esPagoOCobranza,
+  filterDirectoryByName,
   formatFolio,
   isCelula,
   parseClassifyResponse,
@@ -166,6 +167,33 @@ describe("buildBriefText", () => {
     });
     expect(brief).toContain("🔴");
     expect(brief).toContain("NO conectó en 15s");
+  });
+});
+
+describe("filterDirectoryByName (extensiones)", () => {
+  const dir = [
+    { nombre: "Juan Pérez", extension: "101" },
+    { nombre: "Juan Ramírez", extension: "102" },
+    { nombre: "Ana López", extension: "103" },
+    { nombre: null, extension: "104" },
+  ];
+  it("un solo match por nombre completo", () => {
+    const r = filterDirectoryByName(dir, "Ana López");
+    expect(r).toHaveLength(1);
+    expect(r[0].extension).toBe("103");
+  });
+  it("varios matches (homónimos) → desambiguación", () => {
+    const r = filterDirectoryByName(dir, "Juan");
+    expect(r.map((x) => x.extension).sort()).toEqual(["101", "102"]);
+  });
+  it("tokens en cualquier orden, sin acentos", () => {
+    const r = filterDirectoryByName(dir, "perez juan");
+    expect(r).toHaveLength(1);
+    expect(r[0].extension).toBe("101");
+  });
+  it("sin coincidencia → vacío; ignora entradas sin nombre", () => {
+    expect(filterDirectoryByName(dir, "Zavala")).toEqual([]);
+    expect(filterDirectoryByName(dir, "")).toEqual([]);
   });
 });
 

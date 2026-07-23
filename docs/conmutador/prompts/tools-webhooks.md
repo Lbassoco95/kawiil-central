@@ -61,6 +61,24 @@ dedicado `SWITCHBOARD_WEBHOOK_SECRET` validado por la función). Nunca expongas 
   ```
 - **Uso:** el `target_number` alimenta el SIP REFER. **NUNCA** se dice al llamante.
 
+### 3b. `sw-extension-target`
+
+- **Cuándo:** el llamante pide a una persona por nombre o da/marca una extensión.
+- **Request** `POST /functions/v1/sw-extension-target`
+  ```json
+  { "extension": "101" }        // o { "nombre": "Ana López" }
+  ```
+- **Response (match)**
+  ```json
+  { "sip_endpoint": "sip:…", "user_id": "uuid", "extension": "101", "source": "extension|nombre" }
+  ```
+- **Response (homónimos)**
+  ```json
+  { "needs_disambiguation": true, "opciones": [{ "nombre": "Juan Pérez", "extension": "101" }, { "nombre": "Juan Ramírez", "extension": "102" }] }
+  ```
+- **Uso:** el `sip_endpoint` alimenta el SIP REFER directo a la persona. **NUNCA**
+  se dice al llamante. Si `needs_disambiguation`, el agente pregunta cuál y reintenta.
+
 ### 4. `sw-folio`
 
 - **Cuándo:** al confirmar que se atenderá el caso (antes del cierre).
@@ -98,7 +116,8 @@ dedicado `SWITCHBOARD_WEBHOOK_SECRET` validado por la función). Nunca expongas 
 
 ## Checklist de configuración en el portal
 
-- [ ] Registrar las 4 tools de llamada con sus URLs y el header de auth.
+- [ ] Registrar las tools de llamada con sus URLs y el header de auth
+      (sw-classify, sw-urgency, sw-transfer-target, **sw-extension-target**, sw-folio).
 - [ ] Registrar el webhook post-llamada apuntando a `sw-brief`.
 - [ ] Guardar los `voice_id` en `switchboard_config.voz`.
 - [ ] Verificar que ninguna respuesta expone `target_number`/`g4_id` al llamante.

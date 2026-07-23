@@ -312,6 +312,34 @@ export function parseClassifyResponse(raw: string): ClassifyResult {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Directorio de extensiones — resolución por nombre (para sw-extension-target).
+// Filtra por coincidencia de tokens del nombre; prioriza coincidencia exacta.
+// La Edge Function decide: 1 match → conecta; >1 → desambigua; 0 → no encontrado.
+// ---------------------------------------------------------------------------
+export interface DirectoryEntry {
+  nombre: string | null;
+  extension: string;
+}
+
+export function filterDirectoryByName<T extends DirectoryEntry>(
+  entries: T[],
+  query: string,
+): T[] {
+  const q = normalize(query || "").trim();
+  if (!q) return [];
+  const activos = entries.filter((e) => e.nombre);
+  // Coincidencia exacta del nombre completo.
+  const exact = activos.filter((e) => normalize(e.nombre as string) === q);
+  if (exact.length > 0) return exact;
+  // Todos los tokens de la consulta aparecen en el nombre (p. ej. "juan perez").
+  const tokens = q.split(/\s+/).filter(Boolean);
+  return activos.filter((e) => {
+    const n = normalize(e.nombre as string);
+    return tokens.every((t) => n.includes(t));
+  });
+}
+
 // ¿El motivo (célula CONT) es de pago/cobranza? → dispara enlace a Finanzas.
 const KW_PAGO_COBRANZA = [
   "pago",
