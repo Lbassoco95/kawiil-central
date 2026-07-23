@@ -6,6 +6,7 @@ import {
   Banknote,
   ExternalLink,
   FileText,
+  DatabaseZap,
   LayoutDashboard,
   Loader2,
   Plug,
@@ -51,6 +52,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSavioWebhookEvents, type SavioFinanceEvent } from "@/hooks/useSavioWebhookEvents";
 import { useSavioFinanceApiData } from "@/hooks/useSavioFinanceApi";
+import { useSavioSyncRuns, useTriggerSavioSync } from "@/hooks/useSavioSync";
 import {
   extractSavioAmount,
   extractSavioSummary,
@@ -129,6 +131,10 @@ export function SavioFinanceDashboard() {
 
   // Tope de render por seguridad de rendimiento (muy por encima del volumen real).
   const MAX_RENDER_ROWS = 1000;
+
+  const triggerSync = useTriggerSavioSync();
+  const { data: syncRuns = [] } = useSavioSyncRuns();
+  const lastSyncAt = syncRuns[0]?.created_at ?? null;
 
   const { data: kawiilClients = [] } = useClients();
   const savioOnlyRows = useMemo(
@@ -313,6 +319,26 @@ export function SavioFinanceDashboard() {
           >
             <RefreshCw className={cn("h-3.5 w-3.5 mr-1", busy && "animate-spin")} />
             Actualizar vista
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 text-xs"
+            onClick={() => triggerSync.mutate(undefined)}
+            disabled={triggerSync.isPending}
+            title={
+              lastSyncAt
+                ? `Última sincronización: ${format(new Date(lastSyncAt), "dd MMM yyyy HH:mm", { locale: es })}`
+                : "Sincroniza Savio a las tablas locales (facturas, pagos, clientes)"
+            }
+          >
+            {triggerSync.isPending ? (
+              <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+            ) : (
+              <DatabaseZap className="h-3.5 w-3.5 mr-1" />
+            )}
+            {triggerSync.isPending ? "Sincronizando…" : "Sincronizar Savio"}
           </Button>
           <Button
             type="button"
