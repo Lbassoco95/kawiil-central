@@ -27,7 +27,34 @@ CREATE TABLE IF NOT EXISTS public.folio_sequence (
 );
 
 COMMENT ON TABLE public.folio_sequence IS
-  'Contador consecutivo por año para folios del Conmutador (KAW-AAAA-XXXX). El incremento atómico lo hace la Edge Function sw-folio con UPDATE ... RETURNING.';
+  'Contador consecutivo por año para folios del Conmutador (KAW-AAAA-XXXX). El incremento atómico lo hace la RPC public.next_switchboard_folio().';
+
+-- RPC atómica: incrementa el consecutivo del año y devuelve el folio formateado.
+-- El UPSERT + UPDATE sobre la fila del año toma un lock de fila, por lo que
+-- N llamadas concurrentes obtienen consecutivos únicos (0 folios duplicados).
+CREATE OR REPLACE FUNCTION public.next_switchboard_folio(p_anio integer)
+RETURNS text
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_consecutivo integer;
+BEGIN
+  INSERT INTO public.folio_sequence (anio, consecutivo)
+  VALUES (p_anio, 1)
+  ON CONFLICT (anio) DO UPDATE
+    SET consecutivo = public.folio_sequence.consecutivo + 1
+  RETURNING consecutivo INTO v_consecutivo;
+
+  RETURN 'KAW-' || p_anio::text || '-' || lpad(v_consecutivo::text, 4, '0');
+END;
+$$;
+
+COMMENT ON FUNCTION public.next_switchboard_folio(integer) IS
+  'Genera el siguiente folio KAW-AAAA-XXXX de forma atómica (SECURITY DEFINER). La usa la Edge Function sw-folio; el cliente no la invoca directamente.';
+
+REVOKE ALL ON FUNCTION public.next_switchboard_folio(integer) FROM public, anon, authenticated;
 
 -- -------------------------------------------------------------
 -- 2. switchboard_config — configuración por célula
@@ -86,7 +113,7 @@ CREATE TABLE IF NOT EXISTS public.switchboard_call (
   conversation_id text,          -- id de la conversación en ElevenLabs
   transcript_url  text,
   recording_url   text,
-  agent_task_id   uuid,          -- tarea de seguimiento creada en agent_tasks
+  followup_task_id uuid REFERENCES public.tasks(id) ON DELETE SET NULL,  -- tarea de seguimiento para el G4
   created_at      timestamptz NOT NULL DEFAULT now(),
   updated_at      timestamptz NOT NULL DEFAULT now()
 );
@@ -226,3 +253,14 @@ INSERT INTO public.switchboard_config (organization_id, celula, celula_slug, pre
     "¿El proceso está documentado actualmente?"
   ]'::jsonb)
 ON CONFLICT (organization_id, celula) DO NOTHING;
+
+-- =============================================================
+-- 8. Permiso de módulo "conmutador" para los G4 (transformador).
+--    La UI (F7) se gatea con ModuleGate moduleKey="conmutador".
+-- =============================================================
+INSERT INTO public.user_module_permissions (user_id, organization_id, module_key, enabled)
+SELECT ur.user_id, p.organization_id, 'conmutador', true
+FROM public.user_roles ur
+JOIN public.profiles p ON p.user_id = ur.user_id
+WHERE ur.role = 'transformador'
+ON CONFLICT (user_id, module_key) DO NOTHING;
