@@ -11,6 +11,8 @@ import {
   useProposeCheckout,
   useCheckoutApprovals,
   useDecideCheckout,
+  useCheckinApprovals,
+  useDecideCheckinCorrection,
 } from "@/hooks/useRh";
 import type { RhAttendance } from "@/lib/rh";
 
@@ -81,6 +83,49 @@ export function CheckoutApprovalsCard() {
                 {" "}· {dayLabel(row.work_date)} · salida propuesta{" "}
                 <strong>{row.proposed_check_out_at ? formatMX(row.proposed_check_out_at, "HH:mm") : "—"}</strong>
               </span>
+            </div>
+            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" disabled={decide.isPending}
+              onClick={() => decide.mutate({ row, approve: true })}>
+              <Check className="mr-1.5 h-3.5 w-3.5" /> Aprobar
+            </Button>
+            <Button size="sm" variant="outline" className="text-red-600" disabled={decide.isPending}
+              onClick={() => decide.mutate({ row, approve: false })}>
+              <X className="mr-1.5 h-3.5 w-3.5" /> Rechazar
+            </Button>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Tarjeta para G4: correcciones de hora de ENTRADA pendientes (miembros de sus células). */
+export function CheckinApprovalsCard() {
+  const { data: pending = [] } = useCheckinApprovals(true);
+  const { data: users = [] } = useOrgUsers();
+  const decide = useDecideCheckinCorrection();
+  if (pending.length === 0) return null;
+  const nameOf = (id: string) => users.find((u) => u.user_id === id)?.full_name ?? "Colaborador";
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center justify-between text-sm">
+          <span>Entradas por aprobar</span>
+          <Badge variant="secondary" className="text-[10px]">{pending.length}</Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {pending.map((row) => (
+          <div key={row.id} className="flex flex-wrap items-center gap-2 rounded-lg border p-2.5">
+            <div className="min-w-0 flex-1 text-sm">
+              <span className="font-medium">{nameOf(row.user_id)}</span>
+              <span className="text-muted-foreground">
+                {" "}· {dayLabel(row.work_date)} · entrada actual{" "}
+                <strong>{formatMX(row.check_in_at, "HH:mm")}</strong> → propuesta{" "}
+                <strong>{row.proposed_check_in_at ? formatMX(row.proposed_check_in_at, "HH:mm") : "—"}</strong>
+              </span>
+              {row.checkin_note && <p className="mt-0.5 text-xs text-muted-foreground">"{row.checkin_note}"</p>}
             </div>
             <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" disabled={decide.isPending}
               onClick={() => decide.mutate({ row, approve: true })}>

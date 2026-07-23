@@ -12,7 +12,7 @@ import { ExpedientesEquipoPanel } from "./expediente/ExpedientesEquipoPanel";
 import { CuestionariosPanel } from "./cuestionarios/CuestionariosPanel";
 import { ResultadosRHPanel } from "./cuestionarios/ResultadosRHPanel";
 import { TableroRHPanel } from "./tablero/TableroRHPanel";
-import { PendingCheckoutBanner, CheckoutApprovalsCard } from "./CheckoutCorrection";
+import { PendingCheckoutBanner, CheckoutApprovalsCard, CheckinApprovalsCard } from "./CheckoutCorrection";
 import { JornadaCard } from "./JornadaCard";
 import { MyAttendanceList } from "./MyAttendanceList";
 import { SolicitudesPanel } from "./SolicitudesPanel";
@@ -141,6 +141,7 @@ export function RecursosHumanosPanel() {
             <TabsContent value="equipo" className="mt-5">
               <div className="grid gap-5">
                 <CheckoutApprovalsCard />
+                <CheckinApprovalsCard />
                 <div className="grid gap-5 lg:grid-cols-2">
                   <TeamLivePresence />
                   <TeamAbsencesToday />

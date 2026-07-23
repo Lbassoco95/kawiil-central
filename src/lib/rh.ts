@@ -78,6 +78,11 @@ export interface RhAttendance {
   checkout_review?: "pending_user" | "pending_g4" | "approved" | "rejected" | null;
   checkout_reviewed_by?: string | null;
   checkout_reviewed_at?: string | null;
+  proposed_check_in_at?: string | null;
+  checkin_review?: "pending_g4" | "approved" | "rejected" | null;
+  checkin_reviewed_by?: string | null;
+  checkin_reviewed_at?: string | null;
+  checkin_note?: string | null;
   created_at: string;
   updated_at: string;
 }
