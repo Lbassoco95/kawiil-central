@@ -233,6 +233,52 @@ export function buildClassifyPrompt(motivo: string): { system: string; user: str
   return { system, user };
 }
 
+// Clasificación rápida y determinista por keywords fuertes. Devuelve la célula
+// SOLO si hay un ganador claro (una única célula con más coincidencias); si hay
+// empate o cero señales, devuelve null para que la Edge Function use Haiku.
+// Evita la latencia/coste del modelo en los motivos inequívocos.
+const CELULA_KEYWORDS: Record<Celula, string[]> = {
+  LIT: [
+    "audiencia", "amparo", "demanda", "juicio", "litigio", "detenido", "detencion",
+    "penal", "juzgado", "expediente", "sentencia", "apelacion", "comparecencia",
+  ],
+  CORP: [
+    "sociedad", "acta constitutiva", "constituir", "contrato", "fusion", "escision",
+    "accionistas", "estatutos", "poder notarial", "asamblea",
+  ],
+  COMP: [
+    "pld", "lavado de dinero", "lavado", "kyc", "cnbv", "auditoria", "cumplimiento",
+    "prevencion", "uif", "regulatoria", "sujeto obligado",
+  ],
+  CONT: [
+    "sat", "imss", "infonavit", "factura", "facturacion", "declaracion", "nomina",
+    "contabilidad", "fiscal", "iva", "isr", "cfdi", "requerimiento fiscal", "credito fiscal",
+  ],
+  PROC: [
+    "proceso interno", "procedimiento", "digitalizar", "flujo de trabajo",
+    "automatizar", "documentar proceso",
+  ],
+};
+
+export function quickClassify(motivo: string): Celula | null {
+  const t = normalize(motivo || "");
+  if (!t) return null;
+  let best: Celula | null = null;
+  let bestScore = 0;
+  let tie = false;
+  for (const c of CELULAS) {
+    const score = CELULA_KEYWORDS[c].reduce((n, kw) => (t.includes(kw) ? n + 1 : n), 0);
+    if (score > bestScore) {
+      bestScore = score;
+      best = c;
+      tie = false;
+    } else if (score > 0 && score === bestScore) {
+      tie = true;
+    }
+  }
+  return bestScore > 0 && !tie ? best : null;
+}
+
 export interface ClassifyResult {
   celula: Celula | null;
   confidence: number;

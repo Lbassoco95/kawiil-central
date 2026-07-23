@@ -247,14 +247,26 @@ Deno.serve(async (req) => {
       recording_url: body.recording_url ?? null,
     };
 
-    // Upsert por folio (idempotente ante reintentos del webhook).
+    // Upsert por folio (idempotente ante reintentos del webhook). Traemos también
+    // followup_task_id para no duplicar tarea/aviso si ElevenLabs reenvía.
     const { data: saved, error: saveErr } = await admin
       .from("switchboard_call")
       .upsert(callRow, { onConflict: "folio" })
-      .select("id")
+      .select("id, followup_task_id")
       .single();
     if (saveErr) return jsonResponse({ error: `No se pudo guardar la llamada: ${saveErr.message}` }, 500);
     const callId = saved.id as string;
+
+    // Reintento del webhook: la llamada ya tiene tarea/aviso → respuesta idempotente.
+    if (saved.followup_task_id) {
+      return jsonResponse({
+        ok: true,
+        idempotent: true,
+        folio,
+        call_id: callId,
+        followup_task_id: saved.followup_task_id,
+      });
+    }
 
     // 6) Tarea de seguimiento en public.tasks asignada al G4.
     let taskId: string | null = null;
@@ -280,11 +292,15 @@ Deno.serve(async (req) => {
         await admin.from("switchboard_call").update({ followup_task_id: taskId }).eq("id", callId);
       }
 
-      // 7) notify al G4.
+      // 7) notify al G4 (best-effort: nunca debe tumbar el webhook ya persistido).
       const notiTitle = transferenciaFallida
         ? `🔴 Llamada urgente sin transferir · ${folio}`
         : `${severityEmoji(urgencia)} Nueva llamada · ${folio}`;
-      await notifyG4(admin, g4Id, org, notiTitle, briefText, callId);
+      try {
+        await notifyG4(admin, g4Id, org, notiTitle, briefText, callId);
+      } catch (e) {
+        console.warn("sw-brief: notify al G4 falló (best-effort):", String(e));
+      }
     } else {
       console.warn(`sw-brief: sin G4 para célula ${celula}; no se creó tarea ni aviso.`);
     }

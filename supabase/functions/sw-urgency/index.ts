@@ -58,7 +58,18 @@ Deno.serve(async (req) => {
     // (1) Reglas por keywords — siempre disponibles, sin latencia de red.
     const byKeyword = new Set<CriterioUrgencia>(detectUrgencyCriteria(transcript));
 
-    // (2) Haiku para señales implícitas (best-effort; si falla, usamos keywords).
+    // Hot-path urgente: si las keywords ya confirman urgencia, respondemos de
+    // inmediato (sin esperar a Haiku). En una llamada urgente la latencia manda.
+    if (byKeyword.size > 0) {
+      const criterios = CRITERIOS.filter((c) => byKeyword.has(c));
+      return jsonResponse({
+        urgente: true,
+        criterios,
+        fuente: { keywords: criterios, modelo: [] },
+      });
+    }
+
+    // (2) Sin señal por keywords → Haiku para señales implícitas (best-effort).
     const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
     let byLLM = new Set<CriterioUrgencia>();
     if (apiKey && transcript.trim().length > 0) {

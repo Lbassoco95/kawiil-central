@@ -9,6 +9,7 @@ import {
   formatFolio,
   isCelula,
   parseClassifyResponse,
+  quickClassify,
   rutaFromUrgencia,
   severityEmoji,
   taskPriorityFromUrgencia,
@@ -103,6 +104,22 @@ describe("parseClassifyResponse", () => {
     expect(r.celula).toBeNull();
     expect(r.needs_disambiguation).toBe(true);
     expect(r.pregunta_sugerida).toBeTruthy();
+  });
+});
+
+describe("quickClassify (fast-path determinista)", () => {
+  it("clasifica motivos inequívocos sin modelo", () => {
+    expect(quickClassify("tengo una audiencia y un amparo")).toBe("LIT");
+    expect(quickClassify("quiero constituir una sociedad")).toBe("CORP");
+    expect(quickClassify("una auditoría de PLD")).toBe("COMP");
+    expect(quickClassify("me llegó un requerimiento del SAT sobre mi declaración")).toBe("CONT");
+    expect(quickClassify("quiero digitalizar un proceso interno")).toBe("PROC");
+  });
+  it("devuelve null cuando es ambiguo o sin señal (→ cae a Haiku)", () => {
+    expect(quickClassify("tengo una duda general")).toBeNull();
+    expect(quickClassify("")).toBeNull();
+    // Empate entre dos células → null (no adivina)
+    expect(quickClassify("un contrato con una demanda de por medio")).toBeNull();
   });
 });
 

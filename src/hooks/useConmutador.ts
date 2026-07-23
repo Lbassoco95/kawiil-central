@@ -35,6 +35,8 @@ export function useSwitchboardCalls(filters: CallFilters = {}) {
       if (error) throw error;
       return (data ?? []) as SwitchboardCall[];
     },
+    // Refresco periódico para el monitoreo del piloto (bandeja casi en vivo).
+    refetchInterval: 30000,
   });
 }
 
