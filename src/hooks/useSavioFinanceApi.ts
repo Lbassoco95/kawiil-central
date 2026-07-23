@@ -3,7 +3,12 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFinanceAccess } from "@/hooks/useFinanceAccess";
 import { useSavioIncomeAccess } from "@/hooks/useSavioIncomeAccess";
-import { fetchSavioResource, type SavioFinanceApiAction } from "@/lib/savioFinanceInvoke";
+import { type SavioFinanceApiAction } from "@/lib/savioFinanceInvoke";
+import {
+  fetchSavioResourceAllPages,
+  getSavioFinancePagedMaxPages,
+  getSavioFinancePortfolioPagedMaxPages,
+} from "@/lib/savioFinancePagedFetch";
 import {
   extractSavioList,
   pickSavioString,
@@ -17,7 +22,9 @@ import {
 
 export type { SavioFinanceApiAction };
 
-const DEFAULT_QUERY: Record<string, string> = { limit: "100" };
+// Query base sin `limit`: el paginador fija el tamaño de página (100) y recorre
+// todas las páginas por cursor hasta traer el total real (no un tope de 100).
+const DEFAULT_QUERY: Record<string, string> = {};
 
 export type SavioCustomerRowView = {
   key: string;
@@ -57,21 +64,22 @@ export function useSavioFinanceApiData(opts?: UseSavioFinanceApiOptions) {
 
   const invoicesQuery = useQuery({
     queryKey: ["savio-finance-api", "invoices", user?.id, invoiceQuery.customer_id ?? ""],
-    queryFn: () => fetchSavioResource("invoices", invoiceQuery),
+    // La cartera de facturas es la ventana amplia: usa el tope de páginas mayor.
+    queryFn: () => fetchSavioResourceAllPages("invoices", invoiceQuery, getSavioFinancePortfolioPagedMaxPages()),
     enabled: apiEnabled,
     staleTime: 60_000,
   });
 
   const paymentsQuery = useQuery({
     queryKey: ["savio-finance-api", "payments", user?.id],
-    queryFn: () => fetchSavioResource("payments", DEFAULT_QUERY),
+    queryFn: () => fetchSavioResourceAllPages("payments", DEFAULT_QUERY, getSavioFinancePagedMaxPages()),
     enabled: apiEnabled,
     staleTime: 60_000,
   });
 
   const customersQuery = useQuery({
     queryKey: ["savio-finance-api", "customers", user?.id],
-    queryFn: () => fetchSavioResource("customers", DEFAULT_QUERY),
+    queryFn: () => fetchSavioResourceAllPages("customers", DEFAULT_QUERY, getSavioFinancePagedMaxPages()),
     enabled: apiEnabled,
     staleTime: 120_000,
   });
@@ -150,10 +158,19 @@ export function useSavioFinanceApiData(opts?: UseSavioFinanceApiOptions) {
 
   const reactQueryError = invoicesQuery.error ?? paymentsQuery.error ?? customersQuery.error ?? null;
 
+  // Si se alcanzó el techo de páginas, hay más registros de los mostrados: se
+  // expone para avisar en la UI y no ocultar datos silenciosamente.
+  const truncated = (q: unknown) => !!(q as { truncated?: boolean } | undefined)?.truncated;
+  const invoicesTruncated = truncated(invoicesQuery.data);
+  const dataTruncated =
+    invoicesTruncated || truncated(paymentsQuery.data) || truncated(customersQuery.data);
+
   return {
     invoiceRows,
     paymentRows,
     customerRows,
+    invoicesTruncated,
+    dataTruncated,
     invoiceAgg,
     paymentAgg,
     invoicesMeta: invoicesQuery.data,

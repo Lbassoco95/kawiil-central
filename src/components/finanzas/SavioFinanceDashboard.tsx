@@ -124,7 +124,11 @@ export function SavioFinanceDashboard() {
     refetchAll,
     reactQueryError,
     invoiceQueryActive,
+    invoicesTruncated,
   } = useSavioFinanceApiData({ invoiceCustomerId: invoiceCustomerFilter });
+
+  // Tope de render por seguridad de rendimiento (muy por encima del volumen real).
+  const MAX_RENDER_ROWS = 1000;
 
   const { data: kawiilClients = [] } = useClients();
   const savioOnlyRows = useMemo(
@@ -611,7 +615,14 @@ export function SavioFinanceDashboard() {
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="glass-card overflow-hidden p-0 border-border/50 rounded-xl">
               <div className="px-3 py-2 border-b flex flex-wrap items-center justify-between gap-2 text-xs font-medium">
-                <span>Facturas y cargos</span>
+                <span>
+                  Facturas y cargos
+                  {invoicesTruncated ? (
+                    <span className="ml-2 font-normal text-amber-600 dark:text-amber-400 text-[10px]">
+                      · se alcanzó el máximo de páginas; hay más facturas en Savio (ajusta VITE_SAVIO_FINANCE_PORTFOLIO_MAX_PAGES)
+                    </span>
+                  ) : null}
+                </span>
                 {savioPanelUrl ? (
                   <a href={savioPanelUrl} target="_blank" rel="noopener noreferrer" className="font-normal text-primary underline text-[11px]">
                     Abrir en Savio
@@ -637,7 +648,7 @@ export function SavioFinanceDashboard() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {invoiceRows.slice(0, 80).map((row) => (
+                      {invoiceRows.slice(0, MAX_RENDER_ROWS).map((row) => (
                         <TableRow
                           key={row.key}
                           className="cursor-pointer hover:bg-muted/50"
@@ -702,7 +713,7 @@ export function SavioFinanceDashboard() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {paymentRows.slice(0, 80).map((row) => (
+                      {paymentRows.slice(0, MAX_RENDER_ROWS).map((row) => (
                         <TableRow
                           key={row.key}
                           className="cursor-pointer hover:bg-muted/50"
