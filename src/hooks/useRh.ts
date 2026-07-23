@@ -688,6 +688,101 @@ export function useDecideCheckout() {
 }
 
 /* ============================================================
+ * Corrección de la hora de ENTRADA (aprueba el G4 de la célula)
+ * ========================================================== */
+/** El colaborador propone su hora real de entrada -> aprobación del G4 de su célula. */
+export function useProposeCheckinCorrection() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, proposedAt, note }: { id: string; proposedAt: string; note?: string | null }) => {
+      const { error } = await db
+        .from("rh_attendance")
+        .update({
+          proposed_check_in_at: proposedAt,
+          checkin_review: "pending_g4",
+          checkin_note: note ?? null,
+          checkin_reviewed_by: null,
+          checkin_reviewed_at: null,
+        })
+        .eq("id", id)
+        .eq("user_id", user!.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["rh-my-attendance"] });
+      qc.invalidateQueries({ queryKey: ["rh-checkin-approvals"] });
+      toast.success("Corrección de entrada enviada a tu G4");
+    },
+    onError: (e: Error) => toast.error(e.message || "No se pudo enviar la corrección"),
+  });
+}
+
+/** G4: correcciones de entrada pendientes de los miembros de las células que lidera. */
+export function useCheckinApprovals(enabled: boolean) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["rh-checkin-approvals", user?.id],
+    queryFn: async (): Promise<RhAttendance[]> => {
+      // Células que lidera este G4.
+      const { data: cels } = await db
+        .from("celulas")
+        .select("id")
+        .eq("responsible_user_id", user!.id)
+        .eq("is_active", true);
+      const celIds = (cels ?? []).map((c: { id: string }) => c.id);
+      if (celIds.length === 0) return [];
+      // Miembros de esas células.
+      const { data: members } = await db.from("user_celulas").select("user_id").in("celula_id", celIds);
+      const memberIds = [...new Set((members ?? []).map((m: { user_id: string }) => m.user_id))];
+      if (memberIds.length === 0) return [];
+      // Correcciones de entrada pendientes de esos miembros.
+      const { data, error } = await db
+        .from("rh_attendance")
+        .select("*")
+        .eq("checkin_review", "pending_g4")
+        .in("user_id", memberIds)
+        .order("work_date", { ascending: true });
+      if (error) throw error;
+      return (data as RhAttendance[]) ?? [];
+    },
+    enabled,
+  });
+}
+
+/** G4 aprueba (fija la hora de entrada propuesta) o rechaza la corrección. */
+export function useDecideCheckinCorrection() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ row, approve }: { row: RhAttendance; approve: boolean }) => {
+      const patch = approve
+        ? {
+            check_in_at: row.proposed_check_in_at,
+            checkin_review: "approved",
+            checkin_reviewed_by: user!.id,
+            checkin_reviewed_at: new Date().toISOString(),
+          }
+        : {
+            checkin_review: "rejected",
+            checkin_reviewed_by: user!.id,
+            checkin_reviewed_at: new Date().toISOString(),
+            proposed_check_in_at: null,
+          };
+      const { error } = await db.from("rh_attendance").update(patch).eq("id", row.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["rh-checkin-approvals"] });
+      qc.invalidateQueries({ queryKey: ["rh-org-attendance"] });
+      qc.invalidateQueries({ queryKey: ["rh-my-attendance"] });
+      toast.success("Listo");
+    },
+    onError: (e: Error) => toast.error(e.message || "No se pudo procesar"),
+  });
+}
+
+/* ============================================================
  * Células y solicitudes de ausencias (Entrega 3)
  * ========================================================== */
 export interface Celula {
