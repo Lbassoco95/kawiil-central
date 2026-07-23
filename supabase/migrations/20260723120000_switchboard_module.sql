@@ -55,6 +55,7 @@ COMMENT ON FUNCTION public.next_switchboard_folio(integer) IS
   'Genera el siguiente folio KAW-AAAA-XXXX de forma atómica (SECURITY DEFINER). La usa la Edge Function sw-folio; el cliente no la invoca directamente.';
 
 REVOKE ALL ON FUNCTION public.next_switchboard_folio(integer) FROM public, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.next_switchboard_folio(integer) TO service_role;
 
 -- -------------------------------------------------------------
 -- 2. switchboard_config — configuración por célula
