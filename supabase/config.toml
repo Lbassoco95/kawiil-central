@@ -1,6 +1,8 @@
 project_id = "qppfampapbxdgednkofc"
 
 [functions]
+  [functions.notify]
+    verify_jwt = false
   [functions.recruit-apply]
     verify_jwt = false
   [functions.auth-email-hook]
