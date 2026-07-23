@@ -16,6 +16,7 @@ import {
 } from "recharts";
 import { useAging, type AgingRow } from "@/hooks/useAging";
 import { useToggleReminderPause } from "@/hooks/useCollectionReminders";
+import { ReconciliationPanel } from "./ReconciliationPanel";
 import { KpiTile } from "./KpiTile";
 
 const BUCKETS = [
@@ -114,6 +115,8 @@ export function CarteraAgingDashboard() {
           <Download className="h-4 w-4 mr-1" /> Exportar CSV
         </Button>
       </div>
+
+      <ReconciliationPanel />
 
       {/* Totales por moneda */}
       {isLoading ? (
