@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 // La lógica pura del Conmutador vive en supabase/functions/_shared para que las
 // Edge Functions (Deno) y estas pruebas (vitest) compartan una única fuente.
 import {
+  buildBriefText,
   CELULAS,
   detectUrgencyCriteria,
   esPagoOCobranza,
@@ -10,6 +11,8 @@ import {
   parseClassifyResponse,
   rutaFromUrgencia,
   severityEmoji,
+  taskPriorityFromUrgencia,
+  urgenciaFromFlags,
 } from "../../supabase/functions/_shared/conmutador";
 
 describe("formatFolio", () => {
@@ -100,6 +103,52 @@ describe("parseClassifyResponse", () => {
     expect(r.celula).toBeNull();
     expect(r.needs_disambiguation).toBe(true);
     expect(r.pregunta_sugerida).toBeTruthy();
+  });
+});
+
+describe("urgenciaFromFlags / taskPriorityFromUrgencia", () => {
+  it("mapea el flag a nivel y prioridad", () => {
+    expect(urgenciaFromFlags(true)).toBe("urgent");
+    expect(urgenciaFromFlags(false)).toBe("standard");
+    expect(taskPriorityFromUrgencia("urgent")).toBe("urgente");
+    expect(taskPriorityFromUrgencia("medium")).toBe("alta");
+    expect(taskPriorityFromUrgencia("standard")).toBe("media");
+  });
+});
+
+describe("buildBriefText", () => {
+  it("incluye emoji, folio, célula, contacto y enlaces", () => {
+    const brief = buildBriefText({
+      urgencia: "standard",
+      folio: "KAW-2026-0007",
+      celula: "CONT",
+      llamante: "Juan Pérez",
+      empresa: "ACME SA",
+      telefono: "+525512345678",
+      correo: "juan@acme.mx",
+      motivoResumen: "Consulta sobre una factura del mes pasado.",
+      transcriptUrl: "https://t/1",
+      recordingUrl: "https://r/1",
+      carteraEstado: "vencido",
+    });
+    expect(brief).toContain("🟢");
+    expect(brief).toContain("Folio KAW-2026-0007");
+    expect(brief).toContain("CONT · Contable/Fiscal");
+    expect(brief).toContain("Juan Pérez — ACME SA");
+    expect(brief).toContain("⚠️ Vencido");
+    expect(brief).toContain("https://t/1");
+  });
+
+  it("marca en rojo la transferencia urgente fallida", () => {
+    const brief = buildBriefText({
+      urgencia: "urgent",
+      folio: "KAW-2026-0008",
+      celula: "LIT",
+      motivoResumen: "Detención en curso.",
+      transferenciaFallida: true,
+    });
+    expect(brief).toContain("🔴");
+    expect(brief).toContain("NO conectó en 15s");
   });
 });
 

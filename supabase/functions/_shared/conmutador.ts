@@ -39,6 +39,67 @@ export function rutaFromUrgencia(u: Urgencia): Ruta {
   return u === "urgent" ? "urgente" : "estandar";
 }
 
+export function urgenciaFromFlags(urgente: boolean): Urgencia {
+  return urgente ? "urgent" : "standard";
+}
+
+// task_priority (enum de public.tasks): urgente | alta | media | baja.
+export function taskPriorityFromUrgencia(u: Urgencia): "urgente" | "alta" | "media" | "baja" {
+  return u === "urgent" ? "urgente" : u === "medium" ? "alta" : "media";
+}
+
+// ---------------------------------------------------------------------------
+// Brief estructurado (texto) que se envía al G4 y se guarda en switchboard_call.
+// El resumen del motivo (2–3 líneas) lo produce Claude Sonnet; el resto se arma
+// de forma determinista.
+// ---------------------------------------------------------------------------
+export interface BriefParts {
+  urgencia: Urgencia;
+  folio: string;
+  celula: Celula | null;
+  llamante?: string | null;
+  empresa?: string | null;
+  telefono?: string | null;
+  correo?: string | null;
+  motivoResumen: string;
+  transcriptUrl?: string | null;
+  recordingUrl?: string | null;
+  carteraEstado?: string | null; // 'al_dia' | 'vencido' | null
+  transferenciaFallida?: boolean; // ruta urgente sin conexión en 15s
+}
+
+export function buildBriefText(p: BriefParts): string {
+  const emoji = severityEmoji(p.urgencia);
+  const celula = p.celula ? `${p.celula} · ${CELULA_LABELS[p.celula]}` : "Sin clasificar";
+  const nivel =
+    p.urgencia === "urgent" ? "URGENTE" : p.urgencia === "medium" ? "Media" : "Estándar";
+  const contactoPartes = [p.telefono, p.correo].filter(Boolean);
+  const contacto = contactoPartes.length ? contactoPartes.join(" · ") : "Sin datos de contacto";
+  const quien = [p.llamante, p.empresa].filter(Boolean).join(" — ") || "Llamante no identificado";
+
+  const lines: string[] = [];
+  lines.push(`${emoji} ${nivel} · Folio ${p.folio}`);
+  lines.push(`Célula: ${celula}`);
+  lines.push(`Llamante: ${quien}`);
+  lines.push(`Contacto: ${contacto}`);
+  if (p.carteraEstado) {
+    const cartera = p.carteraEstado === "vencido" ? "⚠️ Vencido" : "Al día";
+    lines.push(`Cartera: ${cartera}`);
+  }
+  lines.push("");
+  lines.push(`Motivo:\n${p.motivoResumen.trim()}`);
+  if (p.transcriptUrl || p.recordingUrl) {
+    lines.push("");
+    if (p.transcriptUrl) lines.push(`Transcripción: ${p.transcriptUrl}`);
+    if (p.recordingUrl) lines.push(`Grabación: ${p.recordingUrl}`);
+  }
+  if (p.transferenciaFallida) {
+    lines.push("");
+    lines.push("🔴 La transferencia urgente NO conectó en 15s. Devolver la llamada de inmediato.");
+  }
+  return lines.join("\n");
+}
+
 // ---------------------------------------------------------------------------
 // Folio KAW-AAAA-XXXX (el consecutivo lo genera la RPC atómica en Postgres;
 // esta función solo formatea, y sirve para pruebas deterministas).
