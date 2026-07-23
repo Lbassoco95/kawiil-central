@@ -4,12 +4,17 @@ Los pasos de telefonía (F1) y buena parte de la configuración del agente (F2) 
 **configuración en portales** (Telnyx / ElevenLabs), no código. Aquí quedan como
 checklist accionable.
 
-## F1 — Telefonía (Telnyx)
+## F1 — Telefonía (netelip)
 
-- [ ] Crear cuenta Telnyx.
-- [ ] Adquirir DID local (confirmar lada: 55 CDMX / 33 GDL / 81 MTY).
-- [ ] Verificación con domicilio fiscal MX (Constancia de Situación Fiscal del SAT).
-- [ ] Configurar SIP Trunk Telnyx → ElevenLabs.
+> Proveedor: **netelip**. Guía detallada de integración y verificación en
+> `prompts/netelip-integracion.md`.
+
+- [ ] Cuenta netelip creada (https://cloud.netelip.com).
+- [ ] Adquirir número virtual de **México** (confirmar lada: 55 CDMX / 33 GDL / 81 MTY).
+- [ ] Crear **Líneas SIP** para las extensiones (softphone por persona).
+- [ ] Enrutar el número virtual hacia la **origination URI SIP de ElevenLabs**.
+- [ ] Configurar **Troncal SIP** saliente (auth por IP → whitelist de ElevenLabs)
+      para transferencias al PSTN (celular del G4).
 - [ ] Definir aviso de grabación (LFPDPPP): "Esta llamada puede ser grabada para
       mejorar la atención." (ya incluido en el prompt base).
 

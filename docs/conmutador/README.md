@@ -30,6 +30,7 @@ Llamante ──▶ Telnyx (DID + SIP Trunk) ──▶ ElevenLabs (agente de voz 
 | Prompt base + tools + SIP | `docs/conmutador/prompts/` |
 | Preguntas por célula | `docs/conmutador/prompts/celula-*.md` |
 | Extensiones e IVR híbrido | `docs/conmutador/prompts/extensiones-ivr.md` |
+| Integración netelip (telefonía) | `docs/conmutador/prompts/netelip-integracion.md` |
 | Migración (tablas + vista + RLS) | `supabase/migrations/20260723120000_switchboard_module.sql` |
 | Migración extensiones | `supabase/migrations/20260723130000_switchboard_extensions.sql` |
 | Edge Functions | `supabase/functions/sw-*` |
