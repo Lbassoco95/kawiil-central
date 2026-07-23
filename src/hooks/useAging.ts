@@ -17,6 +17,8 @@ export interface AgingRow {
   max_days_late: number;
   /** Nombre resoluble del cliente (local o Savio). */
   clientName: string;
+  /** Recordatorios de cobranza pausados para este cliente. */
+  remindersPaused: boolean;
 }
 
 export interface AgingTotals {
@@ -48,7 +50,7 @@ export function useAging() {
       const [{ data: agingData, error }, clientsRes, savioCustRes] = await Promise.all([
         (supabase as any).from("v_aging").select("*"),
         supabase.from("clients").select("id, name"),
-        (supabase as any).from("savio_customers").select("savio_id, name"),
+        (supabase as any).from("savio_customers").select("savio_id, name, reminders_paused"),
       ]);
       if (error) throw error;
 
@@ -57,8 +59,10 @@ export function useAging() {
         clientName.set(c.id, c.name);
       }
       const savioName = new Map<string, string>();
-      for (const c of ((savioCustRes.data ?? []) as { savio_id: string; name: string | null }[])) {
+      const pausedByCustomer = new Map<string, boolean>();
+      for (const c of ((savioCustRes.data ?? []) as { savio_id: string; name: string | null; reminders_paused?: boolean }[])) {
         if (c.name) savioName.set(c.savio_id, c.name);
+        pausedByCustomer.set(c.savio_id, !!c.reminders_paused);
       }
 
       const rows: AgingRow[] = ((agingData ?? []) as Record<string, unknown>[]).map((r) => {
@@ -83,6 +87,7 @@ export function useAging() {
           d60_plus: num(r.d60_plus),
           max_days_late: num(r.max_days_late),
           clientName: name,
+          remindersPaused: customer_savio_id ? (pausedByCustomer.get(customer_savio_id) ?? false) : false,
         };
       });
 

@@ -10,11 +10,12 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Download, TrendingDown, AlertTriangle } from "lucide-react";
+import { Download, TrendingDown, AlertTriangle, Bell, BellOff } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid,
 } from "recharts";
 import { useAging, type AgingRow } from "@/hooks/useAging";
+import { useToggleReminderPause } from "@/hooks/useCollectionReminders";
 import { KpiTile } from "./KpiTile";
 
 const BUCKETS = [
@@ -54,6 +55,7 @@ function toCsv(rows: AgingRow[]): string {
 
 export function CarteraAgingDashboard() {
   const { data, isLoading } = useAging();
+  const togglePause = useToggleReminderPause();
   const rows = data?.rows ?? [];
   const totals = data?.totals ?? [];
   const [currency, setCurrency] = useState<string>("todas");
@@ -231,6 +233,7 @@ export function CarteraAgingDashboard() {
                   <TableHead className="text-xs text-right">31–60</TableHead>
                   <TableHead className="text-xs text-right">&gt;60</TableHead>
                   <TableHead className="text-xs text-right">Total</TableHead>
+                  <TableHead className="text-xs text-center">Record.</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -248,6 +251,24 @@ export function CarteraAgingDashboard() {
                     <TableCell className="text-xs text-right tabular-nums">{fmt(r.d31_60, r.currency)}</TableCell>
                     <TableCell className="text-xs text-right tabular-nums text-destructive">{fmt(r.d60_plus, r.currency)}</TableCell>
                     <TableCell className="text-xs text-right font-semibold tabular-nums">{fmt(r.total_balance, r.currency)}</TableCell>
+                    <TableCell className="text-center">
+                      {r.customer_savio_id ? (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className={`h-7 w-7 ${r.remindersPaused ? "text-muted-foreground" : "text-sky-600"}`}
+                          title={r.remindersPaused ? "Recordatorios pausados — clic para reactivar" : "Recordatorios activos — clic para pausar"}
+                          disabled={togglePause.isPending}
+                          onClick={() =>
+                            togglePause.mutate({ customerSavioId: r.customer_savio_id!, paused: !r.remindersPaused })
+                          }
+                        >
+                          {r.remindersPaused ? <BellOff className="h-3.5 w-3.5" /> : <Bell className="h-3.5 w-3.5" />}
+                        </Button>
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
