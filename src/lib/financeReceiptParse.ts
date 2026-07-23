@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { sanitizeStorageFileName } from "@/lib/storageFilename";
+import { describeEdgeFnError } from "@/lib/edgeFnError";
 
 export interface ReceiptResult {
   amount: number | null;
@@ -38,7 +39,7 @@ export async function parseReceiptWithAi(file: File): Promise<ReceiptResult> {
     const { data, error } = await supabase.functions.invoke("finance-parse-statement", {
       body: { mode: "receipt", path, source_type: file.type },
     });
-    if (error) throw new Error(error.message || "La IA no pudo leer el comprobante.");
+    if (error) throw new Error(describeEdgeFnError(error, "finance-parse-statement"));
     const receipt = (data as { receipt?: ReceiptResult })?.receipt;
     if (!receipt) throw new Error("La IA no devolvió datos del comprobante.");
     return receipt;

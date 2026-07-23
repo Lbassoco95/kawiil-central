@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { sanitizeStorageFileName } from "@/lib/storageFilename";
+import { describeEdgeFnError } from "@/lib/edgeFnError";
 
 export type StatementSource = "pdf" | "excel" | "csv" | "image" | "manual";
 export type StatementStatus = "procesando" | "listo" | "error" | "revisado";
@@ -143,7 +144,7 @@ export function useUploadBankStatement() {
       });
       if (fnErr) {
         // El estado queda marcado 'error' por la función; refleja el fallo.
-        throw new Error(fnErr.message || "La IA no pudo procesar el estado de cuenta.");
+        throw new Error(describeEdgeFnError(fnErr, "finance-parse-statement"));
       }
       return { statement: statement as BankStatement, result };
     },

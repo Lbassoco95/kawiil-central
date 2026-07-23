@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { describeEdgeFnError } from "@/lib/edgeFnError";
 
 export interface ReconciliationQueueRow {
   id: string;
@@ -92,7 +93,7 @@ export function useTriggerReconcile() {
   return useMutation({
     mutationFn: async () => {
       const { data, error } = await supabase.functions.invoke("reconcile-payments", { body: {} });
-      if (error) throw new Error(error.message || "No se pudo conciliar");
+      if (error) throw new Error(describeEdgeFnError(error, "reconcile-payments"));
       return data as { ok: boolean; applied: number; queued: number };
     },
     onSuccess: (data) => {

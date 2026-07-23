@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { describeEdgeFnError } from "@/lib/edgeFnError";
 
 export interface SavioSyncRun {
   id: string;
@@ -46,7 +47,7 @@ export function useTriggerSavioSync() {
       const { data, error } = await supabase.functions.invoke("savio-sync", {
         body: resource ? { resource } : {},
       });
-      if (error) throw new Error(error.message || "No se pudo sincronizar con Savio");
+      if (error) throw new Error(describeEdgeFnError(error, "savio-sync"));
       return data as { ok: boolean; runs: SavioSyncRun[] };
     },
     onSuccess: (data) => {
