@@ -8,7 +8,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Wallet, DollarSign, Clock, CheckCircle, XCircle, Landmark, LayoutDashboard, BarChart3, HandCoins, RefreshCcw, CalendarClock, ReceiptText } from "lucide-react";
+import { Plus, Wallet, DollarSign, Clock, CheckCircle, XCircle, Landmark, LayoutDashboard, BarChart3, HandCoins, RefreshCcw, CalendarClock, ReceiptText, PiggyBank } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useExpenses, Expense } from "@/hooks/useExpenses";
 import { useFinanceAccess } from "@/hooks/useFinanceAccess";
@@ -22,6 +22,7 @@ import { FinanceCashflowAlerts } from "@/components/finanzas/FinanceCashflowAler
 import { FinanceIntelligenceBoards } from "@/components/finanzas/FinanceIntelligenceBoards";
 import { FinancePlanningDashboard } from "@/components/finanzas/FinancePlanningDashboard";
 import { BankStatementsSection } from "@/components/finanzas/BankStatementsSection";
+import { CarteraAgingDashboard } from "@/components/finanzas/CarteraAgingDashboard";
 import { KpiTile } from "@/components/finanzas/KpiTile";
 import { PageHeader, type PageHeaderStat } from "@/components/shared/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -48,7 +49,7 @@ const CATEGORY_FILTERS = [
   { value: "contratacion_externa", label: "Contratación ext." },
 ];
 
-type FinanceTab = "resumen" | "gastos" | "planeacion" | "movimientos" | "savio" | "tableros";
+type FinanceTab = "resumen" | "gastos" | "planeacion" | "movimientos" | "cartera" | "savio" | "tableros";
 
 export default function Finanzas() {
   const { user } = useAuth();
@@ -444,6 +445,9 @@ export default function Finanzas() {
                 <TabsTrigger value="movimientos" className="text-xs gap-1.5">
                   <ReceiptText className="h-3.5 w-3.5" /> Movimientos
                 </TabsTrigger>
+                <TabsTrigger value="cartera" className="text-xs gap-1.5">
+                  <PiggyBank className="h-3.5 w-3.5" /> Cartera
+                </TabsTrigger>
                 <TabsTrigger value="savio" className="text-xs gap-1.5">
                   <Landmark className="h-3.5 w-3.5" /> Ingresos facturados
                 </TabsTrigger>
@@ -479,6 +483,10 @@ export default function Finanzas() {
 
               <TabsContent value="movimientos" className="mt-0">
                 <BankStatementsSection />
+              </TabsContent>
+
+              <TabsContent value="cartera" className="mt-0">
+                <CarteraAgingDashboard />
               </TabsContent>
 
               <TabsContent value="savio" className="mt-0">
