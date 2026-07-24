@@ -113,13 +113,39 @@ En **Settings → Webhooks** (o en el agente, sección post-call):
 
 ## Inspeccionar la config actual (desde tu máquina)
 
-Hay un script que consulta la API de ElevenLabs y resume agente/número/tools/
-webhook/conversaciones (útil para verificar qué falta):
+Desde una red sin bloqueo (el entorno de CI bloquea `api.elevenlabs.io`), consulta
+la API para verificar agente/número/tools/webhook. Reemplaza `XI` por tu API key
+(no la pegues en archivos versionados):
 
 ```bash
-export XI_API_KEY="sk_..."   # NO lo commitees
-bash docs/conmutador/scripts/inspect-elevenlabs.sh
+XI="sk_..."; AG="agent_7501ky8yndc0fe98w0hcwnxnnc5n"; B="https://api.elevenlabs.io/v1/convai"
+
+# Agente: idioma, voz y tools registradas
+curl -sS "$B/agents/$AG" -H "xi-api-key: $XI" | jq '{name,
+  language: .conversation_config.agent.language,
+  voice: .conversation_config.tts.voice_id,
+  tools: [.conversation_config.agent.prompt.tools[]?.name],
+  tool_ids: .conversation_config.agent.prompt.tool_ids}'
+
+# Número: que esté asignado al agente
+curl -sS "$B/phone-numbers" -H "xi-api-key: $XI" | jq '[.[] |
+  {phone_number, provider, assigned_agent: .assigned_agent.agent_id}]'
+
+# Tools del workspace (URL de Supabase de cada una)
+curl -sS "$B/tools" -H "xi-api-key: $XI" | jq '[.tools[]? |
+  {name: (.tool_config.name // .name), url: (.tool_config.api_schema.url // "")}]'
+
+# Post-call webhook configurado
+curl -sS "$B/settings" -H "xi-api-key: $XI" | jq '{webhooks, conversation_initiation_client_data_webhook}'
+
+# Últimas conversaciones (si ya hubo llamadas de prueba)
+curl -sS "$B/conversations?agent_id=$AG&page_size=5" -H "xi-api-key: $XI" | jq \
+  '[.conversations[]? | {id: .conversation_id, status, call_duration_secs}]'
 ```
+
+Debe verse: (1) el número **asignado al agente**, (2) tools **sw-transfer-target** y
+**sw-folio** con su URL de Supabase, (3) el **post-call webhook** apuntando a
+`…/sw-brief?secret=…`.
 
 ---
 
