@@ -16,6 +16,10 @@ export function jsonResponse(body: unknown, status = 200): Response {
 }
 
 // Devuelve null si la petición está autorizada; si no, una Response 401.
+// Acepta el secreto por 3 vías (útil según lo que permita el portal):
+//   1. header  x-switchboard-secret        (server tools de ElevenLabs)
+//   2. query   ?secret=…                    (post-call webhook, si no admite headers)
+//   3. header  Authorization: Bearer …
 // Si SWITCHBOARD_WEBHOOK_SECRET no está configurado, no se exige (útil en dev),
 // pero se registra una advertencia.
 export function checkWebhookAuth(req: Request): Response | null {
@@ -24,9 +28,16 @@ export function checkWebhookAuth(req: Request): Response | null {
     console.warn("SWITCHBOARD_WEBHOOK_SECRET no configurado; webhook sin validar.");
     return null;
   }
-  const header =
+  let querySecret: string | null = null;
+  try {
+    querySecret = new URL(req.url).searchParams.get("secret");
+  } catch {
+    /* URL no parseable: ignora */
+  }
+  const provided =
     req.headers.get("x-switchboard-secret") ??
+    querySecret ??
     (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
-  if (header && header === expected) return null;
+  if (provided && provided === expected) return null;
   return jsonResponse({ error: "Unauthorized" }, 401);
 }
