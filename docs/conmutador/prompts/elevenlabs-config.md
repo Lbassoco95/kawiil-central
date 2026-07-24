@@ -108,8 +108,18 @@ En **Settings → Webhooks** (o en el agente, sección post-call):
 - Payload esperado por `sw-brief` (mapear los campos del agente): `celula`,
   `urgente`, `llamante`, `empresa`, `es_cliente`, `telefono`, `correo`, `motivo`,
   `folio`, `conversation_id`, `transcript`, `transcript_url`, `recording_url`,
-  `transfer.connected`. Si solo llega `conversation_id`, `sw-brief` puede recuperar
-  la transcripción/grabación con `ELEVENLABS_API_KEY` (ver opción A del backlog).
+  `transfer.connected`. Si solo llega `conversation_id`, `sw-brief` **recupera la
+  transcripción** desde la API de ElevenLabs con `ELEVENLABS_API_KEY` (implementado).
+
+## Inspeccionar la config actual (desde tu máquina)
+
+Hay un script que consulta la API de ElevenLabs y resume agente/número/tools/
+webhook/conversaciones (útil para verificar qué falta):
+
+```bash
+export XI_API_KEY="sk_..."   # NO lo commitees
+bash docs/conmutador/scripts/inspect-elevenlabs.sh
+```
 
 ---
 

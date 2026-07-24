@@ -31,6 +31,36 @@ const DEFAULT_ORG = "a0000000-0000-0000-0000-000000000001";
 // deno-lint-ignore no-explicit-any
 type Admin = any;
 
+// Recupera la transcripción desde la API de ElevenLabs cuando el post-call
+// webhook solo manda conversation_id (best-effort; si falla, devuelve "").
+async function fetchTranscriptFromElevenLabs(conversationId: string): Promise<string> {
+  const apiKey = Deno.env.get("ELEVENLABS_API_KEY");
+  if (!apiKey || !conversationId) return "";
+  try {
+    const resp = await fetch(
+      `https://api.elevenlabs.io/v1/convai/conversations/${encodeURIComponent(conversationId)}`,
+      { headers: { "xi-api-key": apiKey } },
+    );
+    if (!resp.ok) {
+      console.warn(`sw-brief: ElevenLabs conversation ${resp.status}`);
+      return "";
+    }
+    const data = await resp.json().catch(() => null);
+    const turns = Array.isArray(data?.transcript) ? data.transcript : [];
+    return turns
+      .map((t: { role?: string; message?: string }) => {
+        const who = t?.role === "agent" ? "Agente" : "Llamante";
+        const msg = (t?.message ?? "").trim();
+        return msg ? `${who}: ${msg}` : "";
+      })
+      .filter(Boolean)
+      .join("\n");
+  } catch (e) {
+    console.warn("sw-brief: fetch transcript ElevenLabs falló:", String(e));
+    return "";
+  }
+}
+
 // Resumen del motivo (2–3 líneas) con Sonnet; si falla, usa el motivo crudo.
 async function resumirMotivo(
   apiKey: string | undefined,
@@ -175,7 +205,12 @@ Deno.serve(async (req) => {
     const org: string = typeof body.organization_id === "string" ? body.organization_id : DEFAULT_ORG;
     const celula: Celula | null = isCelula(body.celula) ? body.celula : null;
     const motivo: string = typeof body.motivo === "string" ? body.motivo : "";
-    const transcript: string = typeof body.transcript === "string" ? body.transcript : "";
+    const conversationId: string = typeof body.conversation_id === "string" ? body.conversation_id : "";
+    // Transcripción del payload; si no viene, se intenta traer de ElevenLabs.
+    let transcript: string = typeof body.transcript === "string" ? body.transcript : "";
+    if (!transcript && conversationId) {
+      transcript = await fetchTranscriptFromElevenLabs(conversationId);
+    }
     const llamante: string = typeof body.llamante === "string" ? body.llamante : "";
     const empresa: string = typeof body.empresa === "string" ? body.empresa : "";
     const urgente = Boolean(body.urgente);
@@ -259,7 +294,7 @@ Deno.serve(async (req) => {
       client_id: clientId,
       cartera_estado: cartera,
       brief: briefText,
-      conversation_id: body.conversation_id ?? null,
+      conversation_id: conversationId || null,
       transcript_url: body.transcript_url ?? null,
       recording_url: body.recording_url ?? null,
     };
