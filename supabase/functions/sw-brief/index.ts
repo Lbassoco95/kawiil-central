@@ -61,7 +61,9 @@ async function resumirMotivo(
   }
 }
 
-// Empareja el llamante/empresa con un cliente de la org (name/rfc, ilike).
+// Empareja el llamante/empresa con un cliente de la org. Primero por alias
+// (public.client_alias, match exacto case-insensitive) y luego por nombre
+// (clients.name, ilike). Devuelve el cliente con su savio_customer_id.
 async function matchCliente(
   admin: Admin,
   org: string,
@@ -69,6 +71,21 @@ async function matchCliente(
   llamante: string,
 ): Promise<{ id: string; savio_customer_id: string | null } | null> {
   const candidatos = [empresa, llamante].map((s) => (s || "").trim()).filter(Boolean);
+  if (candidatos.length === 0) return null;
+
+  // 1) Alias exacto (case-insensitive) → client_id.
+  for (const nombre of candidatos) {
+    const { data } = await admin
+      .from("client_alias")
+      .select("client_id, clients:client_id(id, savio_customer_id)")
+      .eq("organization_id", org)
+      .ilike("alias", nombre)
+      .limit(1);
+    const cli = data?.[0]?.clients;
+    if (cli) return { id: cli.id, savio_customer_id: cli.savio_customer_id ?? null };
+  }
+
+  // 2) Nombre del cliente (coincidencia parcial).
   for (const nombre of candidatos) {
     const { data } = await admin
       .from("clients")

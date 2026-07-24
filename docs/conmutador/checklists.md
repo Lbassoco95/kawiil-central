@@ -10,11 +10,11 @@ checklist accionable.
 > `prompts/netelip-integracion.md`.
 
 - [ ] Cuenta netelip creada (https://cloud.netelip.com).
-- [ ] Adquirir número virtual de **México** (confirmar lada: 55 CDMX / 33 GDL / 81 MTY).
-- [ ] Crear **Líneas SIP** para las extensiones (softphone por persona).
-- [ ] Enrutar el número virtual hacia la **origination URI SIP de ElevenLabs**.
-- [ ] Configurar **Troncal SIP** saliente (auth por IP → whitelist de ElevenLabs)
-      para transferencias al PSTN (celular del G4).
+- [ ] Número de **México** — `+525541616006` (⏳ pendiente de validación en netelip).
+- [ ] Número importado a ElevenLabs por **troncal SIP nativa** (servidores fijos:
+      entrante `sip.rtc.elevenlabs.io`, saliente `elevenlabs.netelip.com`; auth
+      digest con la Línea SIP). Detalle en `prompts/netelip-integracion.md`.
+- [ ] (Opcional) **Líneas SIP** para extensiones (softphone por persona).
 - [ ] Definir aviso de grabación (LFPDPPP): "Esta llamada puede ser grabada para
       mejorar la atención." (ya incluido en el prompt base).
 
