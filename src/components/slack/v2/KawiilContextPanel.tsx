@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { invokeSlackApi, type SlackConversation } from "@/lib/slackApi";
@@ -117,6 +118,42 @@ export function KawiilContextPanel({
 
   const tasks = tasksQuery.data ?? [];
 
+  // ─── Mensajes programados de este canal (previsualización + cancelar) ──
+  const qc = useQueryClient();
+  const scheduledQuery = useQuery({
+    queryKey: ["slack-scheduled-messages", channelId],
+    queryFn: async () => {
+      const d = await invokeSlackApi<{
+        ok: boolean;
+        scheduled_messages?: Array<{ id: string; channel: string; post_at: number; text?: string }>;
+      }>({ action: "chat.scheduledMessages.list", channel: channelId }, { timeoutMs: 20_000 });
+      return d.ok ? (d.scheduled_messages ?? []) : [];
+    },
+    enabled: !!channelId,
+    staleTime: 30_000,
+  });
+  const scheduled = [...(scheduledQuery.data ?? [])].sort((a, b) => a.post_at - b.post_at);
+
+  const cancelScheduled = useMutation({
+    mutationFn: async (m: { id: string; channel: string }) => {
+      const d = await invokeSlackApi<{ ok: boolean; error?: string }>(
+        { action: "chat.deleteScheduledMessage", channel: m.channel, scheduled_message_id: m.id },
+        { timeoutMs: 20_000 },
+      );
+      if (!d.ok) throw new Error(d.error || "No se pudo cancelar");
+    },
+    onSuccess: () => {
+      toast.success("Mensaje programado cancelado");
+      void qc.invalidateQueries({ queryKey: ["slack-scheduled-messages", channelId] });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "No se pudo cancelar"),
+  });
+
+  const fmtWhen = (postAt: number) =>
+    new Date(postAt * 1000).toLocaleString("es-MX", {
+      weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+    });
+
   return (
     <div className="slack-context">
       {/* Cabecera */}
@@ -170,6 +207,56 @@ export function KawiilContextPanel({
       {/* ── TAREAS ── */}
       {tab === "tasks" && (
         <div>
+          {/* Mensajes programados de este canal (previsualización) */}
+          {scheduled.length > 0 && (
+            <div className="sl-ctx-card">
+              <div className="sl-ctx-card-head">
+                <div className="sl-ctx-card-title">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                  </svg>
+                  Mensajes programados
+                </div>
+                <span className="sl-ctx-card-link">{scheduled.length}</span>
+              </div>
+              {scheduled.map((m) => (
+                <div
+                  key={m.id}
+                  style={{
+                    border: "1px solid hsl(var(--border))", borderRadius: 8,
+                    padding: "8px 10px", marginTop: 6, background: "hsl(var(--muted) / 0.3)",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "hsl(var(--primary))" }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                    </svg>
+                    Se enviará {fmtWhen(m.post_at)}
+                  </div>
+                  <div style={{
+                    fontSize: 13, color: "hsl(var(--foreground))", marginTop: 4,
+                    display: "-webkit-box", WebkitLineClamp: 4, WebkitBoxOrient: "vertical",
+                    overflow: "hidden", whiteSpace: "pre-wrap", wordBreak: "break-word",
+                  }}>
+                    {m.text || "(sin texto)"}
+                  </div>
+                  <button
+                    type="button"
+                    disabled={cancelScheduled.isPending}
+                    onClick={() => cancelScheduled.mutate({ id: m.id, channel: m.channel })}
+                    style={{
+                      marginTop: 6, fontSize: 11, fontWeight: 600, color: "hsl(var(--destructive))",
+                      background: "transparent", border: "1px solid hsl(var(--destructive) / 0.35)",
+                      borderRadius: 6, padding: "2px 8px", cursor: "pointer",
+                    }}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Sección tareas pendientes */}
           <div className="sl-ctx-card">
             <div className="sl-ctx-card-head">
