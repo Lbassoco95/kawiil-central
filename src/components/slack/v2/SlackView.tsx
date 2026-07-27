@@ -40,6 +40,7 @@ import { KawiilContextPanel } from "./KawiilContextPanel";
 import { TypingIndicator } from "./TypingIndicator";
 import { SlackGroupsOrganizerDialog } from "@/components/slack/SlackGroupsOrganizerDialog";
 import { SlackCreateTaskDialog } from "@/components/slack/SlackCreateTaskDialog";
+import { SlackActivityPanel } from "@/components/slack/SlackActivityPanel";
 
 // ─── Tipos ───────────────────────────────────────────────────
 type HistoryPage = {
@@ -54,10 +55,13 @@ type RawSidebarGroup = {
   slack_sidebar_group_channels: { channel_id: string; sort_order: number }[];
 };
 
-const HISTORY_FIRST_MS   = 110_000;
-const HISTORY_FIRST_HARD = 118_000;
-const HISTORY_NEXT_MS    = 55_000;
-const HISTORY_NEXT_HARD  = 62_000;
+// Antes 110s: un spinner de ~2 min si Slack estaba en rate-limit. La Edge ya reintenta
+// internamente (tope 25s) y al reabrir se muestra la caché local al instante, así que
+// un tope más corto evita el "se queda cargando" y ofrece reintentar antes.
+const HISTORY_FIRST_MS   = 45_000;
+const HISTORY_FIRST_HARD = 50_000;
+const HISTORY_NEXT_MS    = 25_000;
+const HISTORY_NEXT_HARD  = 30_000;
 
 const SLACK_PERMISSION_TOAST_MS = 14_000;
 
@@ -114,6 +118,7 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
   const [threadRootTs, setThreadRootTs] = useState<string | null>(null);
   const [groupsDialogOpen, setGroupsDialogOpen] = useState(false);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+  const [activityOpen, setActivityOpen] = useState(false);
   const composerRef = useRef<SlackComposerHandle>(null);
   const threadComposerRef = useRef<SlackComposerHandle>(null);
   const [taskMsg, setTaskMsg] = useState<SlackMessage | null>(null);
@@ -655,6 +660,17 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
     const key = `${selectedChannel}:${count}`;
     if (lastBadgeMarkRef.current === key) return; // ya lo intentamos para este conteo
     lastBadgeMarkRef.current = key;
+    // Optimista: quita el badge de este canal de inmediato para que la notificación
+    // "cambie" al abrir, sin esperar el round-trip a Supabase ni el refetch.
+    qc.setQueryData<Record<string, number>>(
+      ["slack-channel-notification-badges", user.id],
+      (prev) => {
+        if (!prev || !(selectedChannel in prev)) return prev;
+        const next = { ...prev };
+        delete next[selectedChannel];
+        return next;
+      },
+    );
     void markSlackChannelNotificationsRead(user.id, selectedChannel)
       .then(() => qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", user.id] }))
       .catch(() => { /* best-effort */ });
@@ -766,6 +782,37 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
     return currentConv.name || selectedChannel;
   }, [currentConv, selectedChannel, userMap, aliasMap, mpimNameByChannel]);
 
+  // Resolver un título amable para CUALQUIER channel_id (no solo el activo).
+  // Se usa en el panel de Actividad para mostrar el canal/contraparte de cada item.
+  const resolveChannelTitle = useCallback(
+    (channelId: string): string | undefined => {
+      if (!channelId) return undefined;
+      if (aliasMap[channelId]) return aliasMap[channelId];
+      const conv = conversations.find((c) => c.id === channelId);
+      if (conv) {
+        if (conv.is_im && conv.user) {
+          const u = userMap[conv.user];
+          return u?.display_name || u?.real_name || `@${conv.user}`;
+        }
+        if (conv.is_mpim && mpimNameByChannel[channelId]) return mpimNameByChannel[channelId];
+        if (conv.name) return conv.name;
+      }
+      if (mpimNameByChannel[channelId]) return mpimNameByChannel[channelId];
+      return undefined;
+    },
+    [aliasMap, conversations, userMap, mpimNameByChannel],
+  );
+
+  // Al hacer click en un item de Actividad: saltar al canal y, si es hilo, abrirlo.
+  const handleJumpToMessage = useCallback(
+    (channelId: string, _ts: string, threadTs?: string | null) => {
+      setActivityOpen(false);
+      selectChannel(channelId);
+      if (threadTs) setThreadRootTs(threadTs);
+    },
+    [selectChannel],
+  );
+
   // ─── Nombre del usuario actual (para typing indicator) ─────
   const currentUserName = useMemo(() => {
     if (!connection.slack_user_id) return "Tú";
@@ -858,6 +905,8 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
             }
             messages={messages}
             isLoading={historyQuery.isLoading}
+            isError={historyQuery.isError}
+            onRetry={() => void historyQuery.refetch()}
             hasMore={!!historyQuery.hasNextPage}
             isFetchingNextPage={historyQuery.isFetchingNextPage}
             onLoadMore={() => void historyQuery.fetchNextPage()}
@@ -865,7 +914,7 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
             userMap={userMap}
             selfUserId={connection.slack_user_id ?? undefined}
             onOpenAi={() => {}}
-            onOpenActivity={() => {}}
+            onOpenActivity={() => setActivityOpen(true)}
             onReact={handleReact}
             onCreateTask={handleCreateTask}
             onBack={isMobile ? () => setMobilePanel("sidebar") : undefined}
@@ -913,9 +962,17 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
           currentConv={currentConv}
           userMap={userMap}
           unreadMentions={unreadMentions}
-          onOpenActivity={() => {}}
+          onOpenActivity={() => setActivityOpen(true)}
         />
       )}
+
+      {/* Panel de Actividad (menciones, hilos, DMs, reacciones) */}
+      <SlackActivityPanel
+        open={activityOpen}
+        onClose={() => setActivityOpen(false)}
+        onJumpToMessage={handleJumpToMessage}
+        resolveChannelTitle={resolveChannelTitle}
+      />
 
       {/* Diálogo organizar secciones */}
       {orgId && (
