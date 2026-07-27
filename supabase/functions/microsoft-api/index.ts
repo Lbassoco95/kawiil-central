@@ -2167,6 +2167,57 @@ Deno.serve(async (req) => {
         result = await graphRequest(accessToken, "/me/mailFolders/inbox/messageRules");
         break;
       }
+
+      // Aplica una regla a los correos que YA están en la bandeja (las reglas de Outlook solo
+      // aplican a mail nuevo). Mueve los mensajes del remitente a la carpeta indicada.
+      case "apply-mail-rule": {
+        const senderEmail = String(params?.senderEmail || "").trim().toLowerCase();
+        const moveToFolderId = params?.moveToFolderId as string | undefined;
+        const alsoMarkRead = params?.markAsRead === true;
+        if (!senderEmail) throw new Error("senderEmail required");
+        const filter = encodeURIComponent(`from/emailAddress/address eq '${senderEmail.replace(/'/g, "''")}'`);
+        let moved = 0;
+        let total = 0;
+        const MAX_TOTAL = 500; // tope de seguridad
+        // Repetir por lotes: al mover, los correos salen de la bandeja, así que siempre
+        // pedimos el primer lote de los que quedan hasta que no haya más (o alcanzar el tope).
+        for (let batch = 0; batch < 20; batch++) {
+          const list = (await graphRequest(
+            accessToken,
+            `/me/mailFolders/inbox/messages?$filter=${filter}&$select=id,isRead&$top=50`,
+            { headers: GRAPH_MAIL_PREFER_IMMUTABLE },
+          )) as { value?: Array<{ id: string; isRead?: boolean }> };
+          const items = list.value ?? [];
+          if (items.length === 0) break;
+          total += items.length;
+          for (const m of items) {
+            if (moved >= MAX_TOTAL) break;
+            try {
+              if (alsoMarkRead && m.isRead === false) {
+                await graphRequest(accessToken, `/me/messages/${m.id}`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ isRead: true }),
+                });
+              }
+              if (moveToFolderId) {
+                await graphRequest(accessToken, `/me/messages/${m.id}/move`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ destinationId: moveToFolderId }),
+                });
+              }
+              moved++;
+            } catch {
+              /* seguir con el resto */
+            }
+          }
+          // Si no hay carpeta destino (solo markAsRead), no salen de la bandeja → evitar bucle infinito.
+          if (!moveToFolderId || moved >= MAX_TOTAL) break;
+        }
+        result = { moved, total };
+        break;
+      }
     }
 
     if (result === undefined) {

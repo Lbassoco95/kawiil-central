@@ -1758,6 +1758,45 @@ export function useListMailRules() {
   });
 }
 
+/** Aplica TODAS las reglas activas a los correos que ya están en la bandeja (mover retroactivo)
+ *  y (re)crea las reglas de Outlook para que apliquen a los correos futuros. */
+export function useApplyAllInboxRules() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: async () => {
+      const { data: rules, error } = await supabase
+        .from("email_inbox_rules")
+        .select("*")
+        .eq("is_enabled", true);
+      if (error) throw error;
+      let movedTotal = 0;
+      for (const r of (rules ?? []) as EmailInboxRule[]) {
+        try {
+          await supabase.functions.invoke("microsoft-api", {
+            body: { action: "create-mail-rule", params: { displayName: r.rule_name, senderEmail: r.sender_email, moveToFolderId: r.move_to_folder_id ?? undefined, markAsRead: r.mark_as_read } },
+          });
+        } catch { /* la regla puede ya existir en Outlook */ }
+        try {
+          const res = await supabase.functions.invoke("microsoft-api", {
+            body: { action: "apply-mail-rule", params: { senderEmail: r.sender_email, moveToFolderId: r.move_to_folder_id ?? undefined, markAsRead: r.mark_as_read } },
+          });
+          movedTotal += Number(res.data?.moved ?? 0);
+        } catch { /* seguir con las demás */ }
+      }
+      return { movedTotal, rules: (rules ?? []).length };
+    },
+    onSuccess: (r) => {
+      void queryClient.invalidateQueries({ queryKey: ["outlook-emails"] });
+      void queryClient.invalidateQueries({ queryKey: ["mail-folders"] });
+      void queryClient.invalidateQueries({ queryKey: INBOX_UNREAD_QUERY_KEY });
+      if (r.rules === 0) toast.info("No hay reglas activas para aplicar.");
+      else toast.success(`Reglas aplicadas · ${r.movedTotal} correo${r.movedTotal === 1 ? "" : "s"} movido${r.movedTotal === 1 ? "" : "s"}`);
+    },
+    onError: (err: Error) => toast.error("Error al aplicar reglas: " + err.message),
+  });
+}
+
 export function useCreateMailRule() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -1776,12 +1815,13 @@ export function useCreateMailRule() {
       moveToFolderName?: string;
       markAsRead?: boolean;
     }) => {
+      const cleanSender = senderEmail.trim().toLowerCase();
       const { data, error } = await supabase
         .from("email_inbox_rules")
         .insert({
           user_id: user!.id,
           rule_name: displayName || `Regla: ${senderEmail}`,
-          sender_email: senderEmail.trim().toLowerCase(),
+          sender_email: cleanSender,
           move_to_folder_id: moveToFolderId ?? null,
           move_to_folder_name: moveToFolderName ?? null,
           mark_as_read: markAsRead ?? false,
@@ -1790,11 +1830,36 @@ export function useCreateMailRule() {
         .select()
         .single();
       if (error) throw error;
-      return data as EmailInboxRule;
+
+      // 1) Crear la regla REAL de Outlook (Microsoft la aplica sola a todo el correo futuro).
+      let serverRuleOk = false;
+      try {
+        const res = await supabase.functions.invoke("microsoft-api", {
+          body: { action: "create-mail-rule", params: { displayName, senderEmail: cleanSender, moveToFolderId, markAsRead } },
+        });
+        serverRuleOk = !res.error && !res.data?.error;
+      } catch { /* la regla local ya quedó guardada */ }
+
+      // 2) Aplicar a los correos que YA están en la bandeja (mover los del remitente).
+      let movedNow = 0;
+      try {
+        const res = await supabase.functions.invoke("microsoft-api", {
+          body: { action: "apply-mail-rule", params: { senderEmail: cleanSender, moveToFolderId, markAsRead } },
+        });
+        movedNow = Number(res.data?.moved ?? 0);
+      } catch { /* no bloquear */ }
+
+      return { rule: data as EmailInboxRule, serverRuleOk, movedNow };
     },
-    onSuccess: () => {
+    onSuccess: (r) => {
       void queryClient.invalidateQueries({ queryKey: ["email-inbox-rules", user?.id] });
-      toast.success("Regla creada");
+      void queryClient.invalidateQueries({ queryKey: ["outlook-emails"] });
+      void queryClient.invalidateQueries({ queryKey: ["mail-folders"] });
+      void queryClient.invalidateQueries({ queryKey: INBOX_UNREAD_QUERY_KEY });
+      const parts = ["Regla creada"];
+      if (r.movedNow > 0) parts.push(`${r.movedNow} correo${r.movedNow > 1 ? "s" : ""} movido${r.movedNow > 1 ? "s" : ""}`);
+      if (!r.serverRuleOk) parts.push("(se aplicará a los nuevos desde la app)");
+      toast.success(parts.join(" · "));
     },
     onError: (err: Error) => toast.error("Error al crear la regla: " + err.message),
   });
