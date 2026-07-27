@@ -41,7 +41,7 @@ import { es } from "date-fns/locale";
 import {
   Plus, ChevronLeft, ChevronRight, Loader2, Trash2, Video, Pencil,
   CalendarDays, CheckSquare, Clock, MapPin, Users, ExternalLink, AlertCircle,
-  PanelRightClose, PanelRightOpen, Car, Lock,
+  PanelRightClose, PanelRightOpen, Car, Lock, RefreshCw,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -420,6 +420,12 @@ export function CalendarView({
   const [newEvent, setNewEvent] = useState({
     subject: "", date: "", startTime: "09:00", endTime: "10:00", attendees: "",
     location: "", description: "", isOnlineMeeting: false, isAllDay: false, isPrivate: false, categories: [] as string[],
+    repeat: "none" as "none" | "daily" | "weekly" | "monthly",
+    repeatInterval: 1,
+    repeatDays: [] as string[],
+    repeatEnd: "never" as "never" | "on" | "after",
+    repeatUntil: "",
+    repeatCount: 8,
   });
   // Al abrir "Nuevo evento", precarga la fecha con el día seleccionado (editable
   // por si se eligió el día equivocado).
@@ -863,10 +869,32 @@ export function CalendarView({
     if (newEvent.isPrivate) baseEvent.sensitivity = "private";
     if (newEvent.categories.length > 0) baseEvent.categories = newEvent.categories;
 
+    // Recurrencia (Microsoft Graph): patrón + rango. Aplica la misma hora a cada ocurrencia.
+    if (newEvent.repeat !== "none") {
+      const DOW = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+      const interval = Math.max(1, Number(newEvent.repeatInterval) || 1);
+      let pattern: any;
+      if (newEvent.repeat === "daily") {
+        pattern = { type: "daily", interval };
+      } else if (newEvent.repeat === "weekly") {
+        const days = newEvent.repeatDays.length > 0 ? newEvent.repeatDays : [DOW[baseDate.getDay()]];
+        pattern = { type: "weekly", interval, daysOfWeek: days };
+      } else {
+        pattern = { type: "absoluteMonthly", interval, dayOfMonth: baseDate.getDate() };
+      }
+      const range: any = { type: "noEnd", startDate: dateStr };
+      if (newEvent.repeatEnd === "on" && newEvent.repeatUntil) {
+        range.type = "endDate"; range.endDate = newEvent.repeatUntil;
+      } else if (newEvent.repeatEnd === "after") {
+        range.type = "numbered"; range.numberOfOccurrences = Math.max(1, Number(newEvent.repeatCount) || 1);
+      }
+      baseEvent.recurrence = { pattern, range };
+    }
+
     createEvent.mutate(baseEvent, {
       onSuccess: () => {
         setShowCreate(false);
-        setNewEvent({ subject: "", date: "", startTime: "09:00", endTime: "10:00", attendees: "", location: "", description: "", isOnlineMeeting: false, isAllDay: false, isPrivate: false, categories: [] });
+        setNewEvent({ subject: "", date: "", startTime: "09:00", endTime: "10:00", attendees: "", location: "", description: "", isOnlineMeeting: false, isAllDay: false, isPrivate: false, categories: [], repeat: "none", repeatInterval: 1, repeatDays: [], repeatEnd: "never", repeatUntil: "", repeatCount: 8 });
       },
     });
   };
@@ -1217,20 +1245,19 @@ export function CalendarView({
                               />
                             )}
                             {TIME_SLOTS.map((slotMinutes) => (
-                              <div key={slotMinutes} className="border-b border-border/60 last:border-b-0 transition-colors duration-100 relative"
-                                style={{ height: `${SLOT_HEIGHT}px` }}
-                                onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; e.currentTarget.classList.add("bg-primary/20"); }}
-                                onDragLeave={(e) => e.currentTarget.classList.remove("bg-primary/20")}
-                                onDrop={(e) => {
-                                  e.preventDefault();
-                                  e.currentTarget.classList.remove("bg-primary/20");
-                                  // Granularidad de 15 min: divide el slot de 30 min según la Y del cursor.
-                                  const rect = e.currentTarget.getBoundingClientRect();
-                                  const offY = e.clientY - rect.top;
-                                  const sub = offY >= rect.height / 2 ? 15 : 0;
-                                  handleDrop(day, slotMinutes + sub);
-                                }}
-                              />
+                              <div key={slotMinutes} className="border-b border-border/60 last:border-b-0 relative"
+                                style={{ height: `${SLOT_HEIGHT}px` }}>
+                                {/* Dos zonas de 15 min con resaltado propio → arrastre fino de 15 en 15 */}
+                                {[0, 15].map((sub) => (
+                                  <div
+                                    key={sub}
+                                    className="h-1/2 w-full transition-colors duration-75"
+                                    onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; e.currentTarget.classList.add("bg-primary/25"); }}
+                                    onDragLeave={(e) => e.currentTarget.classList.remove("bg-primary/25")}
+                                    onDrop={(e) => { e.preventDefault(); e.currentTarget.classList.remove("bg-primary/25"); handleDrop(day, slotMinutes + sub); }}
+                                  />
+                                ))}
+                              </div>
                             ))}
 
                             {/* Bloques de "traslado" (fondo rayado) antes de eventos con trayecto guardado */}
@@ -2088,6 +2115,69 @@ export function CalendarView({
                 </div>
               </div>
             )}
+            {/* Recurrencia */}
+            <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <Label className="flex items-center gap-1.5"><RefreshCw className="h-3.5 w-3.5" /> Repetir</Label>
+                <select
+                  value={newEvent.repeat}
+                  onChange={(e) => setNewEvent({ ...newEvent, repeat: e.target.value as any })}
+                  className="h-8 rounded-md border border-border bg-background px-2 text-sm"
+                >
+                  <option value="none">No se repite</option>
+                  <option value="daily">Diario</option>
+                  <option value="weekly">Semanal</option>
+                  <option value="monthly">Mensual</option>
+                </select>
+              </div>
+              {newEvent.repeat !== "none" && (
+                <div className="space-y-2 pt-1">
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-muted-foreground">Cada</span>
+                    <Input type="number" min={1} value={newEvent.repeatInterval}
+                      onChange={(e) => setNewEvent({ ...newEvent, repeatInterval: Math.max(1, Number(e.target.value) || 1) })}
+                      className="h-8 w-16" />
+                    <span className="text-muted-foreground">{newEvent.repeat === "daily" ? "día(s)" : newEvent.repeat === "weekly" ? "semana(s)" : "mes(es)"}</span>
+                  </div>
+                  {newEvent.repeat === "weekly" && (
+                    <div className="flex flex-wrap gap-1">
+                      {[["sunday","D"],["monday","L"],["tuesday","M"],["wednesday","X"],["thursday","J"],["friday","V"],["saturday","S"]].map(([val, lbl]) => {
+                        const on = newEvent.repeatDays.includes(val);
+                        return (
+                          <button key={val} type="button"
+                            onClick={() => setNewEvent((p) => ({ ...p, repeatDays: on ? p.repeatDays.filter((d) => d !== val) : [...p.repeatDays, val] }))}
+                            className={cn("h-7 w-7 rounded-full text-[11px] font-medium border transition-colors",
+                              on ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:bg-accent")}
+                          >{lbl}</button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 text-sm flex-wrap">
+                    <span className="text-muted-foreground">Termina</span>
+                    <select value={newEvent.repeatEnd}
+                      onChange={(e) => setNewEvent({ ...newEvent, repeatEnd: e.target.value as any })}
+                      className="h-8 rounded-md border border-border bg-background px-2 text-sm">
+                      <option value="never">Nunca</option>
+                      <option value="on">En fecha</option>
+                      <option value="after">Después de N</option>
+                    </select>
+                    {newEvent.repeatEnd === "on" && (
+                      <Input type="date" value={newEvent.repeatUntil}
+                        onChange={(e) => setNewEvent({ ...newEvent, repeatUntil: e.target.value })} className="h-8 w-40" />
+                    )}
+                    {newEvent.repeatEnd === "after" && (
+                      <div className="flex items-center gap-1">
+                        <Input type="number" min={1} value={newEvent.repeatCount}
+                          onChange={(e) => setNewEvent({ ...newEvent, repeatCount: Math.max(1, Number(e.target.value) || 1) })}
+                          className="h-8 w-16" />
+                        <span className="text-muted-foreground">veces</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
             <div className="space-y-2">
               <Label>Invitados (correos separados por coma)</Label>
               <Input placeholder="persona1@ejemplo.com, persona2@ejemplo.com" value={newEvent.attendees} onChange={(e) => setNewEvent({ ...newEvent, attendees: e.target.value })} />
