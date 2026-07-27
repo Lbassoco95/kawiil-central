@@ -65,6 +65,7 @@ import { WorkLocationChip } from "@/components/microsoft/WorkLocationChip";
 import { useTeamAvailability } from "@/hooks/useTeamAvailability";
 import { UserAvatar } from "@/components/shared/UserAvatar";
 import { EventTravelSection } from "@/components/microsoft/EventTravelSection";
+import { useEventTravelMap } from "@/hooks/useEventTravel";
 import { PlaceAutocompleteInput } from "@/components/microsoft/PlaceAutocompleteInput";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -427,6 +428,8 @@ export function CalendarView({
   } = useEventDetail(isGoogleEvent ? null : selectedEventId);
   const updateEvent = useUpdateCalendarEvent();
   const { data: outlookCategories = [] } = useOutlookCategories();
+  // Trayectos guardados por evento -> bloque de traslado antes del evento.
+  const { data: travelMap = {} } = useEventTravelMap();
   const [draggedEvent, setDraggedEvent] = useState<any>(null);
 
   const handleDrop = useCallback(
@@ -1164,6 +1167,39 @@ export function CalendarView({
                               />
                             ))}
 
+                            {/* Bloques de "traslado" (fondo rayado) antes de eventos con trayecto guardado */}
+                            {dayEvents.map((event: any) => {
+                              const tr = travelMap[event.id];
+                              if (!tr || event._isAllDay || !event._parsedStart) return null;
+                              const startMin = event._parsedStart.getHours() * 60 + event._parsedStart.getMinutes();
+                              const durMin = Math.max(5, Math.round(tr.duration_seconds / 60));
+                              const bandStart = Math.max(START_HOUR * 60, startMin - durMin);
+                              const bandEnd = Math.min(END_HOUR * 60, startMin);
+                              if (bandEnd <= bandStart) return null;
+                              const bTop = ((bandStart - START_HOUR * 60) / SLOT_MINUTES) * SLOT_HEIGHT;
+                              const bHeight = ((bandEnd - bandStart) / SLOT_MINUTES) * SLOT_HEIGHT;
+                              const leaveStr = formatMX(new Date(event._parsedStart.getTime() - durMin * 60000), "HH:mm");
+                              return (
+                                <div
+                                  key={`travel-${event.id}`}
+                                  className="absolute left-0.5 right-0.5 z-0 overflow-hidden rounded-md pointer-events-none"
+                                  title={`Traslado ~${durMin} min · salir ${leaveStr}`}
+                                  style={{
+                                    top: bTop,
+                                    height: bHeight,
+                                    backgroundImage:
+                                      "repeating-linear-gradient(45deg, rgba(100,116,139,0.20) 0 6px, rgba(100,116,139,0.06) 6px 12px)",
+                                    border: "1px dashed rgba(100,116,139,0.5)",
+                                  }}
+                                >
+                                  {bHeight >= 18 && (
+                                    <span className="absolute left-1 top-0.5 text-[9px] font-medium text-muted-foreground">
+                                      🚗 {durMin} min
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })}
                             {layoutDayEvents(dayEvents).map(({ event, startMin, endMin, col, cols }) => {
                               const endDt = event.end?.dateTime ? parseEventTime(event.end.dateTime) : null;
                               const dayStart = START_HOUR * 60;
@@ -2069,6 +2105,7 @@ export function CalendarView({
                 <EventTravelSection
                   destination={editForm.location.trim()}
                   departureISO={editForm.startDate && editForm.startTime ? `${editForm.startDate}T${editForm.startTime}:00` : null}
+                  eventId={selectedEventId}
                 />
               )}
               <div className="space-y-2">
