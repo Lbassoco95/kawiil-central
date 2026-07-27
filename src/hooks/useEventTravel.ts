@@ -40,7 +40,9 @@ export function useSaveEventTravel() {
     mutationFn: async (rec: Omit<EventTravelRecord, "computed_at">) => {
       if (!user) throw new Error("No autenticado");
       const { error } = await supabase.from("event_travel").upsert(
-        { user_id: user.id, ...rec, computed_at: new Date().toISOString() },
+        // Al recalcular se reinician las banderas de aviso para que un evento
+        // reprogramado vuelva a notificar a 2 h / 1 h.
+        { user_id: user.id, ...rec, computed_at: new Date().toISOString(), notified_2h: false, notified_1h: false },
         { onConflict: "user_id,event_id" },
       );
       if (error) throw error;
