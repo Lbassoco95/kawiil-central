@@ -963,6 +963,8 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
           userMap={userMap}
           unreadMentions={unreadMentions}
           onOpenActivity={() => setActivityOpen(true)}
+          onJumpToMessage={handleJumpToMessage}
+          resolveChannelTitle={resolveChannelTitle}
         />
       )}
 
