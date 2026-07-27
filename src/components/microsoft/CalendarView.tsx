@@ -68,6 +68,7 @@ import { EventTravelSection } from "@/components/microsoft/EventTravelSection";
 import { useEventTravelMap } from "@/hooks/useEventTravel";
 import { PlaceAutocompleteInput } from "@/components/microsoft/PlaceAutocompleteInput";
 import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 
 type ViewMode = "day" | "3days" | "week" | "month" | "agenda" | "equipo";
 
@@ -420,7 +421,7 @@ export function CalendarView({
   const [newEvent, setNewEvent] = useState({
     subject: "", date: "", startTime: "09:00", endTime: "10:00", attendees: "",
     location: "", description: "", isOnlineMeeting: false, isAllDay: false, isPrivate: false, categories: [] as string[],
-    repeat: "none" as "none" | "daily" | "weekly" | "monthly",
+    repeat: "none" as "none" | "daily" | "weekly" | "monthly" | "custom",
     repeatInterval: 1,
     repeatDays: [] as string[],
     repeatEnd: "never" as "never" | "on" | "after",
@@ -869,9 +870,61 @@ export function CalendarView({
     if (newEvent.isPrivate) baseEvent.sensitivity = "private";
     if (newEvent.categories.length > 0) baseEvent.categories = newEvent.categories;
 
-    // Recurrencia (Microsoft Graph): patrón + rango. Aplica la misma hora a cada ocurrencia.
+    const DOW = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+    const resetNewEvent = () => setNewEvent({ subject: "", date: "", startTime: "09:00", endTime: "10:00", attendees: "", location: "", description: "", isOnlineMeeting: false, isAllDay: false, isPrivate: false, categories: [], repeat: "none", repeatInterval: 1, repeatDays: [], repeatEnd: "never", repeatUntil: "", repeatCount: 8 });
+
+    // "Personalizado (editable)": genera eventos INDEPENDIENTES (uno por ocurrencia)
+    // para poder editar/mover cada uno por separado — no una serie fija de Graph.
+    if (newEvent.repeat === "custom" && !newEvent.isAllDay) {
+      const interval = Math.max(1, Number(newEvent.repeatInterval) || 1);
+      const useDays = newEvent.repeatDays.length > 0;
+      const dowSet = new Set(newEvent.repeatDays.length > 0 ? newEvent.repeatDays : [DOW[baseDate.getDay()]]);
+      const HARD_CAP = 90;
+      let countCap = 12; // "nunca" → 12 por defecto
+      let endMs = Infinity;
+      if (newEvent.repeatEnd === "after") { countCap = Math.min(HARD_CAP, Math.max(1, Number(newEvent.repeatCount) || 1)); endMs = Infinity; }
+      else if (newEvent.repeatEnd === "on" && newEvent.repeatUntil) { countCap = HARD_CAP; endMs = new Date(`${newEvent.repeatUntil}T23:59:59`).getTime(); }
+
+      const dates: Date[] = [];
+      const weekStart0 = startOfWeek(baseDate, { weekStartsOn: 0 }).getTime();
+      let iter = new Date(baseDate);
+      let guard = 0;
+      while (dates.length < countCap && iter.getTime() <= endMs && guard < 366) {
+        if (useDays) {
+          const weekDelta = Math.floor((startOfWeek(iter, { weekStartsOn: 0 }).getTime() - weekStart0) / (7 * 86400000));
+          if (dowSet.has(DOW[iter.getDay()]) && weekDelta % interval === 0) dates.push(new Date(iter));
+          iter = addDays(iter, 1);
+        } else {
+          dates.push(new Date(iter));
+          iter = addDays(iter, interval);
+        }
+        guard++;
+      }
+
+      let created = 0;
+      dates.forEach((d) => {
+        const ds = format(d, "yyyy-MM-dd");
+        const ev: any = {
+          subject: baseEvent.subject,
+          start: { dateTime: `${ds}T${newEvent.startTime}:00`, timeZone: CDMX_TZ },
+          end: { dateTime: `${ds}T${newEvent.endTime}:00`, timeZone: CDMX_TZ },
+        };
+        if (baseEvent.body) ev.body = baseEvent.body;
+        if (baseEvent.location) ev.location = baseEvent.location;
+        if (baseEvent.attendees) ev.attendees = baseEvent.attendees;
+        if (baseEvent.sensitivity) ev.sensitivity = baseEvent.sensitivity;
+        if (baseEvent.categories) ev.categories = baseEvent.categories;
+        createEvent.mutate(ev);
+        created++;
+      });
+      toast.success(`${created} eventos creados (editables por separado)`);
+      setShowCreate(false);
+      resetNewEvent();
+      return;
+    }
+
+    // Recurrencia como serie de Microsoft Graph (patrón + rango, misma hora en cada ocurrencia).
     if (newEvent.repeat !== "none") {
-      const DOW = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
       const interval = Math.max(1, Number(newEvent.repeatInterval) || 1);
       let pattern: any;
       if (newEvent.repeat === "daily") {
@@ -894,7 +947,7 @@ export function CalendarView({
     createEvent.mutate(baseEvent, {
       onSuccess: () => {
         setShowCreate(false);
-        setNewEvent({ subject: "", date: "", startTime: "09:00", endTime: "10:00", attendees: "", location: "", description: "", isOnlineMeeting: false, isAllDay: false, isPrivate: false, categories: [], repeat: "none", repeatInterval: 1, repeatDays: [], repeatEnd: "never", repeatUntil: "", repeatCount: 8 });
+        resetNewEvent();
       },
     });
   };
@@ -2128,6 +2181,7 @@ export function CalendarView({
                   <option value="daily">Diario</option>
                   <option value="weekly">Semanal</option>
                   <option value="monthly">Mensual</option>
+                  <option value="custom">Personalizado (editable)</option>
                 </select>
               </div>
               {newEvent.repeat !== "none" && (
@@ -2137,9 +2191,9 @@ export function CalendarView({
                     <Input type="number" min={1} value={newEvent.repeatInterval}
                       onChange={(e) => setNewEvent({ ...newEvent, repeatInterval: Math.max(1, Number(e.target.value) || 1) })}
                       className="h-8 w-16" />
-                    <span className="text-muted-foreground">{newEvent.repeat === "daily" ? "día(s)" : newEvent.repeat === "weekly" ? "semana(s)" : "mes(es)"}</span>
+                    <span className="text-muted-foreground">{newEvent.repeat === "daily" ? "día(s)" : newEvent.repeat === "monthly" ? "mes(es)" : "semana(s)"}</span>
                   </div>
-                  {newEvent.repeat === "weekly" && (
+                  {(newEvent.repeat === "weekly" || newEvent.repeat === "custom") && (
                     <div className="flex flex-wrap gap-1">
                       {[["sunday","D"],["monday","L"],["tuesday","M"],["wednesday","X"],["thursday","J"],["friday","V"],["saturday","S"]].map(([val, lbl]) => {
                         const on = newEvent.repeatDays.includes(val);
@@ -2175,6 +2229,11 @@ export function CalendarView({
                       </div>
                     )}
                   </div>
+                  {newEvent.repeat === "custom" && (
+                    <p className="text-[11px] text-muted-foreground border-t border-border/40 pt-1.5">
+                      Crea cada ocurrencia como un <b className="text-foreground">evento independiente</b> que puedes editar o mover por separado (p. ej. distinto horario por día). Sin fin definido, crea 12.
+                    </p>
+                  )}
                 </div>
               )}
             </div>
