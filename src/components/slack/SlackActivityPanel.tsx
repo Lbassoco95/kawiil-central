@@ -99,7 +99,7 @@ export function SlackActivityPanel({
     <aside
       className={cn(
         "shrink-0 flex flex-col border-l border-border/60 bg-card",
-        "w-full sm:w-[380px] lg:w-[400px] min-w-0",
+        "h-full w-full sm:w-[380px] lg:w-[400px] min-w-0 shadow-2xl",
       )}
     >
       <div

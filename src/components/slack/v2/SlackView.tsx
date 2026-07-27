@@ -966,13 +966,25 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
         />
       )}
 
-      {/* Panel de Actividad (menciones, hilos, DMs, reacciones) */}
-      <SlackActivityPanel
-        open={activityOpen}
-        onClose={() => setActivityOpen(false)}
-        onJumpToMessage={handleJumpToMessage}
-        resolveChannelTitle={resolveChannelTitle}
-      />
+      {/* Panel de Actividad — drawer fijo a la derecha (fuera del grid de columnas
+          para no descuadrar el layout; con backdrop para cerrar al hacer clic fuera). */}
+      {activityOpen && (
+        <>
+          <div
+            className="fixed inset-0 z-40 bg-black/25 backdrop-blur-[1px]"
+            onClick={() => setActivityOpen(false)}
+            aria-hidden
+          />
+          <div className="fixed top-0 right-0 z-50 h-screen flex">
+            <SlackActivityPanel
+              open={activityOpen}
+              onClose={() => setActivityOpen(false)}
+              onJumpToMessage={handleJumpToMessage}
+              resolveChannelTitle={resolveChannelTitle}
+            />
+          </div>
+        </>
+      )}
 
       {/* Diálogo organizar secciones */}
       {orgId && (
