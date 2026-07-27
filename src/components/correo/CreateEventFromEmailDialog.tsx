@@ -266,6 +266,7 @@ export function CreateEventFromEmailDialog({
                     <button
                       type="button"
                       onClick={() => removeAttendee(a.email)}
+                      title="Quitar asistente"
                       className="hover:text-destructive transition-colors"
                     >
                       <X className="w-2.5 h-2.5" />

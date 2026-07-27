@@ -203,6 +203,7 @@ export function MailRulesSheet({ open, onOpenChange, folders = [], onNewRule }: 
                       </button>
                       <button
                         onClick={cancelEdit}
+                        title="Cancelar"
                         className="h-7 w-7 flex items-center justify-center rounded border border-border text-muted-foreground hover:text-foreground"
                       >
                         <X className="w-3 h-3" />

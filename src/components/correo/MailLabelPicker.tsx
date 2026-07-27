@@ -125,6 +125,7 @@ export function MailLabelPicker({ emailMessageId, children }: Props) {
               </button>
               <button
                 onClick={() => setCreating(false)}
+                title="Cancelar"
                 className="h-7 w-7 flex items-center justify-center rounded border border-border text-muted-foreground hover:text-foreground"
               >
                 <X className="w-3 h-3" />

@@ -159,6 +159,7 @@ function FolderRow({
               e.stopPropagation();
               toggleExpanded(folder.id);
             }}
+            title={isExpanded ? "Contraer" : "Expandir"}
             className="flex items-center justify-center w-5 h-8 shrink-0 text-muted-foreground/60 hover:text-foreground"
           >
             {isExpanded ? (
@@ -556,6 +557,7 @@ export function MailSidebar({
               {folderSearch && (
                 <button
                   onClick={() => setFolderSearch("")}
+                  title="Limpiar búsqueda"
                   className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                 >
                   <X className="w-2.5 h-2.5" />

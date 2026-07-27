@@ -128,7 +128,7 @@ export function MailTaskDrawer({ open, email, onClose }: Props) {
             <span className="mt-ai-badge">
               <Sparkles size={11} /> Kawiil AI
             </span>
-            <button className="mt-close" onClick={onClose}><X size={14} /></button>
+            <button className="mt-close" onClick={onClose} title="Cerrar"><X size={14} /></button>
           </div>
           <div className="mt-title">Crear tarea desde correo</div>
 

@@ -402,6 +402,7 @@ export function MailFolders({ selectedFolderId, onSelectFolder, onCompose }: Pro
           <button
             onClick={handleCreate}
             disabled={!newFolderName.trim() || createFolderMut.isPending}
+            title="Crear carpeta"
             style={{
               background: "hsl(var(--primary))", border: 0, borderRadius: 5,
               width: 22, height: 22, display: "flex", alignItems: "center",
@@ -412,6 +413,7 @@ export function MailFolders({ selectedFolderId, onSelectFolder, onCompose }: Pro
           </button>
           <button
             onClick={() => { setShowNewFolder(false); setNewFolderName(""); }}
+            title="Cancelar"
             style={{ background: "transparent", border: 0, cursor: "pointer", color: "hsl(var(--muted-foreground))", padding: 2 }}
           >
             <X size={12} />
