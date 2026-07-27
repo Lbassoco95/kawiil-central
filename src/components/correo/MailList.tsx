@@ -22,7 +22,9 @@ import {
   type DateBucket,
   inferEmailChips,
   isNotificationEmail,
+  resolveCategory,
 } from "@/lib/emailChips";
+import { useSenderCategories } from "@/hooks/useSenderCategories";
 import { MailItem } from "./MailItem";
 import { MailTabs, type MailTabId } from "./MailTabs";
 import { MailRuleSuggestions } from "./MailRuleSuggestions";
@@ -33,6 +35,8 @@ import { cn } from "@/lib/utils";
 
 // AI tab IDs that filter inbox emails client-side
 const AI_TABS: MailTabId[] = ["clientes", "sat", "facturas", "interno", "notificaciones"];
+// Pestañas que filtran por categoría resuelta (aprendida por el equipo o heurística).
+const CATEGORY_TABS: MailTabId[] = ["clientes", "sat", "facturas", "interno", "notificaciones"];
 const AI_TAB_TONE: Record<string, string> = {
   clientes: "cliente",
   sat: "sat",
@@ -88,6 +92,7 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
   const effectiveLabelFilter = externalLabelFilter !== undefined ? externalLabelFilter : labelFilter;
   const queryClient = useQueryClient();
   const { data: userLabels = [] } = useEmailUserLabels();
+  const { data: learnedCategories } = useSenderCategories();
   const listRef = useRef<HTMLDivElement>(null);
   const archiveEmail = useArchiveEmail();
   const markRead = useMarkEmailRead();
@@ -260,20 +265,12 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
     }
     // Bandeja limpia: en "Bandeja" ocultamos las notificaciones automáticas (van a su pestaña).
     if (activeTab === "inbox" && !customFolderOverride) {
-      list = list.filter((e) => !isNotificationEmail(e as { from?: { emailAddress?: { address?: string; name?: string } } }));
+      list = list.filter((e) => resolveCategory(e as any, learnedCategories) !== "notificaciones");
     }
-    if (activeTab === "notificaciones") {
-      list = list.filter((e) => isNotificationEmail(e as { from?: { emailAddress?: { address?: string; name?: string } } }));
-    } else if (isAiTab) {
-      const tone = AI_TAB_TONE[activeTab];
-      list = list.filter((e) => {
-        const chips = inferEmailChips({
-          from: e.from as { emailAddress?: { address?: string } },
-          subject: e.subject as string,
-          importance: e.importance as string,
-        });
-        return chips.some((c) => c.tone === tone);
-      });
+    // Pestañas de categoría (Clientes/SAT/Facturas/Interno/Notificaciones): usan la categoría
+    // resuelta (aprendida por el equipo > heurística).
+    if (CATEGORY_TABS.includes(activeTab)) {
+      list = list.filter((e) => resolveCategory(e as any, learnedCategories) === activeTab);
     }
     if (readFilter === "sinleer") list = list.filter((e) => !(e.isRead as boolean));
     if (readFilter === "leidos") list = list.filter((e) => e.isRead as boolean);
@@ -299,7 +296,7 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
       list = list.filter((e) => emailsWithLabel.has(e.id as string));
     }
     return list;
-  }, [allEmails, activeTab, isAiTab, isUnified, customFolderOverride, debouncedSearch, readFilter, attachmentFilter, dateRangeFilter, effectiveLabelFilter, bulkAssignments]);
+  }, [allEmails, activeTab, isAiTab, isUnified, customFolderOverride, debouncedSearch, readFilter, attachmentFilter, dateRangeFilter, effectiveLabelFilter, bulkAssignments, learnedCategories]);
 
   const handleScroll = useCallback(() => {
     const el = listRef.current;

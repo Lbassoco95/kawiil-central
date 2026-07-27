@@ -4,9 +4,10 @@ import { useEmailLabelAssignments } from "@/hooks/useMicrosoft";
 import { useOutlookEmails } from "@/hooks/useMicrosoft";
 import { useRoutedEmailDetail } from "@/hooks/useLinkedAccounts";
 import { useTasksBySourceEmail } from "@/hooks/useTasks";
-import { inferEmailChips, emailListTimestamp, formatEmailDate } from "@/lib/emailChips";
+import { inferEmailChips, emailListTimestamp, formatEmailDate, resolveCategory } from "@/lib/emailChips";
+import { useSenderCategories, useSetSenderCategory, SENDER_CATEGORY_LABEL, type SenderCategory } from "@/hooks/useSenderCategories";
 import { cn } from "@/lib/utils";
-import { Sparkles, Mail, CheckSquare, Link2, Filter, Tag } from "lucide-react";
+import { Sparkles, Mail, CheckSquare, Link2, Filter, Tag, Check } from "lucide-react";
 import { MailLabelPicker, getLabelStyle } from "./MailLabelPicker";
 
 interface Props {
@@ -46,6 +47,8 @@ export function MailContactPanel({ emailId, onAskAI, onCreateTask, onCreateRule 
   const { data: emailDetail } = useRoutedEmailDetail(emailId);
   const { data: labelAssignments = [] } = useEmailLabelAssignments(emailId);
   const { data: relatedTasks = [] } = useTasksBySourceEmail(emailId);
+  const { data: learnedCategories } = useSenderCategories();
+  const setSenderCategory = useSetSenderCategory();
 
   const senderName = (emailDetail as any)?.from?.emailAddress?.name || "";
   const senderEmail = (emailDetail as any)?.from?.emailAddress?.address || "";
@@ -73,6 +76,23 @@ export function MailContactPanel({ emailId, onAskAI, onCreateTask, onCreateRule 
       importance: (emailDetail as any).importance,
     });
   }, [emailDetail]);
+
+  // Categoría del remitente: confirmada por el equipo (aprendida) o sugerida por heurística.
+  const learnedCat = senderEmail ? (learnedCategories?.get(senderEmail.toLowerCase()) as SenderCategory | undefined) : undefined;
+  const suggestedCat = useMemo(() => {
+    if (!emailDetail || learnedCat) return null;
+    const c = resolveCategory({
+      from: (emailDetail as any).from,
+      subject: (emailDetail as any).subject,
+      importance: (emailDetail as any).importance,
+    }, learnedCategories);
+    return (c as SenderCategory | null);
+  }, [emailDetail, learnedCat, learnedCategories]);
+  const CATEGORY_ORDER: SenderCategory[] = ["clientes", "sat", "facturas", "interno", "notificaciones"];
+  const setCategory = (cat: SenderCategory | null) => {
+    if (!senderEmail) return;
+    setSenderCategory.mutate({ senderEmail, category: cat, senderName: senderName || senderEmail });
+  };
 
   if (!emailId || !emailDetail) {
     return (
@@ -212,6 +232,51 @@ export function MailContactPanel({ emailId, onAskAI, onCreateTask, onCreateRule 
             </div>
           </div>
         )}
+
+        {/* Categoría del remitente — el equipo la confirma y se comparte para todos */}
+        <div className="px-5 py-3.5 border-b border-border/30">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1.5">
+            <Tag className="w-[11px] h-[11px]" /> Categoría del remitente
+          </p>
+          {suggestedCat && (
+            <div className="flex items-center gap-1.5 mb-2 text-[11.5px] text-muted-foreground">
+              <Sparkles className="w-3 h-3 text-primary shrink-0" />
+              <span>Sugerido: <span className="font-semibold text-foreground">{SENDER_CATEGORY_LABEL[suggestedCat]}</span> — confírmalo o elige otra.</span>
+            </div>
+          )}
+          {learnedCat && (
+            <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mb-2 flex items-center gap-1">
+              <Check className="w-3 h-3" /> Confirmado por el equipo
+            </p>
+          )}
+          <div className="flex flex-wrap gap-1.5">
+            {CATEGORY_ORDER.map((cat) => {
+              const active = (learnedCat ?? undefined) === cat;
+              const isSuggestion = !learnedCat && suggestedCat === cat;
+              return (
+                <button
+                  key={cat}
+                  onClick={() => setCategory(active ? null : cat)}
+                  disabled={setSenderCategory.isPending}
+                  title={active ? "Quitar categoría" : `Marcar como ${SENDER_CATEGORY_LABEL[cat]}`}
+                  className={cn(
+                    "px-2 py-1 rounded-full text-[11px] font-medium transition-colors border",
+                    active
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : isSuggestion
+                        ? "border-primary/40 text-primary hover:bg-primary/10"
+                        : "border-border/60 text-muted-foreground hover:bg-accent hover:text-foreground",
+                  )}
+                >
+                  {SENDER_CATEGORY_LABEL[cat]}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-[10.5px] text-muted-foreground/60 mt-1.5">
+            Los correos de este remitente se clasificarán solos en esa sección, para todo el equipo.
+          </p>
+        </div>
 
         {/* Tareas relacionadas — creadas desde este correo */}
         <div className="px-5 py-3.5 border-b border-border/30">
