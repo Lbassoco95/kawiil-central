@@ -77,7 +77,7 @@ export function MailContactPanel({ emailId, onAskAI, onCreateTask, onCreateRule 
     });
   }, [emailDetail]);
 
-  // Categoría del remitente: confirmada por el equipo (aprendida) o sugerida por heurística.
+  // Categoría del remitente: aprendida de lo que TÚ has confirmado, o sugerida por heurística.
   const learnedCat = senderEmail ? (learnedCategories?.get(senderEmail.toLowerCase()) as SenderCategory | undefined) : undefined;
   const suggestedCat = useMemo(() => {
     if (!emailDetail || learnedCat) return null;
@@ -233,7 +233,7 @@ export function MailContactPanel({ emailId, onAskAI, onCreateTask, onCreateRule 
           </div>
         )}
 
-        {/* Categoría del remitente — el equipo la confirma y se comparte para todos */}
+        {/* Categoría del remitente — la confirmas una vez y se clasifica sola de ahí en adelante */}
         <div className="px-5 py-3.5 border-b border-border/30">
           <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1.5">
             <Tag className="w-[11px] h-[11px]" /> Categoría del remitente
@@ -246,7 +246,7 @@ export function MailContactPanel({ emailId, onAskAI, onCreateTask, onCreateRule 
           )}
           {learnedCat && (
             <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mb-2 flex items-center gap-1">
-              <Check className="w-3 h-3" /> Confirmado por el equipo
+              <Check className="w-3 h-3" /> Aprendido — se clasifica solo
             </p>
           )}
           <div className="flex flex-wrap gap-1.5">
@@ -274,7 +274,7 @@ export function MailContactPanel({ emailId, onAskAI, onCreateTask, onCreateRule 
             })}
           </div>
           <p className="text-[10.5px] text-muted-foreground/60 mt-1.5">
-            Los correos de este remitente se clasificarán solos en esa sección, para todo el equipo.
+            Los correos de este remitente se clasificarán solos en esa sección, sin que vuelvas a marcarlos.
           </p>
         </div>
 
