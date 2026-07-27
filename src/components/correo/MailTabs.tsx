@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
 import { useMailFolders, useUnreadEmailCount, useOutlookEmails } from "@/hooks/useMicrosoft";
-import { inferEmailChips, isNotificationEmail } from "@/lib/emailChips";
+import { resolveCategory } from "@/lib/emailChips";
+import { useSenderCategories } from "@/hooks/useSenderCategories";
 import { useMemo } from "react";
 
 export type MailTabId = "inbox" | "starred" | "clientes" | "sat" | "facturas" | "interno" | "notificaciones" | "sentItems" | "drafts";
@@ -46,24 +47,15 @@ export function MailTabs({ activeTab, onSelectTab, inboxUnreadOverride }: Props)
     [inboxData]
   );
 
+  const { data: learnedCategories } = useSenderCategories();
   const aiCounts = useMemo(() => {
     const counts = { clientes: 0, sat: 0, facturas: 0, interno: 0, notificaciones: 0 };
     for (const email of inboxEmails) {
-      if (isNotificationEmail(email)) { counts.notificaciones++; continue; }
-      const chips = inferEmailChips({
-        from: email.from,
-        subject: email.subject,
-        importance: email.importance,
-      });
-      for (const chip of chips) {
-        if (chip.tone === "cliente") counts.clientes++;
-        if (chip.tone === "sat") counts.sat++;
-        if (chip.tone === "factura") counts.facturas++;
-        if (chip.tone === "interno") counts.interno++;
-      }
+      const cat = resolveCategory(email, learnedCategories);
+      if (cat && cat in counts) counts[cat as keyof typeof counts]++;
     }
     return counts;
-  }, [inboxEmails]);
+  }, [inboxEmails, learnedCategories]);
 
   const TABS: { id: MailTabId; label: string }[] = [
     { id: "inbox", label: "Bandeja" },

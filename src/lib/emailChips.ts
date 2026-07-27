@@ -31,6 +31,36 @@ const NOTIFICATION_DOMAINS = [
   "docker.com", "cloudflare.com", "supabase.io", "supabase.com",
 ];
 
+/** Categoría alineada con las pestañas del correo. */
+export type ResolvedCategory = "clientes" | "sat" | "facturas" | "interno" | "notificaciones" | null;
+
+/**
+ * Resuelve la categoría de un correo. Prioridad:
+ *   1) Categoría APRENDIDA del remitente (confirmada por el equipo) — fuente de verdad.
+ *   2) Heurística: notificación (bot/plataforma) → "notificaciones".
+ *   3) Heurística de chips (SAT / Factura) → su categoría.
+ * `learned` es el mapa remitente(lowercase) → categoría compartido por la organización.
+ */
+export function resolveCategory(
+  email: {
+    from?: { emailAddress?: { address?: string; name?: string } };
+    subject?: string;
+    importance?: string;
+  },
+  learned?: Map<string, string>,
+): ResolvedCategory {
+  const addr = (email?.from?.emailAddress?.address || "").toLowerCase();
+  if (addr && learned?.has(addr)) return learned.get(addr) as ResolvedCategory;
+  if (isNotificationEmail(email)) return "notificaciones";
+  const chips = inferEmailChips(email);
+  const tone = chips.map((c) => c.tone).find((t) => t === "sat" || t === "factura" || t === "cliente" || t === "interno");
+  if (tone === "sat") return "sat";
+  if (tone === "factura") return "facturas";
+  if (tone === "cliente") return "clientes";
+  if (tone === "interno") return "interno";
+  return null;
+}
+
 /** ¿El correo es una notificación automática (bot / plataforma) y no un mensaje relevante? */
 export function isNotificationEmail(email: {
   from?: { emailAddress?: { address?: string; name?: string } };
