@@ -24,6 +24,7 @@ import {
 } from "@/lib/emailChips";
 import { MailItem } from "./MailItem";
 import { MailTabs, type MailTabId } from "./MailTabs";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -62,6 +63,16 @@ interface Props {
 }
 
 type ReadFilter = "todos" | "sinleer" | "leidos";
+
+/** Tooltip instantáneo para botones de ícono. */
+function Tip({ label, children }: { label: string; children: React.ReactElement }) {
+  return (
+    <Tooltip delayDuration={200}>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent side="bottom" className="text-[11px]">{label}</TooltipContent>
+    </Tooltip>
+  );
+}
 
 export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmail, onOpenEmail, onCompose, onOpenFolders, onOpenRules, customFolderOverride, customFolderName, onClearCustomFolder, externalLabelFilter }: Props) {
   const [search, setSearch] = useState("");
@@ -394,28 +405,31 @@ const now = useMemo(() => new Date(), []);
           Redactar
         </button>
         <div className="flex-1" />
-        <button
-          onClick={() => { void refetch(); }}
-          disabled={isFetching}
-          className="h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shrink-0 disabled:opacity-40"
-          title="Sincronizar con Outlook"
-        >
-          <RefreshCw className={cn("w-3.5 h-3.5", isFetching && "animate-spin")} />
-        </button>
-        <button
-          onClick={onOpenFolders}
-          className="h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shrink-0"
-          title="Carpetas"
-        >
-          <FolderOpen className="w-3.5 h-3.5" />
-        </button>
-        <button
-          onClick={onOpenRules}
-          className="h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shrink-0"
-          title="Reglas"
-        >
-          <ListFilter className="w-3.5 h-3.5" />
-        </button>
+        <Tip label="Sincronizar con Outlook">
+          <button
+            onClick={() => { void refetch(); }}
+            disabled={isFetching}
+            className="h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shrink-0 disabled:opacity-40"
+          >
+            <RefreshCw className={cn("w-3.5 h-3.5", isFetching && "animate-spin")} />
+          </button>
+        </Tip>
+        <Tip label="Carpetas">
+          <button
+            onClick={onOpenFolders}
+            className="h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shrink-0"
+          >
+            <FolderOpen className="w-3.5 h-3.5" />
+          </button>
+        </Tip>
+        <Tip label="Reglas (mover correos automáticamente)">
+          <button
+            onClick={onOpenRules}
+            className="h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shrink-0"
+          >
+            <ListFilter className="w-3.5 h-3.5" />
+          </button>
+        </Tip>
       </div>
 
       {/* Read filter + attachment toggle */}
