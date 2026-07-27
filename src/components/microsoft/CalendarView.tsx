@@ -41,7 +41,7 @@ import { es } from "date-fns/locale";
 import {
   Plus, ChevronLeft, ChevronRight, Loader2, Trash2, Video, Pencil,
   CalendarDays, CheckSquare, Clock, MapPin, Users, ExternalLink, AlertCircle,
-  PanelRightClose, PanelRightOpen,
+  PanelRightClose, PanelRightOpen, Car,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -1179,24 +1179,32 @@ export function CalendarView({
                               const bTop = ((bandStart - START_HOUR * 60) / SLOT_MINUTES) * SLOT_HEIGHT;
                               const bHeight = ((bandEnd - bandStart) / SLOT_MINUTES) * SLOT_HEIGHT;
                               const leaveStr = formatMX(new Date(event._parsedStart.getTime() - durMin * 60000), "HH:mm");
+                              const trafficNote = tr.with_traffic ? " (con tráfico)" : "";
                               return (
                                 <div
                                   key={`travel-${event.id}`}
                                   className="absolute left-0.5 right-0.5 z-0 overflow-hidden rounded-md pointer-events-none"
-                                  title={`Traslado ~${durMin} min · salir ${leaveStr}`}
+                                  title={`En tránsito ~${durMin} min${trafficNote} · salir ${leaveStr}`}
                                   style={{
                                     top: bTop,
                                     height: bHeight,
                                     backgroundImage:
-                                      "repeating-linear-gradient(45deg, rgba(100,116,139,0.20) 0 6px, rgba(100,116,139,0.06) 6px 12px)",
-                                    border: "1px dashed rgba(100,116,139,0.5)",
+                                      "repeating-linear-gradient(45deg, rgba(99,102,241,0.18) 0 8px, rgba(99,102,241,0.05) 8px 16px)",
+                                    borderLeft: "3px solid rgba(99,102,241,0.65)",
+                                    borderTop: "1px dashed rgba(99,102,241,0.35)",
+                                    borderRadius: 6,
                                   }}
                                 >
-                                  {bHeight >= 18 && (
-                                    <span className="absolute left-1 top-0.5 text-[9px] font-medium text-muted-foreground">
-                                      🚗 {durMin} min
+                                  <div className="absolute inset-0 flex flex-col justify-center gap-0 px-1.5">
+                                    <span className="flex items-center gap-1 truncate text-[9px] font-semibold leading-tight text-indigo-600 dark:text-indigo-300">
+                                      <Car className="h-2.5 w-2.5 shrink-0" /> En tránsito · {durMin} min
                                     </span>
-                                  )}
+                                    {bHeight >= 30 && (
+                                      <span className="truncate text-[8px] leading-tight text-indigo-500/80 dark:text-indigo-300/70">
+                                        salir {leaveStr}{tr.with_traffic ? " · tráfico" : ""}
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                               );
                             })}
