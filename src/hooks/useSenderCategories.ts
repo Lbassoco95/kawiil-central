@@ -14,19 +14,22 @@ export const SENDER_CATEGORY_LABEL: Record<SenderCategory, string> = {
   notificaciones: "Notificaciones",
 };
 
-/** Mapa remitente(lowercase) → categoría, compartido por toda la organización. */
+/** Valor guardado: una categoría, o "ninguna" (el usuario excluyó al remitente de toda sección). */
+export type StoredCategory = SenderCategory | "ninguna";
+
+/** Mapa remitente(lowercase) → categoría guardada, propio de cada usuario. */
 export function useSenderCategories() {
   const { user } = useAuth();
   return useQuery({
     queryKey: ["sender-categories"],
-    queryFn: async (): Promise<Map<string, SenderCategory>> => {
+    queryFn: async (): Promise<Map<string, string>> => {
       const { data, error } = await (supabase as any)
         .from("email_sender_categories")
         .select("sender_email, category");
       if (error) throw error;
-      const map = new Map<string, SenderCategory>();
+      const map = new Map<string, string>();
       for (const row of data ?? []) {
-        map.set(String(row.sender_email).toLowerCase(), row.category as SenderCategory);
+        map.set(String(row.sender_email).toLowerCase(), String(row.category));
       }
       return map;
     },
@@ -35,7 +38,9 @@ export function useSenderCategories() {
   });
 }
 
-/** Confirma/actualiza la categoría de un remitente para toda la organización. */
+/** Establece la categoría de un remitente (propia del usuario).
+ *  - una categoría → se clasifica ahí; "ninguna" → excluido de toda sección (solo bandeja);
+ *  - null → borra la preferencia y vuelve a la predefinida (heurística). */
 export function useSetSenderCategory() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -46,7 +51,7 @@ export function useSetSenderCategory() {
       senderName,
     }: {
       senderEmail: string;
-      category: SenderCategory | null; // null = quitar la categoría
+      category: StoredCategory | null;
       senderName?: string;
     }) => {
       const addr = senderEmail.trim().toLowerCase();
@@ -79,9 +84,11 @@ export function useSetSenderCategory() {
       queryClient.invalidateQueries({ queryKey: ["sender-categories"] });
       queryClient.invalidateQueries({ queryKey: ["outlook-emails"] });
       toast.success(
-        vars.category
-          ? `Guardado: ${SENDER_CATEGORY_LABEL[vars.category]} · se clasificará solo`
-          : "Categoría quitada",
+        vars.category === "ninguna"
+          ? "Quitado de las secciones · se queda en la bandeja"
+          : vars.category
+            ? `Guardado: ${SENDER_CATEGORY_LABEL[vars.category]} · se clasificará solo`
+            : "Preferencia restablecida",
       );
     },
     onError: (err: Error) => toast.error("No se pudo guardar la categoría: " + err.message),

@@ -50,7 +50,12 @@ export function resolveCategory(
   learned?: Map<string, string>,
 ): ResolvedCategory {
   const addr = (email?.from?.emailAddress?.address || "").toLowerCase();
-  if (addr && learned?.has(addr)) return learned.get(addr) as ResolvedCategory;
+  if (addr && learned?.has(addr)) {
+    const v = learned.get(addr);
+    // "ninguna" = el usuario sacó explícitamente al remitente de toda sección
+    // (anula la preferencia predefinida/heurística). Se queda solo en la bandeja.
+    return v === "ninguna" ? null : (v as ResolvedCategory);
+  }
   if (isNotificationEmail(email)) return "notificaciones";
   const chips = inferEmailChips(email);
   const tone = chips.map((c) => c.tone).find((t) => t === "sat" || t === "factura" || t === "cliente" || t === "interno");
