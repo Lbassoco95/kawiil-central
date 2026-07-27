@@ -1128,11 +1128,50 @@ Deno.serve(async (req) => {
         return jsonOk({ ok: false, error: "user_ids array required" });
       }
       const unique = [...new Set(rawIds.map((x) => String(x)).filter(Boolean))].slice(0, 200);
-      const users: Record<string, { display_name: string | null; real_name: string | null; avatar_url: string | null }> = {};
+      type SlackProfile = { display_name: string | null; real_name: string | null; avatar_url: string | null };
+      const users: Record<string, SlackProfile> = {};
 
+      // 1) Servir desde la caché persistente los perfiles frescos (<7 días).
+      //    Solo lo que falte o esté viejo se pide a Slack, evitando rate-limit.
+      const PROFILE_STALE_MS = 7 * 24 * 60 * 60 * 1000;
+      const freshCutoffMs = Date.now() - PROFILE_STALE_MS;
+      let missing: string[] = [];
+      try {
+        const { data: cached } = await supabaseAdmin
+          .from("slack_user_profiles")
+          .select("slack_user_id, display_name, real_name, avatar_url, updated_at")
+          .in("slack_user_id", unique);
+        const cachedMap = new Map(
+          ((cached ?? []) as Array<{
+            slack_user_id: string;
+            display_name: string | null;
+            real_name: string | null;
+            avatar_url: string | null;
+            updated_at: string;
+          }>).map((r) => [r.slack_user_id, r]),
+        );
+        for (const id of unique) {
+          const row = cachedMap.get(id);
+          if (row && row.updated_at && new Date(row.updated_at).getTime() >= freshCutoffMs) {
+            users[id] = {
+              display_name: row.display_name,
+              real_name: row.real_name,
+              avatar_url: row.avatar_url,
+            };
+          } else {
+            missing.push(id);
+          }
+        }
+      } catch {
+        // Si la lectura de caché falla, pedir todo a Slack (comportamiento previo).
+        missing = [...unique];
+      }
+
+      // 2) Pedir a Slack SOLO los perfiles faltantes o vencidos.
+      const fetched: Array<{ slack_user_id: string } & SlackProfile> = [];
       const chunk = 6;
-      for (let i = 0; i < unique.length; i += chunk) {
-        const part = unique.slice(i, i + chunk);
+      for (let i = 0; i < missing.length; i += chunk) {
+        const part = missing.slice(i, i + chunk);
         await Promise.all(
           part.map(async (slackUserId) => {
             const data = await slackCall(conn.access_token, "users.info", { user: slackUserId });
@@ -1160,14 +1199,31 @@ Deno.serve(async (req) => {
                 u.real_name?.trim() ||
                 u.name?.trim() ||
                 null;
-              users[slackUserId] = {
+              const profile: SlackProfile = {
                 display_name: dn,
                 real_name: rn,
                 avatar_url: u.profile?.image_72 || null,
               };
+              users[slackUserId] = profile;
+              fetched.push({ slack_user_id: slackUserId, ...profile });
             }
           }),
         );
+      }
+
+      // 3) Persistir en la caché lo recién traído (best-effort, no bloquea la respuesta).
+      if (fetched.length > 0) {
+        try {
+          const nowIso = new Date().toISOString();
+          await supabaseAdmin
+            .from("slack_user_profiles")
+            .upsert(
+              fetched.map((f) => ({ ...f, updated_at: nowIso })),
+              { onConflict: "slack_user_id" },
+            );
+        } catch {
+          // Si la escritura falla, la respuesta sigue siendo válida.
+        }
       }
 
       return jsonOk({ ok: true, users });
