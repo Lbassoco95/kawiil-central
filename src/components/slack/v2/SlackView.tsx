@@ -509,6 +509,26 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
     },
   });
 
+  // ─── Programar mensaje (chat.scheduleMessage de Slack) ───
+  const scheduleMutation = useMutation({
+    mutationFn: async ({ text, postAt }: { text: string; postAt: number }) => {
+      if (!selectedChannel) throw new Error("Sin canal seleccionado");
+      const data = await invokeSlackApi<{ ok: boolean; error?: string }>(
+        { action: "chat.scheduleMessage", channel: selectedChannel, text, post_at: postAt },
+        { timeoutMs: 30_000 },
+      );
+      if (!data.ok) throw new Error(data.error || "No se pudo programar el mensaje");
+      return postAt;
+    },
+    onSuccess: (postAt) => {
+      const when = new Date(postAt * 1000).toLocaleString("es-MX", {
+        weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+      });
+      toast.success(`Mensaje programado para ${when}`);
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "No se pudo programar el mensaje"),
+  });
+
   // ─── Enviar respuesta en hilo ────────────────────────────
   const sendReplyMutation = useMutation({
     mutationFn: async ({ text, files }: { text: string; files?: File[] }) => {
@@ -857,6 +877,7 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
               sendMutation.mutate({ text, files });
               onStopTyping();
             }}
+            onSchedule={(text, postAt) => scheduleMutation.mutate({ text, postAt })}
             disabled={!selectedChannel}
             userMap={userMap}
             onTyping={onTyping}

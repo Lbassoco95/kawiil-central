@@ -24,6 +24,8 @@ interface Props {
   channelName?: string;
   isSending?: boolean;
   onSend: (text: string, files?: File[]) => void;
+  /** Programa el envío del texto para una fecha/hora futura (unix segundos). */
+  onSchedule?: (text: string, postAtUnix: number) => void;
   disabled?: boolean;
   userMap?: Record<string, UserSuggestion | undefined>;
   onTyping?: () => void;
@@ -33,10 +35,12 @@ interface Props {
 const QUICK_EMOJIS = ["😊","👍","❤️","🔥","✅","😂","🎉","👀","🙏","💪","😅","🤔","👏","🚀","💯","😍","🤝","📌","⚠️","❓"];
 
 export const SlackComposerNew = forwardRef<SlackComposerHandle, Props>(function SlackComposerNew(
-  { channelName, isSending, onSend, disabled, userMap = {}, onTyping },
+  { channelName, isSending, onSend, onSchedule, disabled, userMap = {}, onTyping },
   ref,
 ) {
   const [text, setText] = useState("");
+  const [showSchedule, setShowSchedule] = useState(false);
+  const [scheduleDraft, setScheduleDraft] = useState("");
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
   const [emojiQuery, setEmojiQuery] = useState<string | null>(null);
@@ -57,6 +61,36 @@ export const SlackComposerNew = forwardRef<SlackComposerHandle, Props>(function 
     setEmojiQuery(null);
     setShowEmojiPicker(false);
   }, [text, pendingFiles, isSending, disabled, onSend]);
+
+  // ─── Programar envío ─────────────────────────────────────
+  const doSchedule = useCallback((whenMs: number) => {
+    const val = inputRef.current?.innerText?.trim() || text.trim();
+    if (!val || !onSchedule || disabled) return;
+    if (whenMs <= Date.now() + 10_000) return; // debe ser futuro (holgura 10s)
+    onSchedule(val, Math.floor(whenMs / 1000));
+    setText("");
+    if (inputRef.current) inputRef.current.innerText = "";
+    setShowSchedule(false);
+    setScheduleDraft("");
+    setMentionQuery(null);
+    setEmojiQuery(null);
+  }, [text, onSchedule, disabled]);
+
+  /** Presets rápidos: "mañana 8:00", "mañana 9:00", "en 1 hora". */
+  const schedulePresets = () => {
+    const tomAt = (h: number) => {
+      const d = new Date();
+      d.setDate(d.getDate() + 1);
+      d.setHours(h, 0, 0, 0);
+      return d.getTime();
+    };
+    return [
+      { label: "Mañana 8:00 AM", ms: tomAt(8) },
+      { label: "Mañana 9:00 AM", ms: tomAt(9) },
+      { label: "En 1 hora", ms: Date.now() + 60 * 60_000 },
+    ];
+  };
+  const canSchedule = !disabled && !!onSchedule && !!text.trim() && pendingFiles.length === 0;
 
   // ─── Formato de texto ────────────────────────────────────
   const applyFormat = (tag: "bold" | "italic" | "strike" | "code" | "list") => {
@@ -516,6 +550,93 @@ export const SlackComposerNew = forwardRef<SlackComposerHandle, Props>(function 
                 <circle cx="12" cy="12" r="10"/><path d="M8 13s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/>
               </svg>
             </button>
+            {onSchedule && (
+              <div style={{ position: "relative" }}>
+                <button
+                  className="sl-foot-btn"
+                  title="Programar envío"
+                  type="button"
+                  onClick={() => setShowSchedule((v) => !v)}
+                  disabled={disabled}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                  </svg>
+                </button>
+                {showSchedule && (
+                  <div style={{
+                    position: "absolute", bottom: "calc(100% + 6px)", left: 0, zIndex: 60,
+                    background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))",
+                    borderRadius: 10, padding: 8, width: 240,
+                    boxShadow: "0 6px 20px hsl(0 0% 0% / 0.15)",
+                  }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "hsl(var(--muted-foreground))", padding: "2px 4px 6px", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                      Programar envío
+                    </div>
+                    {!text.trim() && (
+                      <div style={{ fontSize: 11, color: "hsl(var(--muted-foreground))", padding: "0 4px 6px" }}>
+                        Escribe el mensaje primero.
+                      </div>
+                    )}
+                    {pendingFiles.length > 0 && (
+                      <div style={{ fontSize: 11, color: "hsl(var(--muted-foreground))", padding: "0 4px 6px" }}>
+                        Programar es solo para texto (sin adjuntos).
+                      </div>
+                    )}
+                    {schedulePresets().map((p) => (
+                      <button
+                        key={p.label}
+                        type="button"
+                        disabled={!canSchedule}
+                        onClick={() => doSchedule(p.ms)}
+                        style={{
+                          display: "block", width: "100%", textAlign: "left",
+                          background: "transparent", border: 0, borderRadius: 6,
+                          padding: "6px 8px", fontSize: 13, cursor: canSchedule ? "pointer" : "not-allowed",
+                          color: canSchedule ? "hsl(var(--foreground))" : "hsl(var(--muted-foreground))",
+                        }}
+                        onMouseEnter={(e) => canSchedule && (e.currentTarget.style.background = "hsl(var(--accent))")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                    <div style={{ borderTop: "1px solid hsl(var(--border))", margin: "6px 0", paddingTop: 6 }}>
+                      <div style={{ fontSize: 11, color: "hsl(var(--muted-foreground))", padding: "0 4px 4px" }}>
+                        Fecha y hora personalizada
+                      </div>
+                      <input
+                        type="datetime-local"
+                        value={scheduleDraft}
+                        onChange={(e) => setScheduleDraft(e.target.value)}
+                        style={{
+                          width: "100%", fontSize: 12, padding: "4px 6px",
+                          border: "1px solid hsl(var(--border))", borderRadius: 6,
+                          background: "hsl(var(--background))", color: "hsl(var(--foreground))",
+                        }}
+                      />
+                      <button
+                        type="button"
+                        disabled={!canSchedule || !scheduleDraft}
+                        onClick={() => {
+                          const ms = new Date(scheduleDraft).getTime();
+                          if (!Number.isNaN(ms)) doSchedule(ms);
+                        }}
+                        style={{
+                          marginTop: 6, width: "100%", fontSize: 12, fontWeight: 600,
+                          padding: "5px 8px", borderRadius: 6, cursor: (canSchedule && scheduleDraft) ? "pointer" : "not-allowed",
+                          background: (canSchedule && scheduleDraft) ? "hsl(var(--primary))" : "hsl(var(--muted))",
+                          color: (canSchedule && scheduleDraft) ? "hsl(var(--primary-foreground))" : "hsl(var(--muted-foreground))",
+                          border: 0,
+                        }}
+                      >
+                        Programar
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <button
