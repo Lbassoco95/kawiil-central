@@ -77,19 +77,22 @@ export function MailContactPanel({ emailId, onAskAI, onCreateTask, onCreateRule 
     });
   }, [emailDetail]);
 
-  // Categoría del remitente: aprendida de lo que TÚ has confirmado, o sugerida por heurística.
-  const learnedCat = senderEmail ? (learnedCategories?.get(senderEmail.toLowerCase()) as SenderCategory | undefined) : undefined;
+  // Categoría del remitente: preferencia guardada por TI ("ninguna" = excluido), o
+  // preferencia PREDEFINIDA (heurística) cuando aún no la has tocado.
+  const storedCat = senderEmail ? learnedCategories?.get(senderEmail.toLowerCase()) : undefined;
+  const isExcluded = storedCat === "ninguna";
+  const learnedCat = (storedCat && storedCat !== "ninguna") ? (storedCat as SenderCategory) : undefined;
   const suggestedCat = useMemo(() => {
-    if (!emailDetail || learnedCat) return null;
+    if (!emailDetail || storedCat) return null; // ya hay preferencia guardada (incluye "ninguna")
     const c = resolveCategory({
       from: (emailDetail as any).from,
       subject: (emailDetail as any).subject,
       importance: (emailDetail as any).importance,
     }, learnedCategories);
     return (c as SenderCategory | null);
-  }, [emailDetail, learnedCat, learnedCategories]);
+  }, [emailDetail, storedCat, learnedCategories]);
   const CATEGORY_ORDER: SenderCategory[] = ["clientes", "sat", "facturas", "interno", "notificaciones"];
-  const setCategory = (cat: SenderCategory | null) => {
+  const setCategory = (cat: SenderCategory | "ninguna" | null) => {
     if (!senderEmail) return;
     setSenderCategory.mutate({ senderEmail, category: cat, senderName: senderName || senderEmail });
   };
@@ -241,24 +244,27 @@ export function MailContactPanel({ emailId, onAskAI, onCreateTask, onCreateRule 
           {suggestedCat && (
             <div className="flex items-center gap-1.5 mb-2 text-[11.5px] text-muted-foreground">
               <Sparkles className="w-3 h-3 text-primary shrink-0" />
-              <span>Sugerido: <span className="font-semibold text-foreground">{SENDER_CATEGORY_LABEL[suggestedCat]}</span> — confírmalo o elige otra.</span>
+              <span>Predefinido: <span className="font-semibold text-foreground">{SENDER_CATEGORY_LABEL[suggestedCat]}</span> — cámbialo o sácalo si no aplica.</span>
             </div>
           )}
           {learnedCat && (
             <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mb-2 flex items-center gap-1">
-              <Check className="w-3 h-3" /> Aprendido — se clasifica solo
+              <Check className="w-3 h-3" /> Fijado en {SENDER_CATEGORY_LABEL[learnedCat]} — se clasifica solo
             </p>
+          )}
+          {isExcluded && (
+            <p className="text-[11px] text-muted-foreground mb-2">Excluido de las secciones — solo en tu bandeja.</p>
           )}
           <div className="flex flex-wrap gap-1.5">
             {CATEGORY_ORDER.map((cat) => {
-              const active = (learnedCat ?? undefined) === cat;
-              const isSuggestion = !learnedCat && suggestedCat === cat;
+              const active = learnedCat === cat;
+              const isSuggestion = !learnedCat && !isExcluded && suggestedCat === cat;
               return (
                 <button
                   key={cat}
                   onClick={() => setCategory(active ? null : cat)}
                   disabled={setSenderCategory.isPending}
-                  title={active ? "Quitar categoría" : `Marcar como ${SENDER_CATEGORY_LABEL[cat]}`}
+                  title={active ? "Quitar (volver a la predefinida)" : `Marcar como ${SENDER_CATEGORY_LABEL[cat]}`}
                   className={cn(
                     "px-2 py-1 rounded-full text-[11px] font-medium transition-colors border",
                     active
@@ -272,9 +278,23 @@ export function MailContactPanel({ emailId, onAskAI, onCreateTask, onCreateRule 
                 </button>
               );
             })}
+            {/* Sacar de toda sección (anula la preferencia predefinida) */}
+            <button
+              onClick={() => setCategory(isExcluded ? null : "ninguna")}
+              disabled={setSenderCategory.isPending}
+              title={isExcluded ? "Volver a clasificar automáticamente" : "Quitar de todas las secciones (solo bandeja)"}
+              className={cn(
+                "px-2 py-1 rounded-full text-[11px] font-medium transition-colors border",
+                isExcluded
+                  ? "bg-muted text-foreground border-border"
+                  : "border-border/60 text-muted-foreground hover:bg-accent hover:text-foreground",
+              )}
+            >
+              {isExcluded ? "Reactivar" : "Ninguna"}
+            </button>
           </div>
           <p className="text-[10.5px] text-muted-foreground/60 mt-1.5">
-            Los correos de este remitente se clasificarán solos en esa sección, sin que vuelvas a marcarlos.
+            Se clasifica automáticamente por preferencia; puedes cambiarla o sacarla de la sección cuando quieras.
           </p>
         </div>
 
