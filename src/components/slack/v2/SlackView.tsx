@@ -525,6 +525,8 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
         weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
       });
       toast.success(`Mensaje programado para ${when}`);
+      // Refresca la previsualización de programados en el panel derecho.
+      void qc.invalidateQueries({ queryKey: ["slack-scheduled-messages", selectedChannel] });
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : "No se pudo programar el mensaje"),
   });

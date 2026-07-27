@@ -62,6 +62,8 @@ type SlackMethod =
   | "conversations.info"
   | "chat.postMessage"
   | "chat.scheduleMessage"
+  | "chat.scheduledMessages.list"
+  | "chat.deleteScheduledMessage"
   | "chat.update"
   | "chat.delete"
   | "reactions.add"
@@ -940,6 +942,28 @@ Deno.serve(async (req) => {
       return jsonOk(data);
     }
 
+    if (action === "chat.scheduledMessages.list") {
+      // Lista los mensajes programados pendientes (opcionalmente de un canal).
+      const data = await slackCall(conn.access_token, "chat.scheduledMessages.list", {
+        channel: (json.channel as string | undefined) || undefined,
+        limit: 100,
+      });
+      return jsonOk(data);
+    }
+
+    if (action === "chat.deleteScheduledMessage") {
+      const channel = json.channel as string;
+      const scheduledMessageId = json.scheduled_message_id as string;
+      if (!channel || !scheduledMessageId?.trim()) {
+        return jsonOk({ ok: false, error: "channel and scheduled_message_id required" });
+      }
+      const data = await slackCall(conn.access_token, "chat.deleteScheduledMessage", {
+        channel,
+        scheduled_message_id: scheduledMessageId.trim(),
+      });
+      return jsonOk(data);
+    }
+
     if (action === "chat.update") {
       const channel = json.channel as string;
       const ts = json.ts as string;
@@ -1166,6 +1190,8 @@ Deno.serve(async (req) => {
         "conversations.info",
         "chat.postMessage",
         "chat.scheduleMessage",
+        "chat.scheduledMessages.list",
+        "chat.deleteScheduledMessage",
         "chat.update",
         "chat.delete",
         "users.profile.set",
