@@ -120,7 +120,7 @@ export function MailTranslateDrawer({ open, email, onClose }: Props) {
             <span className="tr-ai-badge">
               <Sparkles size={11} /> Kawiil AI · Traducción
             </span>
-            <button className="tr-close" onClick={onClose}><X size={14} /></button>
+            <button className="tr-close" onClick={onClose} title="Cerrar"><X size={14} /></button>
           </div>
 
           <div className="tr-title">{email?.subject || "Traducir correo"}</div>
