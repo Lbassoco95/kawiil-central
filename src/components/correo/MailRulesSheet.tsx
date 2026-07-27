@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Plus, Filter, Loader2, Pencil, Trash2, Check, X } from "lucide-react";
-import { useListMailRules, useUpdateMailRule, useDeleteMailRule, type EmailInboxRule } from "@/hooks/useMicrosoft";
+import { Plus, Filter, Loader2, Pencil, Trash2, Check, X, Play } from "lucide-react";
+import { useListMailRules, useUpdateMailRule, useDeleteMailRule, useApplyAllInboxRules, type EmailInboxRule } from "@/hooks/useMicrosoft";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -25,6 +25,7 @@ export function MailRulesSheet({ open, onOpenChange, folders = [], onNewRule }: 
   const { data: rules = [], isLoading } = useListMailRules();
   const updateRule = useUpdateMailRule();
   const deleteRule = useDeleteMailRule();
+  const applyAll = useApplyAllInboxRules();
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editState, setEditState] = useState<EditState | null>(null);
@@ -75,12 +76,27 @@ export function MailRulesSheet({ open, onOpenChange, folders = [], onNewRule }: 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-[340px] p-0 flex flex-col">
-        <SheetHeader className="px-5 pt-5 pb-3 border-b border-border/40 flex-row items-center justify-between">
+        <SheetHeader className="px-5 pt-5 pb-3 border-b border-border/40 flex-row items-center justify-between gap-2">
           <SheetTitle className="text-sm font-semibold">Reglas de correo</SheetTitle>
-          <Button size="sm" onClick={onNewRule} className="h-7 text-xs gap-1">
-            <Plus className="w-3 h-3" />
-            Nueva regla
-          </Button>
+          <div className="flex items-center gap-1.5">
+            {rules.length > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => applyAll.mutate()}
+                disabled={applyAll.isPending}
+                title="Aplicar todas las reglas a los correos que ya están en la bandeja"
+                className="h-7 text-xs gap-1"
+              >
+                {applyAll.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+                Aplicar ahora
+              </Button>
+            )}
+            <Button size="sm" onClick={onNewRule} className="h-7 text-xs gap-1">
+              <Plus className="w-3 h-3" />
+              Nueva regla
+            </Button>
+          </div>
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-1">
