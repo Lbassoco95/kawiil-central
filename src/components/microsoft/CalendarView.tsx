@@ -1076,7 +1076,7 @@ export function CalendarView({
                     const allDayEvents = getAllDayEventsForDay(day);
                     const dayTasks = showKawiilTasks ? getTasksForDay(day) : [];
                     return (
-                      <div key={day.toISOString() + "-allday"} className="border-r border-border last:border-r-0 px-1 py-1 space-y-0.5 overflow-hidden">
+                      <div key={day.toISOString() + "-allday"} className="border-r border-border last:border-r-0 px-1 py-1 space-y-0.5 max-h-[92px] overflow-y-auto [scrollbar-width:thin]">
                         {allDayEvents.map((event: any) => (
                           <div key={event.id}
                             className="bg-primary/20 text-primary rounded px-1.5 py-0.5 text-[11px] truncate group relative cursor-pointer hover:bg-primary/30 transition-colors"
