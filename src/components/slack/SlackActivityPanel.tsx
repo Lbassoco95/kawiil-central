@@ -28,6 +28,11 @@ interface Props {
   onJumpToMessage?: (channelId: string, ts: string, threadTs?: string | null) => void;
   /** Resolver etiqueta amable para el channel_id (nombre de canal o contraparte de DM). */
   resolveChannelTitle?: (channelId: string) => string | undefined;
+  /**
+   * Si se pasa, la actividad se acota SOLO a esta conversación (el chat abierto).
+   * Sin él, muestra la actividad de todo el workspace.
+   */
+  channelId?: string;
 }
 
 const TABS: Array<{ id: SlackActivityTab; label: string; icon: typeof Activity }> = [
@@ -63,6 +68,7 @@ export function SlackActivityPanel({
   initialTab = "all",
   onJumpToMessage,
   resolveChannelTitle,
+  channelId,
 }: Props) {
   const [tab, setTab] = useState<SlackActivityTab>(initialTab);
 
@@ -70,7 +76,8 @@ export function SlackActivityPanel({
     if (open) setTab(initialTab);
   }, [open, initialTab]);
 
-  const feed = useSlackActivityFeed(tab);
+  const feed = useSlackActivityFeed(tab, false, channelId);
+  const scopeTitle = channelId ? resolveChannelTitle?.(channelId) : undefined;
   const markRead = useMarkSlackActivityRead();
   const markAllRead = useMarkAllSlackActivityRead();
 
@@ -118,7 +125,9 @@ export function SlackActivityPanel({
               Actividad
             </p>
             <p className="text-[10.5px] text-white/85 truncate leading-tight">
-              Menciones, hilos, DMs y reacciones
+              {scopeTitle
+                ? `En ${scopeTitle.startsWith("#") || scopeTitle.startsWith("@") ? scopeTitle : `#${scopeTitle}`}`
+                : "Menciones, hilos, DMs y reacciones"}
             </p>
           </div>
         </div>
@@ -175,7 +184,9 @@ export function SlackActivityPanel({
                       ? "Sin mensajes directos nuevos."
                       : tab === "reactions"
                         ? "Sin reacciones nuevas."
-                        : "Sin actividad reciente."}
+                        : scopeTitle
+                          ? "Sin actividad reciente en este chat."
+                          : "Sin actividad reciente."}
               </p>
             </div>
           ) : (
@@ -239,8 +250,13 @@ export function SlackActivityPanel({
           variant="ghost"
           size="sm"
           className="h-7 gap-1 text-[11px]"
-          disabled={unreadIds.length === 0 || markAllRead.isPending}
-          onClick={() => markAllRead.mutate()}
+          disabled={unreadIds.length === 0 || markAllRead.isPending || markRead.isPending}
+          onClick={() => {
+            // Acotado a un chat: marcar solo los items visibles de ese chat.
+            // Sin acotar: marcar toda la actividad Slack del workspace.
+            if (channelId) markRead.mutate({ ids: unreadIds });
+            else markAllRead.mutate();
+          }}
         >
           <CheckCheck className="h-3.5 w-3.5" />
           Marcar todo leído
