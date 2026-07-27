@@ -5,6 +5,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { invokeSlackApi, type SlackConversation } from "@/lib/slackApi";
 import { useSlackUserProfiles, type SlackUserProfile } from "@/hooks/useSlackUserProfiles";
+import {
+  useSlackActivityFeed,
+  useMarkSlackActivityRead,
+  type SlackActivityItem,
+} from "@/hooks/useSlackActivityFeed";
+import { formatDistanceToNow } from "date-fns";
+import { es } from "date-fns/locale";
 
 type TabId = "tasks" | "ai";
 
@@ -14,7 +21,22 @@ interface Props {
   currentConv?: SlackConversation | null;
   userMap?: Record<string, SlackUserProfile | undefined>;
   unreadMentions?: number;
+  /** Abre el panel completo de actividad (drawer) — enlace "Ver toda la actividad". */
   onOpenActivity?: () => void;
+  /** Salta al mensaje original al hacer clic en un item de actividad. */
+  onJumpToMessage?: (channelId: string, ts: string, threadTs?: string | null) => void;
+  /** Resuelve el nombre amable del canal (para la vista global sin conversación). */
+  resolveChannelTitle?: (channelId: string) => string | undefined;
+}
+
+function activityItemChannelLabel(
+  item: SlackActivityItem,
+  resolver?: (id: string) => string | undefined,
+): string {
+  if (!item.channel_id) return "Slack";
+  const name = resolver?.(item.channel_id);
+  if (name) return name.startsWith("#") || name.startsWith("@") ? name : `#${name}`;
+  return item.channel_id;
 }
 
 // ─── Avatar helper ────────────────────────────────────────────
@@ -68,9 +90,26 @@ export function KawiilContextPanel({
   userMap = {},
   unreadMentions = 0,
   onOpenActivity,
+  onJumpToMessage,
+  resolveChannelTitle,
 }: Props) {
   const [tab, setTab] = useState<TabId>("tasks");
   const { user } = useAuth();
+
+  // Actividad embebida: acotada al chat abierto, o global si no hay conversación.
+  const activityFeed = useSlackActivityFeed("all", false, channelId || undefined);
+  const markActivityRead = useMarkSlackActivityRead();
+  const activityItems = (activityFeed.data ?? []).slice(0, 6);
+  const handleActivityClick = (item: SlackActivityItem) => {
+    if (!item.is_read) markActivityRead.mutate({ ids: [item.id] });
+    if (item.channel_id && item.message_ts) {
+      const isThreadLike =
+        item.type === "slack_thread_reply" ||
+        /hilo|thread/i.test(item.title || "") ||
+        /hilo|thread/i.test(item.body || "");
+      onJumpToMessage?.(item.channel_id, item.message_ts, isThreadLike ? item.message_ts : null);
+    }
+  };
 
   // Retrasa la carga de miembros 3s para no competir con conversations.history
   const [membersChannelId, setMembersChannelId] = useState<string | undefined>();
@@ -492,33 +531,89 @@ export function KawiilContextPanel({
             </div>
           )}
 
-          {/* Acceso a actividad */}
-          {onOpenActivity && (
-            <div className="sl-ctx-card">
-              <div className="sl-ctx-card-head">
-                <div className="sl-ctx-card-title">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-                  </svg>
-                  Menciones y actividad
-                </div>
-                {unreadMentions > 0 && (
-                  <span style={{
-                    background: "hsl(var(--primary))",
-                    color: "#fff",
-                    fontSize: 9,
-                    fontWeight: 800,
-                    padding: "2px 7px",
-                    borderRadius: 9999,
-                  }}>
-                    {unreadMentions}
-                  </span>
-                )}
+          {/* Actividad embebida — ya cargada, acotada a este chat (o global sin conversación) */}
+          <div className="sl-ctx-card">
+            <div className="sl-ctx-card-head">
+              <div className="sl-ctx-card-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                </svg>
+                {channelId ? "Actividad de este chat" : "Menciones y actividad"}
               </div>
+              {unreadMentions > 0 && (
+                <span style={{
+                  background: "hsl(var(--primary))",
+                  color: "#fff",
+                  fontSize: 9,
+                  fontWeight: 800,
+                  padding: "2px 7px",
+                  borderRadius: 9999,
+                }}>
+                  {unreadMentions}
+                </span>
+              )}
+            </div>
+
+            {activityFeed.isLoading && activityItems.length === 0 ? (
+              <p style={{ fontSize: 12, color: "hsl(var(--muted-foreground))" }}>Cargando…</p>
+            ) : activityItems.length === 0 ? (
+              <p style={{ fontSize: 12, color: "hsl(var(--muted-foreground))" }}>
+                {channelId ? "Sin actividad reciente en este chat." : "Sin actividad reciente."}
+              </p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {activityItems.map((item) => {
+                  const unread = !item.is_read;
+                  const author =
+                    item.source_profile?.full_name || item.source_profile?.user_id || "Usuario";
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => handleActivityClick(item)}
+                      style={{
+                        textAlign: "left",
+                        border: "1px solid hsl(var(--border))",
+                        borderRadius: 8,
+                        padding: "7px 9px",
+                        background: unread ? "hsl(var(--primary) / 0.06)" : "hsl(var(--muted) / 0.3)",
+                        cursor: "pointer",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 2,
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
+                        <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.03em", color: "hsl(var(--muted-foreground))", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {channelId ? author : activityItemChannelLabel(item, resolveChannelTitle)}
+                        </span>
+                        <span style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+                          {unread && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "hsl(var(--primary))" }} />}
+                          <span style={{ fontSize: 9.5, color: "hsl(var(--muted-foreground))" }}>
+                            {formatDistanceToNow(new Date(item.created_at), { addSuffix: true, locale: es })}
+                          </span>
+                        </span>
+                      </div>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: "hsl(var(--foreground))", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {item.title || author}
+                      </span>
+                      {item.body && (
+                        <span style={{ fontSize: 11.5, color: "hsl(var(--muted-foreground))", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                          {item.body}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {onOpenActivity && (
               <button
                 onClick={onOpenActivity}
                 style={{
                   width: "100%",
+                  marginTop: 8,
                   background: "transparent",
                   border: "1px solid hsl(var(--border))",
                   borderRadius: 8,
@@ -532,8 +627,8 @@ export function KawiilContextPanel({
               >
                 Ver toda la actividad →
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       )}
 
