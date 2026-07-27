@@ -202,6 +202,10 @@ Deno.serve(async (req) => {
         ? "&$filter=receivedDateTime ge 1900-01-01T00:00:00Z and isRead eq false"
         : "";
       const listSelect = MAIL_SELECT;
+      // Búsqueda: con $search Graph no admite $orderby/$filter y busca en todo el buzón.
+      const rawSearch = typeof params?.search === "string"
+        ? params.search.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/"/g, " ").replace(/\s+/g, " ").trim()
+        : "";
 
       if (params?.nextLink && typeof params.nextLink === "string") {
         const link = params.nextLink as string;
@@ -240,7 +244,10 @@ Deno.serve(async (req) => {
           }
           continue;
         }
-        const path = `/me/mailFolders/${encodeURIComponent(folder)}/messages?${listSelect}&$top=${top}&$orderby=receivedDateTime desc&$count=true${filterParam}`;
+        // Con búsqueda: $search en todo el buzón (sin $orderby/$filter, que Graph no permite combinar).
+        const path = rawSearch
+          ? `/me/messages?${listSelect}&$top=${top}&$count=true&$search=${encodeURIComponent(`"${rawSearch}"`)}`
+          : `/me/mailFolders/${encodeURIComponent(folder)}/messages?${listSelect}&$top=${top}&$orderby=receivedDateTime desc&$count=true${filterParam}`;
         const res = await graphFetch(token, path);
         if (!res.ok) {
           // Con cuenta específica NUNCA tragarse el fallo: sin esto la UI muestra

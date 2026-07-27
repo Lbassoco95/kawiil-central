@@ -335,13 +335,15 @@ export function useLinkedOutlookEmailsAll(options?: {
   accountId?: string;
   folder?: string;
   filterUnread?: boolean;
+  search?: string;
   enabled?: boolean;
 }) {
-  const { accountId, folder = "inbox", filterUnread, enabled = true } = options ?? {};
+  const { accountId, folder = "inbox", filterUnread, search, enabled = true } = options ?? {};
+  const cleanSearch = (search || "").trim() || undefined;
   return useInfiniteQuery({
-    queryKey: ["linked-outlook-emails", accountId ?? "all", folder, filterUnread],
+    queryKey: ["linked-outlook-emails", accountId ?? "all", folder, filterUnread, cleanSearch],
     queryFn: async ({ pageParam }: { pageParam: string | number }) => {
-      const p: Record<string, unknown> = { accountId, folder, top: 25, filterUnread: filterUnread || undefined };
+      const p: Record<string, unknown> = { accountId, folder, top: 25, filterUnread: filterUnread || undefined, search: cleanSearch };
       if (typeof pageParam === "string" && pageParam.startsWith("http")) p.nextLink = pageParam;
       else if (typeof pageParam === "number" && pageParam > 0) p.skip = pageParam;
       const { data, error } = await supabase.functions.invoke("outlook-account-api", {
@@ -454,13 +456,15 @@ export function useGmailEmailsAll(options?: {
   accountId?: string;
   labelId?: string;
   filterUnread?: boolean;
+  search?: string;
   enabled?: boolean;
 }) {
-  const { accountId, labelId = "INBOX", filterUnread, enabled = true } = options ?? {};
+  const { accountId, labelId = "INBOX", filterUnread, search, enabled = true } = options ?? {};
+  const cleanSearch = (search || "").trim() || undefined;
   return useInfiniteQuery({
-    queryKey: ["gmail-emails", accountId ?? "all", labelId, filterUnread],
+    queryKey: ["gmail-emails", accountId ?? "all", labelId, filterUnread, cleanSearch],
     queryFn: async ({ pageParam }: { pageParam: string | undefined }) => {
-      const p: Record<string, unknown> = { accountId, labelId, maxResults: 25, filterUnread: filterUnread || undefined };
+      const p: Record<string, unknown> = { accountId, labelId, maxResults: 25, filterUnread: filterUnread || undefined, search: cleanSearch };
       if (pageParam) p.pageToken = pageParam;
       const { data, error } = await supabase.functions.invoke("google-api", {
         body: { action: "gmail-emails", params: p },
