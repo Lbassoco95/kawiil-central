@@ -137,6 +137,16 @@ function linkedAccountIdFromCalendarId(calendarId?: string | null): string | nul
 const START_HOUR = 6;
 const END_HOUR = 23;
 const SLOT_MINUTES = 30;
+
+// "Nombre base" de un evento de una secuencia: quita numeración inicial como
+// "S03 · ", "Sesión 3 - ", "Semana 2: ", "1. " para agrupar S03/S04/… juntos.
+function sequenceStem(title?: string): string {
+  return String(title || "")
+    .trim()
+    .replace(/^(s(esi[oó]n|emana)?\s*)?\d+\s*[·.\-:)]*\s*/i, "")
+    .trim()
+    .toLowerCase();
+}
 const TIME_SLOTS = Array.from(
   { length: ((END_HOUR - START_HOUR) * 60) / SLOT_MINUTES + 1 },
   (_, i) => START_HOUR * 60 + i * SLOT_MINUTES
@@ -434,6 +444,10 @@ export function CalendarView({
   // Trayectos guardados por evento -> bloque de traslado antes del evento.
   const { data: travelMap = {} } = useEventTravelMap();
   const [draggedEvent, setDraggedEvent] = useState<any>(null);
+  // Al mover un evento de una secuencia, propone recorrer los siguientes el mismo lapso.
+  const [cascade, setCascade] = useState<{ deltaMs: number; events: any[]; selected: Set<string> } | null>(null);
+  // Ref con el listado vigente de eventos (allEvents se declara más abajo).
+  const allEventsRef = useRef<any[]>([]);
 
   const handleDrop = useCallback(
     (day: Date, slotMinutes: number) => {
@@ -445,8 +459,9 @@ export function CalendarView({
       const newStartHour = Math.floor(slotMinutes / 60);
       const newStartMin = slotMinutes % 60;
       const newStartTime = `${newStartHour.toString().padStart(2, "0")}:${newStartMin.toString().padStart(2, "0")}`;
-      const newEndMs = new Date(`${newStartDate}T${newStartTime}:00`).getTime() + durationMs;
-      const newEnd = new Date(newEndMs);
+      const newStartMs = new Date(`${newStartDate}T${newStartTime}:00`).getTime();
+      const newEnd = new Date(newStartMs + durationMs);
+      const deltaMs = newStartMs - startDt.getTime();
       updateEvent.mutate({
         eventId: draggedEvent.id,
         payload: {
@@ -454,10 +469,46 @@ export function CalendarView({
           end: { dateTime: `${format(newEnd, "yyyy-MM-dd")}T${format(newEnd, "HH:mm")}:00`, timeZone: CDMX_TZ },
         },
       });
+
+      // Detecta los siguientes de la misma secuencia (mismo nombre base, posteriores).
+      const stem = sequenceStem(draggedEvent.subject);
+      if (stem && deltaMs !== 0) {
+        const origMs = startDt.getTime();
+        const followers = (allEventsRef.current as any[]).filter((e: any) => {
+          if (!e || e.id === draggedEvent.id) return false;
+          const dt = e.start?.dateTime;
+          if (!dt) return false; // ignora eventos de día completo
+          if (sequenceStem(e.subject) !== stem) return false;
+          return parseEventTime(dt).getTime() > origMs;
+        }).sort((a: any, b: any) => parseEventTime(a.start.dateTime).getTime() - parseEventTime(b.start.dateTime).getTime());
+        if (followers.length > 0) {
+          setCascade({ deltaMs, events: followers, selected: new Set(followers.map((f: any) => f.id)) });
+        }
+      }
       setDraggedEvent(null);
     },
     [draggedEvent, updateEvent]
   );
+
+  // Aplica el mismo desplazamiento a los eventos seleccionados de la secuencia.
+  const applyCascade = useCallback(() => {
+    if (!cascade) return;
+    for (const ev of cascade.events) {
+      if (!cascade.selected.has(ev.id)) continue;
+      const s = parseEventTime(ev.start.dateTime);
+      const e = parseEventTime(ev.end?.dateTime || ev.start.dateTime, new Date(s.getTime() + 60 * 60 * 1000));
+      const ns = new Date(s.getTime() + cascade.deltaMs);
+      const ne = new Date(e.getTime() + cascade.deltaMs);
+      updateEvent.mutate({
+        eventId: ev.id,
+        payload: {
+          start: { dateTime: `${format(ns, "yyyy-MM-dd")}T${format(ns, "HH:mm")}:00`, timeZone: CDMX_TZ },
+          end: { dateTime: `${format(ne, "yyyy-MM-dd")}T${format(ne, "HH:mm")}:00`, timeZone: CDMX_TZ },
+        },
+      });
+    }
+    setCascade(null);
+  }, [cascade, updateEvent]);
 
   const [editForm, setEditForm] = useState({
     subject: "", startDate: "", startTime: "09:00", endDate: "", endTime: "10:00",
@@ -594,6 +645,7 @@ export function CalendarView({
     const outlook = Array.isArray(outlookEventsData) ? outlookEventsData : [];
     return [...m365, ...google, ...outlook];
   }, [eventsData, googleEventsData, outlookEventsData]);
+  allEventsRef.current = allEvents;
 
   const events = useMemo(() => {
     return allEvents.filter((e: any) => {
@@ -1169,7 +1221,15 @@ export function CalendarView({
                                 style={{ height: `${SLOT_HEIGHT}px` }}
                                 onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; e.currentTarget.classList.add("bg-primary/20"); }}
                                 onDragLeave={(e) => e.currentTarget.classList.remove("bg-primary/20")}
-                                onDrop={(e) => { e.preventDefault(); e.currentTarget.classList.remove("bg-primary/20"); handleDrop(day, slotMinutes); }}
+                                onDrop={(e) => {
+                                  e.preventDefault();
+                                  e.currentTarget.classList.remove("bg-primary/20");
+                                  // Granularidad de 15 min: divide el slot de 30 min según la Y del cursor.
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  const offY = e.clientY - rect.top;
+                                  const sub = offY >= rect.height / 2 ? 15 : 0;
+                                  handleDrop(day, slotMinutes + sub);
+                                }}
                               />
                             ))}
 
@@ -1946,6 +2006,56 @@ export function CalendarView({
           </div>
         </div>
       </div>
+
+      {/* Recorrer secuencia: al mover un evento, propone mover los siguientes el mismo lapso */}
+      <Dialog open={!!cascade} onOpenChange={(o) => !o && setCascade(null)}>
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-md max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base"><CalendarDays className="h-4 w-4" /> ¿Recorrer los siguientes?</DialogTitle>
+          </DialogHeader>
+          {cascade && (() => {
+            const abs = Math.abs(cascade.deltaMs);
+            const sign = cascade.deltaMs >= 0 ? "+" : "−";
+            const d = Math.floor(abs / 86400000);
+            const h = Math.floor((abs % 86400000) / 3600000);
+            const mm = Math.round((abs % 3600000) / 60000);
+            const parts = [d && `${d} d`, h && `${h} h`, mm && `${mm} min`].filter(Boolean).join(" ");
+            return (
+              <div className="space-y-3 py-1">
+                <p className="text-sm text-muted-foreground">
+                  Moviste el evento <b className="text-foreground">{sign}{parts || "0 min"}</b>. Recorre también estos eventos de la misma secuencia el mismo lapso para no encimarlos:
+                </p>
+                <div className="space-y-1 max-h-[45vh] overflow-y-auto rounded-md border border-border p-2">
+                  {cascade.events.map((ev) => {
+                    const s = parseEventTime(ev.start.dateTime);
+                    const checked = cascade.selected.has(ev.id);
+                    return (
+                      <label key={ev.id} className="flex items-center gap-2 rounded px-1.5 py-1 text-sm cursor-pointer hover:bg-accent/50">
+                        <Checkbox checked={checked} onCheckedChange={() => setCascade((c) => {
+                          if (!c) return c;
+                          const sel = new Set(c.selected);
+                          if (sel.has(ev.id)) sel.delete(ev.id); else sel.add(ev.id);
+                          return { ...c, selected: sel };
+                        })} />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate font-medium text-foreground">{ev.subject || "(sin asunto)"}</span>
+                          <span className="block text-[11px] text-muted-foreground">{format(s, "EEE d MMM · HH:mm", { locale: es })}</span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCascade(null)}>No, solo este</Button>
+            <Button onClick={applyCascade} disabled={!cascade || cascade.selected.size === 0}>
+              Recorrer {cascade?.selected.size || 0}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Create event dialog */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
