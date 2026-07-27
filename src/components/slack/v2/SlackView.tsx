@@ -981,6 +981,7 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
               onClose={() => setActivityOpen(false)}
               onJumpToMessage={handleJumpToMessage}
               resolveChannelTitle={resolveChannelTitle}
+              channelId={selectedChannel || undefined}
             />
           </div>
         </>

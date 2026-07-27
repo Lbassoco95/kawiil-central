@@ -42,11 +42,21 @@ const SLACK_ACTIVITY_TYPES = [
  * - dms:        slack_dm (fallback: título/body contiene "mensaje directo").
  * - reactions:  slack_reaction.
  */
-export function useSlackActivityFeed(tab: SlackActivityTab = "all", onlyUnread = false) {
+/**
+ * @param channelId Si se pasa, acota la actividad a ESE chat/canal (filtra por
+ *   `entity_ref = "<channel>|<ts>"`). Útil para mostrar solo la actividad de la
+ *   conversación abierta en vez de todo el workspace.
+ */
+export function useSlackActivityFeed(
+  tab: SlackActivityTab = "all",
+  onlyUnread = false,
+  channelId?: string,
+) {
   const { user } = useAuth();
+  const channelKey = channelId ?? null;
 
   const query = useQuery({
-    queryKey: ["slack-activity", user?.id, tab, onlyUnread],
+    queryKey: ["slack-activity", user?.id, tab, onlyUnread, channelKey],
     enabled: !!user,
     staleTime: 15_000,
     refetchInterval: 60_000,
@@ -60,6 +70,9 @@ export function useSlackActivityFeed(tab: SlackActivityTab = "all", onlyUnread =
         .eq("entity_type", "slack")
         .order("created_at", { ascending: false })
         .limit(150);
+
+      // Acota a la conversación abierta: entity_ref = "<channel>|<ts>".
+      if (channelKey) q = q.like("entity_ref", `${channelKey}|%`);
 
       if (onlyUnread) q = q.eq("is_read", false);
 
