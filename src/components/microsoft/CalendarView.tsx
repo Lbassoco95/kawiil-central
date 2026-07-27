@@ -41,7 +41,7 @@ import { es } from "date-fns/locale";
 import {
   Plus, ChevronLeft, ChevronRight, Loader2, Trash2, Video, Pencil,
   CalendarDays, CheckSquare, Clock, MapPin, Users, ExternalLink, AlertCircle,
-  PanelRightClose, PanelRightOpen, Car,
+  PanelRightClose, PanelRightOpen, Car, Lock,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -409,7 +409,7 @@ export function CalendarView({
 
   const [newEvent, setNewEvent] = useState({
     subject: "", date: "", startTime: "09:00", endTime: "10:00", attendees: "",
-    location: "", description: "", isOnlineMeeting: false, isAllDay: false, categories: [] as string[],
+    location: "", description: "", isOnlineMeeting: false, isAllDay: false, isPrivate: false, categories: [] as string[],
   });
   // Al abrir "Nuevo evento", precarga la fecha con el día seleccionado (editable
   // por si se eligió el día equivocado).
@@ -458,7 +458,7 @@ export function CalendarView({
 
   const [editForm, setEditForm] = useState({
     subject: "", startDate: "", startTime: "09:00", endDate: "", endTime: "10:00",
-    location: "", description: "", categories: [] as string[], attendees: "",
+    location: "", description: "", categories: [] as string[], attendees: "", isPrivate: false,
   });
 
   const viewDays = useMemo(() => {
@@ -710,6 +710,7 @@ export function CalendarView({
         description: safeDescription(source.body?.content),
         categories: Array.isArray(source.categories) ? [...source.categories] : [],
         attendees: attendeesStr,
+        isPrivate: !!source.sensitivity && source.sensitivity !== "normal",
       });
     } catch (_) {
       setEditForm((prev) => ({ ...prev, subject: (eventDetail || cachedEvent)?.subject ?? prev.subject }));
@@ -804,12 +805,13 @@ export function CalendarView({
     if (newEvent.location.trim()) baseEvent.location = { displayName: newEvent.location.trim() };
     if (attendees.length > 0) baseEvent.attendees = attendees;
     if (newEvent.isOnlineMeeting) { baseEvent.isOnlineMeeting = true; baseEvent.onlineMeetingProvider = "teamsForBusiness"; }
+    if (newEvent.isPrivate) baseEvent.sensitivity = "private";
     if (newEvent.categories.length > 0) baseEvent.categories = newEvent.categories;
 
     createEvent.mutate(baseEvent, {
       onSuccess: () => {
         setShowCreate(false);
-        setNewEvent({ subject: "", date: "", startTime: "09:00", endTime: "10:00", attendees: "", location: "", description: "", isOnlineMeeting: false, isAllDay: false, categories: [] });
+        setNewEvent({ subject: "", date: "", startTime: "09:00", endTime: "10:00", attendees: "", location: "", description: "", isOnlineMeeting: false, isAllDay: false, isPrivate: false, categories: [] });
       },
     });
   };
@@ -825,6 +827,7 @@ export function CalendarView({
       body: editForm.description.trim() ? { contentType: "html", content: editForm.description.trim() } : undefined,
       categories: editForm.categories,
       attendees: attendees.length > 0 ? attendees : undefined,
+      sensitivity: editForm.isPrivate ? "private" : "normal",
     };
     Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k]);
     updateEvent.mutate({ eventId: selectedEventId, payload }, { onSuccess: () => setSelectedEventId(null) });
@@ -1973,6 +1976,13 @@ export function CalendarView({
               </div>
               <Switch checked={newEvent.isOnlineMeeting} onCheckedChange={(checked) => setNewEvent({ ...newEvent, isOnlineMeeting: checked })} />
             </div>
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <Label className="text-sm flex items-center gap-1.5"><Lock className="h-3.5 w-3.5" /> Personal (privado)</Label>
+                <p className="text-xs text-muted-foreground">Otros verán "Bloqueado"; tú ves el título real.</p>
+              </div>
+              <Switch checked={newEvent.isPrivate} onCheckedChange={(checked) => setNewEvent({ ...newEvent, isPrivate: checked })} />
+            </div>
             <div className="space-y-2">
               <Label>Descripción / notas</Label>
               <Textarea placeholder="Agenda, notas, instrucciones..." value={newEvent.description} onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })} rows={3} />
@@ -2123,6 +2133,13 @@ export function CalendarView({
               <div className="space-y-2">
                 <Label>Descripción</Label>
                 <Textarea value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} rows={3} />
+              </div>
+              <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/20 px-3 py-2">
+                <div>
+                  <Label className="text-sm flex items-center gap-1.5"><Lock className="h-3.5 w-3.5" /> Personal (privado)</Label>
+                  <p className="text-xs text-muted-foreground">Otros verán "Bloqueado"; tú ves el título real.</p>
+                </div>
+                <Switch checked={editForm.isPrivate} onCheckedChange={(checked) => setEditForm({ ...editForm, isPrivate: checked })} />
               </div>
               <div className="space-y-2">
                 <Label>Etiquetas</Label>
