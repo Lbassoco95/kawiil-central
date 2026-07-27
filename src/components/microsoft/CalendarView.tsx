@@ -463,8 +463,8 @@ export function CalendarView({
       case "day": return [currentDate];
       case "3days": return eachDayOfInterval({ start: currentDate, end: addDays(currentDate, 2) });
       case "week": return eachDayOfInterval({
-        start: startOfWeek(currentDate, { weekStartsOn: 1 }),
-        end: endOfWeek(currentDate, { weekStartsOn: 1 }),
+        start: startOfWeek(currentDate, { weekStartsOn: 0 }),
+        end: endOfWeek(currentDate, { weekStartsOn: 0 }),
       });
       case "month": return [];
       default: return [];
@@ -475,7 +475,7 @@ export function CalendarView({
     if (viewMode !== "month") return [];
     const start = startOfMonth(currentDate);
     const end = endOfMonth(currentDate);
-    return eachDayOfInterval({ start: startOfWeek(start, { weekStartsOn: 1 }), end: endOfWeek(end, { weekStartsOn: 1 }) });
+    return eachDayOfInterval({ start: startOfWeek(start, { weekStartsOn: 0 }), end: endOfWeek(end, { weekStartsOn: 0 }) });
   }, [viewMode, currentDate]);
 
   const rangeStart = useMemo(() => {
@@ -839,8 +839,8 @@ export function CalendarView({
       case "day": return format(currentDate, "EEEE d 'de' MMMM, yyyy", { locale: es });
       case "3days": return `${format(currentDate, "d MMM", { locale: es })} – ${format(addDays(currentDate, 2), "d MMM yyyy", { locale: es })}`;
       case "week": {
-        const ws = startOfWeek(currentDate, { weekStartsOn: 1 });
-        const we = endOfWeek(currentDate, { weekStartsOn: 1 });
+        const ws = startOfWeek(currentDate, { weekStartsOn: 0 });
+        const we = endOfWeek(currentDate, { weekStartsOn: 0 });
         return `${format(ws, "d MMM", { locale: es })} – ${format(we, "d MMM yyyy", { locale: es })}`;
       }
       case "month": return format(currentDate, "MMMM yyyy", { locale: es });
@@ -854,8 +854,8 @@ export function CalendarView({
       case "day": return format(currentDate, "EEE d MMM", { locale: es });
       case "3days": return `${format(currentDate, "d")} – ${format(addDays(currentDate, 2), "d MMM", { locale: es })}`;
       case "week": {
-        const ws = startOfWeek(currentDate, { weekStartsOn: 1 });
-        const we = endOfWeek(currentDate, { weekStartsOn: 1 });
+        const ws = startOfWeek(currentDate, { weekStartsOn: 0 });
+        const we = endOfWeek(currentDate, { weekStartsOn: 0 });
         return `${format(ws, "d")} – ${format(we, "d MMM", { locale: es })}`;
       }
       case "month": return format(currentDate, "MMM yyyy", { locale: es });
@@ -1254,13 +1254,13 @@ export function CalendarView({
             <div>
               <div className="grid grid-cols-7 border-b border-border">
                 {[
+                  { short: "Dom", letter: "D" },
                   { short: "Lun", letter: "L" },
                   { short: "Mar", letter: "M" },
                   { short: "Mié", letter: "X" },
                   { short: "Jue", letter: "J" },
                   { short: "Vie", letter: "V" },
                   { short: "Sáb", letter: "S" },
-                  { short: "Dom", letter: "D" },
                 ].map(({ short, letter }) => (
                   <div key={short} className="py-1.5 px-0.5 text-xs text-muted-foreground text-center font-medium">
                     <span className="hidden sm:inline">{short}</span>
@@ -1495,14 +1495,14 @@ export function CalendarView({
                   </div>
                 </div>
                 <div className="grid grid-cols-7 gap-0.5 text-center">
-                  {["L", "M", "X", "J", "V", "S", "D"].map((d) => (
-                    <span key={d} className="text-[10px] font-semibold text-muted-foreground py-1">
+                  {["D", "L", "M", "X", "J", "V", "S"].map((d, i) => (
+                    <span key={`${d}-${i}`} className="text-[10px] font-semibold text-muted-foreground py-1">
                       {d}
                     </span>
                   ))}
                   {eachDayOfInterval({
-                    start: startOfWeek(startOfMonth(currentDate), { weekStartsOn: 1 }),
-                    end: endOfWeek(endOfMonth(currentDate), { weekStartsOn: 1 }),
+                    start: startOfWeek(startOfMonth(currentDate), { weekStartsOn: 0 }),
+                    end: endOfWeek(endOfMonth(currentDate), { weekStartsOn: 0 }),
                   }).map((d) => {
                     const inMonth = isSameMonth(d, currentDate);
                     const today = isToday(d);
@@ -2020,7 +2020,28 @@ export function CalendarView({
                 <Input value={editForm.subject} onChange={(e) => setEditForm({ ...editForm, subject: e.target.value })} />
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1 min-w-0"><Label>Fecha inicio</Label><Input type="date" value={editForm.startDate} onChange={(e) => setEditForm({ ...editForm, startDate: e.target.value })} /></div>
+                <div className="space-y-1 min-w-0"><Label>Fecha inicio</Label><Input type="date" value={editForm.startDate} onChange={(e) => {
+                  const newStart = e.target.value;
+                  setEditForm((f) => {
+                    // Al mover la fecha de inicio, recorre la fecha fin el mismo número
+                    // de días para conservar la duración y no dejarla inconsistente.
+                    let endDate = f.endDate;
+                    try {
+                      if (newStart && f.startDate && f.endDate) {
+                        const oldS = new Date(`${f.startDate}T00:00:00`).getTime();
+                        const oldE = new Date(`${f.endDate}T00:00:00`).getTime();
+                        const ns = new Date(`${newStart}T00:00:00`).getTime();
+                        const deltaDays = Math.round((ns - oldS) / 86400000);
+                        if (deltaDays !== 0 && Number.isFinite(deltaDays)) {
+                          endDate = format(new Date(oldE + deltaDays * 86400000), "yyyy-MM-dd");
+                        }
+                      } else if (newStart && (!f.endDate || f.endDate < newStart)) {
+                        endDate = newStart;
+                      }
+                    } catch { /* ignore */ }
+                    return { ...f, startDate: newStart, endDate };
+                  });
+                }} /></div>
                 <div className="space-y-1 min-w-0"><Label>Hora inicio</Label><Input type="time" value={editForm.startTime} onChange={(e) => setEditForm({ ...editForm, startTime: e.target.value })} /></div>
               </div>
               <div className="grid grid-cols-2 gap-3">
