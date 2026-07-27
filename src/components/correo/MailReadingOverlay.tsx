@@ -5,6 +5,7 @@ import { useLinkedOutlookEmailDetail, useGmailEmailDetail, useRoutedEmailAttachm
 import { useResolvedEmailHtml } from "@/hooks/useResolvedEmailHtml";
 import { MailLabelPicker } from "./MailLabelPicker";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { useMemo, useState, useCallback } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -31,6 +32,16 @@ interface Props {
   onCreateRule?: () => void;
   onSendToSlack?: () => void;
   onCreateEvent?: () => void;
+}
+
+/** Envuelve un botón de ícono para mostrar su nombre al pasar el ratón (tooltip instantáneo). */
+function Tip({ label, children }: { label: string; children: React.ReactElement }) {
+  return (
+    <Tooltip delayDuration={200}>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent side="bottom" className="text-[11px]">{label}</TooltipContent>
+    </Tooltip>
+  );
 }
 
 function AttachmentChip({ messageId, att }: { messageId: string; att: OutlookAttachment }) {
@@ -210,14 +221,15 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onForwar
 
           {/* Move to folder */}
           <Popover open={moveFolderOpen} onOpenChange={setMoveFolderOpen}>
-            <PopoverTrigger asChild>
-              <button
-                className="h-[30px] w-[30px] flex items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-                title="Mover a carpeta"
-              >
-                <FolderInput className="w-3.5 h-3.5" />
-              </button>
-            </PopoverTrigger>
+            <Tip label="Mover a carpeta">
+              <PopoverTrigger asChild>
+                <button
+                  className="h-[30px] w-[30px] flex items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                >
+                  <FolderInput className="w-3.5 h-3.5" />
+                </button>
+              </PopoverTrigger>
+            </Tip>
             <PopoverContent side="bottom" align="end" className="w-[220px] p-1.5">
               <p className="text-[10.5px] font-bold uppercase tracking-widest text-muted-foreground px-2 pb-1.5">
                 Mover a carpeta
@@ -245,13 +257,14 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onForwar
             </PopoverContent>
           </Popover>
 
-          <button
-            className="h-[30px] w-[30px] flex items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-            title="Crear regla"
-            onClick={onCreateRule}
-          >
-            <Filter className="w-3.5 h-3.5" />
-          </button>
+          <Tip label="Crear regla">
+            <button
+              className="h-[30px] w-[30px] flex items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+              onClick={onCreateRule}
+            >
+              <Filter className="w-3.5 h-3.5" />
+            </button>
+          </Tip>
           <MailLabelPicker emailMessageId={emailId || ""}>
             <button
               className="h-[30px] flex items-center gap-1.5 px-2.5 rounded-md border border-border text-[12px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
@@ -261,47 +274,52 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onForwar
               Etiqueta
             </button>
           </MailLabelPicker>
-          <button
-            className="h-[30px] w-[30px] flex items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-            title="Archivar"
-            onClick={() => { if (emailId) { archiveEmail.mutate(emailId); onClose(); } }}
-          >
-            <Archive className="w-3.5 h-3.5" />
-          </button>
-          <button
-            className="h-[30px] w-[30px] flex items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
-            title="Eliminar"
-            onClick={() => { if (emailId) { deleteEmail.mutate(emailId); onClose(); } }}
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-          <button
-            className="h-[30px] w-[30px] flex items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-            title="Crear tarea"
-            onClick={() => emailDetail && onCreateTask(emailDetail as EmailShape)}
-          >
-            <CheckSquare className="w-3.5 h-3.5" />
-          </button>
-          <button
-            className="h-[30px] w-[30px] flex items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-            title="Crear evento en calendario"
-            onClick={onCreateEvent}
-          >
-            <CalendarPlus className="w-3.5 h-3.5" />
-          </button>
-          <button
-            className={cn(
-              "h-[30px] w-[30px] flex items-center justify-center rounded-md transition-colors",
-              isConfidential
-                ? "text-muted-foreground/30 cursor-not-allowed"
-                : "text-muted-foreground hover:bg-accent hover:text-foreground"
-            )}
-            title={isConfidential ? "Correo confidencial — no se puede enviar a Slack" : "Enviar a Slack"}
-            onClick={isConfidential ? undefined : onSendToSlack}
-            disabled={isConfidential}
-          >
-            <MessageSquare className="w-3.5 h-3.5" />
-          </button>
+          <Tip label="Archivar">
+            <button
+              className="h-[30px] w-[30px] flex items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+              onClick={() => { if (emailId) { archiveEmail.mutate(emailId); onClose(); } }}
+            >
+              <Archive className="w-3.5 h-3.5" />
+            </button>
+          </Tip>
+          <Tip label="Eliminar">
+            <button
+              className="h-[30px] w-[30px] flex items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+              onClick={() => { if (emailId) { deleteEmail.mutate(emailId); onClose(); } }}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </Tip>
+          <Tip label="Crear tarea">
+            <button
+              className="h-[30px] w-[30px] flex items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+              onClick={() => emailDetail && onCreateTask(emailDetail as EmailShape)}
+            >
+              <CheckSquare className="w-3.5 h-3.5" />
+            </button>
+          </Tip>
+          <Tip label="Crear evento en calendario">
+            <button
+              className="h-[30px] w-[30px] flex items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+              onClick={onCreateEvent}
+            >
+              <CalendarPlus className="w-3.5 h-3.5" />
+            </button>
+          </Tip>
+          <Tip label={isConfidential ? "Confidencial — no se puede enviar a Slack" : "Enviar a Slack"}>
+            <button
+              className={cn(
+                "h-[30px] w-[30px] flex items-center justify-center rounded-md transition-colors",
+                isConfidential
+                  ? "text-muted-foreground/30 cursor-not-allowed"
+                  : "text-muted-foreground hover:bg-accent hover:text-foreground"
+              )}
+              onClick={isConfidential ? undefined : onSendToSlack}
+              disabled={isConfidential}
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+            </button>
+          </Tip>
         </div>
       </div>
 
