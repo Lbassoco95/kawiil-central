@@ -1,13 +1,13 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import { useEmailLabelAssignments } from "@/hooks/useMicrosoft";
+import { useEmailLabelAssignments, useEmailConversation, useMicrosoftConnection } from "@/hooks/useMicrosoft";
 import { useOutlookEmails } from "@/hooks/useMicrosoft";
 import { useRoutedEmailDetail } from "@/hooks/useLinkedAccounts";
 import { useTasksBySourceEmail } from "@/hooks/useTasks";
 import { inferEmailChips, emailListTimestamp, formatEmailDate, resolveCategory } from "@/lib/emailChips";
 import { useSenderCategories, useSetSenderCategory, SENDER_CATEGORY_LABEL, type SenderCategory } from "@/hooks/useSenderCategories";
 import { cn } from "@/lib/utils";
-import { Sparkles, Mail, CheckSquare, Link2, Filter, Tag, Check } from "lucide-react";
+import { Sparkles, Mail, CheckSquare, Link2, Filter, Tag, Check, MessagesSquare, ArrowRight, CornerUpLeft } from "lucide-react";
 import { MailLabelPicker, getLabelStyle } from "./MailLabelPicker";
 
 interface Props {
@@ -49,6 +49,14 @@ export function MailContactPanel({ emailId, onAskAI, onCreateTask, onCreateRule 
   const { data: relatedTasks = [] } = useTasksBySourceEmail(emailId);
   const { data: learnedCategories } = useSenderCategories();
   const setSenderCategory = useSetSenderCategory();
+  const { profile } = useMicrosoftConnection();
+
+  // Hilo de conversación (incluye tus reenvíos/respuestas, que están en Enviados).
+  // Solo cuenta principal: el email-conversation consulta el buzón principal por conversationId.
+  const isPrimaryEmail = !!emailId && !emailId.includes(":");
+  const conversationId = isPrimaryEmail ? ((emailDetail as any)?.conversationId as string | undefined) : undefined;
+  const { data: thread = [] } = useEmailConversation(conversationId ?? null);
+  const myEmail = (profile?.mail || profile?.userPrincipalName || "").toLowerCase();
 
   const senderName = (emailDetail as any)?.from?.emailAddress?.name || "";
   const senderEmail = (emailDetail as any)?.from?.emailAddress?.address || "";
@@ -205,6 +213,45 @@ export function MailContactPanel({ emailId, onAskAI, onCreateTask, onCreateRule 
 
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto min-h-0">
+        {/* Conversación / Historial — todo el hilo, incluidos tus reenvíos y respuestas */}
+        {thread.length > 1 && (
+          <div className="px-5 py-3.5 border-b border-border/30">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2.5 flex items-center gap-1.5">
+              <MessagesSquare className="w-[11px] h-[11px]" /> Conversación · {thread.length}
+            </p>
+            <div className="space-y-2.5">
+              {[...(thread as any[])]
+                .sort((a, b) => String(emailListTimestamp(a)).localeCompare(String(emailListTimestamp(b))))
+                .map((m: any) => {
+                  const from = m.from?.emailAddress;
+                  const mine = (from?.address || "").toLowerCase() === myEmail && !!myEmail;
+                  const ts = emailListTimestamp({ receivedDateTime: m.receivedDateTime, sentDateTime: m.sentDateTime, createdDateTime: m.createdDateTime });
+                  const date = formatEmailDate(ts);
+                  const isCurrent = m.id === emailId;
+                  return (
+                    <div key={m.id} className={cn("flex items-start gap-2", isCurrent && "opacity-100")}>
+                      <span className={cn(
+                        "w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5",
+                        mine ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground",
+                      )}>
+                        {mine ? <CornerUpLeft className="w-3 h-3" /> : <ArrowRight className="w-3 h-3" />}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[11.5px] font-medium text-foreground truncate flex items-center gap-1">
+                          {mine ? "Tú" : (from?.name || from?.address || "Remitente")}
+                          {isCurrent && <span className="text-[9px] px-1 py-0.5 rounded bg-accent text-muted-foreground">este</span>}
+                        </p>
+                        <p className="text-[10.5px] text-muted-foreground truncate">
+                          {mine ? "Enviado" : "Recibido"} · {date}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        )}
+
         {/* Email threads */}
         {senderThreads.length > 0 && (
           <div className="px-5 py-3.5 border-b border-border/30">
