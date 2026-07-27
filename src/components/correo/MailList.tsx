@@ -21,16 +21,18 @@ import {
   DATE_BUCKET_LABELS,
   type DateBucket,
   inferEmailChips,
+  isNotificationEmail,
 } from "@/lib/emailChips";
 import { MailItem } from "./MailItem";
 import { MailTabs, type MailTabId } from "./MailTabs";
+import { MailRuleSuggestions } from "./MailRuleSuggestions";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 
 // AI tab IDs that filter inbox emails client-side
-const AI_TABS: MailTabId[] = ["clientes", "sat", "facturas", "interno"];
+const AI_TABS: MailTabId[] = ["clientes", "sat", "facturas", "interno", "notificaciones"];
 const AI_TAB_TONE: Record<string, string> = {
   clientes: "cliente",
   sat: "sat",
@@ -56,6 +58,8 @@ interface Props {
   onCompose: () => void;
   onOpenFolders: () => void;
   onOpenRules: () => void;
+  /** Sugerencia de regla: abre el diálogo de crear regla prellenado con ese remitente. */
+  onSuggestRule?: (senderEmail: string, senderName: string) => void;
   customFolderOverride?: string;
   customFolderName?: string;
   onClearCustomFolder?: () => void;
@@ -74,7 +78,7 @@ function Tip({ label, children }: { label: string; children: React.ReactElement 
   );
 }
 
-export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmail, onOpenEmail, onCompose, onOpenFolders, onOpenRules, customFolderOverride, customFolderName, onClearCustomFolder, externalLabelFilter }: Props) {
+export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmail, onOpenEmail, onCompose, onOpenFolders, onOpenRules, onSuggestRule, customFolderOverride, customFolderName, onClearCustomFolder, externalLabelFilter }: Props) {
   const [search, setSearch] = useState("");
   const [readFilter, setReadFilter] = useState<ReadFilter>("sinleer");
   const [attachmentFilter, setAttachmentFilter] = useState(false);
@@ -254,7 +258,13 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
     if (activeTab === "starred") {
       list = list.filter((e) => (e.flag as any)?.flagStatus === "flagged");
     }
-    if (isAiTab) {
+    // Bandeja limpia: en "Bandeja" ocultamos las notificaciones automáticas (van a su pestaña).
+    if (activeTab === "inbox" && !customFolderOverride) {
+      list = list.filter((e) => !isNotificationEmail(e as { from?: { emailAddress?: { address?: string; name?: string } } }));
+    }
+    if (activeTab === "notificaciones") {
+      list = list.filter((e) => isNotificationEmail(e as { from?: { emailAddress?: { address?: string; name?: string } } }));
+    } else if (isAiTab) {
       const tone = AI_TAB_TONE[activeTab];
       list = list.filter((e) => {
         const chips = inferEmailChips({
@@ -289,7 +299,7 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
       list = list.filter((e) => emailsWithLabel.has(e.id as string));
     }
     return list;
-  }, [allEmails, activeTab, isAiTab, isUnified, debouncedSearch, readFilter, attachmentFilter, dateRangeFilter, effectiveLabelFilter, bulkAssignments]);
+  }, [allEmails, activeTab, isAiTab, isUnified, customFolderOverride, debouncedSearch, readFilter, attachmentFilter, dateRangeFilter, effectiveLabelFilter, bulkAssignments]);
 
   const handleScroll = useCallback(() => {
     const el = listRef.current;
@@ -517,6 +527,11 @@ const now = useMemo(() => new Date(), []);
           {isFetching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
         </button>
       </div>
+
+      {/* Sugerencia de regla — solo en Bandeja de la cuenta principal, sin búsqueda */}
+      {onSuggestRule && activeTab === "inbox" && !customFolderOverride && !isUnified && !debouncedSearch && (
+        <MailRuleSuggestions emails={allEmails} onCreateRule={onSuggestRule} />
+      )}
 
       {/* Email list */}
       <div className="flex-1 overflow-y-auto min-h-0" ref={listRef}>

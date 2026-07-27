@@ -16,7 +16,35 @@ export type InferredChipTone =
   | "factura"
   | "cliente"
   | "interno"
+  | "notificacion"
   | "ai";
+
+// Dominios de servicios que envían NOTIFICACIONES automáticas (ruido para la bandeja):
+// desarrollo, redes sociales y plataformas. Se agrupan aparte de los correos relevantes.
+const NOTIFICATION_DOMAINS = [
+  "github.com", "githubusercontent.com", "vercel.com", "vercel.app",
+  "gitlab.com", "atlassian.net", "atlassian.com", "bitbucket.org",
+  "linkedin.com", "substack.com", "medium.com", "twitter.com", "x.com",
+  "facebookmail.com", "instagram.com", "slack.com", "notion.so", "figma.com",
+  "netlify.com", "sentry.io", "circleci.com", "npmjs.com", "reddit.com",
+  "producthunt.com", "calendly.com", "coderabbit.ai", "readthedocs.org",
+  "docker.com", "cloudflare.com", "supabase.io", "supabase.com",
+];
+
+/** ¿El correo es una notificación automática (bot / plataforma) y no un mensaje relevante? */
+export function isNotificationEmail(email: {
+  from?: { emailAddress?: { address?: string; name?: string } };
+  subject?: string;
+}): boolean {
+  const addr = (email?.from?.emailAddress?.address || "").toLowerCase();
+  const name = (email?.from?.emailAddress?.name || "").toLowerCase();
+  const domain = addr.split("@")[1] || "";
+  if (!addr && !name) return false;
+  // Bots de repositorio (coderabbitai[bot], vercel[bot], dependabot[bot], etc.)
+  if (name.includes("[bot]") || /\bbot\b/.test(name)) return true;
+  if (NOTIFICATION_DOMAINS.some((d) => domain === d || domain.endsWith("." + d))) return true;
+  return false;
+}
 
 export interface EmailChip {
   label: string;

@@ -1,9 +1,9 @@
 import { cn } from "@/lib/utils";
 import { useMailFolders, useUnreadEmailCount, useOutlookEmails } from "@/hooks/useMicrosoft";
-import { inferEmailChips } from "@/lib/emailChips";
+import { inferEmailChips, isNotificationEmail } from "@/lib/emailChips";
 import { useMemo } from "react";
 
-export type MailTabId = "inbox" | "starred" | "clientes" | "sat" | "facturas" | "interno" | "sentItems" | "drafts";
+export type MailTabId = "inbox" | "starred" | "clientes" | "sat" | "facturas" | "interno" | "notificaciones" | "sentItems" | "drafts";
 
 interface Props {
   activeTab: MailTabId;
@@ -17,6 +17,7 @@ const CHIP_DOTS: Partial<Record<MailTabId, string>> = {
   sat: "hsl(0 72% 51%)",
   facturas: "hsl(32 90% 48%)",
   interno: "hsl(157 72% 36%)",
+  notificaciones: "hsl(255 8% 55%)",
 };
 
 export function MailTabs({ activeTab, onSelectTab, inboxUnreadOverride }: Props) {
@@ -46,8 +47,9 @@ export function MailTabs({ activeTab, onSelectTab, inboxUnreadOverride }: Props)
   );
 
   const aiCounts = useMemo(() => {
-    const counts = { clientes: 0, sat: 0, facturas: 0, interno: 0 };
+    const counts = { clientes: 0, sat: 0, facturas: 0, interno: 0, notificaciones: 0 };
     for (const email of inboxEmails) {
+      if (isNotificationEmail(email)) { counts.notificaciones++; continue; }
       const chips = inferEmailChips({
         from: email.from,
         subject: email.subject,
@@ -70,6 +72,7 @@ export function MailTabs({ activeTab, onSelectTab, inboxUnreadOverride }: Props)
     { id: "sat", label: "SAT" },
     { id: "facturas", label: "Facturas" },
     { id: "interno", label: "Interno" },
+    { id: "notificaciones", label: "Notificaciones" },
     { id: "sentItems", label: "Enviados" },
     { id: "drafts", label: "Borradores" },
   ];
@@ -80,6 +83,7 @@ export function MailTabs({ activeTab, onSelectTab, inboxUnreadOverride }: Props)
     if (id === "sat") return aiCounts.sat > 0 ? aiCounts.sat : null;
     if (id === "facturas") return aiCounts.facturas > 0 ? aiCounts.facturas : null;
     if (id === "interno") return aiCounts.interno > 0 ? aiCounts.interno : null;
+    if (id === "notificaciones") return aiCounts.notificaciones > 0 ? aiCounts.notificaciones : null;
     if (id === "drafts") { const n = folderCounts.total["drafts"] ?? 0; return n > 0 ? n : null; }
     if (id === "sentItems") { const n = folderCounts.unread["sentitems"] ?? folderCounts.unread["sentItems"] ?? 0; return n > 0 ? n : null; }
     return null;
