@@ -620,6 +620,40 @@ export function useOutlookCategories() {
   });
 }
 
+/** Crea una categoría (master category) en la cuenta Outlook. */
+export function useCreateOutlookCategory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ displayName, color }: { displayName: string; color?: string }) => {
+      const { data, error } = await supabase.functions.invoke("microsoft-api", {
+        body: { action: "create-outlook-category", params: { displayName, color } },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["outlook-categories"] }),
+    onError: (err: Error) => toast.error("No se pudo crear la categoría: " + err.message),
+  });
+}
+
+/** Elimina una categoría (master category) de la cuenta Outlook por id. */
+export function useDeleteOutlookCategory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await supabase.functions.invoke("microsoft-api", {
+        body: { action: "delete-outlook-category", params: { id } },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["outlook-categories"] }),
+    onError: (err: Error) => toast.error("No se pudo eliminar la categoría: " + err.message),
+  });
+}
+
 export type OutlookEmailsPage = {
   emails: unknown[];
   /** URL @odata.nextLink de Graph (paginación con búsqueda y, a veces, sin ella). */
