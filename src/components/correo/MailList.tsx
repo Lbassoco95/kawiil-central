@@ -111,9 +111,14 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
   const isLinkedGmail = folderPfx === "gmail" && !!linkedAccId && !!customFolderOverride;
   const isLinkedAccount = isLinkedOutlook || isLinkedGmail;
 
+  // Al buscar, cubrimos TODAS las cuentas (aunque estés en una sola bandeja). combineAll =
+  // combinar las tres fuentes (principal + Outlook vinculadas + Gmail): unificado o buscando.
+  const isSearching = !!debouncedSearch;
+  const combineAll = isUnified || isSearching;
+
   // For AI tabs, load inbox and filter client-side
   const isAiTab = AI_TABS.includes(activeTab) && !customFolderOverride;
-  const primaryFolderId = (isLinkedAccount || isUnified) ? "inbox" : (customFolderOverride ?? TAB_TO_FOLDER[activeTab] ?? "inbox");
+  const primaryFolderId = (isLinkedAccount || combineAll) ? "inbox" : (customFolderOverride ?? TAB_TO_FOLDER[activeTab] ?? "inbox");
 
   // Filtro "Sin leer" server-side: en vista principal (solo primary) y también en la vista
   // unificada (todas las cuentas), para que "Sin leer" traiga los no leídos REALES de cada
@@ -121,25 +126,25 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
   const wantUnread = readFilter === "sinleer" && !debouncedSearch && !isAiTab;
   const serverFilterUnread = wantUnread && !isLinkedAccount && !isUnified;
   const unifiedUnread = wantUnread && isUnified;
-  // La búsqueda va server-side en TODAS las fuentes activas (principal + vinculadas).
+  // La búsqueda va server-side en TODAS las fuentes (principal + Outlook vinculadas + Gmail).
   const primaryQuery = useOutlookEmails(
     primaryFolderId,
-    isLinkedAccount ? undefined : debouncedSearch || undefined,
+    (isLinkedAccount && !isSearching) ? undefined : (debouncedSearch || undefined),
     isUnified ? unifiedUnread : serverFilterUnread,
   );
   const linkedOutlookQuery = useLinkedOutlookEmailsAll({
-    accountId: isUnified ? undefined : (linkedAccId || undefined),
-    folder: isUnified ? "inbox" : (linkedFolderPath || "inbox"),
+    accountId: combineAll ? undefined : (linkedAccId || undefined),
+    folder: combineAll ? "inbox" : (linkedFolderPath || "inbox"),
     filterUnread: isUnified ? unifiedUnread : undefined,
-    search: (isLinkedOutlook || isUnified) ? (debouncedSearch || undefined) : undefined,
-    enabled: isLinkedOutlook || isUnified,
+    search: debouncedSearch || undefined,
+    enabled: isLinkedOutlook || combineAll,
   });
   const linkedGmailQuery = useGmailEmailsAll({
-    accountId: isUnified ? undefined : (linkedAccId || undefined),
-    labelId: isUnified ? "INBOX" : (linkedFolderPath || "INBOX"),
+    accountId: combineAll ? undefined : (linkedAccId || undefined),
+    labelId: combineAll ? "INBOX" : (linkedFolderPath || "INBOX"),
     filterUnread: isUnified ? unifiedUnread : undefined,
-    search: (isLinkedGmail || isUnified) ? (debouncedSearch || undefined) : undefined,
-    enabled: isLinkedGmail || isUnified,
+    search: debouncedSearch || undefined,
+    enabled: isLinkedGmail || combineAll,
   });
   const { profile } = useMicrosoftConnection();
   const primaryAccountEmail = (profile?.mail || profile?.userPrincipalName || "") as string;
@@ -150,27 +155,27 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
     primaryQuery;
   const { data } = activeQuery;
 
-  // Unificado: combinar controles de las tres fuentes; en otros modos, los de la fuente activa.
-  const isLoading = isUnified
+  // Combinar controles de las tres fuentes cuando corresponde (unificado o buscando).
+  const isLoading = combineAll
     ? (primaryQuery.isLoading || linkedOutlookQuery.isLoading || linkedGmailQuery.isLoading)
     : activeQuery.isLoading;
-  const isFetching = isUnified
+  const isFetching = combineAll
     ? (primaryQuery.isFetching || linkedOutlookQuery.isFetching || linkedGmailQuery.isFetching)
     : activeQuery.isFetching;
-  const hasNextPage = isUnified
+  const hasNextPage = combineAll
     ? (primaryQuery.hasNextPage || linkedOutlookQuery.hasNextPage || linkedGmailQuery.hasNextPage)
     : activeQuery.hasNextPage;
-  const isFetchingNextPage = isUnified
+  const isFetchingNextPage = combineAll
     ? (primaryQuery.isFetchingNextPage || linkedOutlookQuery.isFetchingNextPage || linkedGmailQuery.isFetchingNextPage)
     : activeQuery.isFetchingNextPage;
   const fetchNextPage = () => {
-    if (!isUnified) { void activeQuery.fetchNextPage(); return; }
+    if (!combineAll) { void activeQuery.fetchNextPage(); return; }
     if (primaryQuery.hasNextPage) void primaryQuery.fetchNextPage();
     if (linkedOutlookQuery.hasNextPage) void linkedOutlookQuery.fetchNextPage();
     if (linkedGmailQuery.hasNextPage) void linkedGmailQuery.fetchNextPage();
   };
   const refetch = () => {
-    if (!isUnified) { void activeQuery.refetch(); return; }
+    if (!combineAll) { void activeQuery.refetch(); return; }
     void primaryQuery.refetch();
     void linkedOutlookQuery.refetch();
     void linkedGmailQuery.refetch();
@@ -181,7 +186,7 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
     : isLinkedGmail
       ? (linkedGmailQuery.error as (Error & { code?: string }) | null)
       : null;
-  const primaryError = (!isLinkedAccount && !isUnified) ? (primaryQuery.error as Error | null) : null;
+  const primaryError = (!isLinkedAccount && !combineAll) ? (primaryQuery.error as Error | null) : null;
 
   const archiveLinkedOutlook = useArchiveLinkedOutlookEmail();
   const markLinkedOutlookRead = useMarkLinkedOutlookEmailRead();
@@ -225,10 +230,10 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
   }, [isUnified, unifiedUnreadTotal, isLinkedOutlook, isLinkedGmail, linkedAccId, outlookMetaCount, gmailMetaCount]);
 
   const allEmails = useMemo(() => {
-    if (!isUnified) {
+    if (!combineAll) {
       return (data?.pages ?? []).flatMap((p) => p.emails as Record<string, unknown>[]);
     }
-    // Bandeja general: principal Kawiil (etiquetada con su cuenta) + Outlook vinculadas + Gmail, por fecha desc.
+    // Combinado (unificado o búsqueda): principal Kawiil + Outlook vinculadas + Gmail, por fecha desc.
     const primary = (primaryQuery.data?.pages ?? [])
       .flatMap((p) => p.emails as Record<string, unknown>[])
       .map((e) => ({ ...e, _accountEmail: primaryAccountEmail || "Kawiil", _source: "primary" }));
@@ -267,8 +272,11 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
         list = list.filter((e) => resolveCategory(e as any, learnedCategories) === activeTab);
       }
     }
-    if (readFilter === "sinleer") list = list.filter((e) => !(e.isRead as boolean));
-    if (readFilter === "leidos") list = list.filter((e) => e.isRead as boolean);
+    // Al buscar mostramos leídos Y no leídos (ignoramos el filtro de lectura) para no perder resultados.
+    if (!debouncedSearch) {
+      if (readFilter === "sinleer") list = list.filter((e) => !(e.isRead as boolean));
+      if (readFilter === "leidos") list = list.filter((e) => e.isRead as boolean);
+    }
     if (attachmentFilter) list = list.filter((e) => !!(e.hasAttachments as boolean));
     if (dateRangeFilter !== "todos") {
       const cutoff = new Date();
