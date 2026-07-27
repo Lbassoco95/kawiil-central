@@ -518,6 +518,7 @@ export function useUpdateCalendarEvent() {
         location?: { displayName: string };
         categories?: string[];
         attendees?: { emailAddress: { address: string }; type?: string }[];
+        sensitivity?: "normal" | "personal" | "private" | "confidential";
       };
     }) => {
       const res = await supabase.functions.invoke("microsoft-api", {
