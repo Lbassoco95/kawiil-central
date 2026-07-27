@@ -51,18 +51,12 @@ export function useSetSenderCategory() {
     }) => {
       const addr = senderEmail.trim().toLowerCase();
       if (!addr) return;
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("organization_id")
-        .eq("user_id", user!.id)
-        .single();
-      if (!profile?.organization_id) throw new Error("Sin organización");
 
       if (category === null) {
         const { error } = await (supabase as any)
           .from("email_sender_categories")
           .delete()
-          .eq("organization_id", profile.organization_id)
+          .eq("user_id", user!.id)
           .eq("sender_email", addr);
         if (error) throw error;
         return;
@@ -71,14 +65,13 @@ export function useSetSenderCategory() {
         .from("email_sender_categories")
         .upsert(
           {
-            organization_id: profile.organization_id,
+            user_id: user!.id,
             sender_email: addr,
             category,
             sender_name: senderName ?? null,
-            confirmed_by: user!.id,
             updated_at: new Date().toISOString(),
           },
-          { onConflict: "organization_id,sender_email" },
+          { onConflict: "user_id,sender_email" },
         );
       if (error) throw error;
     },
@@ -87,7 +80,7 @@ export function useSetSenderCategory() {
       queryClient.invalidateQueries({ queryKey: ["outlook-emails"] });
       toast.success(
         vars.category
-          ? `Guardado: ${SENDER_CATEGORY_LABEL[vars.category]} · el equipo lo aprovechará`
+          ? `Guardado: ${SENDER_CATEGORY_LABEL[vars.category]} · se clasificará solo`
           : "Categoría quitada",
       );
     },
