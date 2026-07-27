@@ -1259,6 +1259,36 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case "create-outlook-category": {
+        const displayName = String(params?.displayName || "").trim();
+        if (!displayName) throw new Error("displayName required");
+        // Graph exige un color preset (preset0..preset24). Si el cliente no manda uno
+        // válido, derivamos uno estable del nombre.
+        let h = 0;
+        for (let i = 0; i < displayName.length; i++) h = (h * 31 + displayName.charCodeAt(i)) >>> 0;
+        const color = typeof params?.color === "string" && params.color.startsWith("preset")
+          ? params.color
+          : `preset${h % 25}`;
+        const res = await graphMailFetchWithRetry(accessToken, `/me/outlook/masterCategories`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ displayName, color }),
+        });
+        result = await res.json();
+        break;
+      }
+
+      case "delete-outlook-category": {
+        const id = String(params?.id || "").trim();
+        if (!id) throw new Error("id required");
+        await graphMailFetchWithRetry(accessToken, `/me/outlook/masterCategories/${encodeURIComponent(id)}`, {
+          method: "DELETE",
+          headers: {},
+        });
+        result = { success: true };
+        break;
+      }
+
       case "emails": {
         /** Continuación oficial de Graph; con $search no se admite $skip en la misma petición. */
         if (params?.nextLink && typeof params.nextLink === "string") {

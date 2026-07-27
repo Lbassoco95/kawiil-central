@@ -14,7 +14,7 @@ import {
   useDeleteCalendarEvent,
   useEventDetail,
   useUpdateCalendarEvent,
-  useOutlookCategories,
+  useOutlookCategories, useCreateOutlookCategory, useDeleteOutlookCategory,
 } from "@/hooks/useMicrosoft";
 import { useTasksForCalendar } from "@/hooks/useTasks";
 import { CDMX_TZ, formatMX } from "@/lib/dateUtils";
@@ -428,6 +428,9 @@ export function CalendarView({
   } = useEventDetail(isGoogleEvent ? null : selectedEventId);
   const updateEvent = useUpdateCalendarEvent();
   const { data: outlookCategories = [] } = useOutlookCategories();
+  const createOutlookCategory = useCreateOutlookCategory();
+  const deleteOutlookCategory = useDeleteOutlookCategory();
+  const [newOutlookCatName, setNewOutlookCatName] = useState("");
   // Trayectos guardados por evento -> bloque de traslado antes del evento.
   const { data: travelMap = {} } = useEventTravelMap();
   const [draggedEvent, setDraggedEvent] = useState<any>(null);
@@ -1779,7 +1782,7 @@ export function CalendarView({
                         <div
                           key={name}
                           className={cn(
-                            "w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-[11px] transition-colors",
+                            "group w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-[11px] transition-colors",
                             active ? "bg-primary/10 text-foreground" : "hover:bg-accent/50 text-muted-foreground",
                           )}
                         >
@@ -1803,9 +1806,42 @@ export function CalendarView({
                             <span className="truncate flex-1">{name}</span>
                             {active && <span className="text-primary text-[10px]">●</span>}
                           </button>
+                          {cat.id && (
+                            <button
+                              type="button"
+                              onClick={() => { if (confirm(`¿Eliminar la categoría "${name}"?`)) deleteOutlookCategory.mutate(cat.id); }}
+                              className="shrink-0 p-0.5 text-muted-foreground/50 opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity"
+                              title="Eliminar categoría"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          )}
                         </div>
                       );
                     })}
+                  </div>
+                  <div className="mt-1.5 flex items-center gap-1">
+                    <input
+                      value={newOutlookCatName}
+                      onChange={(e) => setNewOutlookCatName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && newOutlookCatName.trim()) {
+                          createOutlookCategory.mutate({ displayName: newOutlookCatName.trim() });
+                          setNewOutlookCatName("");
+                        }
+                      }}
+                      placeholder="Nueva categoría…"
+                      className="flex-1 min-w-0 h-6 px-2 text-[11px] bg-muted/40 border border-border/40 rounded outline-none focus:border-primary/40"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => { if (newOutlookCatName.trim()) { createOutlookCategory.mutate({ displayName: newOutlookCatName.trim() }); setNewOutlookCatName(""); } }}
+                      disabled={!newOutlookCatName.trim() || createOutlookCategory.isPending}
+                      className="shrink-0 h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent disabled:opacity-40"
+                      title="Agregar categoría"
+                    >
+                      {createOutlookCategory.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+                    </button>
                   </div>
                   {activeCategoryFilters.length > 0 && (
                     <p className="text-[10px] text-muted-foreground pt-1 border-t border-border/40 mt-1">
