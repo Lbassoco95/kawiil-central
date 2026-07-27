@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { TopbarWidgets } from "./TopbarWidgets";
 import { RealtimeStatusIndicator } from "./RealtimeStatusIndicator";
 import { JornadaTopbarWidget } from "@/components/rh/JornadaTopbarWidget";
+import { JornadaReminders } from "@/components/rh/JornadaReminders";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 interface AppTopbarProps {
@@ -89,6 +90,7 @@ export function AppTopbar({ isFullWidth = false }: AppTopbarProps) {
         </button>
 
         <JornadaTopbarWidget />
+        <JornadaReminders />
 
         <TooltipProvider delayDuration={150}>
           <RealtimeStatusIndicator />
