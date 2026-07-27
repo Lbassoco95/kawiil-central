@@ -192,8 +192,16 @@ ${detail.body?.contentType === "html" ? origBody : `<pre style="font-family:inhe
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      // No interceptar campos editables (editor de redacción, contenteditable).
+      const el = e.target as HTMLElement | null;
+      if (el?.isContentEditable || el?.closest("[contenteditable='true'], input, textarea")) return;
+      // Escape siempre cierra la lectura.
+      if (e.key === "Escape") { setReadingOpen(false); return; }
+      // "Redactar" con la tecla "c" SOLO como atajo simple: si hay Cmd/Ctrl/Alt (copiar, etc.)
+      // o hay texto seleccionado, no abrimos redacción para no pisar el copiado del usuario.
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if ((window.getSelection?.()?.toString() ?? "").length > 0) return;
       if (e.key === "c" || e.key === "C") { setForwardState(null); setComposeOpen(true); }
-      if (e.key === "Escape") setReadingOpen(false);
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
