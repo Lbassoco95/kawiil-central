@@ -55,10 +55,13 @@ type RawSidebarGroup = {
   slack_sidebar_group_channels: { channel_id: string; sort_order: number }[];
 };
 
-const HISTORY_FIRST_MS   = 110_000;
-const HISTORY_FIRST_HARD = 118_000;
-const HISTORY_NEXT_MS    = 55_000;
-const HISTORY_NEXT_HARD  = 62_000;
+// Antes 110s: un spinner de ~2 min si Slack estaba en rate-limit. La Edge ya reintenta
+// internamente (tope 25s) y al reabrir se muestra la caché local al instante, así que
+// un tope más corto evita el "se queda cargando" y ofrece reintentar antes.
+const HISTORY_FIRST_MS   = 45_000;
+const HISTORY_FIRST_HARD = 50_000;
+const HISTORY_NEXT_MS    = 25_000;
+const HISTORY_NEXT_HARD  = 30_000;
 
 const SLACK_PERMISSION_TOAST_MS = 14_000;
 
@@ -657,6 +660,17 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
     const key = `${selectedChannel}:${count}`;
     if (lastBadgeMarkRef.current === key) return; // ya lo intentamos para este conteo
     lastBadgeMarkRef.current = key;
+    // Optimista: quita el badge de este canal de inmediato para que la notificación
+    // "cambie" al abrir, sin esperar el round-trip a Supabase ni el refetch.
+    qc.setQueryData<Record<string, number>>(
+      ["slack-channel-notification-badges", user.id],
+      (prev) => {
+        if (!prev || !(selectedChannel in prev)) return prev;
+        const next = { ...prev };
+        delete next[selectedChannel];
+        return next;
+      },
+    );
     void markSlackChannelNotificationsRead(user.id, selectedChannel)
       .then(() => qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", user.id] }))
       .catch(() => { /* best-effort */ });
@@ -891,6 +905,8 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
             }
             messages={messages}
             isLoading={historyQuery.isLoading}
+            isError={historyQuery.isError}
+            onRetry={() => void historyQuery.refetch()}
             hasMore={!!historyQuery.hasNextPage}
             isFetchingNextPage={historyQuery.isFetchingNextPage}
             onLoadMore={() => void historyQuery.fetchNextPage()}

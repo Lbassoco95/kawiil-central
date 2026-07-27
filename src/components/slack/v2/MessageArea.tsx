@@ -26,6 +26,10 @@ interface Props {
   onRename?: (alias: string | null) => void;
   messages: SlackMessage[];
   isLoading: boolean;
+  /** El historial falló (timeout / rate-limit / permisos). Muestra estado con reintentar. */
+  isError?: boolean;
+  /** Reintenta la carga del historial. */
+  onRetry?: () => void;
   hasMore?: boolean;
   onLoadMore?: () => void;
   onOpenThread?: (ts: string) => void;
@@ -48,6 +52,8 @@ export function MessageArea({
   onRename,
   messages,
   isLoading,
+  isError = false,
+  onRetry,
   hasMore = false,
   onLoadMore,
   onOpenThread,
@@ -303,7 +309,28 @@ export function MessageArea({
           </div>
         )}
 
-        {!isLoading && messages.length === 0 && channelId && (
+        {!isLoading && isError && messages.length === 0 && channelId && (
+          <div style={{ padding: "36px 24px", textAlign: "center", color: "hsl(var(--muted-foreground))", fontSize: 13, display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+            <span style={{ maxWidth: 300 }}>
+              No se pudo cargar el historial. Slack pudo tardar o pedir un momento por límite de uso.
+            </span>
+            {onRetry && (
+              <button
+                type="button"
+                onClick={onRetry}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 14px", borderRadius: 8, border: "1px solid hsl(var(--border))", background: "hsl(var(--background))", color: "hsl(var(--foreground))", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                  <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+                  <path d="M3 3v5h5" />
+                </svg>
+                Reintentar
+              </button>
+            )}
+          </div>
+        )}
+
+        {!isLoading && !isError && messages.length === 0 && channelId && (
           <div style={{ padding: "40px 24px", textAlign: "center", color: "hsl(var(--muted-foreground))", fontSize: 13 }}>
             No hay mensajes todavía.
           </div>
