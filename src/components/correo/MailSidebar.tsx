@@ -18,6 +18,7 @@ import {
   ChevronDown,
   RefreshCw,
   Mail,
+  Bell,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { type MailTabId } from "./MailTabs";
@@ -75,6 +76,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "sat", label: "SAT", icon: <AlertCircle className="w-[15px] h-[15px]" />, dot: "hsl(0 72% 51%)" },
   { id: "facturas", label: "Facturas", icon: <FileText className="w-[15px] h-[15px]" />, dot: "hsl(32 90% 48%)" },
   { id: "interno", label: "Interno", icon: <Building className="w-[15px] h-[15px]" />, dot: "hsl(157 72% 36%)" },
+  { id: "notificaciones", label: "Notificaciones", icon: <Bell className="w-[15px] h-[15px]" /> },
   { id: "sentItems", label: "Enviados", icon: <Send className="w-[15px] h-[15px]" /> },
   { id: "drafts", label: "Borradores", icon: <FileEdit className="w-[15px] h-[15px]" /> },
 ];

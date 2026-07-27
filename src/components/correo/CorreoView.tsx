@@ -223,6 +223,11 @@ ${detail.body?.contentType === "html" ? origBody : `<pre style="font-family:inhe
           onCompose={() => { setForwardState(null); setComposeOpen(true); }}
           onOpenFolders={() => setFoldersOpen(true)}
           onOpenRules={() => setRulesOpen(true)}
+          onSuggestRule={(senderEmail, senderName) => {
+            setRuleSenderEmail(senderEmail);
+            setRuleSenderName(senderName);
+            setRuleDialogOpen(true);
+          }}
           customFolderOverride={customFolderOverride ?? undefined}
           customFolderName={customFolderName ?? undefined}
           onClearCustomFolder={() => { setCustomFolderOverride(null); setCustomFolderName(null); }}
