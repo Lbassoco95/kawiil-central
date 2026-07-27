@@ -40,6 +40,7 @@ import { KawiilContextPanel } from "./KawiilContextPanel";
 import { TypingIndicator } from "./TypingIndicator";
 import { SlackGroupsOrganizerDialog } from "@/components/slack/SlackGroupsOrganizerDialog";
 import { SlackCreateTaskDialog } from "@/components/slack/SlackCreateTaskDialog";
+import { SlackActivityPanel } from "@/components/slack/SlackActivityPanel";
 
 // ─── Tipos ───────────────────────────────────────────────────
 type HistoryPage = {
@@ -114,6 +115,7 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
   const [threadRootTs, setThreadRootTs] = useState<string | null>(null);
   const [groupsDialogOpen, setGroupsDialogOpen] = useState(false);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+  const [activityOpen, setActivityOpen] = useState(false);
   const composerRef = useRef<SlackComposerHandle>(null);
   const threadComposerRef = useRef<SlackComposerHandle>(null);
   const [taskMsg, setTaskMsg] = useState<SlackMessage | null>(null);
@@ -766,6 +768,37 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
     return currentConv.name || selectedChannel;
   }, [currentConv, selectedChannel, userMap, aliasMap, mpimNameByChannel]);
 
+  // Resolver un título amable para CUALQUIER channel_id (no solo el activo).
+  // Se usa en el panel de Actividad para mostrar el canal/contraparte de cada item.
+  const resolveChannelTitle = useCallback(
+    (channelId: string): string | undefined => {
+      if (!channelId) return undefined;
+      if (aliasMap[channelId]) return aliasMap[channelId];
+      const conv = conversations.find((c) => c.id === channelId);
+      if (conv) {
+        if (conv.is_im && conv.user) {
+          const u = userMap[conv.user];
+          return u?.display_name || u?.real_name || `@${conv.user}`;
+        }
+        if (conv.is_mpim && mpimNameByChannel[channelId]) return mpimNameByChannel[channelId];
+        if (conv.name) return conv.name;
+      }
+      if (mpimNameByChannel[channelId]) return mpimNameByChannel[channelId];
+      return undefined;
+    },
+    [aliasMap, conversations, userMap, mpimNameByChannel],
+  );
+
+  // Al hacer click en un item de Actividad: saltar al canal y, si es hilo, abrirlo.
+  const handleJumpToMessage = useCallback(
+    (channelId: string, _ts: string, threadTs?: string | null) => {
+      setActivityOpen(false);
+      selectChannel(channelId);
+      if (threadTs) setThreadRootTs(threadTs);
+    },
+    [selectChannel],
+  );
+
   // ─── Nombre del usuario actual (para typing indicator) ─────
   const currentUserName = useMemo(() => {
     if (!connection.slack_user_id) return "Tú";
@@ -865,7 +898,7 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
             userMap={userMap}
             selfUserId={connection.slack_user_id ?? undefined}
             onOpenAi={() => {}}
-            onOpenActivity={() => {}}
+            onOpenActivity={() => setActivityOpen(true)}
             onReact={handleReact}
             onCreateTask={handleCreateTask}
             onBack={isMobile ? () => setMobilePanel("sidebar") : undefined}
@@ -913,9 +946,17 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
           currentConv={currentConv}
           userMap={userMap}
           unreadMentions={unreadMentions}
-          onOpenActivity={() => {}}
+          onOpenActivity={() => setActivityOpen(true)}
         />
       )}
+
+      {/* Panel de Actividad (menciones, hilos, DMs, reacciones) */}
+      <SlackActivityPanel
+        open={activityOpen}
+        onClose={() => setActivityOpen(false)}
+        onJumpToMessage={handleJumpToMessage}
+        resolveChannelTitle={resolveChannelTitle}
+      />
 
       {/* Diálogo organizar secciones */}
       {orgId && (
