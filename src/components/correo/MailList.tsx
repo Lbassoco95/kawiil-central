@@ -121,21 +121,24 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
   const wantUnread = readFilter === "sinleer" && !debouncedSearch && !isAiTab;
   const serverFilterUnread = wantUnread && !isLinkedAccount && !isUnified;
   const unifiedUnread = wantUnread && isUnified;
+  // La búsqueda va server-side en TODAS las fuentes activas (principal + vinculadas).
   const primaryQuery = useOutlookEmails(
     primaryFolderId,
-    (isLinkedAccount || isUnified) ? undefined : debouncedSearch || undefined,
+    isLinkedAccount ? undefined : debouncedSearch || undefined,
     isUnified ? unifiedUnread : serverFilterUnread,
   );
   const linkedOutlookQuery = useLinkedOutlookEmailsAll({
     accountId: isUnified ? undefined : (linkedAccId || undefined),
     folder: isUnified ? "inbox" : (linkedFolderPath || "inbox"),
     filterUnread: isUnified ? unifiedUnread : undefined,
+    search: (isLinkedOutlook || isUnified) ? (debouncedSearch || undefined) : undefined,
     enabled: isLinkedOutlook || isUnified,
   });
   const linkedGmailQuery = useGmailEmailsAll({
     accountId: isUnified ? undefined : (linkedAccId || undefined),
     labelId: isUnified ? "INBOX" : (linkedFolderPath || "INBOX"),
     filterUnread: isUnified ? unifiedUnread : undefined,
+    search: (isLinkedGmail || isUnified) ? (debouncedSearch || undefined) : undefined,
     enabled: isLinkedGmail || isUnified,
   });
   const { profile } = useMicrosoftConnection();
@@ -247,30 +250,22 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
 
   const filtered = useMemo(() => {
     let list = allEmails;
-    // Bandeja unificada: búsqueda client-side sobre lo cargado (el $search de Graph es por cuenta)
-    if (isUnified && debouncedSearch) {
-      const q = debouncedSearch.toLowerCase();
-      list = list.filter((e) => {
-        const from = (e.from as any)?.emailAddress;
-        return (
-          String(e.subject ?? "").toLowerCase().includes(q) ||
-          String(e.bodyPreview ?? "").toLowerCase().includes(q) ||
-          String(from?.name ?? "").toLowerCase().includes(q) ||
-          String(from?.address ?? "").toLowerCase().includes(q)
-        );
-      });
-    }
+    // La búsqueda se hace server-side en cada fuente (principal + vinculadas), así que aquí
+    // ya no filtramos por texto: los resultados combinados ya son coincidencias.
     if (activeTab === "starred") {
       list = list.filter((e) => (e.flag as any)?.flagStatus === "flagged");
     }
-    // Bandeja limpia: en "Bandeja" ocultamos las notificaciones automáticas (van a su pestaña).
-    if (activeTab === "inbox" && !customFolderOverride) {
-      list = list.filter((e) => resolveCategory(e as any, learnedCategories) !== "notificaciones");
-    }
-    // Pestañas de categoría (Clientes/SAT/Facturas/Interno/Notificaciones): usan la categoría
-    // resuelta (aprendida por el equipo > heurística).
-    if (CATEGORY_TABS.includes(activeTab)) {
-      list = list.filter((e) => resolveCategory(e as any, learnedCategories) === activeTab);
+    // Al buscar, mostramos TODAS las coincidencias (sin ocultar notificaciones ni filtrar por
+    // categoría), para que el buscador encuentre cualquier correo.
+    if (!debouncedSearch) {
+      // Bandeja limpia: en "Bandeja" ocultamos las notificaciones automáticas (van a su pestaña).
+      if (activeTab === "inbox" && !customFolderOverride) {
+        list = list.filter((e) => resolveCategory(e as any, learnedCategories) !== "notificaciones");
+      }
+      // Pestañas de categoría (Clientes/SAT/Facturas/Interno/Notificaciones): categoría resuelta.
+      if (CATEGORY_TABS.includes(activeTab)) {
+        list = list.filter((e) => resolveCategory(e as any, learnedCategories) === activeTab);
+      }
     }
     if (readFilter === "sinleer") list = list.filter((e) => !(e.isRead as boolean));
     if (readFilter === "leidos") list = list.filter((e) => e.isRead as boolean);

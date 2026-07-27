@@ -326,7 +326,9 @@ Deno.serve(async (req) => {
       const labelId = params?.labelId || "INBOX";
       const maxResults = Math.min(Number(params?.maxResults) || 25, 100);
       const filterUnread = params?.filterUnread === true;
-      const q = filterUnread ? "is:unread" : "";
+      const searchText = typeof params?.search === "string" ? params.search.trim() : "";
+      // q de Gmail combina filtros y texto libre (busca en asunto/cuerpo/remitente).
+      const q = [filterUnread ? "is:unread" : "", searchText].filter(Boolean).join(" ").trim();
       const allEmails: unknown[] = [];
       let nextPageToken: string | undefined;
       for (const acc of targetAccounts) {
@@ -341,7 +343,9 @@ Deno.serve(async (req) => {
           }
           continue;
         }
-        const listQs = new URLSearchParams({ labelIds: labelId, maxResults: String(maxResults) });
+        // Con texto de búsqueda: buscar en TODO el correo (sin restringir a la etiqueta/INBOX).
+        const listQs = new URLSearchParams({ maxResults: String(maxResults) });
+        if (!searchText) listQs.set("labelIds", labelId);
         if (params?.pageToken) listQs.set("pageToken", params.pageToken);
         if (q) listQs.set("q", q);
         const listRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${listQs}`, {
