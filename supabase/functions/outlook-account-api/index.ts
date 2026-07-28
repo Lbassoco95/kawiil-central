@@ -245,8 +245,11 @@ Deno.serve(async (req) => {
           continue;
         }
         // Con búsqueda: $search en todo el buzón (sin $orderby/$filter, que Graph no permite combinar).
+        // Términos unidos con AND (KQL) en vez de frase exacta: así se encuentran correos donde los
+        // términos están en campos distintos (p. ej. remitente + asunto) y sin importar el orden.
+        const searchKql = rawSearch.split(" ").filter(Boolean).join(" AND ");
         const path = rawSearch
-          ? `/me/messages?${listSelect}&$top=${top}&$count=true&$search=${encodeURIComponent(`"${rawSearch}"`)}`
+          ? `/me/messages?${listSelect}&$top=${top}&$count=true&$search=${encodeURIComponent(`"${searchKql}"`)}`
           : `/me/mailFolders/${encodeURIComponent(folder)}/messages?${listSelect}&$top=${top}&$orderby=receivedDateTime desc&$count=true${filterParam}`;
         const res = await graphFetch(token, path);
         if (!res.ok) {

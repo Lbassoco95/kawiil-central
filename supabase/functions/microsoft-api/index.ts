@@ -1328,7 +1328,11 @@ Deno.serve(async (req) => {
           }
           // Búsqueda en todo el buzón: los correos (p. ej. Microsoft Forms) a veces no están en la carpeta
           // visible, y con $search Graph no admite $orderby; combinarlo suele provocar 400.
-          const searchParam = `&$search=${encodeURIComponent(`"${forSearch}"`)}`;
+          // Unimos los términos con AND (KQL) en lugar de comillas de frase exacta: así "Jaqueline
+          // separación" encuentra correos donde "Jaqueline" es el remitente y "separación" el asunto,
+          // aunque no aparezcan juntos ni en el mismo campo.
+          const kql = forSearch.split(" ").filter(Boolean).join(" AND ");
+          const searchParam = `&$search=${encodeURIComponent(`"${kql}"`)}`;
           result = await graphRequest(
             accessToken,
             `/me/messages?${select}&$top=${top}&$count=true${searchParam}`,
