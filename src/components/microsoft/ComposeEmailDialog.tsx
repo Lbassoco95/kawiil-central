@@ -477,7 +477,7 @@ export function ComposeEmailDialog({
       role="dialog"
       aria-modal="false"
       aria-label="Nuevo mensaje"
-      className="fixed bottom-0 right-3 sm:right-6 z-[120] flex max-h-[min(88vh,42rem)] w-[min(100vw-1.5rem,32rem)] flex-col overflow-hidden rounded-t-xl border border-border/70 bg-background shadow-2xl animate-in slide-in-from-bottom-4 duration-200"
+      className="fixed bottom-0 right-3 sm:right-6 z-[120] flex h-[36rem] max-h-[calc(100dvh-1.5rem)] w-[min(100vw-1.5rem,32rem)] flex-col overflow-hidden rounded-t-xl border border-border/70 bg-background shadow-2xl animate-in slide-in-from-bottom-4 duration-200"
       onKeyDown={(e) => {
         if (e.key === "Escape") { e.stopPropagation(); onOpenChange(false); }
       }}
