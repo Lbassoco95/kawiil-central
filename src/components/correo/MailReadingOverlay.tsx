@@ -27,6 +27,7 @@ interface Props {
   open: boolean;
   onClose: () => void;
   onCompose: () => void;
+  onReply?: () => void;
   onForward?: () => void;
   onCreateTask: (email: EmailShape) => void;
   onCreateRule?: () => void;
@@ -126,7 +127,7 @@ function AttachmentChip({ messageId, att }: { messageId: string; att: OutlookAtt
   );
 }
 
-export function MailReadingOverlay({ emailId, open, onClose, onCompose, onForward, onCreateTask, onCreateRule, onSendToSlack, onCreateEvent }: Props) {
+export function MailReadingOverlay({ emailId, open, onClose, onCompose, onReply, onForward, onCreateTask, onCreateRule, onSendToSlack, onCreateEvent }: Props) {
   // Route detail fetch by ID prefix: "outlook:{accountId}:{id}" or "gmail:{accountId}:{id}"
   const emailParts = (emailId ?? "").split(":");
   const emailPfx = emailParts[0];
@@ -202,7 +203,8 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onForwar
         <div className="ml-auto flex items-center gap-0.5">
           <button
             className="h-[30px] flex items-center gap-1.5 px-2.5 rounded-md bg-primary text-primary-foreground text-[12px] font-semibold hover:bg-primary/90 transition-colors"
-            onClick={onCompose}
+            onClick={onReply ?? onCompose}
+            title="Responder"
           >
             <Reply className="w-3.5 h-3.5" />
             Responder
