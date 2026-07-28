@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { ArrowLeft, Reply, Forward, Archive, Trash2, CheckSquare, Filter, Tag, FolderInput, ChevronRight, MessageSquare, CalendarPlus, Paperclip, Download, FileArchive, FileText, File, Eye } from "lucide-react";
+import { ArrowLeft, Reply, ReplyAll, Forward, Archive, Trash2, CheckSquare, Filter, Tag, FolderInput, ChevronRight, MessageSquare, CalendarPlus, Paperclip, Download, FileArchive, FileText, File, Eye } from "lucide-react";
 import { useEmailDetail, useArchiveEmail, useDeleteEmail, useMoveEmail, useMailFolders } from "@/hooks/useMicrosoft";
 import { useLinkedOutlookEmailDetail, useGmailEmailDetail, useRoutedEmailAttachments, fetchRoutedAttachmentBlob, type EmailAttachmentMeta } from "@/hooks/useLinkedAccounts";
 import { useResolvedEmailHtml } from "@/hooks/useResolvedEmailHtml";
@@ -28,6 +28,7 @@ interface Props {
   onClose: () => void;
   onCompose: () => void;
   onReply?: () => void;
+  onReplyAll?: () => void;
   onForward?: () => void;
   onCreateTask: (email: EmailShape) => void;
   onCreateRule?: () => void;
@@ -127,7 +128,7 @@ function AttachmentChip({ messageId, att }: { messageId: string; att: OutlookAtt
   );
 }
 
-export function MailReadingOverlay({ emailId, open, onClose, onCompose, onReply, onForward, onCreateTask, onCreateRule, onSendToSlack, onCreateEvent }: Props) {
+export function MailReadingOverlay({ emailId, open, onClose, onCompose, onReply, onReplyAll, onForward, onCreateTask, onCreateRule, onSendToSlack, onCreateEvent }: Props) {
   // Route detail fetch by ID prefix: "outlook:{accountId}:{id}" or "gmail:{accountId}:{id}"
   const emailParts = (emailId ?? "").split(":");
   const emailPfx = emailParts[0];
@@ -189,6 +190,11 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onReply,
       .join(", ");
   const toRecipients = fmtRecipients((emailDetail as any)?.toRecipients);
   const ccRecipients = fmtRecipients((emailDetail as any)?.ccRecipients);
+  // "Responder a todos" solo tiene sentido si hay más de un destinatario/copiado.
+  const totalRecipients =
+    (((emailDetail as any)?.toRecipients ?? []) as any[]).length +
+    (((emailDetail as any)?.ccRecipients ?? []) as any[]).length;
+  const showReplyAll = !!onReplyAll && totalRecipients > 1;
 
   return (
     <div
@@ -216,6 +222,16 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onReply,
             <Reply className="w-3.5 h-3.5" />
             Responder
           </button>
+          {showReplyAll && (
+            <button
+              className="h-[30px] flex items-center gap-1.5 px-2.5 rounded-md border border-border text-[12px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors ml-1"
+              onClick={onReplyAll}
+              title="Responder a todos (remitente, destinatarios y copias)"
+            >
+              <ReplyAll className="w-3.5 h-3.5" />
+              Responder a todos
+            </button>
+          )}
           {onForward && (
             <button
               className="h-[30px] flex items-center gap-1.5 px-2.5 rounded-md border border-border text-[12px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors ml-1"

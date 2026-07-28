@@ -83,6 +83,7 @@ interface ComposeEmailDialogProps {
   onOpenChange: (open: boolean) => void;
   /** Prefill values for the recipient, subject, and body. */
   initialTo?: string;
+  initialCc?: string;
   initialSubject?: string;
   initialBodyHtml?: string;
   /** Valores precargados para el selector de plantillas contables. */
@@ -97,6 +98,7 @@ export function ComposeEmailDialog({
   open,
   onOpenChange,
   initialTo,
+  initialCc,
   initialSubject,
   initialBodyHtml,
   defaultTemplateContext,
@@ -160,6 +162,7 @@ export function ComposeEmailDialog({
       setRequestDeliveryReceipt(false);
       setRequestReadReceipt(false);
       if (initialTo) setTo(initialTo);
+      if (initialCc) { setCc(initialCc); setShowCc(true); }
       if (initialSubject) setSubject(initialSubject);
       if (initialBodyHtml) {
         bodyRef.current = initialBodyHtml;
