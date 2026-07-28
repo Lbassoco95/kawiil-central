@@ -198,18 +198,11 @@ ${detail.body?.contentType === "html" ? origBody : `<pre style="font-family:inhe
       detail.replyTo?.[0]?.emailAddress?.address ||
       detail.from?.emailAddress?.address ||
       "";
-    const origFrom = detail.from?.emailAddress?.name || detail.from?.emailAddress?.address || "";
-    const origDate = detail.receivedDateTime
-      ? new Date(detail.receivedDateTime).toLocaleString("es-MX")
-      : "";
-    const origBody = detail.body?.content || detail.bodyPreview || "";
     // "Re:" sin duplicar si el asunto ya lo trae.
     const subject = /^re:/i.test(origSubject.trim()) ? origSubject : `Re: ${origSubject}`;
-    const bodyHtml = `<br/><br/><div style="border-left:2px solid #ccc;padding-left:12px;color:#555;">
-El ${origDate}, ${origFrom} escribió:<br/><br/>
-${detail.body?.contentType === "html" ? origBody : `<pre style="font-family:inherit">${origBody}</pre>`}
-</div>`;
-    setForwardState({ subject, bodyHtml, to: replyTo });
+    // Respuesta limpia: NO citamos el correo original en el cuerpo (se ve más limpio y se puede
+    // minimizar para leerlo). Cuerpo vacío → el redactor coloca la firma automáticamente.
+    setForwardState({ subject, bodyHtml: "", to: replyTo });
     setComposeOpen(true);
   }, [selectedEmailDetail]);
 

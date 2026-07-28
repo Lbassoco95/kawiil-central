@@ -26,6 +26,7 @@ import {
   Wand,
   CalendarClock,
   MoreHorizontal,
+  Minus,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -123,6 +124,8 @@ export function ComposeEmailDialog({
   const [scheduleDate, setScheduleDate] = useState<Date | null>(null);
   const [scheduleDateInput, setScheduleDateInput] = useState("");
   const [schedulePickerOpen, setSchedulePickerOpen] = useState(false);
+  const [customSched, setCustomSched] = useState("");
+  const [minimized, setMinimized] = useState(false);
   const [appliedTemplateInfo, setAppliedTemplateInfo] = useState<{
     templateCategory?: string;
     clientId?: string;
@@ -153,6 +156,8 @@ export function ComposeEmailDialog({
   useEffect(() => {
     if (open) {
       signatureAppliedRef.current = false;
+      setMinimized(false);
+      setCustomSched("");
       setRequestDeliveryReceipt(false);
       setRequestReadReceipt(false);
       if (initialTo) setTo(initialTo);
@@ -472,6 +477,44 @@ export function ComposeEmailDialog({
 
   if (!open || typeof document === "undefined") return null;
 
+  // Minimizado: barra compacta abajo a la derecha para leer el correo detrás.
+  if (minimized) {
+    return createPortal(
+      <div className="fixed bottom-0 right-3 sm:right-6 z-[120] flex w-72 max-w-[calc(100vw-1.5rem)] items-center justify-between gap-2 rounded-t-xl border border-border/70 bg-background px-3 py-2.5 shadow-2xl">
+        <button
+          type="button"
+          className="flex min-w-0 items-center gap-2 text-left"
+          onClick={() => setMinimized(false)}
+          title="Restaurar"
+        >
+          <Pencil className="h-3.5 w-3.5 shrink-0 text-primary" />
+          <span className="truncate text-[13px] font-semibold text-foreground">
+            {subject?.trim() || "Nuevo mensaje"}
+          </span>
+        </button>
+        <div className="flex shrink-0 items-center gap-0.5">
+          <button
+            type="button"
+            className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+            onClick={() => setMinimized(false)}
+            aria-label="Restaurar"
+          >
+            <ChevronUp className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+            onClick={() => onOpenChange(false)}
+            aria-label="Cerrar"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </div>,
+      document.body,
+    );
+  }
+
   return createPortal(
     <div
       role="dialog"
@@ -504,6 +547,15 @@ export function ComposeEmailDialog({
               <Sparkles className="h-3.5 w-3.5" />
               {aiPanelOpen ? "Cerrar IA" : "Asistente"}
             </Button>
+            <button
+              type="button"
+              className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+              onClick={() => setMinimized(true)}
+              aria-label="Minimizar"
+              title="Minimizar para leer el correo"
+            >
+              <Minus className="h-4 w-4" />
+            </button>
             <button
               type="button"
               className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -866,49 +918,76 @@ export function ComposeEmailDialog({
                 )}
                 Enviar
               </Button>
-              <DropdownMenu open={schedulePickerOpen} onOpenChange={setSchedulePickerOpen}>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    className="rounded-l-none border-l border-primary-foreground/20 px-2"
-                    disabled={sendEmail.isPending || !to.trim()}
-                    aria-label="Programar envío"
-                  >
-                    <CalendarClock className="h-3.5 w-3.5" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-60">
-                  {[
-                    { label: "Esta tarde (17:00)", hours: 17, today: true },
-                    { label: "Mañana por la mañana (09:00)", hours: 9, today: false },
-                    { label: "Mañana al mediodía (13:00)", hours: 13, today: false },
-                  ].map(opt => {
-                    const d = new Date();
-                    if (!opt.today) d.setDate(d.getDate() + 1);
-                    d.setHours(opt.hours, 0, 0, 0);
-                    return (
-                      <DropdownMenuItem key={opt.label} onClick={() => { setSchedulePickerOpen(false); void handleScheduleSend(d); }}>
-                        <CalendarClock className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
-                        {opt.label}
-                      </DropdownMenuItem>
-                    );
-                  })}
-                  <DropdownMenuItem
-                    onClick={() => {
-                      setSchedulePickerOpen(false);
-                      const input = window.prompt("Fecha y hora de envío (ej. 2026-06-05 09:00):");
-                      if (!input) return;
-                      const d = new Date(input);
-                      if (isNaN(d.getTime())) { toast.error("Fecha inválida"); return; }
-                      void handleScheduleSend(d);
-                    }}
-                  >
-                    <CalendarClock className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
-                    Otra fecha y hora…
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <div className="relative">
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="rounded-l-none border-l border-primary-foreground/20 px-2"
+                  disabled={sendEmail.isPending || !to.trim()}
+                  aria-label="Programar envío"
+                  title="Programar envío"
+                  onClick={() => setSchedulePickerOpen((v) => !v)}
+                >
+                  <CalendarClock className="h-3.5 w-3.5" />
+                </Button>
+                {schedulePickerOpen && (
+                  <>
+                    <div className="fixed inset-0 z-[125]" onClick={() => setSchedulePickerOpen(false)} />
+                    <div
+                      className="absolute bottom-full right-0 z-[130] mb-2 w-64 rounded-xl border border-border bg-popover p-2 text-popover-foreground shadow-xl"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <p className="px-2 pt-1 pb-1 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        Programar envío
+                      </p>
+                      {[
+                        { label: "Esta tarde (17:00)", hours: 17, today: true },
+                        { label: "Mañana por la mañana (09:00)", hours: 9, today: false },
+                        { label: "Mañana al mediodía (13:00)", hours: 13, today: false },
+                      ].map((opt) => {
+                        const d = new Date();
+                        if (!opt.today) d.setDate(d.getDate() + 1);
+                        d.setHours(opt.hours, 0, 0, 0);
+                        return (
+                          <button
+                            key={opt.label}
+                            type="button"
+                            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] hover:bg-accent"
+                            onClick={() => { setSchedulePickerOpen(false); void handleScheduleSend(d); }}
+                          >
+                            <CalendarClock className="h-3.5 w-3.5 text-muted-foreground" />
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                      <div className="my-1.5 h-px bg-border" />
+                      <p className="px-2 pb-1 text-[11px] text-muted-foreground">Otra fecha y hora</p>
+                      <div className="flex flex-col gap-1.5 px-2 pb-1">
+                        <input
+                          type="datetime-local"
+                          value={customSched}
+                          onChange={(e) => setCustomSched(e.target.value)}
+                          className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-[12.5px] text-foreground outline-none focus:border-primary"
+                        />
+                        <Button
+                          size="sm"
+                          className="h-8 w-full text-xs"
+                          disabled={!customSched}
+                          onClick={() => {
+                            const d = new Date(customSched);
+                            if (isNaN(d.getTime())) { toast.error("Fecha inválida"); return; }
+                            if (d.getTime() <= Date.now()) { toast.error("Elige una fecha y hora futura"); return; }
+                            setSchedulePickerOpen(false);
+                            void handleScheduleSend(d);
+                          }}
+                        >
+                          Programar
+                        </Button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>
