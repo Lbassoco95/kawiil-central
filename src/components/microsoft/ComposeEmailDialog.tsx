@@ -28,8 +28,17 @@ import {
   Wand2,
   Wand,
   CalendarClock,
+  MoreHorizontal,
 } from "lucide-react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuCheckboxItem,
+} from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -43,8 +52,7 @@ import {
 } from "@/lib/emailComposer";
 import { AccountingTemplatePicker, type AccountingTemplatePickerApplied } from "@/components/accounting/AccountingTemplatePicker";
 import { TemplatePickerBoundary } from "@/components/accounting/TemplatePickerBoundary";
-import { Badge } from "@/components/ui/badge";
-import { KAWIIL_AI_GRADIENT, KAWIIL_AI_HEADER_BG } from "@/lib/kawiilAi";
+import { KAWIIL_AI_GRADIENT } from "@/lib/kawiilAi";
 
 async function extractFnError(error: unknown, fallback: string): Promise<string> {
   if (error instanceof FunctionsHttpError) {
@@ -462,8 +470,6 @@ export function ComposeEmailDialog({
     </div>
   );
 
-  const recipientCount =
-    parseRecipients(to).length + parseRecipients(cc).length + parseRecipients(bcc).length;
   const bodyTextLen = (bodyRef.current || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().length;
   const bodyEmpty = bodyTextLen === 0;
 
@@ -472,39 +478,22 @@ export function ComposeEmailDialog({
       <DialogContent
         className="flex max-h-[92vh] w-[min(100vw-1rem,56rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl rounded-xl border-border/60 [&>button.absolute]:hidden"
       >
-        <header
-          className="shrink-0 flex items-center justify-between gap-3 px-4 sm:px-5 py-3 text-white"
-          style={{ background: KAWIIL_AI_HEADER_BG }}
-        >
+        <header className="shrink-0 flex items-center justify-between gap-3 border-b border-border/70 px-4 sm:px-5 py-3">
           <div className="flex min-w-0 items-center gap-2.5">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white/15 backdrop-blur-sm">
-              <Pencil className="h-4 w-4" />
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+              <Pencil className="h-3.5 w-3.5" />
             </span>
-            <div className="min-w-0">
-              <p className="flex items-center gap-1.5 truncate text-sm font-semibold leading-tight">
-                Nuevo mensaje
-                <Badge
-                  variant="outline"
-                  className="ml-0.5 h-4 border-white/40 bg-white/10 px-1.5 text-[9.5px] font-bold uppercase tracking-wider text-white"
-                >
-                  v2.4
-                </Badge>
-              </p>
-              <p className="mt-0.5 truncate text-[11px] leading-tight text-white/80">
-                {subject?.trim()
-                  ? subject.trim()
-                  : recipientCount > 0
-                    ? `${recipientCount} destinatario${recipientCount === 1 ? "" : "s"} · sin asunto`
-                    : "Asistente Kawiil listo para ayudarte a redactar"}
-              </p>
-            </div>
+            <p className="truncate text-sm font-semibold text-foreground">Nuevo mensaje</p>
           </div>
-          <div className="flex shrink-0 items-center gap-1.5">
+          <div className="flex shrink-0 items-center gap-1">
             <Button
               type="button"
               size="sm"
               variant="ghost"
-              className="h-7 gap-1 px-2 text-[11px] text-white hover:bg-white/15 disabled:opacity-50"
+              className={cn(
+                "h-8 gap-1.5 px-2.5 text-xs",
+                aiPanelOpen ? "text-primary" : "text-muted-foreground hover:text-foreground",
+              )}
               onClick={() => setAiPanelOpen((v) => !v)}
               title="Abrir asistente Kawiil para redactar"
             >
@@ -513,7 +502,7 @@ export function ComposeEmailDialog({
             </Button>
             <button
               type="button"
-              className="rounded-md p-1.5 text-white/90 hover:bg-white/15"
+              className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
               onClick={() => onOpenChange(false)}
               aria-label="Cerrar"
             >
@@ -628,26 +617,6 @@ export function ComposeEmailDialog({
                 placeholder="Asunto del correo"
                 className="flex-1"
               />
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-9 shrink-0 gap-1.5 border-sky-200/70 bg-sky-50/60 px-2.5 text-[11.5px] text-sky-700 hover:bg-sky-100/70 disabled:opacity-60 dark:border-sky-800/40 dark:bg-sky-950/30 dark:text-sky-300 dark:hover:bg-sky-950/50"
-                onClick={() => void runSuggestSubject()}
-                disabled={subjectSuggesting || bodyEmpty}
-                title={
-                  bodyEmpty
-                    ? "Escribe primero el cuerpo del correo para que Kawiil sugiera un asunto."
-                    : "Sugerir asunto con Kawiil AI"
-                }
-              >
-                {subjectSuggesting ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Wand className="h-3.5 w-3.5" />
-                )}
-                Sugerir asunto
-              </Button>
             </div>
 
             <div className="flex min-h-0 flex-1 flex-col space-y-2">
@@ -710,35 +679,6 @@ export function ComposeEmailDialog({
                     <span className="text-[10.5px] text-muted-foreground">
                       También puedes elegir una plantilla y se generará al instante.
                     </span>
-                  </div>
-                </div>
-              )}
-
-              {!aiPanelOpen && bodyEmpty && (
-                <div className="shrink-0 rounded-xl border border-sky-200/50 bg-gradient-to-r from-sky-50/70 to-blue-50/50 px-3 py-2.5 dark:border-sky-800/30 dark:from-sky-950/20 dark:to-blue-950/15">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="inline-flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-sky-700 dark:text-sky-300">
-                      <Sparkles className="h-3 w-3" />
-                      Empieza con una plantilla Kawiil
-                    </span>
-                    {QUICK_DRAFT_TEMPLATES.map((tpl) => {
-                      const Icon = tpl.icon;
-                      return (
-                        <button
-                          key={tpl.id}
-                          type="button"
-                          onClick={() => {
-                            setAiPanelOpen(true);
-                            setAiInstruction(tpl.instruction);
-                            void runAiDraft(tpl.instruction);
-                          }}
-                          className="inline-flex items-center gap-1 rounded-full border border-sky-200/70 bg-white px-2 py-0.5 text-[11px] font-medium text-sky-700 shadow-sm hover:bg-sky-100/70 dark:border-sky-800/40 dark:bg-background/60 dark:text-sky-300 dark:hover:bg-sky-500/10"
-                        >
-                          <Icon className="h-3 w-3" />
-                          {tpl.label}
-                        </button>
-                      );
-                    })}
                   </div>
                 </div>
               )}
@@ -852,46 +792,62 @@ export function ComposeEmailDialog({
         </div>
 
         <div className="flex shrink-0 items-center justify-between gap-2 border-t border-border px-4 py-2.5 sm:px-6">
-          <div className="flex items-center gap-3 min-w-0">
-            <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)} className="text-muted-foreground shrink-0">
-              Cancelar
-            </Button>
-            <label className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none shrink-0">
-              <input
-                type="checkbox"
-                className="h-3.5 w-3.5 rounded accent-primary"
-                checked={requestReadReceipt}
-                onChange={e => setRequestReadReceipt(e.target.checked)}
-              />
-              Acuse de lectura
-            </label>
-            <label className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none shrink-0">
-              <input
-                type="checkbox"
-                className="h-3.5 w-3.5 rounded accent-primary"
-                checked={requestDeliveryReceipt}
-                onChange={e => setRequestDeliveryReceipt(e.target.checked)}
-              />
-              Acuse de entrega
-            </label>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <Button
-              type="button"
-              size="sm"
-              className="gap-1.5 text-white shadow-sm hover:opacity-90 disabled:opacity-60 hidden sm:inline-flex"
-              style={{ background: KAWIIL_AI_GRADIENT }}
-              disabled={!!improveBusy || aiLoading}
-              onClick={() => void runImproveBody("improve")}
-              title="Mejorar el cuerpo del correo con Kawiil AI"
-            >
-              {improveBusy === "improve" ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Wand2 className="h-4 w-4" />
-              )}
-              Mejorar con AI
-            </Button>
+          <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)} className="text-muted-foreground shrink-0">
+            Cancelar
+          </Button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {/* Más opciones: IA (sugerir asunto / mejorar) + acuses, sin saturar la barra */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9 text-muted-foreground hover:text-foreground"
+                  title="Más opciones"
+                  aria-label="Más opciones"
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-60">
+                <DropdownMenuLabel className="text-[10.5px] uppercase tracking-wider text-muted-foreground">
+                  Asistente IA
+                </DropdownMenuLabel>
+                <DropdownMenuItem
+                  disabled={subjectSuggesting || bodyEmpty}
+                  onSelect={(e) => { e.preventDefault(); void runSuggestSubject(); }}
+                >
+                  {subjectSuggesting ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Wand className="mr-2 h-3.5 w-3.5 text-muted-foreground" />}
+                  Sugerir asunto
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={!!improveBusy || aiLoading}
+                  onSelect={(e) => { e.preventDefault(); void runImproveBody("improve"); }}
+                >
+                  {improveBusy === "improve" ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Wand2 className="mr-2 h-3.5 w-3.5 text-muted-foreground" />}
+                  Mejorar redacción
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel className="text-[10.5px] uppercase tracking-wider text-muted-foreground">
+                  Confirmación
+                </DropdownMenuLabel>
+                <DropdownMenuCheckboxItem
+                  checked={requestReadReceipt}
+                  onCheckedChange={setRequestReadReceipt}
+                  onSelect={(e) => e.preventDefault()}
+                >
+                  Acuse de lectura
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={requestDeliveryReceipt}
+                  onCheckedChange={setRequestDeliveryReceipt}
+                  onSelect={(e) => e.preventDefault()}
+                >
+                  Acuse de entrega
+                </DropdownMenuCheckboxItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <div className="flex items-center">
               <Button
                 onClick={() => void handleSend()}
