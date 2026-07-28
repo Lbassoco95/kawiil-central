@@ -13,7 +13,7 @@ import { CreateEventFromEmailDialog } from "./CreateEventFromEmailDialog";
 import { TaskFormDialog } from "@/components/tasks/TaskFormDialog";
 import { MailTranslateDrawer } from "./MailTranslateDrawer";
 import { type MailTabId } from "./MailTabs";
-import { useMailFolders, useMarkEmailRead } from "@/hooks/useMicrosoft";
+import { useMailFolders, useMarkEmailRead, useMicrosoftConnection } from "@/hooks/useMicrosoft";
 import { useMarkLinkedOutlookEmailRead, useMarkGmailRead, useRoutedEmailDetail } from "@/hooks/useLinkedAccounts";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -35,6 +35,8 @@ interface ForwardState {
   bodyHtml: string;
   /** Destinatario precargado (respuesta). Vacío en reenviar. */
   to?: string;
+  /** Copia precargada (responder a todos). */
+  cc?: string;
 }
 
 export function CorreoView() {
@@ -66,6 +68,8 @@ export function CorreoView() {
   // Detalle ruteado por prefijo de ID: funciona con la cuenta principal Y las vinculadas
   // (necesario para Reenviar, crear regla, Slack, crear evento desde correos vinculados).
   const { data: selectedEmailDetail } = useRoutedEmailDetail(selectedEmailId);
+  const { profile: msProfile } = useMicrosoftConnection();
+  const myEmail = ((msProfile?.mail || msProfile?.userPrincipalName || "") as string).toLowerCase();
   const markRead = useMarkEmailRead();
   const markLinkedOutlookRead = useMarkLinkedOutlookEmailRead();
   const markGmailRead = useMarkGmailRead();
@@ -206,6 +210,35 @@ ${detail.body?.contentType === "html" ? origBody : `<pre style="font-family:inhe
     setComposeOpen(true);
   }, [selectedEmailDetail]);
 
+  const handleReplyAll = useCallback(() => {
+    const detail = selectedEmailDetail as any;
+    if (!detail) return;
+    const origSubject = detail.subject || "(sin asunto)";
+    const subject = /^re:/i.test(origSubject.trim()) ? origSubject : `Re: ${origSubject}`;
+    const addr = (r: any) => r?.emailAddress?.address as string | undefined;
+    const senderAddr = detail.replyTo?.[0]?.emailAddress?.address || detail.from?.emailAddress?.address || "";
+    const toAddrs = ((detail.toRecipients ?? []) as any[]).map(addr);
+    const ccAddrs = ((detail.ccRecipients ?? []) as any[]).map(addr);
+    // Para = remitente + destinatarios originales; CC = copiados originales. Sin mí ni duplicados.
+    const toSet = new Set<string>();
+    [senderAddr, ...toAddrs].forEach((a) => {
+      const l = (a || "").toLowerCase();
+      if (l && l !== myEmail) toSet.add(a as string);
+    });
+    const ccSet = new Set<string>();
+    ccAddrs.forEach((a) => {
+      const l = (a || "").toLowerCase();
+      if (l && l !== myEmail && !toSet.has(a as string)) ccSet.add(a as string);
+    });
+    setForwardState({
+      subject,
+      bodyHtml: "",
+      to: [...toSet].join(", "),
+      cc: [...ccSet].join(", "),
+    });
+    setComposeOpen(true);
+  }, [selectedEmailDetail, myEmail]);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -265,6 +298,7 @@ ${detail.body?.contentType === "html" ? origBody : `<pre style="font-family:inhe
           onClose={() => setReadingOpen(false)}
           onCompose={() => { setForwardState(null); setComposeOpen(true); }}
           onReply={handleReply}
+          onReplyAll={handleReplyAll}
           onForward={handleForward}
           onCreateTask={handleCreateTask}
           onCreateRule={handleCreateRule}
@@ -333,6 +367,7 @@ ${detail.body?.contentType === "html" ? origBody : `<pre style="font-family:inhe
         open={composeOpen}
         onOpenChange={(o) => { setComposeOpen(o); if (!o) setForwardState(null); }}
         initialTo={forwardState?.to}
+        initialCc={forwardState?.cc}
         initialSubject={forwardState?.subject}
         initialBodyHtml={forwardState?.bodyHtml}
         showAccountingTemplates
