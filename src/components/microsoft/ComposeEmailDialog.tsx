@@ -476,7 +476,7 @@ export function ComposeEmailDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="flex max-h-[92vh] w-[min(100vw-1rem,56rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl rounded-xl border-border/60 [&>button.absolute]:hidden"
+        className="flex max-h-[86vh] w-[min(100vw-2rem,39rem)] flex-col gap-0 overflow-hidden p-0 rounded-xl border-border/60 [&>button.absolute]:hidden"
       >
         <header className="shrink-0 flex items-center justify-between gap-3 border-b border-border/70 px-4 sm:px-5 py-3">
           <div className="flex min-w-0 items-center gap-2.5">
@@ -511,7 +511,7 @@ export function ComposeEmailDialog({
           </div>
         </header>
         <div
-          className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 sm:px-6"
+          className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-3.5 sm:px-5"
           onKeyDown={(e) => {
             if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
               e.preventDefault();
@@ -743,7 +743,7 @@ export function ComposeEmailDialog({
                 onHtmlChange={(html) => {
                   bodyRef.current = html;
                 }}
-                className="min-h-[min(40vh,360px)] sm:min-h-[320px]"
+                className="min-h-[180px] sm:min-h-[200px]"
                 toolbarEndSlot={iaToolbarButton}
               />
 
