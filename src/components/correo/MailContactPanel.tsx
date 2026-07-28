@@ -184,7 +184,7 @@ export function MailContactPanel({ emailId, onAskAI, onCreateTask, onCreateRule 
 
       {/* Labels section */}
       <div className="px-5 py-3.5 border-b border-border/30">
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-0.5">
           <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
             <Tag className="w-[11px] h-[11px]" /> Etiquetas
           </p>
@@ -192,6 +192,7 @@ export function MailContactPanel({ emailId, onAskAI, onCreateTask, onCreateRule 
             <button className="text-[11px] text-primary hover:text-primary/80 font-medium">+ Agregar</button>
           </MailLabelPicker>
         </div>
+        <p className="text-[10.5px] text-muted-foreground/60 mb-2">Marcas manuales para organizar y encontrar este correo.</p>
         {labelAssignments.length === 0 ? (
           <p className="text-[12px] text-muted-foreground/50 italic">Sin etiquetas</p>
         ) : (
@@ -285,9 +286,10 @@ export function MailContactPanel({ emailId, onAskAI, onCreateTask, onCreateRule 
 
         {/* Categoría del remitente — la confirmas una vez y se clasifica sola de ahí en adelante */}
         <div className="px-5 py-3.5 border-b border-border/30">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1.5">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-0.5 flex items-center gap-1.5">
             <Tag className="w-[11px] h-[11px]" /> Categoría del remitente
           </p>
+          <p className="text-[10.5px] text-muted-foreground/60 mb-2">Clasifica solo los correos de este remitente en su sección, automáticamente.</p>
           {suggestedCat && (
             <div className="flex items-center gap-1.5 mb-2 text-[11.5px] text-muted-foreground">
               <Sparkles className="w-3 h-3 text-primary shrink-0" />
@@ -341,7 +343,7 @@ export function MailContactPanel({ emailId, onAskAI, onCreateTask, onCreateRule 
             </button>
           </div>
           <p className="text-[10.5px] text-muted-foreground/60 mt-1.5">
-            Se clasifica automáticamente por preferencia; puedes cambiarla o sacarla de la sección cuando quieras.
+            Cámbiala o sácala de la sección cuando quieras.
           </p>
         </div>
 
