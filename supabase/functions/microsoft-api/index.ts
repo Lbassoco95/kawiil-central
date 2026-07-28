@@ -1328,16 +1328,22 @@ Deno.serve(async (req) => {
           }
           // Búsqueda en todo el buzón: los correos (p. ej. Microsoft Forms) a veces no están en la carpeta
           // visible, y con $search Graph no admite $orderby; combinarlo suele provocar 400.
-          // Unimos los términos con AND (KQL) en lugar de comillas de frase exacta: así "Jaqueline
-          // separación" encuentra correos donde "Jaqueline" es el remitente y "separación" el asunto,
-          // aunque no aparezcan juntos ni en el mismo campo.
-          const kql = forSearch.split(" ").filter(Boolean).join(" AND ");
-          const searchParam = `&$search=${encodeURIComponent(`"${kql}"`)}`;
-          result = await graphRequest(
-            accessToken,
-            `/me/messages?${select}&$top=${top}&$count=true${searchParam}`,
-            { headers: GRAPH_MAIL_SEARCH_HEADERS },
-          );
+          const terms = forSearch.split(" ").filter(Boolean);
+          const runSearch = async (expr: string) =>
+            (await graphRequest(
+              accessToken,
+              `/me/messages?${select}&$top=${top}&$search=${encodeURIComponent(`"${expr}"`)}`,
+              { headers: GRAPH_MAIL_SEARCH_HEADERS },
+            )) as { value?: unknown[]; [k: string]: unknown };
+          // 1) Todos los términos (espacio = AND implícito en KQL): resultado preciso.
+          result = await runSearch(terms.join(" "));
+          // 2) Si no hubo coincidencias y hay varias palabras, ampliamos con OR para no dejar al
+          //    usuario sin resultados cuando un término está escrito distinto (p. ej. el nombre del
+          //    remitente) pero otro sí coincide (el asunto). Graph ordena por relevancia.
+          const andEmpty = !Array.isArray(result?.value) || result.value.length === 0;
+          if (andEmpty && terms.length > 1) {
+            result = await runSearch(terms.join(" OR "));
+          }
           break;
         }
 
