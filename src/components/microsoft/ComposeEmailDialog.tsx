@@ -16,7 +16,6 @@ import { FunctionsHttpError } from "@supabase/functions-js";
 import {
   Loader2,
   Send,
-  ChevronDown,
   ChevronUp,
   Sparkles,
   BookUser,
@@ -108,8 +107,8 @@ export function ComposeEmailDialog({
   const [cc, setCc] = useState("");
   const [bcc, setBcc] = useState("");
   const [subject, setSubject] = useState("");
-  const [showCc, setShowCc] = useState(true);
-  const [showBcc, setShowBcc] = useState(true);
+  const [showCc, setShowCc] = useState(false);
+  const [showBcc, setShowBcc] = useState(false);
   const [editorKey, setEditorKey] = useState(0);
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [aiInstruction, setAiInstruction] = useState("");
@@ -607,57 +606,63 @@ export function ComposeEmailDialog({
                     )}
                   </Button>
                 ) : null}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="text-xs text-muted-foreground shrink-0"
-                  onClick={() => {
-                    setShowCc((prev) => {
-                      if (prev) setShowBcc(false);
-                      return !prev;
-                    });
-                  }}
-                >
-                  CC {showCc ? <ChevronUp className="h-3 w-3 ml-0.5" /> : <ChevronDown className="h-3 w-3 ml-0.5" />}
-                </Button>
+                <div className="flex items-center gap-0.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setShowCc((v) => !v)}
+                    className={cn(
+                      "rounded-md px-1.5 py-1 text-xs font-semibold transition-colors",
+                      showCc || cc.trim() ? "text-primary" : "text-muted-foreground hover:text-foreground",
+                    )}
+                    title="Con copia (Cc)"
+                    aria-pressed={showCc || !!cc.trim()}
+                  >
+                    Cc
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowBcc((v) => !v)}
+                    className={cn(
+                      "rounded-md px-1.5 py-1 text-xs font-semibold transition-colors",
+                      showBcc || bcc.trim() ? "text-primary" : "text-muted-foreground hover:text-foreground",
+                    )}
+                    title="Con copia oculta (Cco)"
+                    aria-pressed={showBcc || !!bcc.trim()}
+                  >
+                    Cco
+                  </button>
+                </div>
               </div>
-              {showCc && (
-                <div className="space-y-2 animate-fade-in">
-                  <div className="flex items-center gap-2">
-                    <Label htmlFor="compose-cc" className="w-12 text-right text-sm text-muted-foreground shrink-0">
-                      CC
-                    </Label>
-                    <ComposeRecipientInput
-                      id="compose-cc"
-                      value={cc}
-                      onChange={setCc}
-                      placeholder="copia@ejemplo.com"
-                      orgUsers={orgUsers}
-                      mailContacts={mailContacts}
-                      teamEmailLowerSet={teamEmailLowerSet}
-                    />
-                    <div className="flex items-center gap-2 shrink-0 px-1">
-                      <span className="text-xs text-muted-foreground whitespace-nowrap">BCC</span>
-                      <Switch checked={showBcc} onCheckedChange={setShowBcc} aria-label="Mostrar BCC" />
-                    </div>
-                  </div>
-                  {showBcc && (
-                    <div className="flex items-center gap-2">
-                      <Label htmlFor="compose-bcc" className="w-12 text-right text-sm text-muted-foreground shrink-0">
-                        BCC
-                      </Label>
-                      <ComposeRecipientInput
-                        id="compose-bcc"
-                        value={bcc}
-                        onChange={setBcc}
-                        placeholder="copia oculta@ejemplo.com"
-                        orgUsers={orgUsers}
-                        mailContacts={mailContacts}
-                        teamEmailLowerSet={teamEmailLowerSet}
-                      />
-                    </div>
-                  )}
+              {(showCc || cc.trim()) && (
+                <div className="flex items-center gap-2 animate-fade-in">
+                  <Label htmlFor="compose-cc" className="w-12 text-right text-sm text-muted-foreground shrink-0">
+                    Cc
+                  </Label>
+                  <ComposeRecipientInput
+                    id="compose-cc"
+                    value={cc}
+                    onChange={setCc}
+                    placeholder="con copia@ejemplo.com"
+                    orgUsers={orgUsers}
+                    mailContacts={mailContacts}
+                    teamEmailLowerSet={teamEmailLowerSet}
+                  />
+                </div>
+              )}
+              {(showBcc || bcc.trim()) && (
+                <div className="flex items-center gap-2 animate-fade-in">
+                  <Label htmlFor="compose-bcc" className="w-12 text-right text-sm text-muted-foreground shrink-0">
+                    Cco
+                  </Label>
+                  <ComposeRecipientInput
+                    id="compose-bcc"
+                    value={bcc}
+                    onChange={setBcc}
+                    placeholder="copia oculta@ejemplo.com"
+                    orgUsers={orgUsers}
+                    mailContacts={mailContacts}
+                    teamEmailLowerSet={teamEmailLowerSet}
+                  />
                 </div>
               )}
             </div>
