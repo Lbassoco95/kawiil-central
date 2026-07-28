@@ -182,6 +182,13 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onReply,
     : "";
   const sensitivity = (emailDetail as any)?.sensitivity as string | undefined;
   const isConfidential = sensitivity === "confidential" || sensitivity === "private";
+  const fmtRecipients = (arr: any[]) =>
+    (arr ?? [])
+      .map((r) => r?.emailAddress?.name || r?.emailAddress?.address || "")
+      .filter(Boolean)
+      .join(", ");
+  const toRecipients = fmtRecipients((emailDetail as any)?.toRecipients);
+  const ccRecipients = fmtRecipients((emailDetail as any)?.ccRecipients);
 
   return (
     <div
@@ -345,7 +352,7 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onReply,
                 </span>
               )}
             </div>
-            <div className="flex items-start gap-3 mb-6">
+            <div className="flex items-start gap-3 mb-2">
               <div
                 className="w-9 h-9 rounded-full flex items-center justify-center text-white text-[12px] font-bold shrink-0"
                 style={{ background: "hsl(217 91% 55%)" }}
@@ -358,6 +365,22 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onReply,
               </div>
               <p className="text-[11.5px] text-muted-foreground shrink-0">{receivedAt}</p>
             </div>
+            {(toRecipients || ccRecipients) && (
+              <div className="mb-6 pl-12 space-y-0.5 text-[11.5px] text-muted-foreground">
+                {toRecipients && (
+                  <p className="break-words">
+                    <span className="font-medium text-muted-foreground/70">Para: </span>
+                    {toRecipients}
+                  </p>
+                )}
+                {ccRecipients && (
+                  <p className="break-words">
+                    <span className="font-medium text-muted-foreground/70">CC: </span>
+                    {ccRecipients}
+                  </p>
+                )}
+              </div>
+            )}
             {iframeSrc ? (
               <iframe
                 srcDoc={`<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><style>body{font-family:system-ui,sans-serif;font-size:14px;line-height:1.7;color:#374151;margin:0;padding:0}a{color:#2563eb;cursor:pointer}img{max-width:100%}</style></head><body>${iframeSrc}</body></html>`}
