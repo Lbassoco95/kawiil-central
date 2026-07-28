@@ -33,6 +33,8 @@ interface EmailShape {
 interface ForwardState {
   subject: string;
   bodyHtml: string;
+  /** Destinatario precargado (respuesta). Vacío en reenviar. */
+  to?: string;
 }
 
 export function CorreoView() {
@@ -188,6 +190,29 @@ ${detail.body?.contentType === "html" ? origBody : `<pre style="font-family:inhe
     setComposeOpen(true);
   }, [selectedEmailDetail]);
 
+  const handleReply = useCallback(() => {
+    const detail = selectedEmailDetail as any;
+    if (!detail) return;
+    const origSubject = detail.subject || "(sin asunto)";
+    const replyTo =
+      detail.replyTo?.[0]?.emailAddress?.address ||
+      detail.from?.emailAddress?.address ||
+      "";
+    const origFrom = detail.from?.emailAddress?.name || detail.from?.emailAddress?.address || "";
+    const origDate = detail.receivedDateTime
+      ? new Date(detail.receivedDateTime).toLocaleString("es-MX")
+      : "";
+    const origBody = detail.body?.content || detail.bodyPreview || "";
+    // "Re:" sin duplicar si el asunto ya lo trae.
+    const subject = /^re:/i.test(origSubject.trim()) ? origSubject : `Re: ${origSubject}`;
+    const bodyHtml = `<br/><br/><div style="border-left:2px solid #ccc;padding-left:12px;color:#555;">
+El ${origDate}, ${origFrom} escribió:<br/><br/>
+${detail.body?.contentType === "html" ? origBody : `<pre style="font-family:inherit">${origBody}</pre>`}
+</div>`;
+    setForwardState({ subject, bodyHtml, to: replyTo });
+    setComposeOpen(true);
+  }, [selectedEmailDetail]);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -246,6 +271,7 @@ ${detail.body?.contentType === "html" ? origBody : `<pre style="font-family:inhe
           open={readingOpen}
           onClose={() => setReadingOpen(false)}
           onCompose={() => { setForwardState(null); setComposeOpen(true); }}
+          onReply={handleReply}
           onForward={handleForward}
           onCreateTask={handleCreateTask}
           onCreateRule={handleCreateRule}
@@ -268,7 +294,7 @@ ${detail.body?.contentType === "html" ? origBody : `<pre style="font-family:inhe
             emailId={selectedEmailId}
             seed={selectedEmailSeed}
             onOpen={() => handleOpenEmail(selectedEmailId)}
-            onReply={() => { setForwardState(null); setComposeOpen(true); }}
+            onReply={handleReply}
           />
         ) : (
           <MailContactPanel
@@ -313,6 +339,7 @@ ${detail.body?.contentType === "html" ? origBody : `<pre style="font-family:inhe
       <ComposeEmailDialog
         open={composeOpen}
         onOpenChange={(o) => { setComposeOpen(o); if (!o) setForwardState(null); }}
+        initialTo={forwardState?.to}
         initialSubject={forwardState?.subject}
         initialBodyHtml={forwardState?.bodyHtml}
         showAccountingTemplates
