@@ -1808,16 +1808,9 @@ Deno.serve(async (req) => {
           }
         }
 
-        const sentBodies = await fetchRecentSentMessageBodies(accessToken, 8);
-        const inferred = inferSignatureFromSentBodies(sentBodies);
-        if (inferred) {
-          result = {
-            html: inferred.html,
-            source: "inferred_from_sent",
-            confidence: inferred.confidence,
-          };
-          break;
-        }
+        // Nota: se retiró la inferencia de firma a partir de "Enviados": tomaba bloques recurrentes
+        // (p. ej. agendas de reunión) y los inyectaba como firma en cada correo nuevo. Ahora, sin
+        // firma manual, se genera una firma limpia desde el perfil de Microsoft (abajo).
 
         const me = await graphRequest(
           accessToken,
