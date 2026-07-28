@@ -1,10 +1,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { FileDropzone } from "@/components/shared/FileDropzone";
 import { emailLimits, withLimits } from "@/lib/fileIntake/limits";
-import {
-  Dialog,
-  DialogContent,
-} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -473,11 +470,18 @@ export function ComposeEmailDialog({
   const bodyTextLen = (bodyRef.current || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().length;
   const bodyEmpty = bodyTextLen === 0;
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="flex max-h-[86vh] w-[min(100vw-2rem,39rem)] flex-col gap-0 overflow-hidden p-0 rounded-xl border-border/60 [&>button.absolute]:hidden"
-      >
+  if (!open || typeof document === "undefined") return null;
+
+  return createPortal(
+    <div
+      role="dialog"
+      aria-modal="false"
+      aria-label="Nuevo mensaje"
+      className="fixed bottom-0 right-3 sm:right-6 z-[120] flex max-h-[min(88vh,42rem)] w-[min(100vw-1.5rem,32rem)] flex-col overflow-hidden rounded-t-xl border border-border/70 bg-background shadow-2xl animate-in slide-in-from-bottom-4 duration-200"
+      onKeyDown={(e) => {
+        if (e.key === "Escape") { e.stopPropagation(); onOpenChange(false); }
+      }}
+    >
         <header className="shrink-0 flex items-center justify-between gap-3 border-b border-border/70 px-4 sm:px-5 py-3">
           <div className="flex min-w-0 items-center gap-2.5">
             <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
@@ -908,7 +912,7 @@ export function ComposeEmailDialog({
             </div>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+    </div>,
+    document.body,
   );
 }
