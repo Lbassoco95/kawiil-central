@@ -186,7 +186,12 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
     : isLinkedGmail
       ? (linkedGmailQuery.error as (Error & { code?: string }) | null)
       : null;
-  const primaryError = (!isLinkedAccount && !combineAll) ? (primaryQuery.error as Error | null) : null;
+  // Fuera de búsqueda: error de la cuenta principal cuando es la fuente activa.
+  // En búsqueda: NO tragarnos el fallo de la principal (Graph 400, etc.); si no, se vería como
+  // "sin resultados" cuando en realidad la petición falló.
+  const primaryError = (!isLinkedAccount && !combineAll)
+    ? (primaryQuery.error as Error | null)
+    : (isSearching ? (primaryQuery.error as Error | null) : null);
 
   const archiveLinkedOutlook = useArchiveLinkedOutlookEmail();
   const markLinkedOutlookRead = useMarkLinkedOutlookEmailRead();
@@ -574,7 +579,13 @@ const now = useMemo(() => new Date(), []);
         )}
         {!isLoading && !linkedError && !primaryError && filtered.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 gap-3 text-center px-6">
-            {readFilter === "sinleer" ? (
+            {debouncedSearch ? (
+              <>
+                <Search className="w-7 h-7 text-muted-foreground/50" />
+                <p className="text-[14px] font-semibold text-foreground">Sin resultados</p>
+                <p className="text-[12.5px] text-muted-foreground">No se encontraron correos para «{debouncedSearch}» en tus cuentas.</p>
+              </>
+            ) : readFilter === "sinleer" ? (
               <>
                 <span className="text-3xl">✓</span>
                 <p className="text-[14px] font-semibold text-foreground">Estás al día</p>

@@ -377,8 +377,24 @@ Deno.serve(async (req) => {
           }
           continue;
         }
-        const listJson = await listRes.json();
-        const msgIds: string[] = (listJson.messages ?? []).map((m: any) => m.id);
+        let listJson = await listRes.json();
+        let msgIds: string[] = (listJson.messages ?? []).map((m: any) => m.id);
+        // Fallback OR: si la búsqueda AND (por defecto en Gmail) no encontró nada y hay varias
+        // palabras, reintentamos con OR para no dejar sin resultados cuando un término está escrito
+        // distinto (p. ej. el nombre) pero otro sí coincide (el asunto).
+        const searchTerms = searchText.split(/\s+/).filter(Boolean);
+        if (searchText && searchTerms.length > 1 && msgIds.length === 0) {
+          const orQs = new URLSearchParams({ maxResults: String(maxResults) });
+          orQs.set("q", [filterUnread ? "is:unread" : "", searchTerms.join(" OR ")].filter(Boolean).join(" ").trim());
+          if (params?.pageToken) orQs.set("pageToken", params.pageToken);
+          const orRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${orQs}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (orRes.ok) {
+            listJson = await orRes.json();
+            msgIds = (listJson.messages ?? []).map((m: any) => m.id);
+          }
+        }
         if (listJson.nextPageToken && accountId) nextPageToken = listJson.nextPageToken;
         const metaFetches = msgIds.map((id: string) =>
           fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date&metadataHeaders=To`, {

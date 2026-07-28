@@ -245,13 +245,14 @@ Deno.serve(async (req) => {
           continue;
         }
         // Con búsqueda: $search en todo el buzón (sin $orderby/$filter, que Graph no permite combinar).
-        // Términos unidos con AND (KQL) en vez de frase exacta: así se encuentran correos donde los
-        // términos están en campos distintos (p. ej. remitente + asunto) y sin importar el orden.
-        const searchKql = rawSearch.split(" ").filter(Boolean).join(" AND ");
-        const path = rawSearch
-          ? `/me/messages?${listSelect}&$top=${top}&$count=true&$search=${encodeURIComponent(`"${searchKql}"`)}`
-          : `/me/mailFolders/${encodeURIComponent(folder)}/messages?${listSelect}&$top=${top}&$orderby=receivedDateTime desc&$count=true${filterParam}`;
-        const res = await graphFetch(token, path);
+        // Espacio entre términos = AND implícito en KQL; si no hay coincidencias con varias palabras,
+        // ampliamos con OR para no dejar sin resultados cuando un término (p. ej. el nombre) está
+        // escrito distinto pero otro sí coincide (el asunto).
+        const searchTerms = rawSearch.split(" ").filter(Boolean);
+        const searchPath = (expr: string) =>
+          `/me/messages?${listSelect}&$top=${top}&$search=${encodeURIComponent(`"${expr}"`)}`;
+        const folderPath = `/me/mailFolders/${encodeURIComponent(folder)}/messages?${listSelect}&$top=${top}&$orderby=receivedDateTime desc&$count=true${filterParam}`;
+        let res = await graphFetch(token, rawSearch ? searchPath(searchTerms.join(" ")) : folderPath);
         if (!res.ok) {
           // Con cuenta específica NUNCA tragarse el fallo: sin esto la UI muestra
           // "No hay mensajes" en lugar del motivo real.
@@ -265,7 +266,12 @@ Deno.serve(async (req) => {
           }
           continue;
         }
-        const json = await res.json();
+        let json = await res.json();
+        // Fallback OR cuando la búsqueda AND no encontró nada y hay varias palabras.
+        if (rawSearch && searchTerms.length > 1 && (!Array.isArray(json.value) || json.value.length === 0)) {
+          const orRes = await graphFetch(token, searchPath(searchTerms.join(" OR ")));
+          if (orRes.ok) json = await orRes.json();
+        }
         for (const e of json.value ?? []) {
           allEmails.push({
             ...e,
