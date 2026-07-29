@@ -37,6 +37,15 @@ interface ForwardState {
   to?: string;
   /** Copia precargada (responder a todos). */
   cc?: string;
+  /** Id del correo original (solo cuenta principal): envía como respuesta y se engancha al hilo. */
+  replyMessageId?: string;
+  /** Responder a todos (para el borrador de respuesta de Graph). */
+  replyAll?: boolean;
+}
+
+/** Los ids de la cuenta principal no llevan prefijo "outlook:"/"gmail:" (esos son cuentas vinculadas). */
+function isPrimaryMessageId(id: string | null): boolean {
+  return !!id && !id.startsWith("outlook:") && !id.startsWith("gmail:");
 }
 
 export function CorreoView() {
@@ -206,9 +215,11 @@ ${detail.body?.contentType === "html" ? origBody : `<pre style="font-family:inhe
     const subject = /^re:/i.test(origSubject.trim()) ? origSubject : `Re: ${origSubject}`;
     // Respuesta limpia: NO citamos el correo original en el cuerpo (se ve más limpio y se puede
     // minimizar para leerlo). Cuerpo vacío → el redactor coloca la firma automáticamente.
-    setForwardState({ subject, bodyHtml: "", to: replyTo });
+    // replyMessageId (solo cuenta principal) → el envío se engancha al hilo de la conversación.
+    const primaryId = isPrimaryMessageId(selectedEmailId) ? selectedEmailId! : undefined;
+    setForwardState({ subject, bodyHtml: "", to: replyTo, replyMessageId: primaryId, replyAll: false });
     setComposeOpen(true);
-  }, [selectedEmailDetail]);
+  }, [selectedEmailDetail, selectedEmailId]);
 
   const handleReplyAll = useCallback(() => {
     const detail = selectedEmailDetail as any;
@@ -230,14 +241,17 @@ ${detail.body?.contentType === "html" ? origBody : `<pre style="font-family:inhe
       const l = (a || "").toLowerCase();
       if (l && l !== myEmail && !toSet.has(a as string)) ccSet.add(a as string);
     });
+    const primaryId = isPrimaryMessageId(selectedEmailId) ? selectedEmailId! : undefined;
     setForwardState({
       subject,
       bodyHtml: "",
       to: [...toSet].join(", "),
       cc: [...ccSet].join(", "),
+      replyMessageId: primaryId,
+      replyAll: true,
     });
     setComposeOpen(true);
-  }, [selectedEmailDetail, myEmail]);
+  }, [selectedEmailDetail, myEmail, selectedEmailId]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -370,6 +384,7 @@ ${detail.body?.contentType === "html" ? origBody : `<pre style="font-family:inhe
         initialCc={forwardState?.cc}
         initialSubject={forwardState?.subject}
         initialBodyHtml={forwardState?.bodyHtml}
+        replyContext={forwardState?.replyMessageId ? { messageId: forwardState.replyMessageId, replyAll: forwardState.replyAll } : null}
         showAccountingTemplates
         onAfterSend={handleAfterSendTemplate}
       />
