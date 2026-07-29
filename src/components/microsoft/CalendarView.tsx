@@ -651,6 +651,13 @@ export function CalendarView({
     kawiilCategories.forEach((c) => m.set(c.id, { name: c.name, color: c.color }));
     return m;
   }, [kawiilCategories]);
+  // Mapa nombre (minúsculas) → categoría Kawiil, para unificar el color entre las
+  // categorías nativas de Outlook y las etiquetas Kawiil del mismo nombre.
+  const kawiilCatByName = useMemo(() => {
+    const m = new Map<string, { id: string; name: string; color: string }>();
+    kawiilCategories.forEach((c) => m.set(c.name.trim().toLowerCase(), c));
+    return m;
+  }, [kawiilCategories]);
   const eventCategoryChips = (eventId?: string | null) =>
     ((eventId && eventTags[eventId]) || []).map((cid) => categoryById.get(cid)).filter(Boolean) as Array<{ name: string; color: string }>;
 
@@ -728,8 +735,10 @@ export function CalendarView({
     const accId = linkedAccountIdFromCalendarId(event?.calendarId);
     return accId ? accountColorForId(accId) : accountColorForId(PRIMARY_MS_ID);
   };
-  // Color de una categoría: override del usuario o color determinista de la paleta.
-  const categoryColorFor = (name?: string | null) => categoryColors[name || ""] || paletteColorFor(name);
+  // Color de una categoría: 1) override del usuario, 2) color de la etiqueta Kawiil
+  // del mismo nombre (lista universal), 3) color determinista de la paleta.
+  const categoryColorFor = (name?: string | null) =>
+    categoryColors[name || ""] || kawiilCatByName.get((name || "").trim().toLowerCase())?.color || paletteColorFor(name);
   const calendarNameFor = (event: any) =>
     (event?.calendarId ? calendarById.get(event.calendarId)?.name : null) || event?.calendarName || null;
   const toggleCalendar = (id: string) => {
@@ -977,9 +986,6 @@ export function CalendarView({
     updateEvent.mutate({ eventId: selectedEventId, payload }, { onSuccess: () => setSelectedEventId(null) });
   };
 
-  const toggleEditCategory = (name: string) => {
-    setEditForm((prev) => ({ ...prev, categories: prev.categories.includes(name) ? prev.categories.filter((c) => c !== name) : [...prev.categories, name] }));
-  };
   const toggleNewEventCategory = (name: string) => {
     setNewEvent((prev) => ({ ...prev, categories: prev.categories.includes(name) ? prev.categories.filter((c) => c !== name) : [...prev.categories, name] }));
   };
@@ -1376,8 +1382,11 @@ export function CalendarView({
                               const leftPct = col * widthPct;
                               const startStr = formatMX(event._parsedStart, "HH:mm");
                               const endStr = endDt ? formatMX(endDt, "HH:mm") : "";
+                              // Color de la etiqueta: primero la etiqueta Kawiil (universal, cualquier
+                              // cuenta), luego la categoría nativa de Outlook como respaldo.
+                              const kawiilTagColor = ((eventTags[event.id] || [])[0] && categoryById.get((eventTags[event.id] || [])[0])?.color) || undefined;
                               const primaryCategory: string | undefined = event.categories?.[0];
-                              const catHex = primaryCategory ? categoryColorFor(primaryCategory) : undefined;
+                              const catHex = kawiilTagColor || (primaryCategory ? categoryColorFor(primaryCategory) : undefined);
                               const meetingUrl = event.onlineMeeting?.joinUrl || event.onlineMeetingUrl || detectMeetingUrl(event.location?.displayName || event.location)?.url;
                               const accent = showCalendarColors ? eventAccentColor(event) : undefined;
                               // Contenido adaptativo según la altura del evento (evita recortes ilegibles):
@@ -2092,6 +2101,27 @@ export function CalendarView({
                       <Plus className="h-3.5 w-3.5" />
                     </button>
                   </div>
+                  {/* Migración: importar categorías de Outlook a la lista universal Kawiil */}
+                  {(() => {
+                    const pending = outlookCategories.filter(
+                      (oc: any) => oc?.displayName && !kawiilCatByName.has(String(oc.displayName).trim().toLowerCase()),
+                    );
+                    if (pending.length === 0) return null;
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          pending.forEach((oc: any) => createCategory.mutate({ name: oc.displayName, color: paletteColorFor(oc.displayName) }));
+                          toast.success(`Importando ${pending.length} categoría(s) de Outlook`);
+                        }}
+                        disabled={createCategory.isPending}
+                        className="mt-1 w-full text-left text-[10px] text-muted-foreground hover:text-foreground rounded-md px-2 py-1 border border-dashed border-border/60 hover:bg-accent/50"
+                        title="Copiar tus categorías de Outlook a la lista universal (funcionan en todas las cuentas)"
+                      >
+                        + Importar {pending.length} categoría(s) de Outlook a esta lista
+                      </button>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -2320,15 +2350,20 @@ export function CalendarView({
               <Textarea placeholder="Agenda, notas, instrucciones..." value={newEvent.description} onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })} rows={3} />
             </div>
             <div className="space-y-2">
-              <Label>Etiquetas</Label>
-              {outlookCategories.length > 0 ? (
+              <Label>Etiquetas <span className="text-[10px] font-normal text-muted-foreground">· lista universal</span></Label>
+              {kawiilCategories.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
-                  {outlookCategories.map((cat: any) => (
-                    <label key={cat.displayName || cat.id} className="flex items-center gap-1.5 text-sm cursor-pointer">
-                      <Checkbox checked={newEvent.categories.includes(cat.displayName)} onCheckedChange={() => toggleNewEventCategory(cat.displayName)} />
-                      <span>{cat.displayName}</span>
-                    </label>
-                  ))}
+                  {kawiilCategories.map((cat) => {
+                    const checked = newEvent.categories.includes(cat.name);
+                    return (
+                      <label key={cat.id} className={cn("flex items-center gap-1.5 text-sm cursor-pointer rounded-full border px-2.5 py-1 transition-colors", checked ? "border-transparent" : "border-border hover:bg-accent/50")} style={checked ? { backgroundColor: hexAlpha(cat.color, 0.18), borderColor: hexAlpha(cat.color, 0.5) } : undefined}>
+                        <Checkbox checked={checked} onCheckedChange={() => toggleNewEventCategory(cat.name)} className="h-3.5 w-3.5" />
+                        <span className="inline-flex items-center gap-1">
+                          <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />{cat.name}
+                        </span>
+                      </label>
+                    );
+                  })}
                 </div>
               ) : (
                 <Input placeholder="Ej: Personal, Trabajo" value={newEvent.categories.join(", ")} onChange={(e) => setNewEvent({ ...newEvent, categories: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })} />
@@ -2535,41 +2570,29 @@ export function CalendarView({
                 </div>
                 <Switch checked={editForm.isPrivate} onCheckedChange={(checked) => setEditForm({ ...editForm, isPrivate: checked })} />
               </div>
-              <div className="space-y-2">
-                <Label>Etiquetas</Label>
-                {outlookCategories.length > 0 ? (
-                  <div className="flex flex-wrap gap-2">
-                    {outlookCategories.map((cat: any) => (
-                      <label key={cat.displayName || cat.id} className="flex items-center gap-1.5 text-sm cursor-pointer">
-                        <Checkbox checked={editForm.categories.includes(cat.displayName)} onCheckedChange={() => toggleEditCategory(cat.displayName)} />
-                        <span>{cat.displayName}</span>
-                      </label>
-                    ))}
-                  </div>
-                ) : (
-                  <Input placeholder="Ej: Personal, Trabajo" value={editForm.categories.join(", ")} onChange={(e) => setEditForm({ ...editForm, categories: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })} />
-                )}
-              </div>
-              {/* Etiquetas Kawiil: aplican a eventos de cualquier cuenta (Google/Outlook/M365) */}
+              {/* Etiquetas: lista universal Kawiil, aplican a eventos de CUALQUIER cuenta
+                  (Google/Outlook/M365) y colorean el evento en el calendario. */}
               {selectedEventId && (
                 <div className="space-y-2">
-                  <Label>Etiquetas Kawiil <span className="text-[10px] font-normal text-muted-foreground">· aplican a cualquier cuenta</span></Label>
+                  <Label>Etiquetas <span className="text-[10px] font-normal text-muted-foreground">· aplican a cualquier cuenta</span></Label>
                   {kawiilCategories.length > 0 ? (
                     <div className="flex flex-wrap gap-2">
                       {kawiilCategories.map((cat) => {
                         const checked = (eventTags[selectedEventId] || []).includes(cat.id);
                         return (
-                          <label key={cat.id} className="flex items-center gap-1.5 text-sm cursor-pointer">
-                            <Checkbox checked={checked} onCheckedChange={() => toggleEventTag.mutate({ eventId: selectedEventId, categoryId: cat.id, active: !checked })} />
+                          <label key={cat.id} className={cn("flex items-center gap-1.5 text-sm cursor-pointer rounded-full border px-2.5 py-1 transition-colors", checked ? "border-transparent" : "border-border hover:bg-accent/50")} style={checked ? { backgroundColor: hexAlpha(cat.color, 0.18), borderColor: hexAlpha(cat.color, 0.5) } : undefined}>
+                            <Checkbox checked={checked} onCheckedChange={() => toggleEventTag.mutate({ eventId: selectedEventId, categoryId: cat.id, active: !checked })} className="h-3.5 w-3.5" />
                             <span className="inline-flex items-center gap-1">
-                              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: cat.color }} />{cat.name}
+                              <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />{cat.name}
                             </span>
                           </label>
                         );
                       })}
                     </div>
                   ) : (
-                    <p className="text-xs text-muted-foreground">Crea categorías en el panel derecho (sección “Etiquetas Kawiil”) para aplicarlas aquí.</p>
+                    <p className="text-xs text-muted-foreground">
+                      Crea o importa categorías en el panel derecho (sección “Etiquetas Kawiil”) para aplicarlas aquí — funcionan en todas tus cuentas.
+                    </p>
                   )}
                 </div>
               )}
