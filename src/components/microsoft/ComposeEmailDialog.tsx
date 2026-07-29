@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/microsoft/RichTextEditor";
-import { useSendNewEmail, useOutlookComposeSignature, useMicrosoftConnection } from "@/hooks/useMicrosoft";
+import { useSendNewEmail, useOutlookComposeSignature, useMicrosoftConnection, useCreateReplyDraft, useSendDraft } from "@/hooks/useMicrosoft";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { useMailDirectoryContacts, useSyncMailDirectory } from "@/hooks/useMailDirectory";
 import { ComposeRecipientInput } from "@/components/microsoft/ComposeRecipientInput";
@@ -86,6 +86,12 @@ interface ComposeEmailDialogProps {
   initialCc?: string;
   initialSubject?: string;
   initialBodyHtml?: string;
+  /**
+   * Si es una respuesta a un correo de la cuenta principal, el envío se hace como respuesta de
+   * Graph (hereda el conversationId → se engancha al hilo), manteniendo el cuerpo limpio que
+   * escribió el usuario. Sin esto, se envía como correo nuevo.
+   */
+  replyContext?: { messageId: string; replyAll?: boolean } | null;
   /** Valores precargados para el selector de plantillas contables. */
   defaultTemplateContext?: ComposeDefaultTemplateContext;
   /** Muestra el selector de plantillas del área contable. Por defecto true. */
@@ -101,6 +107,7 @@ export function ComposeEmailDialog({
   initialCc,
   initialSubject,
   initialBodyHtml,
+  replyContext,
   defaultTemplateContext,
   showAccountingTemplates = true,
   onAfterSend,
@@ -139,6 +146,8 @@ export function ComposeEmailDialog({
   const directorySyncRef = useRef(false);
   const { user } = useAuth();
   const sendEmail = useSendNewEmail();
+  const createReplyDraft = useCreateReplyDraft();
+  const sendReplyDraft = useSendDraft();
   const { data: orgUsers = [] } = useOrgUsers();
   const { isConnected } = useMicrosoftConnection();
   const { data: mailContacts = [] } = useMailDirectoryContacts(open && isConnected);
@@ -292,6 +301,34 @@ export function ComposeEmailDialog({
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "No se pudieron adjuntar archivos");
         return;
+      }
+    }
+
+    // Respuesta enganchada al hilo: creamos el borrador de respuesta (hereda el conversationId del
+    // original) y lo enviamos con NUESTRO cuerpo limpio. Así se engancha visualmente al hilo sin
+    // ensuciar la redacción. Si algo falla, caemos al envío como correo nuevo.
+    if (replyContext?.messageId) {
+      try {
+        const draft = (await createReplyDraft.mutateAsync({
+          messageId: replyContext.messageId,
+          replyAll: replyContext.replyAll,
+        })) as { id?: string; unsupported?: boolean } | null;
+        if (draft?.id && !draft.unsupported) {
+          await sendReplyDraft.mutateAsync({
+            draftId: draft.id,
+            body: { contentType: "HTML", content: bodyRef.current || "<p></p>" },
+            attachments,
+            toRecipients: toList.map((e) => ({ emailAddress: { address: e } })),
+            ccRecipients: ccList.map((e) => ({ emailAddress: { address: e } })),
+            bccRecipients: bccList.map((e) => ({ emailAddress: { address: e } })),
+            requestDeliveryReceipt,
+            requestReadReceipt,
+          });
+          onOpenChange(false);
+          return;
+        }
+      } catch (err) {
+        console.warn("[compose] respuesta en hilo falló; se envía como correo nuevo", err);
       }
     }
 
@@ -476,6 +513,7 @@ export function ComposeEmailDialog({
 
   const bodyTextLen = (bodyRef.current || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().length;
   const bodyEmpty = bodyTextLen === 0;
+  const sending = sendEmail.isPending || createReplyDraft.isPending || sendReplyDraft.isPending;
 
   if (!open || typeof document === "undefined") return null;
 
@@ -915,11 +953,11 @@ export function ComposeEmailDialog({
             <div className="flex items-center">
               <Button
                 onClick={() => void handleSend()}
-                disabled={sendEmail.isPending || !to.trim()}
+                disabled={sending || !to.trim()}
                 size="sm"
                 className="rounded-r-none"
               >
-                {sendEmail.isPending ? (
+                {sending ? (
                   <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
                 ) : (
                   <Send className="h-4 w-4 mr-1.5" />
@@ -931,7 +969,7 @@ export function ComposeEmailDialog({
                   variant="default"
                   size="sm"
                   className="rounded-l-none border-l border-primary-foreground/20 px-2"
-                  disabled={sendEmail.isPending || !to.trim()}
+                  disabled={sending || !to.trim()}
                   aria-label="Programar envío"
                   title="Programar envío"
                   onClick={() => setSchedulePickerOpen((v) => !v)}
