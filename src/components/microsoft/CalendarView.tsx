@@ -14,7 +14,6 @@ import {
   useDeleteCalendarEvent,
   useEventDetail,
   useUpdateCalendarEvent,
-  useRespondEvent,
   useOutlookCategories, useCreateOutlookCategory, useDeleteOutlookCategory,
 } from "@/hooks/useMicrosoft";
 import { useTasksForCalendar } from "@/hooks/useTasks";
@@ -54,6 +53,7 @@ import { CreateTaskFromEventDialog } from "@/components/microsoft/CreateTaskFrom
 import {
   useLinkedAccounts, useGoogleConnection, useGoogleCalendarEvents, useGoogleCalendars,
   useOutlookConnection, useOutlookAccountEvents, useOutlookAccountCalendars, useRenameLinkedAccount,
+  useRoutedRespondEvent,
 } from "@/hooks/useLinkedAccounts";
 import { ColorPickerPopover, paletteColorFor, hexAlpha } from "@/components/microsoft/ColorPickerPopover";
 import {
@@ -445,7 +445,7 @@ export function CalendarView({
     error: eventDetailError,
   } = useEventDetail(isGoogleEvent ? null : selectedEventId);
   const updateEvent = useUpdateCalendarEvent();
-  const respondEvent = useRespondEvent();
+  const respondEvent = useRoutedRespondEvent();
   const { data: outlookCategories = [] } = useOutlookCategories();
   const createOutlookCategory = useCreateOutlookCategory();
   const deleteOutlookCategory = useDeleteOutlookCategory();
@@ -2366,8 +2366,8 @@ export function CalendarView({
                   </Button>
                 </div>
               )}
-              {/* RSVP: responder invitación (cuenta principal Microsoft) */}
-              {!isGoogleEvent && (() => {
+              {/* RSVP: responder invitación en cualquier cuenta conectada (principal, Outlook o Google) */}
+              {(() => {
                 const src = eventDetail || cachedEvent;
                 if (!src) return null;
                 const attendees = Array.isArray(src.attendees) ? src.attendees : [];
@@ -2387,7 +2387,7 @@ export function CalendarView({
                 const responded = rawStatus === "accepted" || rawStatus === "tentativelyAccepted" || rawStatus === "declined";
                 const respond = (response: "accept" | "tentative" | "decline") => {
                   if (!selectedEventId) return;
-                  respondEvent.mutate({ eventId: selectedEventId, response });
+                  respondEvent.mutate({ eventId: selectedEventId, calendarId: src.calendarId, response });
                 };
                 return (
                   <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2.5">
@@ -2542,7 +2542,7 @@ export function CalendarView({
           ) : null}
           {isGoogleEvent && (cachedEvent || eventDetail) && (
             <p className="text-[11px] text-muted-foreground -mt-1">
-              Evento de una cuenta añadida (solo lectura desde Kawiil). Puedes crear una tarea a partir de él.
+              Evento de una cuenta añadida. Puedes responder la invitación y crear una tarea desde aquí; editar o eliminar aún se hace en la app de origen.
             </p>
           )}
           <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:items-center">

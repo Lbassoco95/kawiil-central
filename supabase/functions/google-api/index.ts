@@ -53,8 +53,22 @@ async function ensureAccessToken(
 }
 
 /** Normaliza un evento de Google Calendar al formato tipo Microsoft Graph que usa el frontend. */
+// Estado de respuesta de Google → estilo Graph, para reutilizar la UI de RSVP.
+function googleResponseToGraph(resp?: string): string {
+  switch (resp) {
+    case "accepted": return "accepted";
+    case "declined": return "declined";
+    case "tentative": return "tentativelyAccepted";
+    case "needsAction": return "notResponded";
+    default: return "none";
+  }
+}
+
 function normalizeEvent(ev: Record<string, any>, namespacedCalendarId: string, calName: string) {
   const isAllDay = Boolean(ev.start?.date && !ev.start?.dateTime);
+  const attendees = Array.isArray(ev.attendees) ? ev.attendees : [];
+  const selfAttendee = attendees.find((a: any) => a?.self === true);
+  const isOrganizer = ev.organizer?.self === true;
   return {
     id: `google:${ev.id}`,
     subject: ev.summary ?? "(sin título)",
@@ -67,6 +81,13 @@ function normalizeEvent(ev: Record<string, any>, namespacedCalendarId: string, c
     categories: [],
     calendarId: namespacedCalendarId,
     calendarName: calName,
+    // Datos de invitación para RSVP (formato normalizado tipo Graph).
+    attendees: attendees.map((a: any) => ({
+      emailAddress: { address: a?.email, name: a?.displayName },
+      status: { response: googleResponseToGraph(a?.responseStatus) },
+    })),
+    isOrganizer,
+    responseStatus: { response: isOrganizer ? "organizer" : googleResponseToGraph(selfAttendee?.responseStatus) },
     _source: "google",
   };
 }
@@ -218,6 +239,65 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ error: json?.error?.message || "create_failed" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
       return new Response(JSON.stringify({ id: json.id, htmlLink: json.htmlLink }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    if (action === "respond-event") {
+      // RSVP en Google: no hay endpoint "accept"; se parchea el responseStatus del
+      // asistente propio. params: { accountId, calendarId (crudo), eventId (crudo), response }
+      const acc = accountId ? accounts.find((a) => a.id === accountId) : (accounts.find((a) => a.calendar_enabled) || accounts[0]);
+      if (!acc) return new Response(JSON.stringify({ error: "no_account" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const token = await ensureAccessToken(supabaseAdmin, acc);
+      if (!token) return new Response(JSON.stringify({ error: "no_valid_token" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+      const respMap: Record<string, string> = {
+        accept: "accepted",
+        accepted: "accepted",
+        decline: "declined",
+        declined: "declined",
+        tentative: "tentative",
+        tentatively: "tentative",
+      };
+      const googleResp = respMap[String(params?.response || "").trim()];
+      if (!googleResp) return new Response(JSON.stringify({ error: "invalid_response" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+      const calId = String(params?.calendarId || "primary").replace(/^google:[^:]+:/, "");
+      const rawEventId = String(params?.eventId || "").replace(/^google:/, "");
+      if (!rawEventId) return new Response(JSON.stringify({ error: "missing_event" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+      const base = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${encodeURIComponent(rawEventId)}`;
+      // Leer el evento para ubicar al asistente propio y conservar el resto.
+      const getRes = await fetch(base, { headers: { Authorization: `Bearer ${token}` } });
+      if (!getRes.ok) {
+        let msg = "event_not_found";
+        try { const j = await getRes.json(); msg = j?.error?.message || msg; } catch { /* sin cuerpo */ }
+        return new Response(JSON.stringify({ error: msg }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      const evt = await getRes.json();
+      const attendees = Array.isArray(evt.attendees) ? evt.attendees : [];
+      let found = false;
+      const updated = attendees.map((a: any) => {
+        if (a?.self === true || a?.email?.toLowerCase() === acc.email?.toLowerCase()) {
+          found = true;
+          return { ...a, responseStatus: googleResp };
+        }
+        return a;
+      });
+      if (!found) {
+        // No aparece como asistente: no se puede responder (probablemente es el organizador).
+        return new Response(JSON.stringify({ error: "not_an_attendee" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const patchRes = await fetch(`${base}?sendUpdates=all`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ attendees: updated }),
+      });
+      if (!patchRes.ok) {
+        let msg = "respond_failed";
+        try { const j = await patchRes.json(); msg = j?.error?.message || msg; } catch { /* sin cuerpo */ }
+        return new Response(JSON.stringify({ error: msg }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // ─── GMAIL EMAIL ACTIONS ───────────────────────────────────────────────

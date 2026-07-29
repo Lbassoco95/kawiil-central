@@ -1,7 +1,7 @@
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { useEmailDetail, useEmailAttachments } from "@/hooks/useMicrosoft";
+import { useEmailDetail, useEmailAttachments, useRespondEvent } from "@/hooks/useMicrosoft";
 import { fetchMessageAttachmentBlob } from "@/lib/outlookEmailMedia";
 import { toast } from "sonner";
 
@@ -306,6 +306,92 @@ export function useCreateOutlookAccountEvent() {
       queryClient.invalidateQueries({ queryKey: ["outlook-account-events"] });
     },
   });
+}
+
+// ─── RSVP ruteado por cuenta ──────────────────────────────────────────────────
+
+export type CalendarProvider = "primary" | "outlook" | "google";
+
+/**
+ * Determina el proveedor y los ids crudos de un evento a partir de su id y calendarId.
+ * - Principal Microsoft: id sin prefijo → microsoft-api.
+ * - Outlook vinculado:  id `outlook:<rawId>`, calendarId `outlook:<accId>:<calId>`.
+ * - Google vinculado:   id `google:<rawId>`,  calendarId `google:<accId>:<calId>`.
+ */
+export function parseCalendarEventRef(eventId: string | null, calendarId?: string | null): {
+  provider: CalendarProvider;
+  accountId: string | null;
+  rawEventId: string | null;
+  rawCalendarId: string | null;
+} {
+  if (!eventId) return { provider: "primary", accountId: null, rawEventId: null, rawCalendarId: null };
+  const calParts = (calendarId || "").split(":");
+  const accountId = calParts.length >= 2 ? calParts[1] : null;
+  const rawCalendarId = calParts.length >= 3 ? calParts.slice(2).join(":") : null;
+  if (eventId.startsWith("outlook:")) {
+    return { provider: "outlook", accountId, rawEventId: eventId.slice("outlook:".length), rawCalendarId };
+  }
+  if (eventId.startsWith("google:")) {
+    return { provider: "google", accountId, rawEventId: eventId.slice("google:".length), rawCalendarId };
+  }
+  return { provider: "primary", accountId: null, rawEventId: eventId, rawCalendarId: null };
+}
+
+/**
+ * Responde una invitación (RSVP) en CUALQUIER cuenta conectada, ruteando al backend
+ * correcto según el prefijo del evento (principal Microsoft, Outlook vinculado o Google).
+ */
+export function useRoutedRespondEvent() {
+  const queryClient = useQueryClient();
+  const primary = useRespondEvent();
+
+  const respondLabel = (response: "accept" | "tentative" | "decline") =>
+    response === "accept" ? "Invitación aceptada" : response === "tentative" ? "Marcada como tentativa" : "Invitación rechazada";
+
+  const outlook = useMutation({
+    mutationFn: async (vars: { accountId: string | null; eventId: string; response: "accept" | "tentative" | "decline" }) => {
+      const { data, error } = await supabase.functions.invoke("outlook-account-api", {
+        body: { action: "respond-event", params: { accountId: vars.accountId, eventId: vars.eventId, response: vars.response } },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: (_d, vars) => {
+      toast.success(respondLabel(vars.response));
+      queryClient.invalidateQueries({ queryKey: ["outlook-account-events"] });
+    },
+    onError: (err: Error) => toast.error("No se pudo responder la invitación: " + err.message),
+  });
+
+  const google = useMutation({
+    mutationFn: async (vars: { accountId: string | null; calendarId: string | null; eventId: string; response: "accept" | "tentative" | "decline" }) => {
+      const { data, error } = await supabase.functions.invoke("google-api", {
+        body: { action: "respond-event", params: { accountId: vars.accountId, calendarId: vars.calendarId, eventId: vars.eventId, response: vars.response } },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: (_d, vars) => {
+      toast.success(respondLabel(vars.response));
+      queryClient.invalidateQueries({ queryKey: ["google-calendar-events"] });
+    },
+    onError: (err: Error) => toast.error("No se pudo responder la invitación: " + err.message),
+  });
+
+  const mutate = (args: { eventId: string; calendarId?: string | null; response: "accept" | "tentative" | "decline" }) => {
+    const ref = parseCalendarEventRef(args.eventId, args.calendarId);
+    if (ref.provider === "outlook") {
+      outlook.mutate({ accountId: ref.accountId, eventId: ref.rawEventId!, response: args.response });
+    } else if (ref.provider === "google") {
+      google.mutate({ accountId: ref.accountId, calendarId: ref.rawCalendarId, eventId: ref.rawEventId!, response: args.response });
+    } else {
+      primary.mutate({ eventId: args.eventId, response: args.response });
+    }
+  };
+
+  return { mutate, isPending: primary.isPending || outlook.isPending || google.isPending };
 }
 
 // ─── Account color utility ────────────────────────────────────────────────────
