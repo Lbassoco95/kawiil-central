@@ -93,6 +93,119 @@ export type Database = {
           },
         ]
       }
+      activities: {
+        Row: {
+          activity_type: string | null
+          budget_estimated: number | null
+          budget_spent: number | null
+          created_at: string
+          created_by: string
+          dropbox_url: string | null
+          event_date: string | null
+          id: string
+          location: string | null
+          name: string
+          notes: string | null
+          organization_id: string
+          responsible_user_id: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          activity_type?: string | null
+          budget_estimated?: number | null
+          budget_spent?: number | null
+          created_at?: string
+          created_by: string
+          dropbox_url?: string | null
+          event_date?: string | null
+          id?: string
+          location?: string | null
+          name: string
+          notes?: string | null
+          organization_id: string
+          responsible_user_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          activity_type?: string | null
+          budget_estimated?: number | null
+          budget_spent?: number | null
+          created_at?: string
+          created_by?: string
+          dropbox_url?: string | null
+          event_date?: string | null
+          id?: string
+          location?: string | null
+          name?: string
+          notes?: string | null
+          organization_id?: string
+          responsible_user_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      activity_items: {
+        Row: {
+          activity_id: string
+          budget_estimated: number | null
+          budget_spent: number | null
+          created_at: string
+          created_by: string
+          due_date: string | null
+          id: string
+          notes: string | null
+          organization_id: string
+          responsible: string | null
+          sort_order: number
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          activity_id: string
+          budget_estimated?: number | null
+          budget_spent?: number | null
+          created_at?: string
+          created_by: string
+          due_date?: string | null
+          id?: string
+          notes?: string | null
+          organization_id: string
+          responsible?: string | null
+          sort_order?: number
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          activity_id?: string
+          budget_estimated?: number | null
+          budget_spent?: number | null
+          created_at?: string
+          created_by?: string
+          due_date?: string | null
+          id?: string
+          notes?: string | null
+          organization_id?: string
+          responsible?: string | null
+          sort_order?: number
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_items_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       activity_log: {
         Row: {
           action: string

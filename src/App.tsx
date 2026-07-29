@@ -19,6 +19,8 @@ import Documentos from "./pages/Documentos";
 import Configuracion from "./pages/Admin";
 import ClienteDetalle from "./pages/ClienteDetalle";
 import ProyectoDetalle from "./pages/ProyectoDetalle";
+import Actividades from "./pages/Actividades";
+import ActividadDetalle from "./pages/ActividadDetalle";
 import CambiarContrasena from "./pages/CambiarContrasena";
 import PostularVacante from "./pages/PostularVacante";
 import Microsoft365Calendario from "./pages/Microsoft365Calendario";
@@ -74,6 +76,8 @@ const App = () => (
               {/* Ruta estática antes de la dinámica: "nuevo" no es un UUID */}
               <Route path="/proyectos/nuevo" element={<Navigate to="/proyectos" replace />} />
               <Route path="/proyectos/:id" element={<ProtectedRoute><ProyectoDetalle /></ProtectedRoute>} />
+              <Route path="/actividades" element={<ProtectedRoute><Actividades /></ProtectedRoute>} />
+              <Route path="/actividades/:id" element={<ProtectedRoute><ActividadDetalle /></ProtectedRoute>} />
               <Route path="/tareas" element={<ProtectedRoute><Tareas /></ProtectedRoute>} />
               <Route
                 path="/calendario"
