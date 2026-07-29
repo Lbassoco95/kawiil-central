@@ -16,6 +16,7 @@ import { useSavioIncomeAccess } from "@/hooks/useSavioIncomeAccess";
 import { ExpenseFormDialog } from "@/components/finanzas/ExpenseFormDialog";
 import { ExpenseTable } from "@/components/finanzas/ExpenseTable";
 import { ExpenseReviewDialog } from "@/components/finanzas/ExpenseReviewDialog";
+import { ClientReimbursementDialog } from "@/components/finanzas/ClientReimbursementDialog";
 import { SavioFinanceDashboard } from "@/components/finanzas/SavioFinanceDashboard";
 import { FinanceExecutiveSummary } from "@/components/finanzas/FinanceExecutiveSummary";
 import { FinanceCashflowAlerts } from "@/components/finanzas/FinanceCashflowAlerts";
@@ -55,6 +56,7 @@ export default function Finanzas() {
   const { hasFinanceAccess } = useFinanceAccess();
   const { data: canViewSavioIncome = false, isLoading: savioIncomeLoading } = useSavioIncomeAccess();
   const [showForm, setShowForm] = useState(false);
+  const [showReimbursements, setShowReimbursements] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
   const [statusFilter, setStatusFilter] = useState("todos");
   const [categoryFilter, setCategoryFilter] = useState("todos");
@@ -305,7 +307,8 @@ export default function Finanzas() {
             subtitle="Gastos que el despacho absorbió y hay que cobrar al cliente."
             accentClass="before:bg-amber-500"
             icon={<HandCoins className="h-4 w-4" />}
-            footer={<p className="text-[11px] text-muted-foreground">{totals.toCollectCount} pendiente{totals.toCollectCount === 1 ? "" : "s"}</p>}
+            onClick={() => setShowReimbursements(true)}
+            footer={<p className="text-[11px] text-muted-foreground">{totals.toCollectCount} pendiente{totals.toCollectCount === 1 ? "" : "s"} · ver desglose →</p>}
           >
             <p className="text-2xl font-semibold tabular-nums tracking-tight text-amber-700 dark:text-amber-400">
               {fmtMoney(totals.toCollect)}
@@ -554,6 +557,11 @@ export default function Finanzas() {
         open={!!selectedExpense}
         onOpenChange={(o) => !o && setSelectedExpense(null)}
         canManage={hasFinanceAccess}
+      />
+      <ClientReimbursementDialog
+        open={showReimbursements}
+        onOpenChange={setShowReimbursements}
+        expenses={expenses}
       />
     </AppLayout>
   );
