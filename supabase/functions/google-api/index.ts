@@ -126,15 +126,37 @@ Deno.serve(async (req) => {
 
     if (action === "calendars") {
       const all: any[] = [];
+      // Diagnóstico por cuenta: en vez de tragarnos los errores en silencio (que hacía
+      // que las cuentas Google "desaparecieran" del calendario), reportamos qué pasó.
+      const diagnostics: any[] = [];
       for (const acc of accounts) {
         const token = await ensureAccessToken(supabaseAdmin, acc);
-        if (!token) continue;
+        if (!token) {
+          diagnostics.push({ accountId: acc.id, email: acc.email, ok: false, reason: "reconnect_needed", message: "No se pudo renovar el acceso. Vuelve a conectar la cuenta de Google." });
+          continue;
+        }
         const res = await fetch("https://www.googleapis.com/calendar/v3/users/me/calendarList", {
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (!res.ok) continue;
+        if (!res.ok) {
+          let message = `HTTP ${res.status}`;
+          let reason = "api_error";
+          try {
+            const errJson = await res.json();
+            message = errJson?.error?.message || message;
+            const status = errJson?.error?.status || "";
+            const isDisabled = res.status === 403 && /has not been used|is disabled|SERVICE_DISABLED|accessNotConfigured/i.test(JSON.stringify(errJson));
+            if (isDisabled) { reason = "calendar_api_disabled"; }
+            else if (res.status === 401 || status === "UNAUTHENTICATED") { reason = "reconnect_needed"; }
+            else if (res.status === 403) { reason = "forbidden"; }
+          } catch { /* sin cuerpo JSON */ }
+          diagnostics.push({ accountId: acc.id, email: acc.email, ok: false, reason, message });
+          continue;
+        }
         const json = await res.json();
+        let count = 0;
         for (const item of json.items ?? []) {
+          count++;
           all.push({
             id: `google:${acc.id}:${item.id}`,
             name: acc.email ? `${item.summary} · ${acc.email}` : item.summary,
@@ -145,8 +167,9 @@ Deno.serve(async (req) => {
             _accountId: acc.id,
           });
         }
+        diagnostics.push({ accountId: acc.id, email: acc.email, ok: true, count });
       }
-      return new Response(JSON.stringify({ value: all }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ value: all, diagnostics }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     if (action === "calendar-events") {
