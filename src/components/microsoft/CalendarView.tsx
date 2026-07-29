@@ -2375,7 +2375,7 @@ export function CalendarView({
               </Button>
             </div>
           ) : (cachedEvent || eventDetail) ? (
-            <div className="space-y-4 py-2">
+            <div className="space-y-4 py-2 min-w-0">
               {(() => {
                 const ev = cachedEvent || eventDetail;
                 const accId = linkedAccountIdFromCalendarId(ev?.calendarId);
@@ -2385,9 +2385,9 @@ export function CalendarView({
                 const calName = calendarNameFor(ev);
                 const dotColor = accId ? accountColorForId(accId) : accountColorForId(PRIMARY_MS_ID);
                 return (
-                  <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2">
+                  <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 min-w-0">
                     <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: dotColor }} />
-                    <div className="min-w-0 text-xs leading-tight">
+                    <div className="flex-1 min-w-0 text-xs leading-tight">
                       <p className="font-medium text-foreground truncate">{accountLabel}</p>
                       <p className="text-muted-foreground truncate">{provider}{calName ? ` · ${calName}` : ""}</p>
                     </div>
@@ -2425,11 +2425,11 @@ export function CalendarView({
                   respondEvent.mutate({ eventId: selectedEventId, calendarId: src.calendarId, response });
                 };
                 return (
-                  <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2.5">
-                    <div className="flex items-center gap-2 text-sm">
+                  <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2.5 min-w-0">
+                    <div className="flex items-center gap-2 text-sm min-w-0">
                       <Users className="h-4 w-4 text-primary shrink-0" />
-                      <span className="font-medium text-foreground">Invitación</span>
-                      <span className="text-muted-foreground">· {label}</span>
+                      <span className="font-medium text-foreground shrink-0">Invitación</span>
+                      <span className="text-muted-foreground truncate">· {label}</span>
                     </div>
                     <div className="grid grid-cols-3 gap-2">
                       <Button
