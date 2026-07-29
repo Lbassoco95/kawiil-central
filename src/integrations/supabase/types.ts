@@ -147,6 +147,56 @@ export type Database = {
         }
         Relationships: []
       }
+      activity_attendees: {
+        Row: {
+          activity_id: string
+          confirmed: string
+          created_at: string
+          created_by: string
+          dietary_restriction: string | null
+          id: string
+          name: string
+          notes: string | null
+          organization_id: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          activity_id: string
+          confirmed?: string
+          created_at?: string
+          created_by: string
+          dietary_restriction?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+          organization_id: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          activity_id?: string
+          confirmed?: string
+          created_at?: string
+          created_by?: string
+          dietary_restriction?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+          organization_id?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_attendees_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       activity_items: {
         Row: {
           activity_id: string
@@ -245,6 +295,68 @@ export type Database = {
             referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
+        ]
+      }
+      activity_providers: {
+        Row: {
+          activity_id: string
+          advance: number | null
+          category: string
+          created_at: string
+          created_by: string
+          description: string | null
+          id: string
+          link: string | null
+          name: string
+          notes: string | null
+          organization_id: string
+          quantity: number | null
+          status: string
+          unit_price: number | null
+          updated_at: string
+        }
+        Insert: {
+          activity_id: string
+          advance?: number | null
+          category?: string
+          created_at?: string
+          created_by: string
+          description?: string | null
+          id?: string
+          link?: string | null
+          name: string
+          notes?: string | null
+          organization_id: string
+          quantity?: number | null
+          status?: string
+          unit_price?: number | null
+          updated_at?: string
+        }
+        Update: {
+          activity_id?: string
+          advance?: number | null
+          category?: string
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          id?: string
+          link?: string | null
+          name?: string
+          notes?: string | null
+          organization_id?: string
+          quantity?: number | null
+          status?: string
+          unit_price?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_providers_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          }
         ]
       }
       agent_activity_logs: {

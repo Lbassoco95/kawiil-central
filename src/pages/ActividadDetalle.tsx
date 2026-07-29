@@ -6,8 +6,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Pencil, Trash2, ExternalLink } from "lucide-react";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ActivityFormDialog } from "@/components/actividades/ActivityFormDialog";
 import { ActivityItemsCard } from "@/components/actividades/ActivityItemsCard";
+import { ActivityAttendeesCard } from "@/components/actividades/ActivityAttendeesCard";
+import { ActivityProvidersCard } from "@/components/actividades/ActivityProvidersCard";
 import { useActivity, useDeleteActivity } from "@/hooks/useActivities";
 import { useProfiles } from "@/hooks/useTasks";
 import {
@@ -120,7 +123,22 @@ const ActividadDetalle = () => {
           </Card>
 
           <div className="md:col-span-2">
-            <ActivityItemsCard activityId={activity.id} />
+            <Tabs defaultValue="pendientes">
+              <TabsList>
+                <TabsTrigger value="pendientes">Pendientes</TabsTrigger>
+                <TabsTrigger value="asistentes">Asistentes</TabsTrigger>
+                <TabsTrigger value="proveedores">Proveedores</TabsTrigger>
+              </TabsList>
+              <TabsContent value="pendientes" className="mt-4">
+                <ActivityItemsCard activityId={activity.id} />
+              </TabsContent>
+              <TabsContent value="asistentes" className="mt-4">
+                <ActivityAttendeesCard activityId={activity.id} />
+              </TabsContent>
+              <TabsContent value="proveedores" className="mt-4">
+                <ActivityProvidersCard activityId={activity.id} />
+              </TabsContent>
+            </Tabs>
           </div>
         </div>
       </div>

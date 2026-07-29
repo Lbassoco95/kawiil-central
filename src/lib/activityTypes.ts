@@ -75,3 +75,70 @@ export function activityItemStatusLabel(value?: string | null): string {
   if (!value) return "—";
   return ACTIVITY_ITEM_STATUS_LABELS[value as ActivityItemStatus] ?? value;
 }
+
+// ─── Confirmación de asistentes ──────────────────────────────────────────────
+export type AttendeeConfirmed = "si" | "no" | "pendiente";
+
+export const ATTENDEE_CONFIRMED_LABELS: Record<AttendeeConfirmed, string> = {
+  si: "Confirma",
+  no: "No asiste",
+  pendiente: "Pendiente",
+};
+
+export const ATTENDEE_CONFIRMED_STYLES: Record<AttendeeConfirmed, string> = {
+  si: "bg-emerald-100 text-emerald-800 border-emerald-200",
+  no: "bg-rose-100 text-rose-800 border-rose-200",
+  pendiente: "bg-muted text-muted-foreground border-border",
+};
+
+export const ATTENDEE_CONFIRMED_OPTIONS = (
+  Object.entries(ATTENDEE_CONFIRMED_LABELS) as [AttendeeConfirmed, string][]
+).map(([value, label]) => ({ value, label }));
+
+// ─── Rubro de proveedor ──────────────────────────────────────────────────────
+export type ProviderCategory = "casas" | "alimentos" | "souvenirs" | "obsequios" | "otro";
+
+export const PROVIDER_CATEGORY_LABELS: Record<ProviderCategory, string> = {
+  casas: "Casas / Sede",
+  alimentos: "Alimentos",
+  souvenirs: "Souvenirs",
+  obsequios: "Obsequios",
+  otro: "Otro",
+};
+
+export const PROVIDER_CATEGORY_OPTIONS = (
+  Object.entries(PROVIDER_CATEGORY_LABELS) as [ProviderCategory, string][]
+).map(([value, label]) => ({ value, label }));
+
+export function providerCategoryLabel(value?: string | null): string {
+  if (!value) return "—";
+  return PROVIDER_CATEGORY_LABELS[value as ProviderCategory] ?? value;
+}
+
+// ─── Estatus de proveedor ────────────────────────────────────────────────────
+export type ProviderStatus = "cotizacion" | "elegido" | "apartado" | "pagado" | "descartado";
+
+export const PROVIDER_STATUS_LABELS: Record<ProviderStatus, string> = {
+  cotizacion: "Cotización",
+  elegido: "Elegido",
+  apartado: "Apartado",
+  pagado: "Pagado",
+  descartado: "Descartado",
+};
+
+export const PROVIDER_STATUS_STYLES: Record<ProviderStatus, string> = {
+  cotizacion: "bg-muted text-muted-foreground border-border",
+  elegido: "bg-blue-100 text-blue-800 border-blue-200",
+  apartado: "bg-amber-100 text-amber-800 border-amber-200",
+  pagado: "bg-emerald-100 text-emerald-800 border-emerald-200",
+  descartado: "bg-rose-100 text-rose-800 border-rose-200",
+};
+
+export const PROVIDER_STATUS_OPTIONS = (
+  Object.entries(PROVIDER_STATUS_LABELS) as [ProviderStatus, string][]
+).map(([value, label]) => ({ value, label }));
+
+export function providerStatusLabel(value?: string | null): string {
+  if (!value) return "—";
+  return PROVIDER_STATUS_LABELS[value as ProviderStatus] ?? value;
+}
