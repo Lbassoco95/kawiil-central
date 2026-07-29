@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { type ReactNode, type KeyboardEvent } from "react";
 import { cn } from "@/lib/utils";
 
 export interface KpiTileProps {
@@ -10,6 +10,8 @@ export interface KpiTileProps {
   children: ReactNode;
   footer?: ReactNode;
   className?: string;
+  /** Si se provee, el tile se vuelve clickeable (botón). */
+  onClick?: () => void;
 }
 
 /**
@@ -25,13 +27,28 @@ export function KpiTile({
   children,
   footer,
   className,
+  onClick,
 }: KpiTileProps) {
   return (
     <div
+      {...(onClick
+        ? {
+            role: "button" as const,
+            tabIndex: 0,
+            onClick,
+            onKeyDown: (e: KeyboardEvent) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onClick();
+              }
+            },
+          }
+        : {})}
       className={cn(
         "group relative overflow-hidden rounded-2xl border border-border/50 bg-card/90 p-4 shadow-sm transition-all duration-300",
         "hover:-translate-y-0.5 hover:border-border hover:shadow-lg",
         "before:absolute before:inset-x-0 before:top-0 before:h-1 before:rounded-t-2xl",
+        onClick && "cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400",
         accentClass,
         className,
       )}
