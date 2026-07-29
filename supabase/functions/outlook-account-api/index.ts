@@ -186,6 +186,41 @@ Deno.serve(async (req) => {
       return jsonResp({ id: json.id, htmlLink: json.webLink });
     }
 
+    if (action === "respond-event") {
+      // RSVP en una cuenta Outlook vinculada. params: { accountId, eventId, response, comment?, sendResponse? }
+      const acc = getAccount(params?.accountId);
+      if (!acc) return jsonResp({ error: "no_account" }, 400);
+      const token = await ensureAccessToken(supabaseAdmin, acc);
+      if (!token) return jsonResp({ error: "no_valid_token" }, 400);
+
+      const allowed: Record<string, string> = {
+        accept: "accept",
+        decline: "decline",
+        tentative: "tentativelyAccept",
+        tentativelyAccept: "tentativelyAccept",
+      };
+      const graphAction = allowed[String(params?.response || "").trim()];
+      if (!graphAction) return jsonResp({ error: "invalid_response" }, 400);
+
+      const rawEventId = String(params?.eventId || "").replace(/^outlook:/, "");
+      if (!rawEventId) return jsonResp({ error: "missing_event" }, 400);
+
+      const body: Record<string, unknown> = { sendResponse: params?.sendResponse !== false };
+      if (typeof params?.comment === "string" && params.comment.trim()) body.comment = params.comment.trim();
+
+      const res = await graphFetch(token, `/me/events/${encodeURIComponent(rawEventId)}/${graphAction}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok && res.status !== 202) {
+        let msg = "respond_failed";
+        try { const j = await res.json(); msg = j?.error?.message || msg; } catch { /* sin cuerpo */ }
+        return jsonResp({ error: msg }, 400);
+      }
+      return jsonResp({ success: true });
+    }
+
     // ─── EMAIL ACTIONS ───────────────────────────────────────────────────────
 
     if (action === "emails") {
