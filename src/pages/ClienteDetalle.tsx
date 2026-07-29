@@ -38,6 +38,7 @@ import { cn } from "@/lib/utils";
 import { TeamVisibilityBanner } from "@/components/shared/TeamVisibilityBanner";
 import { useOpenTaskAssigneeUserIds } from "@/hooks/useOpenTaskAssigneeUserIds";
 import { useClientCollaboratorIds } from "@/hooks/useClientCollaborators";
+import { useGlobalClientAccessUserIds } from "@/hooks/useGlobalClientAccess";
 import { useProfiles } from "@/hooks/useTasks";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFinanceAccess } from "@/hooks/useFinanceAccess";
@@ -104,6 +105,7 @@ const ClienteDetalle = () => {
   const openTaskIds = useMemo(() => openTasks.map((t) => t.id), [openTasks]);
   const { data: taskAssigneeUserIds = [], isLoading: loadingTaskAssignees } = useOpenTaskAssigneeUserIds(openTaskIds);
   const { data: declaredCollaboratorIds = [], isLoading: loadingDeclaredCollaborators } = useClientCollaboratorIds(id);
+  const { data: globalAccessUserIds = [] } = useGlobalClientAccessUserIds();
   const { data: orgProfiles = [] } = useProfiles();
   const profilesByUserId = useMemo(
     () => new Map(orgProfiles.map((p) => [p.user_id, p])),
@@ -112,9 +114,11 @@ const ClienteDetalle = () => {
 
   const clientCollaboratorUserIds = useMemo(() => {
     const responsible = client?.responsible_user_id;
-    const explicit = new Set(declaredCollaboratorIds);
+    const explicit = new Set([...declaredCollaboratorIds, ...globalAccessUserIds]);
     const set = new Set<string>();
     for (const uid of declaredCollaboratorIds) set.add(uid);
+    // RF-06: usuarios con acceso global son colaboradores de todos los clientes.
+    for (const uid of globalAccessUserIds) set.add(uid);
     for (const t of openTasks) {
       if (t.assigned_to) set.add(t.assigned_to);
     }
@@ -136,6 +140,7 @@ const ClienteDetalle = () => {
   }, [
     client?.responsible_user_id,
     declaredCollaboratorIds,
+    globalAccessUserIds,
     openTasks,
     taskAssigneeUserIds,
     projects,
