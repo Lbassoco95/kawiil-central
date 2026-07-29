@@ -603,6 +603,61 @@ export function useUpdateCalendarEvent() {
   });
 }
 
+/**
+ * Responde a una invitación (RSVP) desde el calendario: aceptar / tentativo / rechazar.
+ * Aplica a la cuenta principal de Microsoft. Graph envía la respuesta al organizador
+ * y actualiza el responseStatus del evento.
+ */
+export function useRespondEvent() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      eventId,
+      response,
+      comment,
+      sendResponse = true,
+    }: {
+      eventId: string;
+      response: "accept" | "decline" | "tentative";
+      comment?: string;
+      sendResponse?: boolean;
+    }) => {
+      const res = await supabase.functions.invoke("microsoft-api", {
+        body: { action: "respond-event", params: { eventId, response, comment, sendResponse } },
+      });
+      const errBody = await readSupabaseFunctionErrorBody(res.error);
+      if (payloadIndicatesItemNotFound(res.data, res.error, errBody)) {
+        throw new Error("El evento ya no existe. Puede que la invitación haya sido cancelada.");
+      }
+      if (res.error) {
+        const msg = res.error?.message || String(res.error);
+        const detail = (errBody || "").trim().slice(0, 300);
+        throw new Error(detail ? `${msg}: ${detail}` : msg);
+      }
+      if (res.data?.error) throw new Error(res.data.error);
+      return res.data;
+    },
+    onSuccess: (_data, vars) => {
+      const label =
+        vars.response === "accept"
+          ? "Invitación aceptada"
+          : vars.response === "tentative"
+            ? "Marcada como tentativa"
+            : "Invitación rechazada";
+      toast.success(label);
+      queryClient.invalidateQueries({ queryKey: ["calendar-event-detail", vars.eventId] });
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ["calendar-events"] });
+        queryClient.invalidateQueries({ queryKey: ["calendar-event-detail", vars.eventId] });
+      }, 2000);
+    },
+    onError: (err: Error) => {
+      toast.error("No se pudo responder la invitación: " + err.message);
+    },
+  });
+}
+
 export function useOutlookCategories() {
   const { user } = useAuth();
 
