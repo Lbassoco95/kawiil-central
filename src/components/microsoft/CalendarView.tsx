@@ -580,10 +580,16 @@ export function CalendarView({
   const { connect: connectGoogle, isConnecting: googleConnecting, disconnect: disconnectGoogle } = useGoogleConnection();
   const { connect: connectOutlook, isConnecting: outlookConnecting, disconnect: disconnectOutlook } = useOutlookConnection();
   const renameAccount = useRenameLinkedAccount();
-  const hasGoogle = linkedAccounts.some((a) => a.provider === "google" && a.status === "connected" && a.calendar_enabled);
-  const hasOutlookLinked = linkedAccounts.some((a) => a.provider === "microsoft" && a.status === "connected" && a.calendar_enabled);
+  // Nota: no exigimos status === "connected". Un token que expiró deja la cuenta en
+  // "error", pero el backend intenta refrescarlo; si lo forzáramos a "connected" aquí,
+  // la cuenta nunca se recuperaría ni podríamos mostrar el diagnóstico. Solo excluimos
+  // las explícitamente desconectadas.
+  const hasGoogle = linkedAccounts.some((a) => a.provider === "google" && a.calendar_enabled && a.status !== "disconnected");
+  const hasOutlookLinked = linkedAccounts.some((a) => a.provider === "microsoft" && a.calendar_enabled && a.status !== "disconnected");
   const { data: googleEventsData } = useGoogleCalendarEvents(rangeStartISO, rangeEndISO, hasGoogle);
-  const { data: googleCalendars = [] } = useGoogleCalendars(hasGoogle);
+  const { data: googleCalData } = useGoogleCalendars(hasGoogle);
+  const googleCalendars = googleCalData?.value ?? [];
+  const googleCalDiagnostics = googleCalData?.diagnostics ?? [];
   const { data: outlookEventsData } = useOutlookAccountEvents(rangeStartISO, rangeEndISO, hasOutlookLinked);
   const { data: outlookCalendars = [] } = useOutlookAccountCalendars(hasOutlookLinked);
   // Nombre que el usuario asignó a cada cuenta (display_name) o su email.
@@ -1728,6 +1734,35 @@ export function CalendarView({
               {/* Cuentas conectadas (multi-proveedor) */}
               <div className="order-5 border-t border-border/30 pt-3">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Cuentas</p>
+                {/* Diagnóstico: cuentas Google cuyos calendarios no cargaron (antes fallaban en silencio) */}
+                {googleCalDiagnostics.filter((d) => !d.ok).map((d) => {
+                  const detail =
+                    d.reason === "calendar_api_disabled"
+                      ? "La API de Google Calendar no está habilitada en el proyecto de Google Cloud. Un administrador debe activarla."
+                      : d.reason === "reconnect_needed"
+                        ? "La sesión de Google expiró. Vuelve a conectar la cuenta."
+                        : d.message || "No se pudieron cargar los calendarios de esta cuenta.";
+                  return (
+                    <div key={`gdiag-${d.accountId}`} className="mb-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-2 text-[11px] leading-snug">
+                      <div className="flex items-start gap-1.5">
+                        <AlertCircle className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5" />
+                        <div className="min-w-0">
+                          <p className="font-medium text-foreground truncate">Google · {d.email || "cuenta"}</p>
+                          <p className="text-muted-foreground">{detail}</p>
+                          {d.reason === "reconnect_needed" && (
+                            <button
+                              type="button"
+                              onClick={() => connectGoogle()}
+                              className="mt-1 text-[11px] font-medium text-primary hover:underline"
+                            >
+                              Reconectar Google
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
                 <div className="space-y-1">
                   {/* Cuenta principal de Microsoft (Kawiil): editable nombre + color, no se puede quitar */}
                   {calendars.length > 0 && (

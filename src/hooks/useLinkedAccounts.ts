@@ -160,16 +160,28 @@ export interface GoogleCalendar {
 }
 
 /** Lista los calendarios de las cuentas Google conectadas (con id namespaced). */
+export interface CalendarAccountDiagnostic {
+  accountId: string;
+  email: string | null;
+  ok: boolean;
+  reason?: "reconnect_needed" | "calendar_api_disabled" | "forbidden" | "api_error";
+  message?: string;
+  count?: number;
+}
+
 export function useGoogleCalendars(enabled = true) {
   const { user } = useAuth();
   return useQuery({
     queryKey: ["google-calendars"],
-    queryFn: async (): Promise<GoogleCalendar[]> => {
+    queryFn: async (): Promise<{ value: GoogleCalendar[]; diagnostics: CalendarAccountDiagnostic[] }> => {
       const { data, error } = await supabase.functions.invoke("google-api", {
         body: { action: "calendars" },
       });
       if (error) throw error;
-      return (data?.value as GoogleCalendar[]) || [];
+      return {
+        value: (data?.value as GoogleCalendar[]) || [],
+        diagnostics: (data?.diagnostics as CalendarAccountDiagnostic[]) || [],
+      };
     },
     enabled: !!user && enabled,
     staleTime: 5 * 60 * 1000,
