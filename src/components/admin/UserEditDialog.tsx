@@ -139,6 +139,8 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
   const [savioWriteEnabled, setSavioWriteEnabled] = useState(false);
   const [taskDeleteEnabled, setTaskDeleteEnabled] = useState(false);
   const [taskDueDatesEnabled, setTaskDueDatesEnabled] = useState(false);
+  const [globalClientAccessEnabled, setGlobalClientAccessEnabled] = useState(false);
+  const editQueryClient = useQueryClient();
 
   const form = useForm<EditFormValues>({
     resolver: zodResolver(editSchema),
@@ -169,6 +171,7 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
       const stored = parseKawiilerPermissions(user.kawiiler_permissions);
       setTaskDeleteEnabled(stored.can_delete_tasks ?? !!defs.can_delete_tasks);
       setTaskDueDatesEnabled(stored.can_edit_task_due_dates ?? !!defs.can_edit_task_due_dates);
+      setGlobalClientAccessEnabled(!!(user as { has_global_client_access?: boolean }).has_global_client_access);
     }
   }, [user, open, form, userCelulas, userModules, savioViewerRow]);
 
@@ -232,6 +235,14 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
             enabled: savioEffective,
             canWriteSavio: savioEffective && savioWriteEnabled,
           });
+
+          // RF-06: acceso global a la cartera de clientes.
+          const { error: globalAccessError } = await supabase
+            .from("profiles" as any)
+            .update({ has_global_client_access: globalClientAccessEnabled } as any)
+            .eq("user_id", user.user_id);
+          if (globalAccessError) throw globalAccessError;
+          editQueryClient.invalidateQueries({ queryKey: ["global-client-access-user-ids"] });
         }
       }
 
@@ -428,6 +439,27 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
             )}
 
             {showTaskPerms && isAdminOrManager && <Separator />}
+
+            {isAdminOrManager && (
+              <div className="rounded-md border border-border/80 bg-muted/20 p-3 space-y-3">
+                <div>
+                  <p className="text-sm font-medium">Cartera de clientes</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Con «Acceso global» el usuario aparece como colaborador en todos los clientes
+                    (sin desplazar al responsable), sin crear una asignación por cliente.
+                  </p>
+                </div>
+                <label className="flex items-center justify-between gap-2 text-sm">
+                  <span className="text-muted-foreground">Acceso global a toda la cartera</span>
+                  <Switch
+                    checked={globalClientAccessEnabled}
+                    onCheckedChange={setGlobalClientAccessEnabled}
+                  />
+                </label>
+              </div>
+            )}
+
+            {isAdminOrManager && <Separator />}
 
             {isAdminOrManager && (
               <div className="rounded-md border border-border/80 bg-muted/30 p-3 space-y-3">

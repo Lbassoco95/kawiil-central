@@ -16,6 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useClients, useDeleteClient, useOrgProfiles } from "@/hooks/useClients";
 import { useClientGroups } from "@/hooks/useClientGroups";
 import { ClientFormDialog } from "@/components/clients/ClientFormDialog";
+import { ResponsibleInlineSelect } from "@/components/clients/ResponsibleInlineSelect";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -268,6 +269,18 @@ const Clientes = () => {
     };
   }, [clients, responsibleUserFilter]);
 
+  /** Cobertura de responsable en la cartera (RF-02: "X de Y con responsable"). */
+  const responsibleCoverage = useMemo(() => {
+    const total = (clients ?? []).length;
+    const withResponsible = (clients ?? []).filter((c) => !!c.responsible_user_id).length;
+    return { total, withResponsible };
+  }, [clients]);
+
+  const profilesLite = useMemo(
+    () => (profiles ?? []).map((p) => ({ user_id: p.user_id, full_name: p.full_name })),
+    [profiles]
+  );
+
   const toggleGroup = (key: string) => {
     setCollapsedGroups((prev) => {
       const next = new Set(prev);
@@ -432,6 +445,19 @@ const Clientes = () => {
             <span className="text-xs text-muted-foreground whitespace-nowrap">
               {filtered.length} cliente{filtered.length !== 1 ? "s" : ""}
             </span>
+            {responsibleCoverage.total > 0 && (
+              <span
+                className={cn(
+                  "text-xs whitespace-nowrap rounded-full border px-2 py-0.5",
+                  responsibleCoverage.withResponsible === responsibleCoverage.total
+                    ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                    : "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                )}
+                title="Clientes con responsable asignado"
+              >
+                {responsibleCoverage.withResponsible} de {responsibleCoverage.total} con responsable
+              </span>
+            )}
           </div>
 
           <div
@@ -579,6 +605,16 @@ const Clientes = () => {
                                   </span>
                                 )}
                               </div>
+                            </div>
+
+                            {/* Responsable (edición en línea — RF-02) */}
+                            <div className="hidden md:flex shrink-0 w-[170px] justify-end">
+                              <ResponsibleInlineSelect
+                                clientId={client.id}
+                                responsibleUserId={client.responsible_user_id}
+                                profiles={profilesLite}
+                                canEdit={isAdminOrManager}
+                              />
                             </div>
 
                             {/* Service area chips */}
