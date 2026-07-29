@@ -4974,6 +4974,7 @@ export type Database = {
       }
       tasks: {
         Row: {
+          activity_id: string | null
           area: string | null
           assigned_to: string | null
           checklist: Json | null
@@ -5009,6 +5010,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          activity_id?: string | null
           area?: string | null
           assigned_to?: string | null
           checklist?: Json | null
@@ -5044,6 +5046,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          activity_id?: string | null
           area?: string | null
           assigned_to?: string | null
           checklist?: Json | null

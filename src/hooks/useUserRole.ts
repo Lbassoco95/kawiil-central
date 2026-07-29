@@ -10,7 +10,7 @@ import {
 export function useUserRole() {
   const { user } = useAuth();
 
-  const { data: role } = useQuery({
+  const { data: role, isLoading: roleLoading } = useQuery({
     queryKey: ["user-role", user?.id],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -53,6 +53,7 @@ export function useUserRole() {
   return {
     role: currentRole,
     grado: currentRole,
+    isLoading: roleLoading,
     isTransformador,
     isReferenteOrAbove,
     canManageTasks,

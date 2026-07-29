@@ -8,11 +8,12 @@ import { ArrowLeft, Pencil, Trash2, ExternalLink } from "lucide-react";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ActivityFormDialog } from "@/components/actividades/ActivityFormDialog";
-import { ActivityItemsCard } from "@/components/actividades/ActivityItemsCard";
+import { ActivityTasksCard } from "@/components/actividades/ActivityTasksCard";
 import { ActivityAttendeesCard } from "@/components/actividades/ActivityAttendeesCard";
 import { ActivityProvidersCard } from "@/components/actividades/ActivityProvidersCard";
 import { useActivity, useDeleteActivity } from "@/hooks/useActivities";
 import { useProfiles } from "@/hooks/useTasks";
+import { useUserRole } from "@/hooks/useUserRole";
 import {
   activityTypeLabel, activityStatusLabel, ACTIVITY_STATUS_STYLES, type ActivityStatus,
 } from "@/lib/activityTypes";
@@ -32,7 +33,13 @@ const ActividadDetalle = () => {
   const { data: activity, isLoading } = useActivity(id);
   const { data: profiles } = useProfiles();
   const deleteActivity = useDeleteActivity();
+  const { isTransformador, isLoading: roleLoading } = useUserRole();
   const [confirmOpen, setConfirmOpen] = useState(false);
+
+  // Módulo exclusivo para G4 (transformador).
+  if (!roleLoading && !isTransformador) {
+    return <Navigate to="/" replace />;
+  }
 
   if (isLoading) {
     return (
@@ -130,7 +137,7 @@ const ActividadDetalle = () => {
                 <TabsTrigger value="proveedores">Proveedores</TabsTrigger>
               </TabsList>
               <TabsContent value="pendientes" className="mt-4">
-                <ActivityItemsCard activityId={activity.id} />
+                <ActivityTasksCard activityId={activity.id} />
               </TabsContent>
               <TabsContent value="asistentes" className="mt-4">
                 <ActivityAttendeesCard activityId={activity.id} />

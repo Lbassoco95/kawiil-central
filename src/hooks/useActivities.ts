@@ -9,14 +9,9 @@ import { toast } from "sonner";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 
 export type Activity = Tables<"activities">;
-export type ActivityItem = Tables<"activity_items">;
 
 export type ActivityCreateInput = Omit<
   TablesInsert<"activities">,
-  "organization_id" | "created_by" | "id" | "created_at" | "updated_at"
->;
-export type ActivityItemCreateInput = Omit<
-  TablesInsert<"activity_items">,
   "organization_id" | "created_by" | "id" | "created_at" | "updated_at"
 >;
 
@@ -122,77 +117,28 @@ export function useDeleteActivity() {
   });
 }
 
-// ─── Pendientes / seguimiento ────────────────────────────────────────────────
-export function useActivityItems(activityId?: string) {
+// ─── Pendientes / seguimiento (son TAREAS reales ligadas a la actividad) ─────
+export type ActivityTask = Tables<"tasks">;
+
+/**
+ * Tareas de una actividad. La queryKey empieza con ["tasks", ...] a propósito:
+ * así las invalidaciones de useCreateTask/useUpdateTask/useDeleteTask (que
+ * invalidan ["tasks"]) refrescan también esta lista automáticamente.
+ */
+export function useActivityTasks(activityId?: string) {
   const { user } = useAuth();
   return useQuery({
-    queryKey: ["activity-items", activityId],
+    queryKey: ["tasks", "activity", activityId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("activity_items")
+        .from("tasks")
         .select("*")
         .eq("activity_id", activityId!)
-        .order("sort_order", { ascending: true })
+        .order("due_date", { ascending: true, nullsFirst: false })
         .order("created_at", { ascending: true });
       if (error) throw error;
-      return data as ActivityItem[];
+      return data as ActivityTask[];
     },
     enabled: !!user && !!activityId,
-  });
-}
-
-export function useCreateActivityItem() {
-  const queryClient = useQueryClient();
-  const { user } = useAuth();
-  return useMutation({
-    mutationFn: async (input: ActivityItemCreateInput) => {
-      const organization_id = await getOrgId(user!.id);
-      const { data, error } = await supabase
-        .from("activity_items")
-        .insert({ ...input, organization_id, created_by: user!.id })
-        .select()
-        .single();
-      if (error) throw error;
-      return data as ActivityItem;
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["activity-items", data.activity_id] });
-    },
-    onError: (e: Error) => toast.error("Error al agregar el pendiente: " + e.message),
-  });
-}
-
-export function useUpdateActivityItem() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, ...updates }: TablesUpdate<"activity_items"> & { id: string }) => {
-      const { data, error } = await supabase
-        .from("activity_items")
-        .update(updates)
-        .eq("id", id)
-        .select()
-        .single();
-      if (error) throw error;
-      return data as ActivityItem;
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["activity-items", data.activity_id] });
-    },
-    onError: (e: Error) => toast.error("Error al actualizar el pendiente: " + e.message),
-  });
-}
-
-export function useDeleteActivityItem() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id }: { id: string; activityId: string }) => {
-      const { error } = await supabase.from("activity_items").delete().eq("id", id);
-      if (error) throw error;
-      return id;
-    },
-    onSuccess: (_id, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["activity-items", variables.activityId] });
-    },
-    onError: (e: Error) => toast.error("Error al eliminar el pendiente: " + e.message),
   });
 }
