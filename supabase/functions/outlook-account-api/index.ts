@@ -221,6 +221,47 @@ Deno.serve(async (req) => {
       return jsonResp({ success: true });
     }
 
+    if (action === "update-event") {
+      // Edita un evento de una cuenta Outlook vinculada. params: { accountId, eventId, payload }
+      const acc = getAccount(params?.accountId);
+      if (!acc) return jsonResp({ error: "no_account" }, 400);
+      const token = await ensureAccessToken(supabaseAdmin, acc);
+      if (!token) return jsonResp({ error: "no_valid_token" }, 400);
+      const rawEventId = String(params?.eventId || "").replace(/^outlook:/, "");
+      if (!rawEventId) return jsonResp({ error: "missing_event" }, 400);
+      const payload = params?.payload && typeof params.payload === "object" ? params.payload : {};
+
+      const res = await graphFetch(token, `/me/events/${encodeURIComponent(rawEventId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Prefer: 'outlook.timezone="America/Mexico_City"' },
+        body: JSON.stringify(payload),
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        let msg = `HTTP ${res.status}`;
+        try { msg = JSON.parse(text)?.error?.message || msg; } catch { /* sin cuerpo JSON */ }
+        return jsonResp({ error: msg }, 400);
+      }
+      return jsonResp(text ? JSON.parse(text) : { success: true });
+    }
+
+    if (action === "delete-event") {
+      // Elimina un evento de una cuenta Outlook vinculada. params: { accountId, eventId }
+      const acc = getAccount(params?.accountId);
+      if (!acc) return jsonResp({ error: "no_account" }, 400);
+      const token = await ensureAccessToken(supabaseAdmin, acc);
+      if (!token) return jsonResp({ error: "no_valid_token" }, 400);
+      const rawEventId = String(params?.eventId || "").replace(/^outlook:/, "");
+      if (!rawEventId) return jsonResp({ error: "missing_event" }, 400);
+      const res = await graphFetch(token, `/me/events/${encodeURIComponent(rawEventId)}`, { method: "DELETE" });
+      if (!res.ok && res.status !== 404) {
+        let msg = `HTTP ${res.status}`;
+        try { msg = (await res.json())?.error?.message || msg; } catch { /* sin cuerpo */ }
+        return jsonResp({ error: msg }, 400);
+      }
+      return jsonResp({ success: true });
+    }
+
     // ─── EMAIL ACTIONS ───────────────────────────────────────────────────────
 
     if (action === "emails") {

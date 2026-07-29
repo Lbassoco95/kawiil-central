@@ -406,6 +406,56 @@ export function useRoutedRespondEvent() {
   return { mutate, isPending: primary.isPending || outlook.isPending || google.isPending };
 }
 
+/**
+ * Actualiza un evento (PATCH parcial) ruteando al backend correcto. Silencioso (sin
+ * toasts) — pensado para sincronizaciones en segundo plano como reflejar las
+ * categorías Kawiil en las categorías nativas de Outlook. Google no soporta
+ * categorías de texto, así que ahí se ignora.
+ */
+export function useRoutedUpdateEvent() {
+  const queryClient = useQueryClient();
+
+  const primary = useMutation({
+    mutationFn: async (vars: { eventId: string; payload: Record<string, any> }) => {
+      const { data, error } = await supabase.functions.invoke("microsoft-api", {
+        body: { action: "update-event", params: { eventId: vars.eventId, payload: vars.payload } },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: () => {
+      setTimeout(() => queryClient.invalidateQueries({ queryKey: ["calendar-events"] }), 1500);
+    },
+  });
+
+  const outlook = useMutation({
+    mutationFn: async (vars: { accountId: string | null; eventId: string; payload: Record<string, any> }) => {
+      const { data, error } = await supabase.functions.invoke("outlook-account-api", {
+        body: { action: "update-event", params: { accountId: vars.accountId, eventId: vars.eventId, payload: vars.payload } },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: () => {
+      setTimeout(() => queryClient.invalidateQueries({ queryKey: ["outlook-account-events"] }), 1500);
+    },
+  });
+
+  const mutate = (args: { eventId: string; calendarId?: string | null; payload: Record<string, any> }) => {
+    const ref = parseCalendarEventRef(args.eventId, args.calendarId);
+    if (ref.provider === "outlook") {
+      outlook.mutate({ accountId: ref.accountId, eventId: ref.rawEventId!, payload: args.payload });
+    } else if (ref.provider === "primary") {
+      primary.mutate({ eventId: args.eventId, payload: args.payload });
+    }
+    // Google: sin categorías nativas → no-op.
+  };
+
+  return { mutate, isPending: primary.isPending || outlook.isPending };
+}
+
 // ─── Account color utility ────────────────────────────────────────────────────
 const LINKED_ACCOUNT_COLORS = [
   "hsl(210 100% 47%)",
