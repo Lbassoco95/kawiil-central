@@ -53,7 +53,7 @@ import { CreateTaskFromEventDialog } from "@/components/microsoft/CreateTaskFrom
 import {
   useLinkedAccounts, useGoogleConnection, useGoogleCalendarEvents, useGoogleCalendars,
   useOutlookConnection, useOutlookAccountEvents, useOutlookAccountCalendars, useRenameLinkedAccount,
-  useRoutedRespondEvent,
+  useRoutedRespondEvent, useRoutedUpdateEvent, parseCalendarEventRef,
 } from "@/hooks/useLinkedAccounts";
 import { ColorPickerPopover, paletteColorFor, hexAlpha } from "@/components/microsoft/ColorPickerPopover";
 import {
@@ -446,6 +446,7 @@ export function CalendarView({
   } = useEventDetail(isGoogleEvent ? null : selectedEventId);
   const updateEvent = useUpdateCalendarEvent();
   const respondEvent = useRoutedRespondEvent();
+  const routedUpdateEvent = useRoutedUpdateEvent();
   const { data: outlookCategories = [] } = useOutlookCategories();
   const createOutlookCategory = useCreateOutlookCategory();
   const deleteOutlookCategory = useDeleteOutlookCategory();
@@ -660,6 +661,22 @@ export function CalendarView({
   }, [kawiilCategories]);
   const eventCategoryChips = (eventId?: string | null) =>
     ((eventId && eventTags[eventId]) || []).map((cid) => categoryById.get(cid)).filter(Boolean) as Array<{ name: string; color: string }>;
+
+  // Alterna una etiqueta Kawiil (universal, cualquier cuenta) y, en cuentas Microsoft
+  // (principal u Outlook vinculado), la refleja como categoría NATIVA de Outlook para
+  // que también se vea en la app de Outlook. Google no tiene categorías de texto.
+  const handleToggleEventTag = (ev: any, cat: { id: string; name: string }, active: boolean) => {
+    if (!ev?.id) return;
+    toggleEventTag.mutate({ eventId: ev.id, categoryId: cat.id, active });
+    const ref = parseCalendarEventRef(ev.id, ev.calendarId);
+    if (ref.provider === "primary" || ref.provider === "outlook") {
+      const current: string[] = Array.isArray(ev.categories) ? ev.categories : [];
+      const next = active
+        ? Array.from(new Set([...current, cat.name]))
+        : current.filter((c) => c !== cat.name);
+      routedUpdateEvent.mutate({ eventId: ev.id, calendarId: ev.calendarId, payload: { categories: next } });
+    }
+  };
 
   const allEvents = useMemo(() => {
     const m365 = Array.isArray(eventsData) ? eventsData : [];
@@ -2581,7 +2598,7 @@ export function CalendarView({
                         const checked = (eventTags[selectedEventId] || []).includes(cat.id);
                         return (
                           <label key={cat.id} className={cn("flex items-center gap-1.5 text-sm cursor-pointer rounded-full border px-2.5 py-1 transition-colors", checked ? "border-transparent" : "border-border hover:bg-accent/50")} style={checked ? { backgroundColor: hexAlpha(cat.color, 0.18), borderColor: hexAlpha(cat.color, 0.5) } : undefined}>
-                            <Checkbox checked={checked} onCheckedChange={() => toggleEventTag.mutate({ eventId: selectedEventId, categoryId: cat.id, active: !checked })} className="h-3.5 w-3.5" />
+                            <Checkbox checked={checked} onCheckedChange={() => handleToggleEventTag(cachedEvent || eventDetail, cat, !checked)} className="h-3.5 w-3.5" />
                             <span className="inline-flex items-center gap-1">
                               <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />{cat.name}
                             </span>
