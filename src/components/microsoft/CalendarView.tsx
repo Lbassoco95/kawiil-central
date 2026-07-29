@@ -14,6 +14,7 @@ import {
   useDeleteCalendarEvent,
   useEventDetail,
   useUpdateCalendarEvent,
+  useRespondEvent,
   useOutlookCategories, useCreateOutlookCategory, useDeleteOutlookCategory,
 } from "@/hooks/useMicrosoft";
 import { useTasksForCalendar } from "@/hooks/useTasks";
@@ -41,7 +42,7 @@ import { es } from "date-fns/locale";
 import {
   Plus, ChevronLeft, ChevronRight, Loader2, Trash2, Video, Pencil,
   CalendarDays, CheckSquare, Clock, MapPin, Users, ExternalLink, AlertCircle,
-  PanelRightClose, PanelRightOpen, Car, Lock, RefreshCw,
+  PanelRightClose, PanelRightOpen, Car, Lock, RefreshCw, Check, X, HelpCircle,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -444,6 +445,7 @@ export function CalendarView({
     error: eventDetailError,
   } = useEventDetail(isGoogleEvent ? null : selectedEventId);
   const updateEvent = useUpdateCalendarEvent();
+  const respondEvent = useRespondEvent();
   const { data: outlookCategories = [] } = useOutlookCategories();
   const createOutlookCategory = useCreateOutlookCategory();
   const deleteOutlookCategory = useDeleteOutlookCategory();
@@ -2364,6 +2366,68 @@ export function CalendarView({
                   </Button>
                 </div>
               )}
+              {/* RSVP: responder invitación (cuenta principal Microsoft) */}
+              {!isGoogleEvent && (() => {
+                const src = eventDetail || cachedEvent;
+                if (!src) return null;
+                const attendees = Array.isArray(src.attendees) ? src.attendees : [];
+                const rawStatus = src.responseStatus?.response as string | undefined;
+                const isOrganizer = src.isOrganizer === true || rawStatus === "organizer";
+                // Solo mostramos RSVP si somos invitados (no organizador) y hay asistentes.
+                if (isOrganizer || attendees.length === 0) return null;
+
+                const statusLabel: Record<string, string> = {
+                  accepted: "Aceptaste esta invitación",
+                  tentativelyAccepted: "Respondiste como tentativo",
+                  declined: "Rechazaste esta invitación",
+                  notResponded: "Aún no has respondido",
+                  none: "Aún no has respondido",
+                };
+                const label = statusLabel[rawStatus || "none"] || "Aún no has respondido";
+                const responded = rawStatus === "accepted" || rawStatus === "tentativelyAccepted" || rawStatus === "declined";
+                const respond = (response: "accept" | "tentative" | "decline") => {
+                  if (!selectedEventId) return;
+                  respondEvent.mutate({ eventId: selectedEventId, response });
+                };
+                return (
+                  <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2.5">
+                    <div className="flex items-center gap-2 text-sm">
+                      <Users className="h-4 w-4 text-primary shrink-0" />
+                      <span className="font-medium text-foreground">Invitación</span>
+                      <span className="text-muted-foreground">· {label}</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <Button
+                        variant={rawStatus === "accepted" ? "default" : "outline"}
+                        size="sm"
+                        disabled={respondEvent.isPending}
+                        onClick={() => respond("accept")}
+                      >
+                        <Check className="mr-1 h-4 w-4" /> Aceptar
+                      </Button>
+                      <Button
+                        variant={rawStatus === "tentativelyAccepted" ? "default" : "outline"}
+                        size="sm"
+                        disabled={respondEvent.isPending}
+                        onClick={() => respond("tentative")}
+                      >
+                        <HelpCircle className="mr-1 h-4 w-4" /> Tentativo
+                      </Button>
+                      <Button
+                        variant={rawStatus === "declined" ? "default" : "outline"}
+                        size="sm"
+                        disabled={respondEvent.isPending}
+                        onClick={() => respond("decline")}
+                      >
+                        <X className="mr-1 h-4 w-4" /> Rechazar
+                      </Button>
+                    </div>
+                    {responded && (
+                      <p className="text-[11px] text-muted-foreground">Puedes cambiar tu respuesta en cualquier momento.</p>
+                    )}
+                  </div>
+                );
+              })()}
               <div className="space-y-2">
                 <Label>Asunto</Label>
                 <Input value={editForm.subject} onChange={(e) => setEditForm({ ...editForm, subject: e.target.value })} />

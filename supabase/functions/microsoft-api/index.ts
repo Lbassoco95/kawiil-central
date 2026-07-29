@@ -1250,6 +1250,51 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case "respond-event": {
+        // RSVP a una invitación: aceptar / rechazar / tentativo desde el calendario.
+        const encodedEventId = encodeURIComponent(params.eventId);
+        const responseType = String(params?.response || "").trim();
+        const allowed: Record<string, string> = {
+          accept: "accept",
+          decline: "decline",
+          tentative: "tentativelyAccept",
+          tentativelyAccept: "tentativelyAccept",
+        };
+        const action = allowed[responseType];
+        if (!action) throw new Error("response must be accept, decline or tentative");
+
+        const body: Record<string, any> = {
+          sendResponse: params?.sendResponse !== false,
+        };
+        if (typeof params?.comment === "string" && params.comment.trim()) {
+          body.comment = params.comment.trim();
+        }
+
+        await graphMailFetchWithRetry(accessToken, `/me/events/${encodedEventId}/${action}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+
+        // Graph responde 202 sin cuerpo; devolvemos el estado ya persistido.
+        let persistedEvent: any = null;
+        try {
+          const verifyRes = await graphMailFetchWithRetry(accessToken, `/me/events/${encodedEventId}`, {
+            headers: { Prefer: 'outlook.timezone="America/Mexico_City"' },
+          });
+          persistedEvent = await verifyRes.json();
+        } catch (ve) {
+          const vm = ve instanceof Error ? ve.message : String(ve);
+          if (!/\[404\]/.test(vm) && !vm.toLowerCase().includes("erroritemnotfound")) throw ve;
+        }
+
+        result = persistedEvent || {
+          success: true,
+          responseStatus: { response: action === "tentativelyAccept" ? "tentativelyAccepted" : `${action}ed` },
+        };
+        break;
+      }
+
       case "outlook-categories": {
         const res = await graphMailFetchWithRetry(accessToken, `/me/outlook/masterCategories`, {
           headers: {},
