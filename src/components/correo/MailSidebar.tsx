@@ -235,7 +235,12 @@ function LinkedOutlookSection({
 }) {
   const colorForAccount = useAccountColor();
   const color = colorForAccount(account.id);
-  const label = account.display_name || account.email || "Outlook";
+  // Identificamos la cuenta por su CORREO (igual que en Calendario), para que sea consistente entre
+  // módulos y se distingan cuentas con el mismo nombre configurado. El nombre amistoso va de subtítulo.
+  const label = account.email || account.display_name || "Outlook";
+  const subLabel = account.display_name && account.display_name.trim().toLowerCase() !== (account.email || "").trim().toLowerCase()
+    ? account.display_name
+    : "";
   const inboxId = `outlook:${account.id}:inbox`;
   const sentId = `outlook:${account.id}:sentItems`;
 
@@ -243,9 +248,14 @@ function LinkedOutlookSection({
     <div className="mt-2">
       <div className="flex items-center gap-1.5 px-4 mb-1">
         <MailAccountBadge email={account.email || account.id} color={color} size="sm" />
-        <p className="text-[9.5px] font-bold uppercase tracking-widest text-muted-foreground/60 truncate flex-1">
-          {label}
-        </p>
+        <div className="min-w-0 flex-1">
+          <p className="text-[9.5px] font-bold uppercase tracking-widest text-muted-foreground/60 truncate" title={account.email || undefined}>
+            {label}
+          </p>
+          {subLabel && (
+            <p className="text-[9px] font-normal tracking-normal normal-case text-muted-foreground/45 truncate">{subLabel}</p>
+          )}
+        </div>
         {unreadCount > 0 && (
           <span className="text-[10px] font-medium text-muted-foreground/60 shrink-0">{unreadCount}</span>
         )}
@@ -291,7 +301,10 @@ function LinkedGmailSection({
 }) {
   const colorForAccount = useAccountColor();
   const color = colorForAccount(account.id);
-  const label = account.display_name || account.email || "Gmail";
+  const label = account.email || account.display_name || "Gmail";
+  const subLabel = account.display_name && account.display_name.trim().toLowerCase() !== (account.email || "").trim().toLowerCase()
+    ? account.display_name
+    : "";
   const inboxId = `gmail:${account.id}:INBOX`;
   const sentId = `gmail:${account.id}:SENT`;
 
@@ -299,9 +312,14 @@ function LinkedGmailSection({
     <div className="mt-2">
       <div className="flex items-center gap-1.5 px-4 mb-1">
         <MailAccountBadge email={account.email || account.id} color={color} size="sm" />
-        <p className="text-[9.5px] font-bold uppercase tracking-widest text-muted-foreground/60 truncate flex-1">
-          {label}
-        </p>
+        <div className="min-w-0 flex-1">
+          <p className="text-[9.5px] font-bold uppercase tracking-widest text-muted-foreground/60 truncate" title={account.email || undefined}>
+            {label}
+          </p>
+          {subLabel && (
+            <p className="text-[9px] font-normal tracking-normal normal-case text-muted-foreground/45 truncate">{subLabel}</p>
+          )}
+        </div>
         {unreadCount > 0 && (
           <span className="text-[10px] font-medium text-muted-foreground/60 shrink-0">{unreadCount}</span>
         )}
