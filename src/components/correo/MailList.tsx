@@ -180,6 +180,10 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
     void linkedOutlookQuery.refetch();
     void linkedGmailQuery.refetch();
   };
+  // Momento de la última actualización real (para mostrar "Act. hh:mm" y confirmar sincronización).
+  const lastUpdatedAt = combineAll
+    ? Math.max(primaryQuery.dataUpdatedAt || 0, linkedOutlookQuery.dataUpdatedAt || 0, linkedGmailQuery.dataUpdatedAt || 0)
+    : (activeQuery.dataUpdatedAt || 0);
 
   const linkedError = isLinkedOutlook
     ? (linkedOutlookQuery.error as (Error & { code?: string }) | null)
@@ -420,7 +424,15 @@ const now = useMemo(() => new Date(), []);
           Redactar
         </button>
         <div className="flex-1" />
-        <Tip label="Sincronizar con Outlook">
+        {(lastUpdatedAt > 0 || isFetching) && (
+          <span
+            className="text-[10.5px] text-muted-foreground/70 mr-0.5 hidden sm:inline whitespace-nowrap"
+            title={lastUpdatedAt > 0 ? `Última actualización: ${format(new Date(lastUpdatedAt), "d 'de' MMM, HH:mm", { locale: es })}` : undefined}
+          >
+            {isFetching ? "Actualizando…" : `Act. ${format(new Date(lastUpdatedAt), "HH:mm")}`}
+          </span>
+        )}
+        <Tip label="Actualizar correos de todas las cuentas">
           <button
             onClick={() => { void refetch(); }}
             disabled={isFetching}
@@ -525,9 +537,10 @@ const now = useMemo(() => new Date(), []);
           />
         </div>
         <button
-          onClick={() => queryClient.invalidateQueries({ queryKey: ["outlook-emails"] })}
-          className="h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shrink-0"
-          title="Actualizar"
+          onClick={() => { void refetch(); }}
+          disabled={isFetching}
+          className="h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shrink-0 disabled:opacity-40"
+          title="Actualizar correos de todas las cuentas"
         >
           {isFetching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
         </button>
