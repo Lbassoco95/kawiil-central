@@ -3,12 +3,23 @@ import {
   extractCidRefsFromHtml,
   findAttachmentForCid,
   replaceCidInHtml,
-  fetchMessageAttachmentContent,
   inferMimeFromFileName,
   type OutlookAttachment,
 } from "@/lib/outlookEmailMedia";
+import { fetchRoutedAttachmentBlob } from "@/hooks/useLinkedAccounts";
 
 const MAX_INLINE_BYTES = 4 * 1024 * 1024;
+
+/** Blob → base64 por chunks (evita stack overflow con binarios grandes). */
+async function blobToBase64(blob: Blob): Promise<string> {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  const CHUNK = 0x2000;
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
+}
 
 /**
  * Sustituye referencias cid: del HTML por data URLs (contenido del adjunto vía Graph).
@@ -52,16 +63,26 @@ export function useResolvedEmailHtml(
           const att = findAttachmentForCid(attachments, cid);
           if (!att?.id) continue;
           try {
-            const r = await fetchMessageAttachmentContent(messageId, att.id);
+            // Enrutado por cuenta (principal / Outlook vinculada / Gmail) para que las imágenes
+            // inline se vean también en correos de cuentas vinculadas, no solo la principal.
+            const r = await fetchRoutedAttachmentBlob(messageId, {
+              id: att.id,
+              name: att.name || "",
+              contentType: att.contentType || "",
+              size: att.size ?? 0,
+              contentId: att.contentId,
+              isInline: att.isInline,
+              "@odata.type": att["@odata.type"],
+            });
             if (cancelled) return;
-            const approxBytes = Math.floor((r.contentBytes?.length || 0) * 0.75);
-            if (approxBytes > MAX_INLINE_BYTES) continue;
+            if (r.blob.size > MAX_INLINE_BYTES) continue;
             const raw = (r.contentType || "").toLowerCase();
             const ct =
               raw && raw !== "application/octet-stream"
-                ? r.contentType!
+                ? r.contentType
                 : inferMimeFromFileName(att.name || r.name || "") || att.contentType || "application/octet-stream";
-            const dataUrl = `data:${ct};base64,${r.contentBytes}`;
+            const b64 = await blobToBase64(r.blob);
+            const dataUrl = `data:${ct};base64,${b64}`;
             out = replaceCidInHtml(out, cid, dataUrl);
           } catch {
             /* adjunto no descargable o tipo no soportado */
