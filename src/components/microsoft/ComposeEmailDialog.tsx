@@ -11,6 +11,7 @@ import { useSendNewEmail, useOutlookComposeSignature, useMicrosoftConnection, us
 import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { useMailDirectoryContacts, useSyncMailDirectory } from "@/hooks/useMailDirectory";
 import { ComposeRecipientInput } from "@/components/microsoft/ComposeRecipientInput";
+import { useLinkedAccounts, useSendLinkedOutlookEmail, useSendLinkedGmailEmail } from "@/hooks/useLinkedAccounts";
 import { supabase } from "@/integrations/supabase/client";
 import { FunctionsHttpError } from "@supabase/functions-js";
 import {
@@ -149,10 +150,31 @@ export function ComposeEmailDialog({
   const createReplyDraft = useCreateReplyDraft();
   const sendReplyDraft = useSendDraft();
   const { data: orgUsers = [] } = useOrgUsers();
-  const { isConnected } = useMicrosoftConnection();
+  const { isConnected, profile } = useMicrosoftConnection();
   const { data: mailContacts = [] } = useMailDirectoryContacts(open && isConnected);
   const { mutate: syncDirectoryMutate, isPending: syncDirectoryPending } = useSyncMailDirectory();
   const { data: composeSignature } = useOutlookComposeSignature(open);
+  const { data: linkedAccounts = [] } = useLinkedAccounts();
+  const sendLinkedOutlook = useSendLinkedOutlookEmail();
+  const sendLinkedGmail = useSendLinkedGmailEmail();
+
+  // Identidades desde las que se puede enviar ("De"): principal Kawiil + cuentas vinculadas con correo.
+  type SenderOption = { key: string; email: string; label: string; kind: "primary" | "outlook" | "gmail"; accountId?: string };
+  const senderOptions = useMemo<SenderOption[]>(() => {
+    const primEmail = ((profile?.mail || profile?.userPrincipalName || "") as string).trim();
+    const opts: SenderOption[] = [
+      { key: "primary", email: primEmail, label: primEmail || "Cuenta Kawiil", kind: "primary" },
+    ];
+    for (const a of linkedAccounts) {
+      if (!a.mail_enabled || a.status !== "connected" || !a.email) continue;
+      if (a.provider === "microsoft") opts.push({ key: `outlook:${a.id}`, email: a.email, label: a.email, kind: "outlook", accountId: a.id });
+      else if (a.provider === "google") opts.push({ key: `gmail:${a.id}`, email: a.email, label: a.email, kind: "gmail", accountId: a.id });
+    }
+    return opts;
+  }, [profile, linkedAccounts]);
+  const [fromKey, setFromKey] = useState("primary");
+  const [fromMenuOpen, setFromMenuOpen] = useState(false);
+  const fromOption = senderOptions.find((o) => o.key === fromKey) ?? senderOptions[0];
 
   const teamEmailLowerSet = useMemo(() => {
     const s = new Set<string>();
@@ -167,6 +189,8 @@ export function ComposeEmailDialog({
     if (open) {
       signatureAppliedRef.current = false;
       setMinimized(false);
+      setFromKey("primary");
+      setFromMenuOpen(false);
       setCustomSched("");
       setRequestDeliveryReceipt(false);
       setRequestReadReceipt(false);
@@ -300,6 +324,42 @@ export function ComposeEmailDialog({
         attachments = await filesToComposerAttachments(pendingFiles);
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "No se pudieron adjuntar archivos");
+        return;
+      }
+    }
+
+    // Envío desde una cuenta VINCULADA (Outlook/Gmail) elegida en "De": se envía por esa cuenta
+    // (send-as), no por la principal. Los adjuntos aún no se soportan por esta vía.
+    if (fromOption && fromOption.kind !== "primary" && fromOption.accountId) {
+      if (attachments.length) {
+        toast.error("Los adjuntos aún no se pueden enviar desde cuentas vinculadas. Quítalos o envía desde tu cuenta Kawiil.");
+        return;
+      }
+      try {
+        if (fromOption.kind === "outlook") {
+          await sendLinkedOutlook.mutateAsync({
+            accountId: fromOption.accountId,
+            to: toList,
+            cc: ccList.length ? ccList : undefined,
+            bcc: bccList.length ? bccList : undefined,
+            subject: subject || "(Sin asunto)",
+            bodyHtml: bodyRef.current || "<p></p>",
+          });
+        } else {
+          if (bccList.length) toast.info("Gmail vinculado no admite CCO; se omitió esa copia oculta.");
+          await sendLinkedGmail.mutateAsync({
+            accountId: fromOption.accountId,
+            to: toList,
+            cc: ccList.length ? ccList : undefined,
+            subject: subject || "(Sin asunto)",
+            bodyHtml: bodyRef.current || "<p></p>",
+          });
+        }
+        toast.success(`Enviado desde ${fromOption.email}`);
+        onOpenChange(false);
+        return;
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "No se pudo enviar desde esa cuenta");
         return;
       }
     }
@@ -513,7 +573,7 @@ export function ComposeEmailDialog({
 
   const bodyTextLen = (bodyRef.current || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().length;
   const bodyEmpty = bodyTextLen === 0;
-  const sending = sendEmail.isPending || createReplyDraft.isPending || sendReplyDraft.isPending;
+  const sending = sendEmail.isPending || createReplyDraft.isPending || sendReplyDraft.isPending || sendLinkedOutlook.isPending || sendLinkedGmail.isPending;
 
   if (!open || typeof document === "undefined") return null;
 
@@ -616,6 +676,48 @@ export function ComposeEmailDialog({
           }}
         >
           <div className="space-y-3">
+            {senderOptions.length > 1 && (
+              <div className="flex items-center gap-2">
+                <Label className="w-12 text-right text-sm text-muted-foreground shrink-0">De</Label>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setFromMenuOpen((v) => !v)}
+                    className="flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1.5 text-[13px] text-foreground hover:border-primary/60"
+                    title="Elegir desde qué cuenta se envía"
+                  >
+                    <span className="max-w-[22rem] truncate">{fromOption?.email || "Cuenta Kawiil"}</span>
+                    <ChevronUp className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform", fromMenuOpen ? "" : "rotate-180")} />
+                  </button>
+                  {fromMenuOpen && (
+                    <>
+                      <div className="fixed inset-0 z-[125]" onClick={() => setFromMenuOpen(false)} />
+                      <div className="absolute left-0 top-full z-[130] mt-1 w-72 max-w-[calc(100vw-3rem)] rounded-xl border border-border bg-popover p-1 shadow-xl">
+                        {senderOptions.map((opt) => (
+                          <button
+                            key={opt.key}
+                            type="button"
+                            onClick={() => { setFromKey(opt.key); setFromMenuOpen(false); }}
+                            className={cn(
+                              "flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-2 text-left text-[13px] hover:bg-accent",
+                              opt.key === fromKey ? "text-primary font-medium" : "text-foreground",
+                            )}
+                          >
+                            <span className="min-w-0">
+                              <span className="block truncate">{opt.email}</span>
+                              <span className="block text-[11px] text-muted-foreground">
+                                {opt.kind === "primary" ? "Cuenta Kawiil" : opt.kind === "gmail" ? "Gmail vinculado" : "Outlook vinculado"}
+                              </span>
+                            </span>
+                            {opt.key === fromKey && <span className="text-primary">✓</span>}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
             <div className="space-y-1.5">
               <div className="flex items-center gap-2">
                 <Label htmlFor="compose-to" className="w-12 text-right text-sm text-muted-foreground shrink-0">
