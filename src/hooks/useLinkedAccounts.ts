@@ -38,6 +38,47 @@ export function useLinkedAccounts() {
   });
 }
 
+/** Envía un correo NUEVO desde una cuenta Outlook vinculada (send-as de esa cuenta). */
+export function useSendLinkedOutlookEmail() {
+  return useMutation({
+    mutationFn: async (p: {
+      accountId: string;
+      to: string[];
+      cc?: string[];
+      bcc?: string[];
+      subject: string;
+      bodyHtml: string;
+    }) => {
+      const { data, error } = await supabase.functions.invoke("outlook-account-api", {
+        body: { action: "send-email", params: p },
+      });
+      if (error) throw error;
+      if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+      return data;
+    },
+  });
+}
+
+/** Envía un correo NUEVO desde una cuenta Gmail vinculada (send-as de esa cuenta). */
+export function useSendLinkedGmailEmail() {
+  return useMutation({
+    mutationFn: async (p: {
+      accountId: string;
+      to: string[];
+      cc?: string[];
+      subject: string;
+      bodyHtml: string;
+    }) => {
+      const { data, error } = await supabase.functions.invoke("google-api", {
+        body: { action: "gmail-send", params: p },
+      });
+      if (error) throw error;
+      if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+      return data;
+    },
+  });
+}
+
 /** Renombra una cuenta vinculada (display_name) y lo persiste en Supabase. */
 export function useRenameLinkedAccount() {
   const queryClient = useQueryClient();
