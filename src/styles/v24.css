@@ -607,7 +607,9 @@
 }
 .kwv24 .dr-head {
   display: flex; align-items: center; gap: 14px;
-  padding: 14px 22px; border-bottom: 1px solid hsl(var(--border));
+  /* Reserve room on the right so header actions never sit under the dialog's
+     absolute close (X) button (right-3, ~36px wide). */
+  padding: 14px 56px 14px 22px; border-bottom: 1px solid hsl(var(--border));
   background: hsl(var(--card));
   min-height: 54px;
 }
