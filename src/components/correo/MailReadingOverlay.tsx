@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { ArrowLeft, Reply, ReplyAll, Forward, Archive, Trash2, CheckSquare, Filter, Tag, FolderInput, ChevronRight, MessageSquare, CalendarPlus, Paperclip, Download, FileArchive, FileText, File, Eye } from "lucide-react";
+import { ArrowLeft, Reply, ReplyAll, Forward, Archive, Trash2, CheckSquare, Filter, Tag, FolderInput, ChevronRight, MessageSquare, CalendarPlus, Paperclip, Download, FileArchive, FileText, FileSpreadsheet, Image as ImageIcon, File, Eye, type LucideIcon } from "lucide-react";
 import { useEmailDetail, useArchiveEmail, useDeleteEmail, useMoveEmail, useMailFolders } from "@/hooks/useMicrosoft";
 import { useLinkedOutlookEmailDetail, useGmailEmailDetail, useRoutedEmailAttachments, fetchRoutedAttachmentBlob, type EmailAttachmentMeta } from "@/hooks/useLinkedAccounts";
 import { useResolvedEmailHtml } from "@/hooks/useResolvedEmailHtml";
@@ -46,11 +46,24 @@ function Tip({ label, children }: { label: string; children: React.ReactElement 
   );
 }
 
+// Lenguaje visual por tipo de archivo: ícono + color (PDF rojo, Word azul, Excel verde, etc.).
+function fileKind(name: string): { label: string; Icon: LucideIcon; color: string; bg: string } {
+  const n = (name || "").toLowerCase();
+  if (/\.pdf$/.test(n)) return { label: "PDF", Icon: FileText, color: "text-red-600 dark:text-red-400", bg: "bg-red-500/12" };
+  if (/\.docx?$/.test(n)) return { label: "Word", Icon: FileText, color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-500/12" };
+  if (/\.(xlsx?|xlsm|csv)$/.test(n)) return { label: "Excel", Icon: FileSpreadsheet, color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-500/12" };
+  if (/\.(pptx?)$/.test(n)) return { label: "PowerPoint", Icon: FileText, color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-500/12" };
+  if (/\.(zip|rar|7z|tar|gz)$/.test(n)) return { label: "Comprimido", Icon: FileArchive, color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-500/12" };
+  if (/\.(png|jpe?g|gif|webp|svg|bmp|tiff?)$/.test(n)) return { label: "Imagen", Icon: ImageIcon, color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-500/12" };
+  if (/\.txt$/.test(n)) return { label: "Texto", Icon: FileText, color: "text-slate-500 dark:text-slate-400", bg: "bg-slate-500/12" };
+  return { label: "Archivo", Icon: File, color: "text-muted-foreground", bg: "bg-muted" };
+}
+
 function AttachmentChip({ messageId, att }: { messageId: string; att: OutlookAttachment }) {
   const [loading, setLoading] = useState(false);
 
-  const isArchive = /\.(zip|rar|7z|tar|gz)$/i.test(att.name || "");
-  const Icon = isArchive ? FileArchive : /\.(pdf|docx?|xlsx?|pptx?|csv|txt)$/i.test(att.name || "") ? FileText : File;
+  const kind = fileKind(att.name || "");
+  const Icon = kind.Icon;
   // Tipos que el navegador puede mostrar directo (PDF e imágenes) → botón "Ver".
   const isViewable = /\.(pdf|png|jpe?g|gif|webp|svg|bmp)$/i.test(att.name || "");
 
@@ -98,11 +111,13 @@ function AttachmentChip({ messageId, att }: { messageId: string; att: OutlookAtt
     : `${Math.round(att.size / 1024)} KB`;
 
   return (
-    <div className="flex items-center gap-1 px-3 py-2 rounded-lg border border-border/60 bg-muted/30 hover:border-border transition-colors min-w-0 max-w-[260px]">
-      <Icon className="w-4 h-4 text-muted-foreground shrink-0" />
+    <div className="flex items-center gap-2 px-2.5 py-2 rounded-lg border border-border/60 bg-card hover:border-border hover:shadow-sm transition-all min-w-0 max-w-[280px]">
+      <span className={cn("w-8 h-8 rounded-md grid place-items-center shrink-0", kind.bg)}>
+        <Icon className={cn("w-4 h-4", kind.color)} />
+      </span>
       <span className="flex-1 min-w-0">
-        <span className="block text-[12px] font-medium truncate">{att.name || "adjunto"}</span>
-        <span className="block text-[10.5px] text-muted-foreground">{sizeLabel}</span>
+        <span className="block text-[12px] font-medium truncate" title={att.name || "adjunto"}>{att.name || "adjunto"}</span>
+        <span className="block text-[10.5px] text-muted-foreground">{kind.label} · {sizeLabel}</span>
       </span>
       {isViewable && (
         <button
@@ -155,6 +170,17 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onReply,
     primaryLoading;
 
   const { data: attachments = [] } = useRoutedEmailAttachments(emailId ?? null);
+  // Adjuntos reales (no inline ni item/reference) — se muestran ARRIBA del correo.
+  const downloadableAttachments = useMemo(
+    () =>
+      (attachments as OutlookAttachment[]).filter(
+        (a) =>
+          !a["@odata.type"]?.includes("itemAttachment") &&
+          !a["@odata.type"]?.includes("referenceAttachment") &&
+          !a.isInline,
+      ),
+    [attachments],
+  );
   const { html: resolvedHtml } = useResolvedEmailHtml(
     emailId ?? undefined,
     (emailDetail as any)?.body?.contentType === "html" ? (emailDetail as any)?.body?.content : undefined,
@@ -397,6 +423,20 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onReply,
                 )}
               </div>
             )}
+            {/* Adjuntos ARRIBA del correo: clip + nombre + tipo con color por tipo de archivo. */}
+            {downloadableAttachments.length > 0 && emailId && (
+              <div className="mb-5 rounded-xl border border-border/50 bg-muted/20 p-3">
+                <p className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-2.5">
+                  <Paperclip className="w-3.5 h-3.5" />
+                  {downloadableAttachments.length} adjunto{downloadableAttachments.length > 1 ? "s" : ""}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {downloadableAttachments.map((att) => (
+                    <AttachmentChip key={att.id} messageId={emailId} att={att} />
+                  ))}
+                </div>
+              </div>
+            )}
             {iframeSrc ? (
               <iframe
                 srcDoc={`<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><style>body{font-family:system-ui,sans-serif;font-size:14px;line-height:1.7;color:#374151;margin:0;padding:0}a{color:#2563eb;cursor:pointer}img{max-width:100%}</style></head><body>${iframeSrc}</body></html>`}
@@ -422,29 +462,6 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onReply,
               </p>
             )}
 
-            {/* Adjuntos descargables */}
-            {(() => {
-              const downloadable = (attachments as OutlookAttachment[]).filter(
-                (a) =>
-                  !a["@odata.type"]?.includes("itemAttachment") &&
-                  !a["@odata.type"]?.includes("referenceAttachment") &&
-                  !a.isInline,
-              );
-              if (!downloadable.length || !emailId) return null;
-              return (
-                <div className="mt-6 pt-5 border-t border-border/40">
-                  <p className="flex items-center gap-1.5 text-[11.5px] font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                    <Paperclip className="w-3.5 h-3.5" />
-                    {downloadable.length} adjunto{downloadable.length > 1 ? "s" : ""}
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {downloadable.map((att) => (
-                      <AttachmentChip key={att.id} messageId={emailId} att={att} />
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
           </>
         ) : (
           <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-6">
