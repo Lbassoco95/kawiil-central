@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import { ArrowLeft, Reply, ReplyAll, Forward, Archive, Trash2, CheckSquare, Filter, Tag, FolderInput, ChevronRight, MessageSquare, CalendarPlus, Paperclip, Download, FileArchive, FileText, FileSpreadsheet, Image as ImageIcon, File, Eye, type LucideIcon } from "lucide-react";
-import { useEmailDetail, useArchiveEmail, useDeleteEmail, useMoveEmail, useMailFolders } from "@/hooks/useMicrosoft";
-import { useLinkedOutlookEmailDetail, useGmailEmailDetail, useRoutedEmailAttachments, fetchRoutedAttachmentBlob, type EmailAttachmentMeta } from "@/hooks/useLinkedAccounts";
+import { useEmailDetail, useArchiveEmail, useDeleteEmail, useMoveEmail, useMailFolders, useMicrosoftConnection } from "@/hooks/useMicrosoft";
+import { useLinkedOutlookEmailDetail, useGmailEmailDetail, useRoutedEmailAttachments, fetchRoutedAttachmentBlob, useLinkedAccounts, type EmailAttachmentMeta } from "@/hooks/useLinkedAccounts";
 import { useResolvedEmailHtml } from "@/hooks/useResolvedEmailHtml";
 import { MailLabelPicker } from "./MailLabelPicker";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -203,6 +203,8 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onReply,
   const archiveEmail = useArchiveEmail();
   const deleteEmail = useDeleteEmail();
   const moveEmail = useMoveEmail();
+  const { profile: primaryProfile } = useMicrosoftConnection();
+  const { data: linkedAccountsList = [] } = useLinkedAccounts();
   const { data: foldersData } = useMailFolders();
   const [moveFolderOpen, setMoveFolderOpen] = useState(false);
 
@@ -223,18 +225,35 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onReply,
     : "";
   const sensitivity = (emailDetail as any)?.sensitivity as string | undefined;
   const isConfidential = sensitivity === "confidential" || sensitivity === "private";
-  const fmtRecipients = (arr: any[]) =>
-    (arr ?? [])
-      .map((r) => r?.emailAddress?.name || r?.emailAddress?.address || "")
-      .filter(Boolean)
-      .join(", ");
-  const toRecipients = fmtRecipients((emailDetail as any)?.toRecipients);
-  const ccRecipients = fmtRecipients((emailDetail as any)?.ccRecipients);
+  const toArr = (((emailDetail as any)?.toRecipients ?? []) as any[]);
+  const ccArr = (((emailDetail as any)?.ccRecipients ?? []) as any[]);
+  // Cada destinatario como span con su correo en el title (hover) para poder verlo.
+  const renderPeople = (arr: any[]) =>
+    arr.map((r, i) => {
+      const name = r?.emailAddress?.name || r?.emailAddress?.address || "";
+      const addr = r?.emailAddress?.address || "";
+      return (
+        <span key={`${addr}-${i}`}>
+          <span
+            className="cursor-help decoration-dotted underline-offset-2 hover:text-foreground hover:underline"
+            title={addr || name}
+          >
+            {name}
+          </span>
+          {i < arr.length - 1 ? ", " : ""}
+        </span>
+      );
+    });
   // "Responder a todos" solo tiene sentido si hay más de un destinatario/copiado.
-  const totalRecipients =
-    (((emailDetail as any)?.toRecipients ?? []) as any[]).length +
-    (((emailDetail as any)?.ccRecipients ?? []) as any[]).length;
+  const totalRecipients = toArr.length + ccArr.length;
   const showReplyAll = !!onReplyAll && totalRecipients > 1;
+  // A qué cuenta NUESTRA llegó este correo (para confirmar el destino).
+  const receivedAtEmail = useMemo(() => {
+    if (isLinkedOutlookEmail || isLinkedGmailEmail) {
+      return linkedAccountsList.find((a) => a.id === emailAccId)?.email || "";
+    }
+    return ((primaryProfile?.mail || primaryProfile?.userPrincipalName || "") as string) || "";
+  }, [isLinkedOutlookEmail, isLinkedGmailEmail, emailAccId, linkedAccountsList, primaryProfile]);
 
   return (
     <div
@@ -421,18 +440,24 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onReply,
               </div>
               <p className="text-[11.5px] text-muted-foreground shrink-0">{receivedAt}</p>
             </div>
-            {(toRecipients || ccRecipients) && (
+            {(toArr.length > 0 || ccArr.length > 0 || receivedAtEmail) && (
               <div className="mb-6 pl-12 space-y-0.5 text-[11.5px] text-muted-foreground">
-                {toRecipients && (
+                {toArr.length > 0 && (
                   <p className="break-words">
                     <span className="font-medium text-muted-foreground/70">Para: </span>
-                    {toRecipients}
+                    {renderPeople(toArr)}
                   </p>
                 )}
-                {ccRecipients && (
+                {ccArr.length > 0 && (
                   <p className="break-words">
                     <span className="font-medium text-muted-foreground/70">CC: </span>
-                    {ccRecipients}
+                    {renderPeople(ccArr)}
+                  </p>
+                )}
+                {receivedAtEmail && (
+                  <p className="break-words pt-0.5 text-muted-foreground/70">
+                    <span className="font-medium">Recibido en: </span>
+                    <span className="text-foreground/80">{receivedAtEmail}</span>
                   </p>
                 )}
               </div>
