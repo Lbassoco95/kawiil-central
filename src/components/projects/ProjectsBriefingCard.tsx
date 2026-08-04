@@ -6,6 +6,8 @@ import { cn } from "@/lib/utils";
 import { useAiModuleBriefing, sha256Hex, briefingJsonInstructions } from "@/hooks/useAiModuleBriefing";
 import { PROYECTOS_METRIC_KEYS } from "@/components/dashboard/AiHeroV24";
 import { MetricInsightChips } from "@/components/dashboard/MetricInsightChips";
+import { AiFeedback } from "@/components/ai/AiFeedback";
+import { aiFeedbackKey } from "@/lib/aiFeedbackKey";
 
 const PROYECTOS_METRIC_LABELS: Record<string, string> = {
   proyectos_activos: "Activos",
@@ -210,6 +212,9 @@ export function ProjectsBriefingCard({
                 order={[...PROYECTOS_METRIC_KEYS]}
               />
             )}
+            <div className="mt-2 flex justify-end">
+              <AiFeedback surface="projects_briefing" contextKey={aiFeedbackKey(content)} />
+            </div>
           </>
         ) : loading ? (
           <p className="text-xs text-muted-foreground">Analizando tu cartera de proyectos…</p>

@@ -12,7 +12,7 @@ import {
   Search,
   Trash2,
 } from "lucide-react";
-import { useTasks, useMyAssignedTasks, useDeleteTask, useProfiles } from "@/hooks/useTasks";
+import { useTasks, useMyAssignedTasks, useDeleteTask, useProfiles, useUpdateTask } from "@/hooks/useTasks";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAssignedSteps } from "@/hooks/useAssignedSteps";
 import { useReminders } from "@/hooks/useReminders";
@@ -22,6 +22,13 @@ import { useMexicoToday } from "@/hooks/useMexicoToday";
 import { useTasksRealtime } from "@/hooks/useTasksRealtime";
 import { openNewTaskModal } from "@/lib/openNewTaskModal";
 import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
+import { TaskQuickPreview } from "@/components/tasks/TaskQuickPreview";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { UserAvatar } from "@/components/shared/UserAvatar";
 import { AiHeroV24 } from "@/components/dashboard/AiHeroV24";
@@ -199,6 +206,13 @@ const Tareas = () => {
       p.delete("taskId");
       return p;
     });
+  };
+
+  // Previo rápido (panel lateral) — no navega, permite cambios rápidos in-place.
+  const [previewTaskId, setPreviewTaskId] = useState<string | null>(null);
+  const updateTask = useUpdateTask();
+  const quickSetStatus = (taskId: string, status: string) => {
+    updateTask.mutate({ id: taskId, status } as any);
   };
 
   const setVistaAndUrl = (next: Vista) => {
@@ -591,13 +605,13 @@ const Tareas = () => {
                   <div
                     key={task.id}
                     className="trow"
-                    onClick={() => openTask(task as any)}
+                    onClick={() => setPreviewTaskId(task.id)}
                     role="button"
                     tabIndex={0}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
-                        openTask(task as any);
+                        setPreviewTaskId(task.id);
                       }
                     }}
                   >
@@ -628,12 +642,32 @@ const Tareas = () => {
                         )}
                       </div>
                     </div>
-                    <div className="status-cell">
-                      <span className={`status-dot ${statusDotClass(task.status)}`} />
-                      <span className="cell-text">
-                        {statusLabels[task.status]?.label ?? task.status}
-                      </span>
-                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          className="status-cell text-left rounded-md hover:bg-muted/60 px-1 -mx-1 transition-colors"
+                          title="Cambiar estatus"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <span className={`status-dot ${statusDotClass(task.status)}`} />
+                          <span className="cell-text">
+                            {statusLabels[task.status]?.label ?? task.status}
+                          </span>
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" onClick={(e) => e.stopPropagation()}>
+                        {Object.entries(statusLabels).map(([key, { label }]) => (
+                          <DropdownMenuItem
+                            key={key}
+                            disabled={task.status === key}
+                            onSelect={() => quickSetStatus(task.id, key)}
+                          >
+                            {label}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                     {assigneeName ? (
                       <div className="assignee">
                         <UserAvatar
@@ -710,9 +744,15 @@ const Tareas = () => {
                   <div
                     key={task.id}
                     className="trow"
-                    onClick={() => openTask(task)}
+                    onClick={() => setPreviewTaskId(task.id)}
                     role="button"
                     tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setPreviewTaskId(task.id);
+                      }
+                    }}
                   >
                     <div className={`prio-dot ${priorityClass(task.priority)}`} />
                     <div className="tname">
@@ -736,12 +776,32 @@ const Tareas = () => {
                         )}
                       </div>
                     </div>
-                    <div className="status-cell">
-                      <span className={`status-dot ${statusDotClass(task.status)}`} />
-                      <span className="cell-text">
-                        {statusLabels[task.status]?.label ?? task.status}
-                      </span>
-                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          className="status-cell text-left rounded-md hover:bg-muted/60 px-1 -mx-1 transition-colors"
+                          title="Cambiar estatus"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <span className={`status-dot ${statusDotClass(task.status)}`} />
+                          <span className="cell-text">
+                            {statusLabels[task.status]?.label ?? task.status}
+                          </span>
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" onClick={(e) => e.stopPropagation()}>
+                        {Object.entries(statusLabels).map(([key, { label }]) => (
+                          <DropdownMenuItem
+                            key={key}
+                            disabled={task.status === key}
+                            onSelect={() => quickSetStatus(task.id, key)}
+                          >
+                            {label}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                     {assigneeName ? (
                       <div className="assignee">
                         <UserAvatar
@@ -847,6 +907,18 @@ const Tareas = () => {
           </details>
         )}
       </div>
+
+      <TaskQuickPreview
+        taskId={previewTaskId}
+        open={!!previewTaskId}
+        onOpenChange={(o) => {
+          if (!o) setPreviewTaskId(null);
+        }}
+        onOpenFull={(task) => {
+          setPreviewTaskId(null);
+          openTask(task);
+        }}
+      />
 
       <TaskDetailDialog taskId={selectedTaskId} onClose={closeTask} />
       <DeleteConfirmDialog

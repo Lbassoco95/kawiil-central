@@ -777,32 +777,38 @@ export type Database = {
       ai_feedback: {
         Row: {
           chat_message_id: string | null
+          context_key: string | null
           created_at: string
           feedback_category: string | null
           feedback_comment: string | null
           id: string
           organization_id: string
           rating: string
+          surface: string
           user_id: string
         }
         Insert: {
           chat_message_id?: string | null
+          context_key?: string | null
           created_at?: string
           feedback_category?: string | null
           feedback_comment?: string | null
           id?: string
           organization_id: string
           rating: string
+          surface?: string
           user_id: string
         }
         Update: {
           chat_message_id?: string | null
+          context_key?: string | null
           created_at?: string
           feedback_category?: string | null
           feedback_comment?: string | null
           id?: string
           organization_id?: string
           rating?: string
+          surface?: string
           user_id?: string
         }
         Relationships: [

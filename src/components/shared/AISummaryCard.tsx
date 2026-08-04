@@ -1,6 +1,8 @@
 import { useState, useCallback, useEffect } from "react";
 import { Sparkles, Loader2, RefreshCw, ChevronDown, ChevronRight } from "lucide-react";
 import { KawiilAiMarkdown } from "@/components/shared/KawiilAiMarkdown";
+import { AiFeedback } from "@/components/ai/AiFeedback";
+import { aiFeedbackKey } from "@/lib/aiFeedbackKey";
 import { nowMX, toDateStringMX } from "@/lib/dateUtils";
 import { fetchAiChatSimpleContent } from "@/lib/fetchAiChatSimple";
 import { Badge } from "@/components/ui/badge";
@@ -175,9 +177,17 @@ export function AISummaryCard({
           )}
 
           {content ? (
-            <KawiilAiMarkdown className="text-[13px] leading-relaxed">
-              {content}
-            </KawiilAiMarkdown>
+            <>
+              <KawiilAiMarkdown className="text-[13px] leading-relaxed">
+                {content}
+              </KawiilAiMarkdown>
+              <div className="mt-2 flex justify-end">
+                <AiFeedback
+                  surface={`summary_${cacheKey}`}
+                  contextKey={aiFeedbackKey(content)}
+                />
+              </div>
+            </>
           ) : loading ? (
             <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
               <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-500" />

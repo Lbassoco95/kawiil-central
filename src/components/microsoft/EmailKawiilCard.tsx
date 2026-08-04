@@ -16,6 +16,8 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { FunctionsHttpError } from "@supabase/functions-js";
 import { withAiRateLimit, invalidateAiCache, readAiCache } from "@/lib/kawiilAiCache";
+import { AiFeedback } from "@/components/ai/AiFeedback";
+import { aiFeedbackKey } from "@/lib/aiFeedbackKey";
 
 /**
  * Extrae el mensaje real de una Edge Function cuando responde 4xx/5xx.
@@ -388,9 +390,16 @@ export function EmailKawiilCard({
         )}
 
         {summary && tab === "summary" && (
-          <p className="leading-relaxed text-foreground/90">
-            {summary.summary || "Sin resumen disponible."}
-          </p>
+          <>
+            <p className="leading-relaxed text-foreground/90">
+              {summary.summary || "Sin resumen disponible."}
+            </p>
+            {summary.summary && (
+              <div className="mt-2 flex justify-end">
+                <AiFeedback surface="email_summary" contextKey={aiFeedbackKey(summary.summary)} />
+              </div>
+            )}
+          </>
         )}
 
         {summary && tab === "keyPoints" && (

@@ -15,6 +15,8 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { AiFeedback } from "@/components/ai/AiFeedback";
+import { aiFeedbackKey } from "@/lib/aiFeedbackKey";
 
 /**
  * CalendarKawiilCard — Ficha "Kawiil AI · Resumen del día/semana" para el módulo Calendario.
@@ -301,6 +303,12 @@ export function CalendarKawiilCard({
               </Button>
             )}
           </div>
+        </div>
+      )}
+
+      {summary && summary.briefing && (
+        <div className="mt-2 flex justify-end">
+          <AiFeedback surface="calendar_summary" contextKey={aiFeedbackKey(summary.briefing)} />
         </div>
       )}
     </div>
