@@ -1,7 +1,8 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchSlackUnreadSnapshot } from "@/lib/slackApi";
 import { loadSlackReadMap } from "@/lib/slackReadCursor";
+import { markSlackChannelNotificationsRead } from "@/hooks/useSlackChannelNotificationBadges";
 
 /** Throttle entre invalidaciones por `visibilitychange` para no machacar slack-api al alternar pestañas. */
 const VISIBILITY_REFETCH_THROTTLE_MS = 2_000;
@@ -43,6 +44,8 @@ export function useSlackUnreadSync({
   holdUnreadSnapshot = false,
 }: Params) {
   const qc = useQueryClient();
+  /** Canales cuya reconciliación (marcar leído) está en vuelo; evita disparos dobles. */
+  const reconcileInFlightRef = useRef<Set<string>>(new Set());
 
   const localUnreadSig = useMemo(
     () => unreadCountsSignature(localUnreadByChannel),
@@ -102,10 +105,33 @@ export function useSlackUnreadSync({
     const remote = unreadSnapshotQuery.data;
     if (!remote) return;
 
-    // NOTA: NO auto-marcamos como leídas las notificaciones de Kawiil cuando Slack
-    // reporta el canal como leído. Las notificaciones deben mantenerse hasta que el
-    // usuario abra la conversación DENTRO de Kawiil (selectChannel → markSlackChannelNotificationsRead).
-    // Antes esto limpiaba badges al abrir el módulo sin haber entrado al mensaje.
+    // Reconciliación Slack nativo → Kawiil: si Slack reporta un canal como LEÍDO
+    // (unread_count_display = 0, estado autoritativo que incluye la app nativa) pero
+    // Kawiil aún tiene badge, marcamos esas notificaciones como leídas para que el
+    // badge desaparezca. Esto NO limpia por abrir el módulo: solo cuando Slack mismo
+    // dice que ya no hay no-leídos en ese canal (lo leíste en Slack u otro cliente).
+    if (userId) {
+      const toClear: string[] = [];
+      for (const [ch, localCount] of Object.entries(localUnreadByChannel)) {
+        if (localCount <= 0) continue;
+        if (!(ch in remote)) continue; // sin dato autoritativo de Slack para este canal
+        if (remote[ch] > 0) continue; // Slack todavía lo ve como no-leído
+        if (reconcileInFlightRef.current.has(ch)) continue; // ya se está marcando
+        reconcileInFlightRef.current.add(ch);
+        toClear.push(ch);
+      }
+      if (toClear.length > 0) {
+        void Promise.all(
+          toClear.map((ch) => markSlackChannelNotificationsRead(userId, ch).catch(() => {})),
+        ).then(() => {
+          for (const ch of toClear) reconcileInFlightRef.current.delete(ch);
+          void qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", userId] });
+          void qc.invalidateQueries({ queryKey: ["slack-activity", userId] });
+          void qc.invalidateQueries({ queryKey: ["user-notifications", userId] });
+          void qc.invalidateQueries({ queryKey: ["unread-notifications-count", userId] });
+        });
+      }
+    }
 
     if (selectedChannel) {
       const remoteCurrent = remote[selectedChannel] ?? 0;
