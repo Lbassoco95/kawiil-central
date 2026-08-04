@@ -103,6 +103,19 @@ interface ComposeEmailDialogProps {
   onAfterSend?: (info: { templateCategory?: string; clientId?: string; clientName?: string }) => void;
 }
 
+/** Firma limpia (nombre + correo) para cuentas vinculadas, cuando no hay firma guardada de esa cuenta. */
+function buildSimpleSignatureHtml(name: string, email: string): string {
+  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const n = (name || "").trim();
+  const e = (email || "").trim();
+  if (!n && !e) return "";
+  let html = `<p style="font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#333;">`;
+  if (n && n.toLowerCase() !== e.toLowerCase()) html += `<strong>${esc(n)}</strong><br/>`;
+  if (e) html += `<a href="mailto:${esc(e)}">${esc(e)}</a>`;
+  html += `</p>`;
+  return html;
+}
+
 export function ComposeEmailDialog({
   open,
   onOpenChange,
@@ -147,6 +160,7 @@ export function ComposeEmailDialog({
   const bodyRef = useRef("");
   const editorRef = useRef<RichTextEditorHandle>(null);
   const signatureAppliedRef = useRef(false);
+  const lastAppliedSigRef = useRef("");
   const directorySyncRef = useRef(false);
   const { user } = useAuth();
   const sendEmail = useSendNewEmail();
@@ -178,6 +192,15 @@ export function ComposeEmailDialog({
   const [fromKey, setFromKey] = useState("primary");
   const [fromMenuOpen, setFromMenuOpen] = useState(false);
   const fromOption = senderOptions.find((o) => o.key === fromKey) ?? senderOptions[0];
+  // Firma según la cuenta "De" seleccionada: la principal usa su firma guardada; las vinculadas
+  // una firma limpia con su nombre + correo.
+  const signatureHtmlForAccount = useMemo(() => {
+    if (!fromOption || fromOption.kind === "primary") {
+      return composeSignature?.html ? sanitizeSignatureHtml(composeSignature.html) : "";
+    }
+    const acc = linkedAccounts.find((a) => a.id === fromOption.accountId);
+    return buildSimpleSignatureHtml(acc?.display_name || fromOption.email, fromOption.email);
+  }, [fromOption, composeSignature, linkedAccounts]);
 
   const teamEmailLowerSet = useMemo(() => {
     const s = new Set<string>();
@@ -191,6 +214,7 @@ export function ComposeEmailDialog({
   useEffect(() => {
     if (open) {
       signatureAppliedRef.current = false;
+      lastAppliedSigRef.current = "";
       setMinimized(false);
       setExpanded(false);
       setFromKey("primary");
@@ -257,24 +281,28 @@ export function ComposeEmailDialog({
     syncDirectoryMutate({ silent: true });
   }, [open, isConnected, syncDirectoryMutate]);
 
-  /** Orden: Kawiil (perfil) → inferida (Enviados) → bloque /me; Graph no expone firma OWA. */
+  /**
+   * Coloca/actualiza la firma según la cuenta "De" seleccionada. Se reemplaza SOLO si el usuario
+   * no ha escrito contenido propio (el cuerpo está vacío o contiene exactamente la firma anterior),
+   * para no pisar lo que ya redactó. Reacciona al cambio de cuenta (fromKey).
+   */
   useEffect(() => {
-    if (!open || !composeSignature?.html) return;
+    if (!open) return;
     const t = window.setTimeout(() => {
-      if (signatureAppliedRef.current) return;
-      const raw = bodyRef.current || "";
-      const textOnly = raw.replace(/<[^>]+>/g, " ").replace(/\s|&nbsp;/gi, "").trim();
-      if (textOnly.length > 0) {
-        signatureAppliedRef.current = true;
-        return;
-      }
-      const html = `${sanitizeSignatureHtml(composeSignature.html)}<p><br></p>`;
+      const strip = (s: string) => (s || "").replace(/<[^>]+>/g, " ").replace(/\s|&nbsp;/gi, "").trim();
+      const bodyText = strip(bodyRef.current);
+      const lastSigText = strip(lastAppliedSigRef.current);
+      const safeToReplace = bodyText.length === 0 || bodyText === lastSigText;
+      if (!safeToReplace) return;
+      const sig = signatureHtmlForAccount;
+      const html = sig ? `${sig}<p><br></p>` : "<p><br></p>";
       editorRef.current?.setHtml(html);
       bodyRef.current = html;
+      lastAppliedSigRef.current = sig ? html : "";
       signatureAppliedRef.current = true;
     }, 150);
     return () => window.clearTimeout(t);
-  }, [open, editorKey, composeSignature]);
+  }, [open, editorKey, fromKey, signatureHtmlForAccount]);
 
   const runAiDraft = useCallback(async (instruction: string) => {
     const trimmed = instruction.trim();
