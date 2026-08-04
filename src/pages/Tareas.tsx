@@ -29,7 +29,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Checkbox } from "@/components/ui/checkbox";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
+import { toast } from "sonner";
 import { UserAvatar } from "@/components/shared/UserAvatar";
 import { AiHeroV24 } from "@/components/dashboard/AiHeroV24";
 import { useAreaOptions } from "@/hooks/useAreaOptions";
@@ -215,6 +217,66 @@ const Tareas = () => {
   const updateTask = useUpdateTask();
   const quickSetStatus = (taskId: string, status: string) => {
     updateTask.mutate({ id: taskId, status } as any);
+  };
+
+  // Selección múltiple para acciones en lote.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const toggleSelected = (taskId: string) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(taskId)) next.delete(taskId);
+      else next.add(taskId);
+      return next;
+    });
+  const clearSelection = () => setSelectedIds(new Set());
+  const setAllSelected = (ids: string[], on: boolean) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (on) ids.forEach((id) => next.add(id));
+      else ids.forEach((id) => next.delete(id));
+      return next;
+    });
+
+  const bulkSetStatus = async (status: string) => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    setBulkBusy(true);
+    let ok = 0;
+    let fail = 0;
+    for (const id of ids) {
+      try {
+        await updateTask.mutateAsync({ id, status } as any);
+        ok++;
+      } catch {
+        fail++;
+      }
+    }
+    setBulkBusy(false);
+    clearSelection();
+    if (fail === 0) toast.success(`${ok} tarea(s) actualizada(s)`);
+    else toast.warning(`${ok} actualizada(s), ${fail} no se pudieron (revisa subtareas abiertas)`);
+  };
+
+  const bulkDelete = async () => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    if (!window.confirm(`¿Eliminar ${ids.length} tarea(s)? Esta acción no se puede deshacer.`)) return;
+    setBulkBusy(true);
+    let ok = 0;
+    let fail = 0;
+    for (const id of ids) {
+      try {
+        await deleteTask.mutateAsync(id);
+        ok++;
+      } catch {
+        fail++;
+      }
+    }
+    setBulkBusy(false);
+    clearSelection();
+    if (fail === 0) toast.success(`${ok} tarea(s) eliminada(s)`);
+    else toast.warning(`${ok} eliminada(s), ${fail} no se pudieron`);
   };
 
   const setVistaAndUrl = (next: Vista) => {
@@ -570,12 +632,88 @@ const Tareas = () => {
           </div>
         </div>
 
+        {/* Barra de acciones en lote */}
+        {selectedIds.size > 0 && (
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-4 py-2.5">
+            <span className="text-sm font-medium">
+              {selectedIds.size} seleccionada{selectedIds.size === 1 ? "" : "s"}
+            </span>
+            <span className="mx-1 h-4 w-px bg-border" />
+            <Button
+              size="sm"
+              className="h-8 gap-1.5"
+              disabled={bulkBusy}
+              onClick={() => void bulkSetStatus("completada")}
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" /> Completar
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 text-destructive hover:text-destructive"
+              disabled={bulkBusy}
+              onClick={() => void bulkSetStatus("cancelada")}
+            >
+              Cancelar
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="outline" className="h-8" disabled={bulkBusy}>
+                  Cambiar estatus ▾
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                {Object.entries(statusLabels).map(([key, { label }]) => (
+                  <DropdownMenuItem key={key} onSelect={() => void bulkSetStatus(key)}>
+                    {label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {canDeleteTasks && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-8 gap-1.5 text-destructive hover:text-destructive"
+                disabled={bulkBusy}
+                onClick={() => void bulkDelete()}
+              >
+                <Trash2 className="h-3.5 w-3.5" /> Eliminar
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="ghost"
+              className="ml-auto h-8"
+              disabled={bulkBusy}
+              onClick={clearSelection}
+            >
+              Limpiar
+            </Button>
+          </div>
+        )}
+
         {/* TABLA */}
         {vista === "activas" ? (
           <div className="mtable tareas">
             <div className="thead">
               <div />
-              <div>Tarea</div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  checked={
+                    filteredOpen.length > 0 &&
+                    filteredOpen.every((t) => selectedIds.has(t.id))
+                  }
+                  onCheckedChange={(v) =>
+                    setAllSelected(
+                      filteredOpen.map((t) => t.id),
+                      !!v,
+                    )
+                  }
+                  aria-label="Seleccionar todas"
+                />
+                Tarea
+              </div>
               <div>Estado</div>
               <div>Responsable</div>
               <div>Célula</div>
@@ -623,26 +761,37 @@ const Tareas = () => {
                       title={`Prioridad ${task.priority}`}
                     />
                     <div className="tname">
-                      <span className="title">{task.title}</span>
-                      <div className="meta">
-                        {criticality === "critico" && (
-                          <>
-                            <span className="flag flag-critico">Crítico</span>
-                            <span className="dot" />
-                          </>
-                        )}
-                        {criticality === "atencion" && (
-                          <>
-                            <span className="flag flag-atencion">Atención</span>
-                            <span className="dot" />
-                          </>
-                        )}
-                        {clientName && <span>{clientName}</span>}
-                        {clientName && projectName && <span className="dot" />}
-                        {projectName && <span>{projectName}</span>}
-                        {!clientName && !projectName && criticality == null && (
-                          <span>Interno</span>
-                        )}
+                      <div className="flex items-start gap-2 min-w-0">
+                        <Checkbox
+                          checked={selectedIds.has(task.id)}
+                          onCheckedChange={() => toggleSelected(task.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="mt-0.5 shrink-0"
+                          aria-label="Seleccionar tarea"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <span className="title">{task.title}</span>
+                          <div className="meta">
+                            {criticality === "critico" && (
+                              <>
+                                <span className="flag flag-critico">Crítico</span>
+                                <span className="dot" />
+                              </>
+                            )}
+                            {criticality === "atencion" && (
+                              <>
+                                <span className="flag flag-atencion">Atención</span>
+                                <span className="dot" />
+                              </>
+                            )}
+                            {clientName && <span>{clientName}</span>}
+                            {clientName && projectName && <span className="dot" />}
+                            {projectName && <span>{projectName}</span>}
+                            {!clientName && !projectName && criticality == null && (
+                              <span>Interno</span>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </div>
                     <DropdownMenu>
@@ -727,7 +876,19 @@ const Tareas = () => {
           <div className="mtable tareas">
             <div className="thead">
               <div />
-              <div>Tarea</div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  checked={closedTasks.length > 0 && closedTasks.every((t: any) => selectedIds.has(t.id))}
+                  onCheckedChange={(v) =>
+                    setAllSelected(
+                      closedTasks.map((t: any) => t.id),
+                      !!v,
+                    )
+                  }
+                  aria-label="Seleccionar todas"
+                />
+                Tarea
+              </div>
               <div>Estado</div>
               <div>Responsable</div>
               <div>Célula</div>
@@ -767,24 +928,35 @@ const Tareas = () => {
                   >
                     <div className={`prio-dot ${priorityClass(task.priority)}`} />
                     <div className="tname">
-                      <span
-                        className="title"
-                        style={
-                          task.status === "cancelada"
-                            ? { textDecoration: "line-through", opacity: 0.7 }
-                            : undefined
-                        }
-                      >
-                        {task.title}
-                      </span>
-                      <div className="meta">
-                        {task.clients?.name && <span>{task.clients.name}</span>}
-                        {task.projects?.name && (
-                          <>
-                            <span className="dot" />
-                            <span>{task.projects.name}</span>
-                          </>
-                        )}
+                      <div className="flex items-start gap-2 min-w-0">
+                        <Checkbox
+                          checked={selectedIds.has(task.id)}
+                          onCheckedChange={() => toggleSelected(task.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="mt-0.5 shrink-0"
+                          aria-label="Seleccionar tarea"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <span
+                            className="title"
+                            style={
+                              task.status === "cancelada"
+                                ? { textDecoration: "line-through", opacity: 0.7 }
+                                : undefined
+                            }
+                          >
+                            {task.title}
+                          </span>
+                          <div className="meta">
+                            {task.clients?.name && <span>{task.clients.name}</span>}
+                            {task.projects?.name && (
+                              <>
+                                <span className="dot" />
+                                <span>{task.projects.name}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </div>
                     <DropdownMenu>
