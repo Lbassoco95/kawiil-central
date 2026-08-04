@@ -1,6 +1,4 @@
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -11,11 +9,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { UserAvatar } from "@/components/shared/UserAvatar";
-import { useTaskDetail, useUpdateTask, useAddComment, useProfiles } from "@/hooks/useTasks";
+import { useTaskDetail, useUpdateTask, useProfiles } from "@/hooks/useTasks";
 import { useCelulaOptions } from "@/hooks/useCelulaOptions";
 import { TASK_STATUS_CONFIG } from "@/lib/statusStyles";
-import { formatMX } from "@/lib/dateUtils";
-import { CheckCircle2, XCircle, ExternalLink, Loader2, Send } from "lucide-react";
+import { TaskComments } from "@/components/tasks/TaskComments";
+import { CheckCircle2, XCircle, ExternalLink, Loader2 } from "lucide-react";
 
 const STATUS_KEYS = ["pendiente", "en_progreso", "en_revision", "completada", "cancelada"] as const;
 
@@ -31,21 +29,13 @@ interface Props {
  * cancelar y comentar sin abrir el detalle completo.
  */
 export function TaskInlineQuickEdit({ taskId, onOpenFull }: Props) {
-  const { task, isLoading, comments } = useTaskDetail(taskId);
+  const { task, isLoading } = useTaskDetail(taskId);
   const updateTask = useUpdateTask();
-  const addComment = useAddComment();
   const { data: profiles = [] } = useProfiles();
   const { celulaOptions } = useCelulaOptions();
-  const [comment, setComment] = useState("");
 
   const setField = (updates: Record<string, unknown>) => {
     updateTask.mutate({ id: taskId, ...updates });
-  };
-
-  const submitComment = () => {
-    const content = comment.trim();
-    if (!content) return;
-    addComment.mutate({ taskId, content }, { onSuccess: () => setComment("") });
   };
 
   if (isLoading || !task) {
@@ -154,54 +144,8 @@ export function TaskInlineQuickEdit({ taskId, onOpenFull }: Props) {
         </div>
       </div>
 
-      {/* Comentario */}
-      <div className="flex items-start gap-2">
-        <Textarea
-          value={comment}
-          onChange={(e) => setComment(e.target.value)}
-          onKeyDown={(e) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") submitComment();
-          }}
-          rows={2}
-          className="resize-none text-sm"
-          placeholder={
-            comments.length > 0
-              ? `Agregar un comentario… (${comments.length} existentes)`
-              : "Agregar un comentario…"
-          }
-        />
-        <Button
-          size="sm"
-          className="h-9 gap-1.5 shrink-0"
-          disabled={!comment.trim() || addComment.isPending}
-          onClick={submitComment}
-        >
-          {addComment.isPending ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Send className="h-3.5 w-3.5" />
-          )}
-          Enviar
-        </Button>
-      </div>
-
-      {comments.length > 0 && (
-        <div className="space-y-1.5">
-          {comments.slice(-3).map((c: any) => (
-            <div key={c.id} className="rounded-md bg-background/70 px-2.5 py-1.5 text-xs">
-              <span className="font-medium text-foreground">
-                {c.profile?.full_name ?? "Usuario"}
-              </span>
-              {c.created_at && (
-                <span className="ml-2 text-[10px] text-muted-foreground">
-                  {formatMX(c.created_at, "dd MMM")}
-                </span>
-              )}
-              <p className="text-foreground/80 whitespace-pre-wrap break-words">{c.content}</p>
-            </div>
-          ))}
-        </div>
-      )}
+      {/* Comentarios (mismo diseño y funciones que el detalle: @, archivos, links) */}
+      <TaskComments taskId={taskId} />
 
       <div className="flex justify-end">
         <Button variant="ghost" size="sm" className="gap-1.5 text-xs" onClick={onOpenFull}>
