@@ -5,6 +5,8 @@ import { fetchAiChatSimpleContent, type AiChatSimpleMessage } from "@/lib/fetchA
 import { formatMX, isPastDueCalendarMX } from "@/lib/dateUtils";
 import { isTaskClosedStatus } from "@/lib/taskStatusGroups";
 import { useTaskDependencies } from "@/hooks/useTaskDependencies";
+import { AiFeedback } from "@/components/ai/AiFeedback";
+import { aiFeedbackKey } from "@/lib/aiFeedbackKey";
 import { toast } from "sonner";
 
 interface SubtaskLike {
@@ -353,6 +355,10 @@ export function TaskAiBriefingCard({
                 </ul>
               </div>
             )}
+
+            <div className="mt-1 flex justify-end">
+              <AiFeedback surface="task_briefing" contextKey={aiFeedbackKey(task.id)} />
+            </div>
           </>
         )}
       </div>

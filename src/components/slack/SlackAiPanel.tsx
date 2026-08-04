@@ -23,6 +23,8 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { SlackChannelFilesPanel } from "@/components/slack/SlackChannelFilesPanel";
+import { AiFeedback } from "@/components/ai/AiFeedback";
+import { aiFeedbackKey } from "@/lib/aiFeedbackKey";
 
 /**
  * SlackAiPanel — Fase 2 del rediseño v2.4 del módulo Slack.
@@ -459,6 +461,12 @@ export function SlackAiPanel({
                     )}
                   </div>
                 </div>
+              </div>
+            ) : null}
+
+            {summary?.summary ? (
+              <div className="mt-2 flex justify-end">
+                <AiFeedback surface="slack_summary" contextKey={aiFeedbackKey(summary.summary)} />
               </div>
             ) : null}
           </div>

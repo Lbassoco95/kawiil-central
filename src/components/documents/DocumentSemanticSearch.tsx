@@ -11,6 +11,8 @@ import { useDeleteDocument } from "@/hooks/useDocuments";
 import { formatMX } from "@/lib/dateUtils";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { AiFeedback } from "@/components/ai/AiFeedback";
+import { aiFeedbackKey } from "@/lib/aiFeedbackKey";
 
 interface DocLite {
   id: string;
@@ -341,6 +343,9 @@ Reglas:
                 </div>
               );
             })}
+          </div>
+          <div className="flex justify-end">
+            <AiFeedback surface="doc_semantic_search" contextKey={aiFeedbackKey(JSON.stringify(results))} />
           </div>
         </div>
       )}

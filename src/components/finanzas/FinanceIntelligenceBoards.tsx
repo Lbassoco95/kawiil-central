@@ -64,6 +64,8 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { Database } from "@/integrations/supabase/types";
 import { KAWIIL_AI_GRADIENT, KAWIIL_AI_HEADER_BG, KAWIIL_AI_SOFT_BG } from "@/lib/kawiilAi";
+import { AiFeedback } from "@/components/ai/AiFeedback";
+import { aiFeedbackKey } from "@/lib/aiFeedbackKey";
 
 /**
  * Paleta v2.4 para los gráficos de tableros financieros.
@@ -572,6 +574,9 @@ export function FinanceIntelligenceBoards({ expenses, clients, savioEnabled = tr
               <Card className="mt-2 border-border/50 bg-muted/20">
                 <CardContent className="prose prose-sm dark:prose-invert max-w-none pt-4 text-sm">
                   <ReactMarkdown>{aiMarkdown}</ReactMarkdown>
+                  <div className="mt-2 flex justify-end not-prose">
+                    <AiFeedback surface="finance_insights" contextKey={aiFeedbackKey(aiMarkdown)} />
+                  </div>
                 </CardContent>
               </Card>
             ) : (

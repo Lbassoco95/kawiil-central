@@ -3,6 +3,8 @@ import { Sparkles, Loader2 } from "lucide-react";
 import { KawiilAiMarkdown } from "@/components/shared/KawiilAiMarkdown";
 import { nowMX, toDateStringMX } from "@/lib/dateUtils";
 import { fetchAiChatSimpleContent } from "@/lib/fetchAiChatSimple";
+import { AiFeedback } from "@/components/ai/AiFeedback";
+import { aiFeedbackKey } from "@/lib/aiFeedbackKey";
 
 interface MetricInsightProps {
   metricKey: string;
@@ -84,6 +86,9 @@ export function MetricInsight({
         <Sparkles className="h-3.5 w-3.5 text-primary shrink-0 mt-1" aria-hidden />
         <div className="min-w-0 flex-1 rounded-lg border border-border/50 bg-muted/15 px-3 py-2.5">
           <KawiilAiMarkdown variant="compact">{insight}</KawiilAiMarkdown>
+          <div className="mt-1.5 flex justify-end">
+            <AiFeedback surface="metric_insight" contextKey={aiFeedbackKey(insight)} label={null} />
+          </div>
         </div>
       </div>
     );

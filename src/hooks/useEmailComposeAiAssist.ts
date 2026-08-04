@@ -77,6 +77,10 @@ export function useEmailComposeAiAssist({
         if (!text) throw new Error("La IA no devolvió texto");
         lastInstructionRef.current = trimmed;
         const html = plainTextToEmailHtml(text);
+        const existing = (getBodyHtml() || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+        if (existing.length > 0 && !window.confirm("Ya tienes contenido escrito. ¿Reemplazarlo con el borrador de la IA?")) {
+          return;
+        }
         editorRef.current?.setHtml(html);
         setBodyHtml(html);
         setHasAiDraft(true);
@@ -87,7 +91,7 @@ export function useEmailComposeAiAssist({
         setAiLoading(false);
       }
     },
-    [subject, toLabel, threadContext, setBodyHtml, editorRef],
+    [subject, toLabel, threadContext, setBodyHtml, getBodyHtml, editorRef],
   );
 
   const runImproveBody = useCallback(

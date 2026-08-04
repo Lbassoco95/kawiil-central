@@ -27,6 +27,8 @@ import {
 } from "@/hooks/useAiModuleBriefing";
 import type { AiChatSimpleMessage } from "@/lib/fetchAiChatSimple";
 import { MetricInsightChips } from "@/components/dashboard/MetricInsightChips";
+import { AiFeedback } from "@/components/ai/AiFeedback";
+import { aiFeedbackKey } from "@/lib/aiFeedbackKey";
 
 /**
  * Contratos de `metric_insights` por módulo para AiHeroV24.
@@ -228,6 +230,13 @@ export function AiHeroV24(props: AiHeroV24Props) {
               <KawiilAiMarkdown className="text-[12.5px] leading-relaxed">
                 {briefing.content}
               </KawiilAiMarkdown>
+              <div className="mt-1 flex justify-end">
+                <AiFeedback
+                  surface="ai_hero_phrase"
+                  contextKey={aiFeedbackKey(briefing.content)}
+                  label={null}
+                />
+              </div>
               {Object.keys(briefing.metricInsights).length > 0 && (
                 <MetricInsightChips
                   insights={briefing.metricInsights}

@@ -8,6 +8,8 @@ import { useMexicoToday } from "@/hooks/useMexicoToday";
 import { toDateStringMX } from "@/lib/dateUtils";
 import { useAiModuleBriefing, sha256Hex, briefingJsonInstructions } from "@/hooks/useAiModuleBriefing";
 import { MetricInsightChips } from "@/components/dashboard/MetricInsightChips";
+import { AiFeedback } from "@/components/ai/AiFeedback";
+import { aiFeedbackKey } from "@/lib/aiFeedbackKey";
 
 const DASHBOARD_METRIC_LABELS: Record<string, string> = {
   tasks_pendientes: "Pendientes",
@@ -206,6 +208,12 @@ INSTRUCCIONES PARA "metric_insights":
           )}
 
           {content && <KawiilAiMarkdown>{content}</KawiilAiMarkdown>}
+
+          {content && (
+            <div className="mt-2 flex justify-end">
+              <AiFeedback surface="daily_briefing" contextKey={aiFeedbackKey(content)} />
+            </div>
+          )}
 
           {content && Object.keys(briefing.metricInsights).length > 0 && (
             <MetricInsightChips

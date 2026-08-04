@@ -9,6 +9,7 @@ import {
 import { BookMarked, ChevronRight } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { getSourceTypeCopy, getInsightTypeCopy, truncateChunkText } from "@/lib/knowledgeLabels";
+import { AiFeedback } from "@/components/ai/AiFeedback";
 
 export function KnowledgeInsightCard({ insight, technical }: { insight: KnowledgeInsight; technical: boolean }) {
   const ids = insight.source_chunks?.filter(Boolean);
@@ -31,6 +32,11 @@ export function KnowledgeInsightCard({ insight, technical }: { insight: Knowledg
       <div className="prose prose-xs dark:prose-invert max-w-none text-xs max-h-48 overflow-y-auto pr-1">
         <ReactMarkdown>{insight.content}</ReactMarkdown>
       </div>
+      {insight.content && (
+        <div className="mt-2 flex justify-end">
+          <AiFeedback surface="knowledge_insight" contextKey={insight.id} />
+        </div>
+      )}
       {ids && ids.length > 0 && (
         <Collapsible>
           <CollapsibleTrigger className="flex items-center gap-1 text-[11px] font-medium text-primary hover:underline data-[state=open]:[&_.chev-evidence]:rotate-90">
