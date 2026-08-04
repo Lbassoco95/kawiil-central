@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, Plus, Trash2 } from "lucide-react";
+import { AtSign, Bell, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { useReminders, type ReminderCreateInput } from "@/hooks/useReminders";
+import { useReminders, type Reminder, type ReminderCreateInput, type ReminderUpdateInput } from "@/hooks/useReminders";
+import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { ReminderCreateDialog } from "@/components/reminders/ReminderCreateDialog";
+import { ReminderDetailDialog } from "@/components/reminders/ReminderDetailDialog";
 import { useMexicoToday } from "@/hooks/useMexicoToday";
 import { formatDateMX } from "@/lib/dateUtils";
 import { useToast } from "@/hooks/use-toast";
@@ -15,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { UserAvatar } from "@/components/shared/UserAvatar";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 
 type Props = {
@@ -60,9 +63,26 @@ export function PersonalRemindersPanel({
     enabled: !!user,
   });
 
-  const { reminders, isLoading, isError, fetchError, addReminder, toggleReminder, deleteReminder } = useReminders();
+  const {
+    reminders,
+    isLoading,
+    isError,
+    fetchError,
+    refetch,
+    isFetching,
+    addReminder,
+    updateReminder,
+    toggleReminder,
+    deleteReminder,
+    addCollaborator,
+    removeCollaborator,
+  } = useReminders();
+  const { data: orgUsers = [] } = useOrgUsers();
   const [reminderDialogOpen, setReminderDialogOpen] = useState(false);
   const [reminderToDelete, setReminderToDelete] = useState<string | null>(null);
+  const [selectedReminderId, setSelectedReminderId] = useState<string | null>(null);
+
+  const selectedReminder = reminders.find((r) => r.id === selectedReminderId) ?? null;
 
   const confirmDeleteReminder = () => {
     if (!reminderToDelete) return;
@@ -77,6 +97,21 @@ export function PersonalRemindersPanel({
   const handleCreateReminder = (input: ReminderCreateInput) => {
     addReminder.mutate(input, { onSuccess: () => setReminderDialogOpen(false) });
   };
+
+  const handleSaveReminder = (input: ReminderUpdateInput) =>
+    new Promise<void>((resolve) => {
+      updateReminder.mutate(input, { onSettled: () => resolve() });
+    });
+
+  const handleAddCollaborator = (reminder: Reminder, userId: string) =>
+    new Promise<void>((resolve) => {
+      addCollaborator.mutate({ reminder, userId }, { onSettled: () => resolve() });
+    });
+
+  const handleRemoveCollaborator = (reminderId: string, userId: string) =>
+    new Promise<void>((resolve) => {
+      removeCollaborator.mutate({ reminderId, userId }, { onSettled: () => resolve() });
+    });
 
   const updateRemindersDigest = useMutation({
     mutationFn: async (reminders_hourly_digest: boolean) => {
@@ -147,6 +182,18 @@ export function PersonalRemindersPanel({
           <Plus className="h-4 w-4" />
           Nuevo recordatorio
         </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="gap-1.5 text-muted-foreground"
+          onClick={() => refetch()}
+          disabled={isFetching}
+          aria-label="Actualizar recordatorios"
+        >
+          <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
+          Actualizar
+        </Button>
       </div>
 
       <ReminderCreateDialog
@@ -154,6 +201,26 @@ export function PersonalRemindersPanel({
         onOpenChange={setReminderDialogOpen}
         onSubmit={handleCreateReminder}
         isPending={addReminder.isPending}
+      />
+
+      <ReminderDetailDialog
+        reminder={selectedReminder}
+        open={!!selectedReminder}
+        onOpenChange={(open) => {
+          if (!open) setSelectedReminderId(null);
+        }}
+        orgUsers={orgUsers}
+        currentUserId={user?.id}
+        onSave={handleSaveReminder}
+        isSaving={updateReminder.isPending}
+        onToggleComplete={(id, is_completed) => toggleReminder.mutate({ id, is_completed })}
+        onAddCollaborator={(userId) =>
+          selectedReminder ? handleAddCollaborator(selectedReminder, userId) : Promise.resolve()
+        }
+        onRemoveCollaborator={(userId) =>
+          selectedReminder ? handleRemoveCollaborator(selectedReminder.id, userId) : Promise.resolve()
+        }
+        isMutatingCollaborators={addCollaborator.isPending || removeCollaborator.isPending}
       />
 
       <DeleteConfirmDialog
@@ -184,8 +251,15 @@ export function PersonalRemindersPanel({
                   onCheckedChange={() => toggleReminder.mutate({ id: r.id, is_completed: true })}
                   className="h-4 w-4 mt-0.5 shrink-0"
                 />
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-foreground leading-snug">{r.title}</p>
+                <button
+                  type="button"
+                  onClick={() => setSelectedReminderId(r.id)}
+                  className="min-w-0 flex-1 text-left cursor-pointer"
+                  aria-label={`Abrir recordatorio: ${r.title}`}
+                >
+                  <p className="text-sm font-medium text-foreground leading-snug hover:underline decoration-dotted underline-offset-2">
+                    {r.title}
+                  </p>
                   {r.description?.trim() ? (
                     <p className="text-xs text-muted-foreground mt-1 line-clamp-3 whitespace-pre-wrap">{r.description.trim()}</p>
                   ) : null}
@@ -203,8 +277,31 @@ export function PersonalRemindersPanel({
                         {formatReminderDueTime(r.due_time) ? ` · ${formatReminderDueTime(r.due_time)}` : ""}
                       </span>
                     ) : null}
+                    {!r.is_owner ? (
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-normal">
+                        Compartido
+                      </Badge>
+                    ) : null}
+                    {r.collaborators.length > 0 ? (
+                      <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                        <AtSign className="h-3 w-3" />
+                        <span className="flex -space-x-1.5">
+                          {r.collaborators.slice(0, 3).map((c) => (
+                            <UserAvatar
+                              key={c.user_id}
+                              name={c.full_name}
+                              avatarUrl={c.avatar_url}
+                              userId={c.user_id}
+                              size="xs"
+                              className="ring-1 ring-background"
+                            />
+                          ))}
+                        </span>
+                        {r.collaborators.length > 3 ? <span>+{r.collaborators.length - 3}</span> : null}
+                      </span>
+                    ) : null}
                   </div>
-                </div>
+                </button>
               </div>
               <button
                 type="button"
@@ -226,7 +323,13 @@ export function PersonalRemindersPanel({
                     onCheckedChange={() => toggleReminder.mutate({ id: r.id, is_completed: false })}
                     className="h-4 w-4"
                   />
-                  <span className="text-sm text-muted-foreground line-through flex-1 truncate">{r.title}</span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedReminderId(r.id)}
+                    className="text-sm text-muted-foreground line-through flex-1 truncate text-left cursor-pointer hover:no-underline"
+                  >
+                    {r.title}
+                  </button>
                   <button
                     type="button"
                     onClick={() => setReminderToDelete(r.id)}
