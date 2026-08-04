@@ -645,18 +645,37 @@ Deno.serve(async (req) => {
       const ccList: string[] = params?.cc || [];
       const subjectB64 = btoa(unescape(encodeURIComponent(params?.subject || "(sin asunto)")));
       const bodyB64 = btoa(unescape(encodeURIComponent(params?.bodyHtml || "")));
-      const lines = [
+      const attachments = Array.isArray(params?.attachments) ? params.attachments : [];
+      const headerBase = [
         `From: ${acc.email}`,
         `To: ${toList.join(", ")}`,
         ...(ccList.length ? [`Cc: ${ccList.join(", ")}`] : []),
         `Subject: =?UTF-8?B?${subjectB64}?=`,
         "MIME-Version: 1.0",
-        "Content-Type: text/html; charset=utf-8",
-        "Content-Transfer-Encoding: base64",
-        "",
-        bodyB64,
       ];
-      const raw = btoa(lines.join("\r\n")).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+      let mimeStr: string;
+      if (attachments.length) {
+        // multipart/mixed: cuerpo HTML + cada adjunto (base64). Permite enviar adjuntos desde Gmail.
+        const boundary = `kawiil_${Date.now()}_bnd`;
+        const parts: string[] = [];
+        parts.push(`--${boundary}`, "Content-Type: text/html; charset=utf-8", "Content-Transfer-Encoding: base64", "", bodyB64);
+        for (const a of attachments) {
+          const name = String(a?.name || "adjunto").replace(/["\r\n]/g, "");
+          parts.push(
+            `--${boundary}`,
+            `Content-Type: ${a?.contentType || "application/octet-stream"}; name="${name}"`,
+            "Content-Transfer-Encoding: base64",
+            `Content-Disposition: attachment; filename="${name}"`,
+            "",
+            String(a?.contentBytes || ""),
+          );
+        }
+        parts.push(`--${boundary}--`);
+        mimeStr = [...headerBase, `Content-Type: multipart/mixed; boundary="${boundary}"`, "", ...parts].join("\r\n");
+      } else {
+        mimeStr = [...headerBase, "Content-Type: text/html; charset=utf-8", "Content-Transfer-Encoding: base64", "", bodyB64].join("\r\n");
+      }
+      const raw = btoa(mimeStr).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
       const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
         method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ raw }),

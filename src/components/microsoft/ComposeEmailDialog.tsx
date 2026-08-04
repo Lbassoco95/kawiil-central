@@ -363,10 +363,7 @@ export function ComposeEmailDialog({
     // Envío desde una cuenta VINCULADA (Outlook/Gmail) elegida en "De": se envía por esa cuenta
     // (send-as), no por la principal. Los adjuntos aún no se soportan por esta vía.
     if (fromOption && fromOption.kind !== "primary" && fromOption.accountId) {
-      if (attachments.length) {
-        toast.error("Los adjuntos aún no se pueden enviar desde cuentas vinculadas. Quítalos o envía desde tu cuenta Kawiil.");
-        return;
-      }
+      const linkedAttachments = attachments.map((a) => ({ name: a.name, contentType: a.contentType, contentBytes: a.contentBytes }));
       try {
         if (fromOption.kind === "outlook") {
           await sendLinkedOutlook.mutateAsync({
@@ -376,6 +373,7 @@ export function ComposeEmailDialog({
             bcc: bccList.length ? bccList : undefined,
             subject: subject || "(Sin asunto)",
             bodyHtml: bodyRef.current || "<p></p>",
+            attachments: linkedAttachments.length ? linkedAttachments : undefined,
           });
         } else {
           if (bccList.length) toast.info("Gmail vinculado no admite CCO; se omitió esa copia oculta.");
@@ -385,6 +383,7 @@ export function ComposeEmailDialog({
             cc: ccList.length ? ccList : undefined,
             subject: subject || "(Sin asunto)",
             bodyHtml: bodyRef.current || "<p></p>",
+            attachments: linkedAttachments.length ? linkedAttachments : undefined,
           });
         }
         toast.success(`Enviado desde ${fromOption.email}`);
