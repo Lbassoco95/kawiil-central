@@ -27,6 +27,8 @@ import {
   CalendarClock,
   MoreHorizontal,
   Minus,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -135,6 +137,7 @@ export function ComposeEmailDialog({
   const [schedulePickerOpen, setSchedulePickerOpen] = useState(false);
   const [customSched, setCustomSched] = useState("");
   const [minimized, setMinimized] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [appliedTemplateInfo, setAppliedTemplateInfo] = useState<{
     templateCategory?: string;
     clientId?: string;
@@ -189,6 +192,7 @@ export function ComposeEmailDialog({
     if (open) {
       signatureAppliedRef.current = false;
       setMinimized(false);
+      setExpanded(false);
       setFromKey("primary");
       setFromMenuOpen(false);
       setCustomSched("");
@@ -616,15 +620,27 @@ export function ComposeEmailDialog({
   }
 
   return createPortal(
-    <div
-      role="dialog"
-      aria-modal="false"
-      aria-label="Nuevo mensaje"
-      className="fixed bottom-0 right-3 sm:right-6 z-[120] flex h-[36rem] max-h-[calc(100dvh-1.5rem)] w-[min(100vw-1.5rem,32rem)] flex-col overflow-hidden rounded-t-xl border border-border/70 bg-background shadow-2xl animate-in slide-in-from-bottom-4 duration-200"
-      onKeyDown={(e) => {
-        if (e.key === "Escape") { e.stopPropagation(); onOpenChange(false); }
-      }}
-    >
+    <>
+      {expanded && (
+        <div
+          className="fixed inset-0 z-[119] bg-black/30 animate-in fade-in-0 duration-150"
+          onClick={() => setExpanded(false)}
+        />
+      )}
+      <div
+        role="dialog"
+        aria-modal={expanded ? "true" : "false"}
+        aria-label="Nuevo mensaje"
+        className={cn(
+          "fixed z-[120] flex flex-col overflow-hidden border border-border/70 bg-background shadow-2xl animate-in duration-200",
+          expanded
+            ? "left-1/2 top-1/2 h-[calc(100dvh-3rem)] w-[min(100vw-3rem,56rem)] -translate-x-1/2 -translate-y-1/2 rounded-xl fade-in-0 zoom-in-95"
+            : "bottom-0 right-3 sm:right-6 h-[36rem] max-h-[calc(100dvh-1.5rem)] w-[min(100vw-1.5rem,32rem)] rounded-t-xl slide-in-from-bottom-4",
+        )}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") { e.stopPropagation(); onOpenChange(false); }
+        }}
+      >
         <header className="shrink-0 flex items-center justify-between gap-3 border-b border-border/70 px-4 sm:px-5 py-3">
           <div className="flex min-w-0 items-center gap-2.5">
             <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
@@ -650,7 +666,16 @@ export function ComposeEmailDialog({
             <button
               type="button"
               className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-              onClick={() => setMinimized(true)}
+              onClick={() => setExpanded((v) => !v)}
+              aria-label={expanded ? "Reducir" : "Pantalla completa"}
+              title={expanded ? "Volver a ventana pequeña" : "Expandir a pantalla completa"}
+            >
+              {expanded ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+            </button>
+            <button
+              type="button"
+              className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+              onClick={() => { setMinimized(true); setExpanded(false); }}
               aria-label="Minimizar"
               title="Minimizar para leer el correo"
             >
@@ -1139,7 +1164,8 @@ export function ComposeEmailDialog({
             </div>
           </div>
         </div>
-    </div>,
+      </div>
+    </>,
     document.body,
   );
 }
