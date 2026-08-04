@@ -59,12 +59,12 @@ function fileKind(name: string): { label: string; Icon: LucideIcon; color: strin
   return { label: "Archivo", Icon: File, color: "text-muted-foreground", bg: "bg-muted" };
 }
 
-function AttachmentChip({ messageId, att }: { messageId: string; att: OutlookAttachment }) {
+function AttachmentChip({ messageId, att, onPreview }: { messageId: string; att: OutlookAttachment; onPreview?: (att: OutlookAttachment) => void }) {
   const [loading, setLoading] = useState(false);
 
   const kind = fileKind(att.name || "");
   const Icon = kind.Icon;
-  // Tipos que el navegador puede mostrar directo (PDF e imágenes) → botón "Ver".
+  // Tipos que el navegador puede mostrar directo (PDF e imágenes) → botón "Ver" (in-app).
   const isViewable = /\.(pdf|png|jpe?g|gif|webp|svg|bmp)$/i.test(att.name || "");
 
   const resolveBlobUrl = useCallback(async () => {
@@ -93,19 +93,6 @@ function AttachmentChip({ messageId, att }: { messageId: string; att: OutlookAtt
     }
   }, [resolveBlobUrl]);
 
-  const view = useCallback(async () => {
-    setLoading(true);
-    try {
-      const { url } = await resolveBlobUrl();
-      window.open(url, "_blank", "noopener,noreferrer");
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    } catch (e) {
-      toast.error("No se pudo abrir el adjunto: " + (e instanceof Error ? e.message : "Error desconocido"));
-    } finally {
-      setLoading(false);
-    }
-  }, [resolveBlobUrl]);
-
   const sizeLabel = att.size > 1024 * 1024
     ? `${(att.size / 1024 / 1024).toFixed(1)} MB`
     : `${Math.round(att.size / 1024)} KB`;
@@ -119,12 +106,12 @@ function AttachmentChip({ messageId, att }: { messageId: string; att: OutlookAtt
         <span className="block text-[12px] font-medium truncate" title={att.name || "adjunto"}>{att.name || "adjunto"}</span>
         <span className="block text-[10.5px] text-muted-foreground">{kind.label} · {sizeLabel}</span>
       </span>
-      {isViewable && (
+      {isViewable && onPreview && (
         <button
           type="button"
-          onClick={view}
+          onClick={() => onPreview(att)}
           disabled={loading}
-          title="Ver"
+          title="Ver aquí"
           className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-accent text-muted-foreground hover:text-foreground disabled:opacity-60 shrink-0"
         >
           <Eye className="w-3.5 h-3.5" />
@@ -181,6 +168,33 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onReply,
       ),
     [attachments],
   );
+  // Vista previa in-app de adjuntos (PDF / imágenes) sin salir de la pantalla.
+  const [preview, setPreview] = useState<{ url: string; name: string; kind: "pdf" | "image" } | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const openPreview = useCallback(async (att: OutlookAttachment) => {
+    if (!emailId) return;
+    const name = att.name || "adjunto";
+    const isPdf = /\.pdf$/i.test(name);
+    const isImage = /\.(png|jpe?g|gif|webp|svg|bmp)$/i.test(name);
+    if (!isPdf && !isImage) return;
+    setPreviewLoading(true);
+    try {
+      const r = await fetchRoutedAttachmentBlob(emailId, att as unknown as EmailAttachmentMeta);
+      const fromApi = (r.contentType || "").toLowerCase();
+      const inferred = inferMimeFromFileName(name);
+      const mime = fromApi && fromApi !== "application/octet-stream" ? r.contentType : inferred || "application/octet-stream";
+      const url = URL.createObjectURL(new Blob([r.blob], { type: mime }));
+      setPreview({ url, name, kind: isPdf ? "pdf" : "image" });
+    } catch (e) {
+      toast.error("No se pudo abrir la vista previa: " + (e instanceof Error ? e.message : "Error desconocido"));
+    } finally {
+      setPreviewLoading(false);
+    }
+  }, [emailId]);
+  const closePreview = useCallback(() => {
+    setPreview((p) => { if (p) URL.revokeObjectURL(p.url); return null; });
+  }, []);
+
   const { html: resolvedHtml } = useResolvedEmailHtml(
     emailId ?? undefined,
     (emailDetail as any)?.body?.contentType === "html" ? (emailDetail as any)?.body?.content : undefined,
@@ -432,14 +446,14 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onReply,
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {downloadableAttachments.map((att) => (
-                    <AttachmentChip key={att.id} messageId={emailId} att={att} />
+                    <AttachmentChip key={att.id} messageId={emailId} att={att} onPreview={openPreview} />
                   ))}
                 </div>
               </div>
             )}
             {iframeSrc ? (
               <iframe
-                srcDoc={`<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><style>body{font-family:system-ui,sans-serif;font-size:14px;line-height:1.7;color:#374151;margin:0;padding:0}a{color:#2563eb;cursor:pointer}img{max-width:100%}</style></head><body>${iframeSrc}</body></html>`}
+                srcDoc={`<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests"><base target="_blank"><style>body{font-family:system-ui,sans-serif;font-size:14px;line-height:1.7;color:#374151;margin:0;padding:0}a{color:#2563eb;cursor:pointer}img{max-width:100%;height:auto}</style></head><body>${iframeSrc}</body></html>`}
                 className="w-full border-0 min-h-[400px]"
                 style={{ height: "auto" }}
                 onLoad={(e) => {
@@ -479,6 +493,44 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onReply,
           </div>
         )}
       </div>
+
+      {/* Vista previa in-app del adjunto (PDF / imagen) — sin salir de la pantalla */}
+      {(preview || previewLoading) && (
+        <div className="fixed inset-0 z-[130] flex flex-col bg-black/75 animate-in fade-in-0 duration-150" onClick={closePreview}>
+          <div className="flex items-center justify-between gap-3 px-4 py-2.5 text-white shrink-0" onClick={(e) => e.stopPropagation()}>
+            <span className="text-[13px] font-medium truncate">{preview?.name ?? "Cargando…"}</span>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {preview && (
+                <a
+                  href={preview.url}
+                  download={preview.name}
+                  className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-white/15 hover:bg-white/25 text-[12px] font-medium transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" /> Descargar
+                </a>
+              )}
+              <button
+                type="button"
+                onClick={closePreview}
+                className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/15 hover:bg-white/25 transition-colors"
+                title="Cerrar"
+                aria-label="Cerrar vista previa"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+          <div className="flex-1 min-h-0 p-3 sm:p-6 flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+            {previewLoading && !preview ? (
+              <div className="text-white/80 text-[13px]">Cargando vista previa…</div>
+            ) : preview?.kind === "pdf" ? (
+              <iframe src={preview.url} title={preview.name} className="w-full h-full rounded-lg bg-white" />
+            ) : preview ? (
+              <img src={preview.url} alt={preview.name} className="max-w-full max-h-full object-contain rounded-lg" />
+            ) : null}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
