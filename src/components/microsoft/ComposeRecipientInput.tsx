@@ -58,7 +58,7 @@ export function ComposeRecipientInput({
       .filter((c) => {
         if (teamEmailLowerSet.has(c.email.toLowerCase())) return false;
         const name = (c.display_name || "").toLowerCase();
-        return c.email.includes(lastQuery) || name.includes(lastQuery);
+        return c.email.toLowerCase().includes(lastQuery) || name.includes(lastQuery);
       })
       .slice(0, 8);
   }, [mailContacts, lastQuery, teamEmailLowerSet]);
@@ -68,9 +68,11 @@ export function ComposeRecipientInput({
 
   const pick = (email: string) => {
     const before = parts.slice(0, -1).join(",").trim();
-    const next = before ? `${before}, ${email}` : email;
+    // Se agrega ", " al final para poder cargar otro destinatario de inmediato y que el buscador
+    // arranque limpio con el siguiente (antes se pegaba al correo anterior y ya no buscaba).
+    const next = before ? `${before}, ${email}, ` : `${email}, `;
     onChange(next);
-    setMenuOpen(false);
+    setMenuOpen(true); // mantener abierto para el siguiente destinatario
   };
 
   return (
@@ -79,7 +81,7 @@ export function ComposeRecipientInput({
         <input
           id={id}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => { onChange(e.target.value); setMenuOpen(true); }}
           placeholder={placeholder}
           className={inputClassName}
           onFocus={() => setMenuOpen(true)}
@@ -89,7 +91,7 @@ export function ComposeRecipientInput({
         <Input
           id={id}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => { onChange(e.target.value); setMenuOpen(true); }}
           placeholder={placeholder}
           className="w-full"
           onFocus={() => setMenuOpen(true)}
