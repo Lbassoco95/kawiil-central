@@ -479,6 +479,14 @@ Deno.serve(async (req) => {
       };
       if (params?.cc?.length) message.ccRecipients = makeRecipients(params.cc);
       if (params?.bcc?.length) message.bccRecipients = makeRecipients(params.bcc);
+      if (Array.isArray(params?.attachments) && params.attachments.length) {
+        message.attachments = params.attachments.map((a: any) => ({
+          "@odata.type": "#microsoft.graph.fileAttachment",
+          name: a.name,
+          contentType: a.contentType || "application/octet-stream",
+          contentBytes: a.contentBytes,
+        }));
+      }
       const res = await graphFetch(token, "/me/sendMail", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

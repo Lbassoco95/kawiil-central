@@ -48,6 +48,7 @@ export function useSendLinkedOutlookEmail() {
       bcc?: string[];
       subject: string;
       bodyHtml: string;
+      attachments?: { name: string; contentType: string; contentBytes: string }[];
     }) => {
       const { data, error } = await supabase.functions.invoke("outlook-account-api", {
         body: { action: "send-email", params: p },
@@ -68,6 +69,7 @@ export function useSendLinkedGmailEmail() {
       cc?: string[];
       subject: string;
       bodyHtml: string;
+      attachments?: { name: string; contentType: string; contentBytes: string }[];
     }) => {
       const { data, error } = await supabase.functions.invoke("google-api", {
         body: { action: "gmail-send", params: p },
