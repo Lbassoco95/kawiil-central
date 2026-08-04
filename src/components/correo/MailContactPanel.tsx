@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useEmailLabelAssignments, useEmailConversation, useMicrosoftConnection } from "@/hooks/useMicrosoft";
 import { useOutlookEmails } from "@/hooks/useMicrosoft";
-import { useRoutedEmailDetail } from "@/hooks/useLinkedAccounts";
+import { useRoutedEmailDetail, useLinkedOutlookEmailsAll, useGmailEmailsAll, parseEmailAccountRef } from "@/hooks/useLinkedAccounts";
 import { useTasksBySourceEmail } from "@/hooks/useTasks";
 import { inferEmailChips, emailListTimestamp, formatEmailDate, resolveCategory } from "@/lib/emailChips";
 import { useSenderCategories, useSetSenderCategory, SENDER_CATEGORY_LABEL, type SenderCategory } from "@/hooks/useSenderCategories";
@@ -62,19 +62,37 @@ export function MailContactPanel({ emailId, onAskAI, onCreateTask, onCreateRule 
   const senderEmail = (emailDetail as any)?.from?.emailAddress?.address || "";
   const senderDomain = senderEmail.split("@")[1] || "";
 
-  // Get all inbox emails to find threads from this sender
-  const { data: inboxData } = useOutlookEmails("inbox");
-  const allInboxEmails = useMemo(
-    () => (inboxData?.pages ?? []).flatMap((p) => p.emails as any[]),
-    [inboxData]
+  // Correos de este remitente en LA CUENTA a la que pertenece este correo (no solo la bandeja
+  // principal). Busca por el correo del remitente en esa cuenta → funciona en todas las cuentas.
+  const acctRef = parseEmailAccountRef(emailId);
+  const primarySenderSearch = useOutlookEmails(
+    "inbox",
+    acctRef.provider === "primary" && senderEmail ? senderEmail : undefined,
   );
+  const linkedOutlookSenderSearch = useLinkedOutlookEmailsAll({
+    accountId: acctRef.accountId ?? undefined,
+    search: senderEmail || undefined,
+    enabled: acctRef.provider === "outlook" && !!senderEmail && !!acctRef.accountId,
+  });
+  const gmailSenderSearch = useGmailEmailsAll({
+    accountId: acctRef.accountId ?? undefined,
+    search: senderEmail || undefined,
+    enabled: acctRef.provider === "gmail" && !!senderEmail && !!acctRef.accountId,
+  });
 
   const senderThreads = useMemo(() => {
     if (!senderEmail) return [];
-    return allInboxEmails
+    const pages =
+      acctRef.provider === "primary" ? primarySenderSearch.data?.pages :
+      acctRef.provider === "gmail" ? gmailSenderSearch.data?.pages :
+      linkedOutlookSenderSearch.data?.pages;
+    const src = (pages ?? []).flatMap((p: any) => p.emails as any[]);
+    const seen = new Set<string>();
+    return src
       .filter((e) => (e.from?.emailAddress?.address || "").toLowerCase() === senderEmail.toLowerCase())
-      .slice(0, 5);
-  }, [allInboxEmails, senderEmail]);
+      .filter((e) => { const id = e.id as string; if (!id || seen.has(id)) return false; seen.add(id); return true; })
+      .slice(0, 8);
+  }, [acctRef.provider, senderEmail, primarySenderSearch.data, gmailSenderSearch.data, linkedOutlookSenderSearch.data]);
 
   const chips = useMemo(() => {
     if (!emailDetail) return [];
