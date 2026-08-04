@@ -22,7 +22,7 @@ import { useMexicoToday } from "@/hooks/useMexicoToday";
 import { useTasksRealtime } from "@/hooks/useTasksRealtime";
 import { openNewTaskModal } from "@/lib/openNewTaskModal";
 import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
-import { TaskQuickPreview } from "@/components/tasks/TaskQuickPreview";
+import { TaskInlineQuickEdit } from "@/components/tasks/TaskInlineQuickEdit";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -208,8 +208,10 @@ const Tareas = () => {
     });
   };
 
-  // Previo rápido (panel lateral) — no navega, permite cambios rápidos in-place.
-  const [previewTaskId, setPreviewTaskId] = useState<string | null>(null);
+  // Edición rápida en línea — la fila se expande, no navega ni abre ventana.
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
+  const toggleExpand = (taskId: string) =>
+    setExpandedTaskId((prev) => (prev === taskId ? null : taskId));
   const updateTask = useUpdateTask();
   const quickSetStatus = (taskId: string, status: string) => {
     updateTask.mutate({ id: taskId, status } as any);
@@ -602,16 +604,17 @@ const Tareas = () => {
                 const projectName = (task as any).projects?.name ?? null;
                 const criticality = (task as any).criticality_level ?? null;
                 return (
+                  <div key={task.id} className={expandedTaskId === task.id ? "trow-group is-open" : "trow-group"}>
                   <div
-                    key={task.id}
-                    className="trow"
-                    onClick={() => setPreviewTaskId(task.id)}
+                    className={`trow${expandedTaskId === task.id ? " is-open" : ""}`}
+                    onClick={() => toggleExpand(task.id)}
                     role="button"
                     tabIndex={0}
+                    aria-expanded={expandedTaskId === task.id}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
-                        setPreviewTaskId(task.id);
+                        toggleExpand(task.id);
                       }
                     }}
                   >
@@ -709,6 +712,13 @@ const Tareas = () => {
                       <div />
                     )}
                   </div>
+                  {expandedTaskId === task.id && (
+                    <TaskInlineQuickEdit
+                      taskId={task.id}
+                      onOpenFull={() => openTask(task as any)}
+                    />
+                  )}
+                  </div>
                 );
               })
             )}
@@ -741,16 +751,17 @@ const Tareas = () => {
                   ? profileAvatarMap.get(task.assigned_to) ?? null
                   : null;
                 return (
+                  <div key={task.id} className={expandedTaskId === task.id ? "trow-group is-open" : "trow-group"}>
                   <div
-                    key={task.id}
-                    className="trow"
-                    onClick={() => setPreviewTaskId(task.id)}
+                    className={`trow${expandedTaskId === task.id ? " is-open" : ""}`}
+                    onClick={() => toggleExpand(task.id)}
                     role="button"
                     tabIndex={0}
+                    aria-expanded={expandedTaskId === task.id}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
-                        setPreviewTaskId(task.id);
+                        toggleExpand(task.id);
                       }
                     }}
                   >
@@ -828,6 +839,13 @@ const Tareas = () => {
                     </div>
                     <div className={due.className}>{due.label}</div>
                     <div />
+                  </div>
+                  {expandedTaskId === task.id && (
+                    <TaskInlineQuickEdit
+                      taskId={task.id}
+                      onOpenFull={() => openTask(task)}
+                    />
+                  )}
                   </div>
                 );
               })
@@ -907,18 +925,6 @@ const Tareas = () => {
           </details>
         )}
       </div>
-
-      <TaskQuickPreview
-        taskId={previewTaskId}
-        open={!!previewTaskId}
-        onOpenChange={(o) => {
-          if (!o) setPreviewTaskId(null);
-        }}
-        onOpenFull={(task) => {
-          setPreviewTaskId(null);
-          openTask(task);
-        }}
-      />
 
       <TaskDetailDialog taskId={selectedTaskId} onClose={closeTask} />
       <DeleteConfirmDialog

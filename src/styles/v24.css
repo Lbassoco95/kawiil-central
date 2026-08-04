@@ -159,6 +159,14 @@
 .kwv24 .mtable .trow:hover {
   background: hsl(var(--primary) / 0.03);
 }
+/* Fila expandida (edición rápida en línea) */
+.kwv24 .mtable .trow-group.is-open {
+  background: hsl(var(--primary) / 0.04);
+  box-shadow: inset 3px 0 0 hsl(var(--primary) / 0.5);
+}
+.kwv24 .mtable .trow.is-open {
+  background: transparent;
+}
 .kwv24 .mtable .trow:last-child {
   border-bottom: 0;
 }
