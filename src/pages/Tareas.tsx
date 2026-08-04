@@ -762,13 +762,31 @@ const Tareas = () => {
                     />
                     <div className="tname">
                       <div className="flex items-start gap-2 min-w-0">
-                        <Checkbox
-                          checked={selectedIds.has(task.id)}
-                          onCheckedChange={() => toggleSelected(task.id)}
-                          onClick={(e) => e.stopPropagation()}
-                          className="mt-0.5 shrink-0"
+                        <span
+                          role="checkbox"
+                          aria-checked={selectedIds.has(task.id)}
                           aria-label="Seleccionar tarea"
-                        />
+                          tabIndex={0}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleSelected(task.id);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === " " || e.key === "Enter") {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              toggleSelected(task.id);
+                            }
+                          }}
+                          className="flex shrink-0 cursor-pointer items-start p-2 -m-2"
+                        >
+                          <Checkbox
+                            checked={selectedIds.has(task.id)}
+                            tabIndex={-1}
+                            aria-hidden
+                            className="pointer-events-none mt-0.5"
+                          />
+                        </span>
                         <div className="min-w-0 flex-1">
                           <span className="title">{task.title}</span>
                           <div className="meta">
@@ -929,13 +947,31 @@ const Tareas = () => {
                     <div className={`prio-dot ${priorityClass(task.priority)}`} />
                     <div className="tname">
                       <div className="flex items-start gap-2 min-w-0">
-                        <Checkbox
-                          checked={selectedIds.has(task.id)}
-                          onCheckedChange={() => toggleSelected(task.id)}
-                          onClick={(e) => e.stopPropagation()}
-                          className="mt-0.5 shrink-0"
+                        <span
+                          role="checkbox"
+                          aria-checked={selectedIds.has(task.id)}
                           aria-label="Seleccionar tarea"
-                        />
+                          tabIndex={0}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleSelected(task.id);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === " " || e.key === "Enter") {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              toggleSelected(task.id);
+                            }
+                          }}
+                          className="flex shrink-0 cursor-pointer items-start p-2 -m-2"
+                        >
+                          <Checkbox
+                            checked={selectedIds.has(task.id)}
+                            tabIndex={-1}
+                            aria-hidden
+                            className="pointer-events-none mt-0.5"
+                          />
+                        </span>
                         <div className="min-w-0 flex-1">
                           <span
                             className="title"
