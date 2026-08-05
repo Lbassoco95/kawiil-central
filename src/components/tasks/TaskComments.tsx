@@ -12,7 +12,8 @@ import { formatMX } from "@/lib/dateUtils";
 import { renderTextWithMentionHighlights } from "@/lib/renderMentionHighlights";
 import { extractDropboxFilenameFromUrl, getDropboxLinkDisplayLabel } from "@/lib/dropboxLinkLabel";
 import { sanitizeStorageFileName } from "@/lib/storageFilename";
-import { Send, Link2, X, ExternalLink } from "lucide-react";
+import { AttachmentCard } from "@/components/shared/AttachmentCard";
+import { Send, Link2, X } from "lucide-react";
 import { toast } from "sonner";
 
 interface CommentAttachment {
@@ -46,30 +47,32 @@ export function TaskComments({ taskId }: { taskId: string }) {
     renderTextWithMentionHighlights(t, `cm-${keyOffset}`);
 
   const renderCommentContent = (content: string): ReactNode => {
-    const elements: ReactNode[] = [];
+    // Separa el texto de los adjuntos (📎 [nombre](url)): el texto se muestra con
+    // menciones resaltadas y cada adjunto como tarjeta con vista previa y descarga.
+    const atts: { name: string; url: string }[] = [];
     let lastIndex = 0;
     let m: RegExpExecArray | null;
     const rx = new RegExp(LINK_REGEX.source, "g");
+    const textParts: string[] = [];
     while ((m = rx.exec(content)) !== null) {
-      const before = content.slice(lastIndex, m.index);
-      if (before) elements.push(...renderMentions(before, elements.length));
-      elements.push(
-        <a
-          key={`link-${m.index}`}
-          href={m[2]}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 text-xs text-primary hover:underline break-all max-w-full"
-        >
-          📎 <span className="truncate max-w-[200px]">{m[1]}</span>
-          <ExternalLink className="h-3 w-3 shrink-0 inline" />
-        </a>,
-      );
+      textParts.push(content.slice(lastIndex, m.index));
+      atts.push({ name: m[1], url: m[2] });
       lastIndex = m.index + m[0].length;
     }
-    const remaining = content.slice(lastIndex);
-    if (remaining) elements.push(...renderMentions(remaining, elements.length));
-    return elements.length > 0 ? elements : content;
+    textParts.push(content.slice(lastIndex));
+    const text = textParts.join("").trim();
+    return (
+      <>
+        {text && <div className="whitespace-pre-wrap break-words">{renderMentions(text, 0)}</div>}
+        {atts.length > 0 && (
+          <div className="mt-1.5 flex flex-col gap-1.5">
+            {atts.map((a, i) => (
+              <AttachmentCard key={i} name={a.name} url={a.url} />
+            ))}
+          </div>
+        )}
+      </>
+    );
   };
 
   const send = () => {
