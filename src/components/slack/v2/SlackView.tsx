@@ -483,6 +483,13 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
     },
     enabled: !!selectedChannel && !!threadRootTs,
     staleTime: 30_000,
+    // Apertura instantánea: muestra el mensaje raíz (ya en el historial) mientras
+    // llegan las respuestas, en vez de un panel vacío/cargando.
+    placeholderData: () => {
+      if (!threadRootTs) return undefined;
+      const root = messages.find((m) => m.ts === threadRootTs);
+      return root ? [root] : undefined;
+    },
   });
 
   const threadMessages = threadQuery.data ?? [];
@@ -506,10 +513,34 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
       }, { timeoutMs: 30_000 });
       if (!data.ok) throw new Error("No se pudo enviar el mensaje");
     },
+    // Optimista: muestra el mensaje al instante (sin esperar el POST + refetch).
+    onMutate: async ({ text, files }) => {
+      if (files && files.length > 0) return undefined; // los archivos se suben de verdad
+      if (!selectedChannel) return undefined;
+      const key = ["slack-history-v2", selectedChannel];
+      await qc.cancelQueries({ queryKey: key });
+      const prev = qc.getQueryData(key);
+      const tempMsg = {
+        ts: (Date.now() / 1000).toFixed(6),
+        user: connection.slack_user_id ?? undefined,
+        text,
+      } as SlackMessage;
+      qc.setQueryData(key, (old: { pages?: HistoryPage[]; pageParams?: unknown[] } | undefined) => {
+        if (!old?.pages?.length) {
+          return { pages: [{ messages: [tempMsg] }], pageParams: [undefined] };
+        }
+        const pages = old.pages.slice();
+        pages[0] = { ...pages[0], messages: [...pages[0].messages, tempMsg] };
+        return { ...old, pages };
+      });
+      return { key, prev };
+    },
     onSuccess: () => {
       void historyQuery.refetch();
     },
-    onError: (err) => {
+    onError: (err, _vars, ctx) => {
+      const c = ctx as { key?: unknown[]; prev?: unknown } | undefined;
+      if (c?.key && c.prev !== undefined) qc.setQueryData(c.key, c.prev);
       toast.error(err instanceof Error ? err.message : "Error al enviar el mensaje");
     },
   });
@@ -552,10 +583,30 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
       }, { timeoutMs: 30_000 });
       if (!data.ok) throw new Error("No se pudo enviar la respuesta");
     },
+    // Optimista: la respuesta aparece al instante en el hilo.
+    onMutate: async ({ text, files }) => {
+      if (files && files.length > 0) return undefined;
+      if (!selectedChannel || !threadRootTs) return undefined;
+      const key = ["slack-thread-v2", selectedChannel, threadRootTs];
+      await qc.cancelQueries({ queryKey: key });
+      const prev = qc.getQueryData(key);
+      const tempMsg = {
+        ts: (Date.now() / 1000).toFixed(6),
+        user: connection.slack_user_id ?? undefined,
+        text,
+        thread_ts: threadRootTs,
+      } as SlackMessage;
+      qc.setQueryData(key, (old: SlackMessage[] | undefined) =>
+        Array.isArray(old) ? [...old, tempMsg] : [tempMsg],
+      );
+      return { key, prev };
+    },
     onSuccess: () => {
       void threadQuery.refetch();
     },
-    onError: (err) => {
+    onError: (err, _vars, ctx) => {
+      const c = ctx as { key?: unknown[]; prev?: unknown } | undefined;
+      if (c?.key && c.prev !== undefined) qc.setQueryData(c.key, c.prev);
       toast.error(err instanceof Error ? err.message : "Error al responder");
     },
   });

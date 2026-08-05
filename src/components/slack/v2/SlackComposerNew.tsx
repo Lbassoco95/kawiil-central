@@ -49,32 +49,56 @@ export const SlackComposerNew = forwardRef<SlackComposerHandle, Props>(function 
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const inputRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  /** Menciones insertadas en esta redacción: etiqueta visible → Slack user id. */
+  const mentionMapRef = useRef<Map<string, string>>(new Map());
+
+  /**
+   * Codifica las menciones a formato Slack `<@USERID>` para que la persona reciba
+   * la notificación y el mensaje se muestre resaltado (igual que en Slack nativo).
+   * Reemplaza cada `@Etiqueta` que corresponda a una mención insertada; las etiquetas
+   * más largas primero para no cortar nombres que contienen a otros.
+   */
+  const encodeMentions = useCallback((raw: string): string => {
+    if (!mentionMapRef.current.size) return raw;
+    let out = raw;
+    const entries = [...mentionMapRef.current.entries()].sort(
+      (a, b) => b[0].length - a[0].length,
+    );
+    for (const [label, id] of entries) {
+      if (!label) continue;
+      const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      out = out.replace(new RegExp(`@${escaped}`, "g"), `<@${id}>`);
+    }
+    return out;
+  }, []);
 
   const handleSend = useCallback(() => {
     const val = inputRef.current?.innerText?.trim() || text.trim();
     if ((!val && pendingFiles.length === 0) || isSending || disabled) return;
-    onSend(val, pendingFiles.length > 0 ? pendingFiles : undefined);
+    onSend(encodeMentions(val), pendingFiles.length > 0 ? pendingFiles : undefined);
     setText("");
     setPendingFiles([]);
+    mentionMapRef.current.clear();
     if (inputRef.current) inputRef.current.innerText = "";
     setMentionQuery(null);
     setEmojiQuery(null);
     setShowEmojiPicker(false);
-  }, [text, pendingFiles, isSending, disabled, onSend]);
+  }, [text, pendingFiles, isSending, disabled, onSend, encodeMentions]);
 
   // ─── Programar envío ─────────────────────────────────────
   const doSchedule = useCallback((whenMs: number) => {
     const val = inputRef.current?.innerText?.trim() || text.trim();
     if (!val || !onSchedule || disabled) return;
     if (whenMs <= Date.now() + 10_000) return; // debe ser futuro (holgura 10s)
-    onSchedule(val, Math.floor(whenMs / 1000));
+    onSchedule(encodeMentions(val), Math.floor(whenMs / 1000));
     setText("");
+    mentionMapRef.current.clear();
     if (inputRef.current) inputRef.current.innerText = "";
     setShowSchedule(false);
     setScheduleDraft("");
     setMentionQuery(null);
     setEmojiQuery(null);
-  }, [text, onSchedule, disabled]);
+  }, [text, onSchedule, disabled, encodeMentions]);
 
   /** Presets rápidos: "mañana 8:00", "mañana 9:00", "en 1 hora". */
   const schedulePresets = () => {
@@ -232,6 +256,8 @@ export const SlackComposerNew = forwardRef<SlackComposerHandle, Props>(function 
 
   const insertMention = useCallback((user: UserSuggestion & { id: string }) => {
     const label = user.display_name || user.real_name || user.id;
+    // Recuerda la mención para codificarla como <@id> al enviar (resalta + notifica).
+    mentionMapRef.current.set(label, user.id);
     const sel = window.getSelection();
     if (!sel || sel.rangeCount === 0 || !inputRef.current) return;
     const range = sel.getRangeAt(0);
