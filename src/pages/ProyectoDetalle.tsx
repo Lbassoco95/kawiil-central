@@ -19,6 +19,7 @@ import {
   MessageSquare,
   Sparkles,
   Trash2,
+  CheckCircle2,
   AlertTriangle,
   CircleAlert,
   ListTree,
@@ -47,11 +48,17 @@ type ProjectStatus = Database["public"]["Enums"]["project_status"];
 
 import { SERVICE_LABELS } from "@/lib/serviceLabels";
 import { kawiilTeamPath } from "@/lib/dropboxConfig";
-import { PROJECT_STATUS_CONFIG } from "@/lib/statusStyles";
+import { PROJECT_STATUS_CONFIG, TASK_STATUS_CONFIG } from "@/lib/statusStyles";
 import { useProfiles, useDeleteTask, useUpdateTask } from "@/hooks/useTasks";
 import { useUserRole } from "@/hooks/useUserRole";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 
 import { PhaseManager, type Phase } from "@/components/projects/PhaseManager";
@@ -99,6 +106,7 @@ const ProyectoDetalle = () => {
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
   const [showBulkDelete, setShowBulkDelete] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
   const [reconcilingBracketPhases, setReconcilingBracketPhases] = useState(false);
 
   const { data: complianceSiblingProjects = [] } = useQuery({
@@ -270,6 +278,34 @@ const ProyectoDetalle = () => {
     setSelectionMode(false);
     setSelectedTaskIds(new Set());
   }, []);
+
+  /** Cambio de estatus en lote para las tareas seleccionadas (mismo comportamiento que el módulo /tareas). */
+  const bulkSetStatus = useCallback(
+    async (status: string) => {
+      const ids = [...selectedTaskIds];
+      if (ids.length === 0) return;
+      setBulkBusy(true);
+      let ok = 0;
+      let fail = 0;
+      for (const taskId of ids) {
+        try {
+          await updateTask.mutateAsync({ id: taskId, status } as any);
+          ok++;
+        } catch {
+          fail++;
+        }
+      }
+      setBulkBusy(false);
+      exitSelectionMode();
+      queryClient.invalidateQueries({ queryKey: ["project-tasks", id] });
+      if (fail === 0) {
+        toast.success(`${ok} tarea${ok !== 1 ? "s" : ""} actualizada${ok !== 1 ? "s" : ""}`);
+      } else {
+        toast.warning(`${ok} actualizada(s), ${fail} no se pudieron (revisa subtareas abiertas)`);
+      }
+    },
+    [selectedTaskIds, updateTask, exitSelectionMode, queryClient, id],
+  );
 
   const handleReconcileBracketPhases = useCallback(async () => {
     if (!id) return;
@@ -658,7 +694,7 @@ const ProyectoDetalle = () => {
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                {canDeleteTasks && tasks.length > 0 && (
+                {(canManageTasks || canDeleteTasks) && tasks.length > 0 && (
                   <Button
                     size="sm"
                     variant={selectionMode ? "secondary" : "outline"}
@@ -714,15 +750,44 @@ const ProyectoDetalle = () => {
 
             {/* Bulk action bar */}
             {selectionMode && selectedTaskIds.size > 0 && (
-              <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 glass-card rounded-full px-5 py-2.5 flex items-center gap-4 shadow-xl border-primary/15">
+              <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 glass-card rounded-full px-5 py-2.5 flex flex-wrap items-center justify-center gap-2 sm:gap-3 shadow-xl border-primary/15">
                 <span className="text-sm font-medium">{selectedTaskIds.size} tarea{selectedTaskIds.size > 1 ? "s" : ""} seleccionada{selectedTaskIds.size > 1 ? "s" : ""}</span>
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  onClick={() => setShowBulkDelete(true)}
-                >
-                  <Trash2 className="h-3.5 w-3.5 mr-1" />Eliminar
-                </Button>
+                {canManageTasks && (
+                  <>
+                    <Button
+                      size="sm"
+                      className="gap-1.5"
+                      disabled={bulkBusy}
+                      onClick={() => void bulkSetStatus("completada")}
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5" />Completar
+                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button size="sm" variant="outline" disabled={bulkBusy}>
+                          Cambiar estatus ▾
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="center">
+                        {Object.entries(TASK_STATUS_CONFIG).map(([key, { label }]) => (
+                          <DropdownMenuItem key={key} onSelect={() => void bulkSetStatus(key)}>
+                            {label}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </>
+                )}
+                {canDeleteTasks && (
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    disabled={bulkBusy}
+                    onClick={() => setShowBulkDelete(true)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5 mr-1" />Eliminar
+                  </Button>
+                )}
               </div>
             )}
 
