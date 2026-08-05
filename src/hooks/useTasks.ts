@@ -50,6 +50,8 @@ export type Task = Tables<"tasks"> & {
   clients?: { name: string } | null;
   projects?: { name: string } | null;
   assignee_profile?: { full_name: string; email: string } | null;
+  /** Tarea principal (solo se rellena para subtareas, para poder enlazarla en las listas). */
+  parent_task?: { id: string; title: string | null } | null;
 };
 
 export type TaskComment = Tables<"task_comments"> & {
@@ -62,10 +64,12 @@ export function useTasks(filters?: { area?: string; status?: string; search?: st
   return useQuery({
     queryKey: ["tasks", filters],
     queryFn: async () => {
+      // Se incluyen las subtareas para que sean visibles y accionables desde /tareas
+      // (antes se filtraban con is_subtask y quedaban "huérfanas": visibles en el dashboard
+      // pero ausentes en la lista). Se marcan con `parent_task` para enlazarlas a su tarea principal.
       let query = supabase
         .from("tasks")
         .select("*, clients(name), projects(name)")
-        .or("is_subtask.eq.false,is_subtask.is.null")
         .order("created_at", { ascending: false });
 
       if (filters?.area && filters.area !== "todas") {
@@ -80,7 +84,29 @@ export function useTasks(filters?: { area?: string; status?: string; search?: st
 
       const { data, error } = await query;
       if (error) throw error;
-      return data as Task[];
+      const rows = (data ?? []) as Task[];
+
+      // Resolver el título de la tarea principal para cada subtarea (una sola consulta extra).
+      const parentIds = [
+        ...new Set(
+          rows
+            .filter((r) => r.is_subtask && r.parent_task_id)
+            .map((r) => r.parent_task_id as string),
+        ),
+      ];
+      if (parentIds.length > 0) {
+        const { data: parents } = await supabase
+          .from("tasks")
+          .select("id, title")
+          .in("id", parentIds);
+        const titleById = new Map((parents ?? []).map((p) => [p.id, p.title]));
+        for (const r of rows) {
+          if (r.is_subtask && r.parent_task_id) {
+            r.parent_task = { id: r.parent_task_id, title: titleById.get(r.parent_task_id) ?? null };
+          }
+        }
+      }
+      return rows;
     },
     enabled: !!user,
   });
