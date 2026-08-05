@@ -47,7 +47,7 @@ import {
 import { TASK_STATUS_CONFIG, STEP_STATUS_CONFIG } from "@/lib/statusStyles";
 import { isTaskClosedStatus } from "@/lib/taskStatusGroups";
 
-type StatusFilter = "todas" | "mias" | "vencidas" | "sin_resp";
+type StatusFilter = "mias" | "equipo" | "vencidas" | "sin_resp";
 type OrderMode = "fecha" | "prioridad" | "responsable";
 type Vista = "activas" | "historial";
 
@@ -138,7 +138,7 @@ const Tareas = () => {
 
   // ── Estado principal ────────────────────────────────────────
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("todas");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("mias");
   const [celula, setCelula] = useState<string>(() => searchParams.get("area") || "todas");
   const [orden, setOrden] = useState<OrderMode>("fecha");
   const [vista, setVista] = useState<Vista>(() => {
@@ -334,10 +334,36 @@ const Tareas = () => {
     },
   });
 
-  const openTasks = useMemo(
+  const isBlocked = (t: any) =>
+    Boolean(t.is_blocked) || t.status === "bloqueada" || t.delay_category === "bloqueada";
+
+  /**
+   * Universo "equipo/organización": todas las tareas visibles (incluye subtareas) tras aplicar
+   * el filtro de célula y la búsqueda (que ya se resuelven en el servidor dentro de useTasks).
+   */
+  const orgOpen = useMemo(
     () => (tasks as any[]).filter((t) => !isTaskClosedStatus(t.status)),
     [tasks],
   );
+
+  /**
+   * Universo "mías": exactamente la misma fuente que el dashboard personal
+   * (useMyAssignedTasks → assigned_to = yo, subtareas incluidas). Se filtra en cliente por
+   * célula y búsqueda para que los controles de la barra también apliquen a esta vista.
+   */
+  const mineOpen = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return (myAssignedRaw as any[])
+      .filter((t) => !isTaskClosedStatus(t.status))
+      .filter((t) => (celula !== "todas" ? t.area === celula : true))
+      .filter((t) => (q ? (t.title ?? "").toLowerCase().includes(q) : true));
+  }, [myAssignedRaw, celula, search]);
+
+  const mineOverdue = useMemo(
+    () => mineOpen.filter((t) => t.due_date && isPastDueCalendarMX(t.due_date)),
+    [mineOpen],
+  );
+
   const closedTasks = useMemo(() => {
     const list = (tasks as any[]).filter((t) => isTaskClosedStatus(t.status));
     return [...list].sort(
@@ -347,53 +373,41 @@ const Tareas = () => {
     );
   }, [tasks]);
 
-  const overdueCount = useMemo(
-    () =>
-      openTasks.filter((t) => t.due_date && isPastDueCalendarMX(t.due_date)).length,
-    [openTasks],
-  );
+  // Conteos operativos (personales por defecto, para que coincidan con el dashboard).
+  const overdueCount = mineOverdue.length;
   const dueThisWeekCount = useMemo(
     () =>
-      openTasks.filter((t) => {
+      mineOpen.filter((t) => {
         if (!t.due_date) return false;
         if (isPastDueCalendarMX(t.due_date)) return false;
         return t.due_date <= in7Ymd;
       }).length,
-    [openTasks, in7Ymd],
+    [mineOpen, in7Ymd],
   );
-  const blockedCount = useMemo(
-    () =>
-      openTasks.filter((t) =>
-        Boolean((t as any).is_blocked) ||
-        (t as any).status === "bloqueada" ||
-        (t as any).delay_category === "bloqueada",
-      ).length,
-    [openTasks],
-  );
+  const blockedCount = useMemo(() => mineOpen.filter(isBlocked).length, [mineOpen]);
   const sinRespCount = useMemo(
-    () => openTasks.filter((t) => !t.assigned_to).length,
-    [openTasks],
+    () => orgOpen.filter((t) => !t.assigned_to).length,
+    [orgOpen],
   );
-  const miasCount = useMemo(
-    () =>
-      openTasks.filter((t) => t.assigned_to === user?.id && !isTaskClosedStatus(t.status)).length,
-    [openTasks, user?.id],
-  );
+  const miasCount = mineOpen.length;
+  const equipoCount = orgOpen.length;
 
   // ── Filtro de pills + ordenamiento ──────────────────────────
   const filteredOpen = useMemo(() => {
-    let list = openTasks;
+    let list: any[];
     switch (statusFilter) {
-      case "mias":
-        list = list.filter((t) => t.assigned_to === user?.id);
+      case "equipo":
+        list = orgOpen;
         break;
       case "vencidas":
-        list = list.filter((t) => t.due_date && isPastDueCalendarMX(t.due_date));
+        list = mineOverdue;
         break;
       case "sin_resp":
-        list = list.filter((t) => !t.assigned_to);
+        list = orgOpen.filter((t) => !t.assigned_to);
         break;
+      case "mias":
       default:
+        list = mineOpen;
         break;
     }
     const sorted = [...list];
@@ -420,27 +434,24 @@ const Tareas = () => {
       });
     }
     return sorted;
-  }, [openTasks, statusFilter, orden, user?.id, profileMap]);
+  }, [orgOpen, mineOpen, mineOverdue, statusFilter, orden, user?.id, profileMap]);
 
   // ── Stats del hero ──────────────────────────────────────────
+  // Todos los indicadores son PERSONALES (mías, subtareas incluidas) para que coincidan
+  // exactamente con el dashboard. El total del equipo se muestra como contexto secundario.
   const heroStats = useMemo<Array<PageHeaderStat | false>>(() => {
-    const myOpen = myAssignedRaw.filter((t) => !isTaskClosedStatus(t.status));
-    const myOverdue = myOpen.filter(
-      (t) => t.due_date && isPastDueCalendarMX(t.due_date),
-    ).length;
-
     return [
       {
         label: "En curso",
-        value: openTasks.length,
-        sub: `${myOpen.length} asignada${myOpen.length === 1 ? "" : "s"} a ti`,
+        value: miasCount,
+        sub: `${equipoCount} en el equipo`,
         tone: "default" as const,
       },
       {
         label: "Vencidas",
-        value: myOverdue,
-        sub: myOverdue > 0 ? "Requieren atención" : "Sin atrasos",
-        tone: myOverdue > 0 ? ("warning" as const) : ("default" as const),
+        value: overdueCount,
+        sub: overdueCount > 0 ? "Requieren atención" : "Sin atrasos",
+        tone: overdueCount > 0 ? ("warning" as const) : ("default" as const),
       },
       {
         label: "Esta semana",
@@ -461,12 +472,12 @@ const Tareas = () => {
         tone: blockedCount > 0 ? ("warning" as const) : ("default" as const),
       },
     ];
-  }, [myAssignedRaw, openTasks.length, dueThisWeekCount, completedTodayCount, blockedCount]);
+  }, [miasCount, equipoCount, overdueCount, dueThisWeekCount, completedTodayCount, blockedCount]);
 
   // ── Contexto para AiHeroV24 ─────────────────────────────────
   const topCritical = useMemo(
     () =>
-      openTasks
+      orgOpen
         .filter(
           (t) =>
             t.priority === "urgente" ||
@@ -486,7 +497,7 @@ const Tareas = () => {
             : null,
           priority: t.priority ?? null,
         })),
-    [openTasks, todayYmd],
+    [orgOpen, todayYmd],
   );
 
   return (
@@ -514,7 +525,7 @@ const Tareas = () => {
           module="tareas"
           ready={!isLoading}
           ctx={{
-            tasksCount: openTasks.length,
+            tasksCount: miasCount,
             completedToday: completedTodayCount ?? 0,
             overdueCount,
             dueThisWeekCount,
@@ -526,8 +537,8 @@ const Tareas = () => {
         <div className="kpi-strip">
           <div className="kpi">
             <div className="label">En curso</div>
-            <div className="num">{openTasks.length}</div>
-            <div className="sub">{miasCount} asignada{miasCount === 1 ? "" : "s"} a ti</div>
+            <div className="num">{miasCount}</div>
+            <div className="sub">{equipoCount} en el equipo</div>
           </div>
           <div className={`kpi ${overdueCount > 0 ? "danger" : ""}`}>
             <div className="label">Vencidas</div>
@@ -564,17 +575,17 @@ const Tareas = () => {
           <div className="pill-group">
             <button
               type="button"
-              className={statusFilter === "todas" ? "active" : ""}
-              onClick={() => setStatusFilter("todas")}
-            >
-              Todas<span className="count">{openTasks.length}</span>
-            </button>
-            <button
-              type="button"
               className={statusFilter === "mias" ? "active" : ""}
               onClick={() => setStatusFilter("mias")}
             >
               Mías<span className="count">{miasCount}</span>
+            </button>
+            <button
+              type="button"
+              className={statusFilter === "equipo" ? "active" : ""}
+              onClick={() => setStatusFilter("equipo")}
+            >
+              Equipo<span className="count">{equipoCount}</span>
             </button>
             <button
               type="button"
@@ -741,6 +752,8 @@ const Tareas = () => {
                 const clientName = (task as any).clients?.name ?? null;
                 const projectName = (task as any).projects?.name ?? null;
                 const criticality = (task as any).criticality_level ?? null;
+                const isSubtask = Boolean((task as any).is_subtask);
+                const parentTask = (task as any).parent_task ?? null;
                 return (
                   <div key={task.id} className={expandedTaskId === task.id ? "trow-group is-open" : "trow-group"}>
                   <div
@@ -788,8 +801,35 @@ const Tareas = () => {
                           />
                         </span>
                         <div className="min-w-0 flex-1">
-                          <span className="title">{task.title}</span>
+                          <span className="title">
+                            {isSubtask && (
+                              <span
+                                className="flag"
+                                style={{ background: "hsl(var(--muted))", marginRight: 6 }}
+                                title="Subtarea"
+                              >
+                                ↳ Subtarea
+                              </span>
+                            )}
+                            {task.title}
+                          </span>
                           <div className="meta">
+                            {isSubtask && parentTask?.id && (
+                              <>
+                                <button
+                                  type="button"
+                                  className="underline-offset-2 hover:underline"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openTask({ id: parentTask.id, project_id: (task as any).project_id });
+                                  }}
+                                  title="Abrir tarea principal"
+                                >
+                                  Tarea principal: {parentTask.title ?? "ver"}
+                                </button>
+                                <span className="dot" />
+                              </>
+                            )}
                             {criticality === "critico" && (
                               <>
                                 <span className="flag flag-critico">Crítico</span>

@@ -30,7 +30,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { formatDateMX, nowMX } from "@/lib/dateUtils";
+import { formatDateMX, nowMX, isPastDueCalendarMX } from "@/lib/dateUtils";
 import { SERVICE_LABELS } from "@/lib/serviceLabels";
 import { useUserRole } from "@/hooks/useUserRole";
 
@@ -104,7 +104,7 @@ export function TeamDashboard() {
       const total = pending + completed;
       const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
       const overdue = userTasks.filter(
-        (t) => ["pendiente", "en_progreso", "en_revision"].includes(t.status) && t.due_date && new Date(t.due_date) < today
+        (t) => ["pendiente", "en_progreso", "en_revision"].includes(t.status) && isPastDueCalendarMX(t.due_date)
       ).length;
       const assignedClients =
         clients
@@ -249,7 +249,7 @@ export function TeamDashboard() {
         areas[a].completed++;
       } else if (["pendiente", "en_progreso", "en_revision"].includes(t.status)) {
         areas[a].pending++;
-        if (t.due_date && new Date(t.due_date) < today) areas[a].overdue++;
+        if (isPastDueCalendarMX(t.due_date)) areas[a].overdue++;
       }
     });
     return Object.entries(areas)
@@ -305,7 +305,7 @@ export function TeamDashboard() {
     const activeProjectDetails = projects?.filter((p) => p.status === "activo").map((p: any) => {
       const pt = allTasks?.filter((t) => t.project_id === p.id) ?? [];
       const ptPending = pt.filter(t => ["pendiente", "en_progreso", "en_revision"].includes(t.status));
-      const ptOverdue = ptPending.filter(t => t.due_date && new Date(t.due_date) < today);
+      const ptOverdue = ptPending.filter(t => isPastDueCalendarMX(t.due_date));
       
       let areaDetail = "";
       
@@ -314,7 +314,7 @@ export function TeamDashboard() {
         const ld = p.lawsuit_details;
         const deadlines = Array.isArray(ld.deadlines) ? ld.deadlines : [];
         const upcoming = deadlines.filter((d: any) => !d.completed && d.date).sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
-        const overdueD = upcoming.filter((d: any) => new Date(d.date) < today);
+        const overdueD = upcoming.filter((d: any) => isPastDueCalendarMX(d.date));
         if (upcoming.length > 0) {
           areaDetail = ` | Próximas fechas: ${upcoming.slice(0, 2).map((d: any) => `${d.title} (${d.date})`).join(", ")}`;
           if (overdueD.length > 0) areaDetail += ` ⚠️ ${overdueD.length} vencidas`;
@@ -452,7 +452,7 @@ INSTRUCCIONES:
                   >
                     <span className="text-sm text-foreground truncate flex-1">{t.title}</span>
                     {t.due_date && (
-                      <span className={`text-[11px] shrink-0 ${new Date(t.due_date) < today ? "text-destructive" : "text-muted-foreground"}`}>
+                      <span className={`text-[11px] shrink-0 ${isPastDueCalendarMX(t.due_date) ? "text-destructive" : "text-muted-foreground"}`}>
                         {formatDateMX(t.due_date)}
                       </span>
                     )}
@@ -705,7 +705,7 @@ Markdown: **negritas** para riesgo o acción; viñetas si varios clientes; emoji
                   <span className="truncate flex-1 mr-3 text-foreground">{t.title}</span>
                   <div className="flex items-center gap-2 shrink-0">
                     {t.due_date && (
-                      <span className={`text-[11px] ${new Date(t.due_date) < today ? "text-destructive font-medium" : "text-muted-foreground"}`}>
+                      <span className={`text-[11px] ${isPastDueCalendarMX(t.due_date) ? "text-destructive font-medium" : "text-muted-foreground"}`}>
                         {formatDateMX(t.due_date)}
                       </span>
                     )}
