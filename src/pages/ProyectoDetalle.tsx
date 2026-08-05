@@ -879,6 +879,10 @@ const ProyectoDetalle = () => {
                 selectionMode={selectionMode}
                 selectedTaskIds={selectedTaskIds}
                 onToggleTaskSelection={toggleTaskSelection}
+                onSelectTasks={(ids) => {
+                  setSelectionMode(true);
+                  setSelectedTaskIds(new Set(ids));
+                }}
                 expandPhaseKey={expandPhaseKeyForDeepLink}
                 phaseGrouping={isCumplimiento ? "compliance_catalog" : "none"}
                 complianceAnchorYmd={compliancePhaseAnchorYmd}
