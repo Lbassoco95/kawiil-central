@@ -62,6 +62,8 @@ interface PhaseManagerProps {
   selectionMode?: boolean;
   selectedTaskIds?: Set<string>;
   onToggleTaskSelection?: (taskId: string) => void;
+  /** Activa el modo selección con un conjunto de tareas ya marcadas (p. ej. «Seleccionar sin fase»). */
+  onSelectTasks?: (taskIds: string[]) => void;
   /** Contenido bajo «Agregar tarea» (p. ej. seguimiento de etapa en juicios) */
   renderPhaseFooter?: (phaseKey: string) => ReactNode;
   /** Oculta el bloque inferior «Agregar fase» (p. ej. juicios usan otro diálogo) */
@@ -311,7 +313,7 @@ function DroppablePhaseShell({
 
 export function PhaseManager({
   phases, tasks, profileMap, onPhasesChange, onTaskClick, onTaskPhaseAssign, onAddTask,
-  canDeleteTasks, onDeleteTask, selectionMode, selectedTaskIds, onToggleTaskSelection,
+  canDeleteTasks, onDeleteTask, selectionMode, selectedTaskIds, onToggleTaskSelection, onSelectTasks,
   renderPhaseFooter, hideBuiltInAddPhase, showTaskDragHint = true, expandPhaseKey,
   phaseGrouping = "none",
   complianceAnchorYmd = null,
@@ -689,6 +691,17 @@ export function PhaseManager({
               </button>
               <CheckSquare className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
               <span className="text-sm font-medium text-muted-foreground flex-1">Sin fase asignada</span>
+              {!selectionMode && onSelectTasks && unassignedOpen.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-[11px] shrink-0"
+                  onClick={(e) => { e.stopPropagation(); onSelectTasks(unassignedOpen.map((t) => t.id)); }}
+                  title="Seleccionar todas las tareas sin fase para acciones en lote"
+                >
+                  <CheckSquare className="h-3 w-3 mr-1" />Seleccionar
+                </Button>
+              )}
               <Badge variant="secondary" className="text-[10px]">{unassignedTasks.length}</Badge>
             </div>
             {!collapsedPhases.has("__none__") && (
@@ -744,6 +757,17 @@ export function PhaseManager({
                 </button>
                 <CheckSquare className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                 <span className="text-sm font-medium text-muted-foreground flex-1">Sin fase asignada</span>
+                {!selectionMode && onSelectTasks && unassignedOpen.length > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-[11px] shrink-0"
+                    onClick={(e) => { e.stopPropagation(); onSelectTasks(unassignedOpen.map((t) => t.id)); }}
+                    title="Seleccionar todas las tareas sin fase para acciones en lote"
+                  >
+                    <CheckSquare className="h-3 w-3 mr-1" />Seleccionar
+                  </Button>
+                )}
                 <Badge variant="secondary" className="text-[10px]">{unassignedTasks.length}</Badge>
               </div>
               {!collapsedPhases.has("__none__") && (
