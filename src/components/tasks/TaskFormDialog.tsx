@@ -12,8 +12,11 @@ import { useCreateTask, useProfiles } from "@/hooks/useTasks";
 import { useClients } from "@/hooks/useClients";
 import { useProjects } from "@/hooks/useProjects";
 import { useAreaOptions } from "@/hooks/useAreaOptions";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { findSimilarTasks, type SimilarTaskCandidate } from "@/lib/taskSimilarity";
 import { Badge } from "@/components/ui/badge";
-import { X, Plus, Link, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
+import { X, Plus, Link, ChevronDown, ChevronUp, RefreshCw, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { AIDescriptionButton } from "@/components/tasks/AIDescriptionButton";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
@@ -64,6 +67,8 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
   const [recurrenceType, setRecurrenceType] = useState<string>("on_complete");
   /** Al abrir el modal mostramos todas las opciones (descripción, cliente, proyecto…); la rápida queda en QuickTaskInput. */
   const [showAdvanced, setShowAdvanced] = useState(true);
+  /** Tareas existentes similares detectadas al intentar crear (aviso de posible duplicado). */
+  const [dupeMatches, setDupeMatches] = useState<Array<SimilarTaskCandidate & { score: number }>>([]);
 
   const createTask = useCreateTask();
   const { data: profiles } = useProfiles();
@@ -132,8 +137,26 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
     return calculateNextOccurrenceDate(dueDate, recurrencePattern);
   }, [isRecurring, dueDate, recurrencePattern]);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  // Candidatos para detección de duplicados: tareas abiertas del mismo proyecto
+  // (o del mismo cliente si no hay proyecto). Base para el aviso de "posible duplicado".
+  const { data: dupeCandidates = [] } = useQuery({
+    queryKey: ["dupe-candidates", projectId || null, clientId || null],
+    enabled: open && (!!projectId || !!clientId),
+    staleTime: 30_000,
+    queryFn: async () => {
+      let q = supabase
+        .from("tasks")
+        .select("id, title, status, area, is_recurring")
+        .in("status", ["pendiente", "en_progreso", "en_revision"]);
+      if (projectId) q = q.eq("project_id", projectId);
+      else if (clientId) q = q.eq("client_id", clientId);
+      const { data, error } = await q;
+      if (error) throw error;
+      return (data ?? []) as SimilarTaskCandidate[];
+    },
+  });
+
+  const doCreate = () => {
     createTask.mutate(
       {
         title,
@@ -168,12 +191,27 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
     );
   };
 
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    // Aviso de posible duplicado antes de crear (no aplica a recurrentes ni Contabilidad).
+    const matches = findSimilarTasks(title, dupeCandidates, {
+      area: area || null,
+      isRecurring,
+      threshold: 0.7,
+    });
+    if (matches.length > 0) {
+      setDupeMatches(matches);
+      return;
+    }
+    doCreate();
+  };
+
   const resetForm = () => {
     setTitle(""); setDescription(""); setArea(""); setPriority("media");
     setDueDate(""); setAssignedTo(""); setAdditionalAssignees([]);
     setClientId(""); setProjectId(""); setDropboxLinks([]); setNewLink("");
     setIsRecurring(false); setRecurrencePattern("weekly"); setRecurrenceType("on_complete");
-    setShowAdvanced(true);
+    setShowAdvanced(true); setDupeMatches([]);
   };
 
   const addAssignee = (userId: string) => {
@@ -211,7 +249,13 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
           {/* Essential fields */}
           <div>
             <Label>Título *</Label>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} required placeholder="¿Qué hay que hacer?" autoFocus />
+            <Input
+              value={title}
+              onChange={(e) => { setTitle(e.target.value); if (dupeMatches.length) setDupeMatches([]); }}
+              required
+              placeholder="¿Qué hay que hacer?"
+              autoFocus
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -405,12 +449,46 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
             </div>
           )}
 
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-            <Button type="submit" disabled={createTask.isPending || !title.trim()}>
-              {createTask.isPending ? "Creando..." : "Crear tarea"}
-            </Button>
-          </div>
+          {dupeMatches.length > 0 && (
+            <div className="rounded-lg border border-amber-500/40 bg-amber-500/[0.06] p-3 space-y-2">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-500 mt-0.5" />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-foreground">
+                    Ya existe{dupeMatches.length > 1 ? "n" : ""} {dupeMatches.length} tarea{dupeMatches.length > 1 ? "s" : ""} parecida{dupeMatches.length > 1 ? "s" : ""} en este {projectId ? "proyecto" : "cliente"}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    ¿Es la misma tarea o una distinta? Si es otra, puedes crearla de todas formas.
+                  </p>
+                </div>
+              </div>
+              <ul className="space-y-1 pl-6">
+                {dupeMatches.slice(0, 5).map((m) => (
+                  <li key={m.id} className="text-xs text-foreground flex items-center gap-2">
+                    <span className="truncate" title={m.title}>• {m.title}</span>
+                    {m.status && <span className="text-[10px] text-muted-foreground shrink-0">({m.status})</span>}
+                  </li>
+                ))}
+              </ul>
+              <div className="flex justify-end gap-2 pt-1">
+                <Button type="button" variant="outline" size="sm" onClick={() => setDupeMatches([])}>
+                  Revisar
+                </Button>
+                <Button type="button" size="sm" disabled={createTask.isPending} onClick={doCreate}>
+                  {createTask.isPending ? "Creando..." : "Es otra, crear de todas formas"}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {dupeMatches.length === 0 && (
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+              <Button type="submit" disabled={createTask.isPending || !title.trim()}>
+                {createTask.isPending ? "Creando..." : "Crear tarea"}
+              </Button>
+            </div>
+          )}
         </form>
       </DialogContent>
     </Dialog>

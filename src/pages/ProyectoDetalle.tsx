@@ -76,6 +76,7 @@ import { toast } from "sonner";
 import { PhaseManager, type Phase } from "@/components/projects/PhaseManager";
 import { ProjectDelayPredictorCard } from "@/components/projects/ProjectDelayPredictorCard";
 import { isTaskClosedStatus } from "@/lib/taskStatusGroups";
+import { findDuplicateGroups } from "@/lib/taskSimilarity";
 import { TeamVisibilityBanner } from "@/components/shared/TeamVisibilityBanner";
 import { reconcileBracketPhasesForProject } from "@/lib/reconcileTaskPhasesFromTitles";
 import { complianceAnchorYmdFromProject } from "@/lib/complianceDueDates";
@@ -122,6 +123,8 @@ const ProyectoDetalle = () => {
   const [bulkBusy, setBulkBusy] = useState(false);
   // Cierre / reapertura de proyecto (null = sin diálogo abierto).
   const [projectStatusAction, setProjectStatusAction] = useState<null | "close" | "reopen">(null);
+  // Resultado de "Detectar duplicados" (banner informativo mientras se revisan en lote).
+  const [dupeBanner, setDupeBanner] = useState<{ groups: number; selected: number } | null>(null);
   const [reconcilingBracketPhases, setReconcilingBracketPhases] = useState(false);
 
   const { data: complianceSiblingProjects = [] } = useQuery({
@@ -292,7 +295,41 @@ const ProyectoDetalle = () => {
   const exitSelectionMode = useCallback(() => {
     setSelectionMode(false);
     setSelectedTaskIds(new Set());
+    setDupeBanner(null);
   }, []);
+
+  /**
+   * Detecta tareas repetidas (mismo título normalizado) y preselecciona las copias
+   * dejando 1 de cada grupo (la más antigua). Excluye recurrentes y Contabilidad.
+   * Luego se revisan y eliminan/completan con la barra de acciones en lote.
+   */
+  const handleDetectDuplicates = useCallback(() => {
+    const groups = findDuplicateGroups(
+      (tasks as any[]).map((t) => ({
+        id: t.id,
+        title: t.title,
+        status: t.status,
+        area: t.area,
+        is_recurring: t.is_recurring,
+        created_at: t.created_at,
+      })),
+    );
+    if (groups.length === 0) {
+      toast.info("No se detectaron tareas duplicadas (mismo título) en este proyecto.");
+      return;
+    }
+    const toSelect = new Set<string>();
+    for (const group of groups) {
+      // Conservar la más antigua; marcar el resto como posibles duplicados.
+      const sorted = [...group].sort((a: any, b: any) =>
+        String(a.created_at ?? "").localeCompare(String(b.created_at ?? "")),
+      );
+      sorted.slice(1).forEach((t) => toSelect.add(t.id));
+    }
+    setSelectionMode(true);
+    setSelectedTaskIds(toSelect);
+    setDupeBanner({ groups: groups.length, selected: toSelect.size });
+  }, [tasks]);
 
   /** Cambio de estatus en lote para las tareas seleccionadas (mismo comportamiento que el módulo /tareas). */
   const bulkSetStatus = useCallback(
@@ -777,6 +814,12 @@ const ProyectoDetalle = () => {
                 </p>
               </div>
               <div className="flex items-center gap-2">
+                {(canManageTasks || canDeleteTasks) && tasks.length > 1 && (
+                  <Button size="sm" variant="outline" onClick={handleDetectDuplicates}>
+                    <ListTree className="h-3.5 w-3.5 mr-1" />
+                    Detectar duplicados
+                  </Button>
+                )}
                 {(canManageTasks || canDeleteTasks) && tasks.length > 0 && (
                   <Button
                     size="sm"
@@ -792,6 +835,17 @@ const ProyectoDetalle = () => {
                 </Button>
               </div>
             </div>
+
+            {dupeBanner && (
+              <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/[0.06] px-4 py-3">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-500 mt-0.5" />
+                <p className="text-xs text-foreground">
+                  Se detectaron <strong>{dupeBanner.groups}</strong> grupo{dupeBanner.groups === 1 ? "" : "s"} de tareas repetidas.
+                  Preseleccioné <strong>{dupeBanner.selected}</strong> posible{dupeBanner.selected === 1 ? "" : "s"} duplicado{dupeBanner.selected === 1 ? "" : "s"} (dejé 1 de cada grupo, la más antigua).
+                  Revísalos y usa la barra inferior para <strong>eliminarlos</strong> o <strong>completarlos</strong> en lote.
+                </p>
+              </div>
+            )}
 
             {selectionMode && tasks.length > 0 && (
               <div className="flex items-center gap-2 px-2">
