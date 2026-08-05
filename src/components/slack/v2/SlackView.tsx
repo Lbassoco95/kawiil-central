@@ -623,11 +623,60 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
         name,
       }, { timeoutMs: 15_000 });
     },
-    onSuccess: () => {
-      void historyQuery.refetch();
-      void threadQuery.refetch();
+    // Optimista: la reacción aparece al instante; solo se refresca la superficie
+    // (historial o hilo) que realmente contiene el mensaje, no ambas.
+    onMutate: async ({ ts, emoji }) => {
+      const name = emoji.replace(/^:|:$/g, "").trim();
+      const self = connection.slack_user_id ?? undefined;
+      const bump = (msgs: SlackMessage[]): { changed: boolean; next: SlackMessage[] } => {
+        let changed = false;
+        const next = msgs.map((m) => {
+          if (m.ts !== ts) return m;
+          changed = true;
+          const reactions = m.reactions ? m.reactions.map((r) => ({ ...r })) : [];
+          const idx = reactions.findIndex((r) => r.name === name);
+          if (idx >= 0) {
+            if (self && reactions[idx].users?.includes(self)) return m; // ya reaccionó
+            reactions[idx].count += 1;
+            reactions[idx].users = [...(reactions[idx].users ?? []), ...(self ? [self] : [])];
+          } else {
+            reactions.push({ name, count: 1, users: self ? [self] : [] });
+          }
+          return { ...m, reactions };
+        });
+        return { changed, next };
+      };
+
+      const histKey = ["slack-history-v2", selectedChannel];
+      const thrKey = ["slack-thread-v2", selectedChannel, threadRootTs];
+      const prevHist = qc.getQueryData(histKey);
+      const prevThread = threadRootTs ? qc.getQueryData(thrKey) : undefined;
+      let inThread = false;
+
+      qc.setQueryData(histKey, (old: { pages?: HistoryPage[]; pageParams?: unknown[] } | undefined) => {
+        if (!old?.pages?.length) return old;
+        return { ...old, pages: old.pages.map((p) => ({ ...p, messages: bump(p.messages).next })) };
+      });
+      if (threadRootTs) {
+        qc.setQueryData(thrKey, (old: SlackMessage[] | undefined) => {
+          if (!Array.isArray(old)) return old;
+          const res = bump(old);
+          inThread = res.changed;
+          return res.next;
+        });
+      }
+      return { histKey, thrKey, prevHist, prevThread, inThread };
     },
-    onError: (err) => {
+    onSuccess: (_data, _vars, ctx) => {
+      const c = ctx as { inThread?: boolean } | undefined;
+      // Refetch dirigido: solo la superficie que contiene el mensaje.
+      if (c?.inThread) void threadQuery.refetch();
+      else void historyQuery.refetch();
+    },
+    onError: (err, _vars, ctx) => {
+      const c = ctx as { histKey?: unknown[]; thrKey?: unknown[]; prevHist?: unknown; prevThread?: unknown } | undefined;
+      if (c?.histKey && c.prevHist !== undefined) qc.setQueryData(c.histKey, c.prevHist);
+      if (c?.thrKey && c.prevThread !== undefined) qc.setQueryData(c.thrKey, c.prevThread);
       toast.error(err instanceof Error ? err.message : "No se pudo agregar la reacción");
     },
   });
