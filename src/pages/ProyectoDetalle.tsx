@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, Fragment } from "react";
 import { useParams, useNavigate, useSearchParams, Navigate } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
-import { useProjectDetail } from "@/hooks/useProjects";
+import { useProjectDetail, useUpdateProject } from "@/hooks/useProjects";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,6 +20,7 @@ import {
   Sparkles,
   Trash2,
   CheckCircle2,
+  RotateCcw,
   AlertTriangle,
   CircleAlert,
   ListTree,
@@ -59,6 +60,17 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { toDateStringMX } from "@/lib/dateUtils";
 import { toast } from "sonner";
 
 import { PhaseManager, type Phase } from "@/components/projects/PhaseManager";
@@ -98,15 +110,18 @@ const ProyectoDetalle = () => {
   const [signRequests, setSignRequests] = useState<any[]>([]);
   const [loadingSign, setLoadingSign] = useState(false);
   const [showMinutesDialog, setShowMinutesDialog] = useState(false);
-  const { canDeleteTasks, canManageTasks } = useUserRole();
+  const { canDeleteTasks, canManageTasks, isAdminOrManager } = useUserRole();
   const deleteTask = useDeleteTask();
   const updateTask = useUpdateTask();
+  const updateProject = useUpdateProject();
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
   const [showBulkDelete, setShowBulkDelete] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
+  // Cierre / reapertura de proyecto (null = sin diálogo abierto).
+  const [projectStatusAction, setProjectStatusAction] = useState<null | "close" | "reopen">(null);
   const [reconcilingBracketPhases, setReconcilingBracketPhases] = useState(false);
 
   const { data: complianceSiblingProjects = [] } = useQuery({
@@ -306,6 +321,26 @@ const ProyectoDetalle = () => {
     },
     [selectedTaskIds, updateTask, exitSelectionMode, queryClient, id],
   );
+
+  /** Cierra (completa) o reabre el proyecto. Al cerrar, fija fecha de fin = hoy si estaba vacía. */
+  const confirmProjectStatusChange = useCallback(async () => {
+    if (!project) return;
+    const closing = projectStatusAction === "close";
+    const updates: { id: string; status: ProjectStatus; end_date?: string } = {
+      id: project.id,
+      status: closing ? "completado" : "activo",
+    };
+    if (closing && !project.end_date) updates.end_date = toDateStringMX();
+    try {
+      await updateProject.mutateAsync(updates as any);
+      queryClient.invalidateQueries({ queryKey: ["project", id] });
+      toast.success(closing ? "Proyecto cerrado" : "Proyecto reabierto");
+    } catch (e: any) {
+      toast.error("No se pudo actualizar el proyecto: " + e.message);
+    } finally {
+      setProjectStatusAction(null);
+    }
+  }, [project, projectStatusAction, updateProject, queryClient, id]);
 
   const handleReconcileBracketPhases = useCallback(async () => {
     if (!id) return;
@@ -561,6 +596,28 @@ const ProyectoDetalle = () => {
                 <Sparkles className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">Subir minuta</span>
               </Button>
+              {isAdminOrManager && (
+                project.status === "completado" ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={() => setProjectStatusAction("reopen")}
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Reabrir proyecto</span>
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={() => setProjectStatusAction("close")}
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Cerrar proyecto</span>
+                  </Button>
+                )
+              )}
             </div>
           </div>
           <TeamVisibilityBanner
@@ -588,6 +645,32 @@ const ProyectoDetalle = () => {
         </div>
 
         <ProjectDelayPredictorCard project={project} tasks={tasks as any} />
+
+        {/* Aviso: todas las tareas cerradas y el proyecto sigue activo → invitar a cerrarlo. */}
+        {isAdminOrManager &&
+          project.status !== "completado" &&
+          tasks.length > 0 &&
+          openTaskCount === 0 && (
+            <div className="flex flex-col gap-3 rounded-xl border border-emerald-500/25 bg-emerald-500/[0.06] px-4 py-3 sm:flex-row sm:items-center">
+              <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-foreground">
+                  Todas las tareas están cerradas ({closedTaskCount}/{tasks.length})
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  El proyecto sigue marcado como activo. ¿Quieres cerrarlo como completado?
+                </p>
+              </div>
+              <Button
+                size="sm"
+                className="gap-1.5 shrink-0"
+                onClick={() => setProjectStatusAction("close")}
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Cerrar proyecto
+              </Button>
+            </div>
+          )}
 
         {/* Tab pills */}
         <div className="flex gap-1.5 overflow-x-auto scrollbar-hide -mx-1 px-1 pb-1 flex-nowrap">
@@ -922,6 +1005,41 @@ const ProyectoDetalle = () => {
         area={project.area}
         projectName={project.name}
       />
+
+      {/* Confirmación de cierre / reapertura del proyecto */}
+      <AlertDialog
+        open={projectStatusAction !== null}
+        onOpenChange={(o) => { if (!o) setProjectStatusAction(null); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {projectStatusAction === "reopen" ? "¿Reabrir el proyecto?" : "¿Cerrar el proyecto?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {projectStatusAction === "reopen" ? (
+                <>El proyecto volverá a estado <strong>Activo</strong> y reaparecerá en las vistas de proyectos en curso.</>
+              ) : openTaskCount > 0 ? (
+                <>
+                  Se marcará como <strong>Completado</strong> y se fijará la fecha de fin de hoy si no tenía.
+                  {" "}Atención: quedan <strong>{openTaskCount} tarea{openTaskCount === 1 ? "" : "s"} abierta{openTaskCount === 1 ? "" : "s"}</strong> que no se cerrarán automáticamente.
+                </>
+              ) : (
+                <>Todas las tareas están cerradas. Se marcará como <strong>Completado</strong> y se fijará la fecha de fin de hoy si no tenía.</>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={updateProject.isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={updateProject.isPending}
+              onClick={(e) => { e.preventDefault(); void confirmProjectStatusChange(); }}
+            >
+              {projectStatusAction === "reopen" ? "Reabrir" : "Cerrar proyecto"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 };
