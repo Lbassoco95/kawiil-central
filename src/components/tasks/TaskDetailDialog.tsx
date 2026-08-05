@@ -3,6 +3,7 @@ import { DropboxFilePicker } from "@/components/projects/DropboxFilePicker";
 import { DropboxUploadDialog } from "@/components/documents/DropboxUploadDialog";
 import { BlockTimeDialog } from "@/components/microsoft/BlockTimeDialog";
 import { DocumentPreviewDialog } from "@/components/documents/DocumentPreviewDialog";
+import { AttachmentCard } from "@/components/shared/AttachmentCard";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -445,34 +446,36 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
 
   const LINK_REGEX = /📎\s*\[([^\]]+)\]\(([^)]+)\)/g;
 
-  const renderCommentContent = (content: string) => {
-    // First parse attachment links
-    const elements: React.ReactNode[] = [];
+  const renderCommentContent = (content: string): React.ReactNode => {
+    // Separa el texto de los adjuntos (📎 [nombre](url)): el texto conserva las
+    // menciones resaltadas y cada adjunto se muestra como tarjeta con vista previa
+    // y descarga (mismo diseño por tipo de archivo que la pestaña Archivos).
+    const atts: { name: string; url: string }[] = [];
     let lastIndex = 0;
-    let linkMatch;
-    const tempContent = content;
+    let linkMatch: RegExpExecArray | null;
     const linkRegex = new RegExp(LINK_REGEX.source, "g");
+    const textParts: string[] = [];
 
-    while ((linkMatch = linkRegex.exec(tempContent)) !== null) {
-      const before = tempContent.slice(lastIndex, linkMatch.index);
-      if (before) elements.push(...renderMentions(before, elements.length));
-      elements.push(
-        <a
-          key={`link-${linkMatch.index}`}
-          href={linkMatch[2]}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 text-xs text-primary hover:underline break-all max-w-full"
-        >
-          📎 <span className="truncate max-w-[200px]">{linkMatch[1]}</span>
-          <ExternalLink className="h-3 w-3 shrink-0 inline" />
-        </a>
-      );
+    while ((linkMatch = linkRegex.exec(content)) !== null) {
+      textParts.push(content.slice(lastIndex, linkMatch.index));
+      atts.push({ name: linkMatch[1], url: linkMatch[2] });
       lastIndex = linkMatch.index + linkMatch[0].length;
     }
-    const remaining = tempContent.slice(lastIndex);
-    if (remaining) elements.push(...renderMentions(remaining, elements.length));
-    return elements.length > 0 ? elements : content;
+    textParts.push(content.slice(lastIndex));
+    const text = textParts.join("").trim();
+
+    return (
+      <>
+        {text && <div className="whitespace-pre-wrap break-words">{renderMentions(text, 0)}</div>}
+        {atts.length > 0 && (
+          <div className="mt-1.5 flex flex-col gap-1.5">
+            {atts.map((a, i) => (
+              <AttachmentCard key={i} name={a.name} url={a.url} />
+            ))}
+          </div>
+        )}
+      </>
+    );
   };
 
   const renderMentions = (text: string, keyOffset: number): React.ReactNode[] =>
