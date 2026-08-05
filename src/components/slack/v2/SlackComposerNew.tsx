@@ -53,24 +53,59 @@ export const SlackComposerNew = forwardRef<SlackComposerHandle, Props>(function 
   const mentionMapRef = useRef<Map<string, string>>(new Map());
 
   /**
+   * Candidatos nombre→id para auto-resolver menciones escritas a mano (sin elegir del
+   * autocompletado). Incluye display_name, real_name y el primer nombre SOLO si es único
+   * (para no resolver "@Ana" de forma ambigua). Ordenados por longitud desc para que los
+   * nombres largos se reemplacen antes que los cortos que podrían ser prefijo.
+   */
+  const mentionCandidates = useMemo(() => {
+    const byName = new Map<string, string>(); // etiqueta(lower) → id
+    const firstNameCount = new Map<string, Set<string>>(); // primer nombre(lower) → ids
+    for (const [id, p] of Object.entries(userMap)) {
+      if (!p) continue;
+      const dn = (p.display_name || "").trim();
+      const rn = (p.real_name || "").trim();
+      for (const full of [dn, rn]) {
+        if (!full) continue;
+        byName.set(full.toLowerCase(), id);
+        const first = full.split(/\s+/)[0];
+        if (first && first.length >= 2) {
+          if (!firstNameCount.has(first.toLowerCase())) firstNameCount.set(first.toLowerCase(), new Set());
+          firstNameCount.get(first.toLowerCase())!.add(id);
+        }
+      }
+    }
+    // Primer nombre solo si mapea a un único usuario (no ambiguo).
+    for (const [first, ids] of firstNameCount) {
+      if (ids.size === 1 && !byName.has(first)) byName.set(first, [...ids][0]);
+    }
+    return [...byName.entries()]
+      .map(([name, id]) => ({ name, id }))
+      .sort((a, b) => b.name.length - a.name.length);
+  }, [userMap]);
+
+  /**
    * Codifica las menciones a formato Slack `<@USERID>` para que la persona reciba
    * la notificación y el mensaje se muestre resaltado (igual que en Slack nativo).
-   * Reemplaza cada `@Etiqueta` que corresponda a una mención insertada; las etiquetas
-   * más largas primero para no cortar nombres que contienen a otros.
+   * 1) Las menciones elegidas del autocompletado (mapa etiqueta→id).
+   * 2) Auto-resuelve `@nombre` escrito a mano contra los miembros (display/real/1er nombre único).
    */
   const encodeMentions = useCallback((raw: string): string => {
-    if (!mentionMapRef.current.size) return raw;
     let out = raw;
-    const entries = [...mentionMapRef.current.entries()].sort(
-      (a, b) => b[0].length - a[0].length,
-    );
-    for (const [label, id] of entries) {
+    // 1) Menciones insertadas por autocompletado (prioridad).
+    const tracked = [...mentionMapRef.current.entries()].sort((a, b) => b[0].length - a[0].length);
+    for (const [label, id] of tracked) {
       if (!label) continue;
       const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       out = out.replace(new RegExp(`@${escaped}`, "g"), `<@${id}>`);
     }
+    // 2) Auto-resolución de nombres escritos a mano (longest-first; sin cortar palabras).
+    for (const { name, id } of mentionCandidates) {
+      const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      out = out.replace(new RegExp(`@${escaped}(?![\\p{L}\\p{N}_])`, "giu"), `<@${id}>`);
+    }
     return out;
-  }, []);
+  }, [mentionCandidates]);
 
   const handleSend = useCallback(() => {
     const val = inputRef.current?.innerText?.trim() || text.trim();
