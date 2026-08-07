@@ -19,6 +19,7 @@ import {
   getExpedienteSignedUrl,
 } from "@/hooks/useExpediente";
 import { WelcomeChecklist } from "./WelcomeChecklist";
+import { EmployeeAbsenceHistory } from "./EmployeeAbsenceHistory";
 
 interface Props {
   userId: string | null;
@@ -74,6 +75,9 @@ export function EmployeeExpedienteDialog({ userId, userName, onOpenChange }: Pro
             <VerifyRow key={t.key} label={t.label} doc={docByType.get(t.key)} />
           ))}
         </div>
+
+        {/* Solicitudes y permisos */}
+        <EmployeeAbsenceHistory userId={userId} />
 
         {/* Bienvenida */}
         <div className="space-y-2">

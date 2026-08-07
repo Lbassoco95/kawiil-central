@@ -23,6 +23,7 @@ import {
   getExpedienteSignedUrl,
 } from "@/hooks/useExpediente";
 import { WelcomeChecklist } from "./WelcomeChecklist";
+import { EmployeeAbsenceHistory } from "./EmployeeAbsenceHistory";
 import { toast } from "sonner";
 
 const EMPTY = {
@@ -137,6 +138,14 @@ export function MiExpedientePanel() {
           ))}
         </CardContent>
       </Card>
+
+      {/* Mis solicitudes y permisos */}
+      {user?.id && (
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Mis solicitudes y permisos</CardTitle></CardHeader>
+          <CardContent><EmployeeAbsenceHistory userId={user.id} /></CardContent>
+        </Card>
+      )}
     </div>
   );
 }
