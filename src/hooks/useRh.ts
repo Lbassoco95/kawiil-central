@@ -847,6 +847,24 @@ export function useMyAbsenceRequests() {
   });
 }
 
+/** Solicitudes/permisos de un colaborador (para su expediente).
+ *  RLS: visible para el propio usuario, el responsable de su célula o un G4. */
+export function useUserAbsenceRequests(userId: string | null) {
+  return useQuery({
+    queryKey: ["rh-user-absences", userId],
+    enabled: !!userId,
+    queryFn: async (): Promise<RhAbsenceRequest[]> => {
+      const { data, error } = await db
+        .from("rh_absence_requests")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data as RhAbsenceRequest[]) ?? [];
+    },
+  });
+}
+
 /** Solicitudes de las células que el usuario aprueba (responsable). */
 export function useCelulaAbsenceRequests(celulaIds: string[]) {
   const { user } = useAuth();
