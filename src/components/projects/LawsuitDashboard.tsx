@@ -67,6 +67,7 @@ import { TaskFormDialog } from "@/components/tasks/TaskFormDialog";
 import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { UserOrTextMulti } from "./UserOrTextInput";
+import { BuhoMonitoringCard } from "./BuhoMonitoringCard";
 
 interface StageAttachment {
   id: string;
@@ -739,6 +740,14 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
           )}
         </CardContent>
       </Card>
+
+      {/* Monitoreo Búho Legal — acuerdos del juzgado */}
+      <BuhoMonitoringCard
+        projectId={projectId}
+        jurisdiction={localDetails.jurisdiction}
+        defaultExpediente={localDetails.case_number}
+        defaultAsunto={LAWSUIT_TYPE_LABELS[localDetails.lawsuit_type] || localDetails.lawsuit_type}
+      />
 
       {/* Etapas y tareas — mismo diseño visual que Precios de transferencia / tab Tareas */}
       <div className="space-y-3">
