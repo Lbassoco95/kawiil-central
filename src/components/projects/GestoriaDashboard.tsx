@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import {
-  FileText, Receipt, KeyRound, Send, Save, ClipboardList, Phone, CalendarClock, Plus, ChevronRight,
+  Save, ClipboardList, CalendarClock, Plus, ChevronRight,
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -26,6 +26,19 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  GESTORIA_TRAMITE_TYPES,
+  getGestoriaPhases,
+  getGestoriaDefaultSteps,
+  getGestoriaTramiteLabel,
+} from "@/lib/gestoriaTramiteCatalog";
 
 import type { AccountingStep } from "@/hooks/useAccountingPeriods";
 
@@ -37,28 +50,9 @@ interface GestoriaStep extends AccountingStep {
   appointment_date?: string | null;
 }
 
-const PHASES = [
-  { number: 1, label: "Documentación y requisitos previos" },
-  { number: 2, label: "Trámite de RFC" },
-  { number: 3, label: "Trámite de e.firma" },
-  { number: 4, label: "Entrega" },
-];
-
-const DEFAULT_STEPS: GestoriaStep[] = [
-  { key: "documentacion", label: "Recopilación de documentación", description: "Integrar documentos de identidad del contribuyente, acta constitutiva (persona moral), poder notarial y demás requisitos.", icon: "FileText", phase: 1, status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", assigned_to: null, due_date: null, document_ids: [], collaborators: [] },
-  { key: "comprobante_domicilio_rfc", label: "Comprobante de domicilio para RFC", description: "Estado de cuenta bancario a nombre del contribuyente o comprobante de teléfono.", icon: "FileText", phase: 1, status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", assigned_to: null, due_date: null, document_ids: [], collaborators: [] },
-  { key: "contratacion_linea", label: "Contratación de línea telefónica", description: "Contratar línea telefónica fija o móvil a nombre del contribuyente para generar el comprobante de domicilio.", icon: "Phone", phase: 1, status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", assigned_to: null, due_date: null, document_ids: [], collaborators: [] },
-  { key: "recibo_linea", label: "Recibo de línea telefónica generado", description: "Verificar que ya se generó el recibo/comprobante de la línea contratada.", icon: "FileText", phase: 1, status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", assigned_to: null, due_date: null, document_ids: [], collaborators: [] },
-  { key: "cita_rfc", label: "Agendar cita ante el SAT (RFC)", description: "Solicitar cita en el SAT a través del gestor.", icon: "CalendarClock", phase: 2, status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", appointment_date: null, assigned_to: null, due_date: null, document_ids: [], collaborators: [] },
-  { key: "obtencion_rfc", label: "Obtención del RFC", description: "Acudir a la cita y completar la inscripción al RFC.", icon: "Receipt", phase: 2, status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", assigned_to: null, due_date: null, document_ids: [], collaborators: [] },
-  { key: "cita_efirma", label: "Agendar cita ante el SAT (e.firma)", description: "Solicitar cita en el SAT para obtener la firma electrónica.", icon: "CalendarClock", phase: 3, status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", appointment_date: null, assigned_to: null, due_date: null, document_ids: [], collaborators: [] },
-  { key: "obtencion_efirma", label: "Obtención de e.firma (FIEL)", description: "Acudir a la cita y completar el trámite de firma electrónica avanzada.", icon: "KeyRound", phase: 3, status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", assigned_to: null, due_date: null, document_ids: [], collaborators: [] },
-  { key: "entrega_final", label: "Entrega de documentos y acuses", description: "Entregar al cliente los documentos, acuses, constancia de RFC y archivos de e.firma.", icon: "Send", phase: 4, status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", assigned_to: null, due_date: null, document_ids: [], collaborators: [] },
-];
-
 interface Props {
   projectId: string;
-  gestoriaDetails: { steps: GestoriaStep[] } | null;
+  gestoriaDetails: { steps: GestoriaStep[]; tramite_type?: string | null } | null;
   responsibleUserId?: string | null;
   clientDropboxPath?: string;
   clientId?: string;
@@ -90,7 +84,7 @@ export function GestoriaDashboard({ projectId, gestoriaDetails, responsibleUserI
   useEffect(() => {
     if (!gestoriaDetails || !projectId) return;
     let cancelled = false;
-    ensureGestoriaPhasesOnProject(projectId)
+    ensureGestoriaPhasesOnProject(projectId, gestoriaDetails.tramite_type ?? null)
       .then((changed) => {
         if (!cancelled && changed) queryClient.invalidateQueries({ queryKey: ["project", projectId] });
       })
@@ -115,7 +109,12 @@ export function GestoriaDashboard({ projectId, gestoriaDetails, responsibleUserI
     }
   }, [gestoriaDetails]);
 
-  const steps: GestoriaStep[] = (localGestoria?.steps ?? DEFAULT_STEPS).map((s) => ({
+  const [selectedTramite, setSelectedTramite] = useState("");
+
+  const tramiteType = localGestoria?.tramite_type ?? null;
+  const phases = getGestoriaPhases(tramiteType);
+
+  const steps: GestoriaStep[] = (localGestoria?.steps ?? []).map((s) => ({
     ...s,
     completed: s.status === "completado",
     completed_by: s.completed_by ?? null,
@@ -126,11 +125,11 @@ export function GestoriaDashboard({ projectId, gestoriaDetails, responsibleUserI
   const progressPct = steps.length > 0 ? Math.round((completedCount / steps.length) * 100) : 0;
 
   const saveMutation = useMutation({
-    mutationFn: async (updatedSteps: GestoriaStep[]) => {
-      setLocalGestoria({ steps: updatedSteps });
+    mutationFn: async (payload: { steps: GestoriaStep[]; tramite_type: string | null }) => {
+      setLocalGestoria(payload);
       const { error } = await supabase
         .from("projects")
-        .update({ constitution_details: { steps: updatedSteps } } as any)
+        .update({ constitution_details: payload } as any)
         .eq("id", projectId);
       if (error) throw error;
     },
@@ -158,29 +157,47 @@ export function GestoriaDashboard({ projectId, gestoriaDetails, responsibleUserI
         completed_at: newStatus === "completado" ? new Date().toISOString() : newStatus !== s.status ? null : s.completed_at,
       };
     });
-    saveMutation.mutate(updated);
+    saveMutation.mutate({ steps: updated, tramite_type: tramiteType });
   };
 
-  const initializeSteps = () => {
-    const stepsWithResponsible = DEFAULT_STEPS.map((s) => ({
+  const startTramite = (type: string) => {
+    if (!type) return;
+    const seeded = getGestoriaDefaultSteps(type).map((s) => ({
       ...s,
       assigned_to: responsibleUserId || null,
-    }));
-    saveMutation.mutate(stepsWithResponsible);
+    })) as GestoriaStep[];
+    saveMutation.mutate({ steps: seeded, tramite_type: type });
   };
 
-  if (!gestoriaDetails) {
+  // Sin pasos aún → selector de tipo de trámite.
+  if (!gestoriaDetails || !(gestoriaDetails.steps?.length)) {
     return (
       <Card>
         <CardContent className="py-12 text-center space-y-4">
           <ClipboardList className="mx-auto h-12 w-12 text-muted-foreground/50" />
           <div>
             <h3 className="font-semibold text-foreground">Módulo de Gestoría</h3>
-            <p className="text-sm text-muted-foreground mt-1">Inicia el seguimiento del trámite de RFC y firma electrónica.</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Elige el tipo de trámite para generar su flujo de fases y pasos.
+            </p>
           </div>
-          <Button onClick={initializeSteps}>
-            <ClipboardList className="mr-2 h-4 w-4" /> Iniciar proceso de gestoría
-          </Button>
+          <div className="max-w-xs mx-auto space-y-3">
+            <Select value={selectedTramite} onValueChange={setSelectedTramite}>
+              <SelectTrigger><SelectValue placeholder="Seleccionar trámite" /></SelectTrigger>
+              <SelectContent>
+                {GESTORIA_TRAMITE_TYPES.map((t) => (
+                  <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              className="w-full"
+              disabled={!selectedTramite || saveMutation.isPending}
+              onClick={() => startTramite(selectedTramite)}
+            >
+              <ClipboardList className="mr-2 h-4 w-4" /> Iniciar trámite
+            </Button>
+          </div>
         </CardContent>
       </Card>
     );
@@ -192,7 +209,10 @@ export function GestoriaDashboard({ projectId, gestoriaDetails, responsibleUserI
       <Card>
         <CardContent className="pt-6 space-y-3">
           <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-foreground">Progreso de gestoría</h3>
+            <div>
+              <h3 className="font-semibold text-foreground">Progreso de gestoría</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">{getGestoriaTramiteLabel(tramiteType)}</p>
+            </div>
             <span className="text-sm font-medium text-muted-foreground">{completedCount}/{steps.length} pasos</span>
           </div>
           <Progress value={progressPct} className="h-2" />
@@ -200,7 +220,7 @@ export function GestoriaDashboard({ projectId, gestoriaDetails, responsibleUserI
       </Card>
 
       <h3 className="text-sm font-medium text-muted-foreground">Fases del trámite</h3>
-      {PHASES.map((phase) => {
+      {phases.map((phase) => {
         const phaseSteps = steps.filter((s) => s.phase === phase.number);
         if (phaseSteps.length === 0) return null;
         const completedInPhase = phaseSteps.filter((s) => s.status === "completado").length;

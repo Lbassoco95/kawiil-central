@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { getMonthName } from "@/hooks/useAccountingPeriods";
 import { COMPLIANCE_CATEGORY_LABELS, COMPLIANCE_CATEGORY_ORDER } from "@/lib/compliancePhaseCatalog";
+import { getGestoriaPhases } from "@/lib/gestoriaTramiteCatalog";
 
 export type SyncPhase = { key: string; name: string; order: number };
 
@@ -48,17 +49,18 @@ export async function ensureAccountingPeriodPhasesOnProject(
   return appendProjectPhases(projectId, additions);
 }
 
-const GESTORIA_PHASE_LABELS = [
-  { number: 1, name: "Fase 1: Documentación y requisitos previos" },
-  { number: 2, name: "Fase 2: Trámite de RFC" },
-  { number: 3, name: "Fase 3: Trámite de e.firma" },
-  { number: 4, name: "Fase 4: Entrega" },
-];
-
-export async function ensureGestoriaPhasesOnProject(projectId: string): Promise<boolean> {
-  const additions = GESTORIA_PHASE_LABELS.map((p) => ({
+/**
+ * Asegura las fases de gestoría en `projects.phases` según el tipo de trámite
+ * (RPC/COFEPRIS/IMPI). Sin `tramiteType` usa el fallback legacy (SAT) para no
+ * romper gestorías creadas antes del catálogo.
+ */
+export async function ensureGestoriaPhasesOnProject(
+  projectId: string,
+  tramiteType?: string | null,
+): Promise<boolean> {
+  const additions = getGestoriaPhases(tramiteType).map((p) => ({
     key: gestoriaPhaseKey(p.number),
-    name: p.name,
+    name: `Fase ${p.number}: ${p.label}`,
     order: 0,
   }));
   return appendProjectPhases(projectId, additions);
