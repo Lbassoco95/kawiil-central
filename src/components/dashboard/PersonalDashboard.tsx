@@ -214,16 +214,18 @@ export function PersonalDashboard() {
     };
   }, [openTasksForKpi, todayYmd, clients, myProjectProgress]);
 
+  // Orden por fecha de vencimiento (asc), prioridad como desempate — mismo criterio
+  // que el resto de listas del dashboard para que las fechas se vean coherentes.
   const topOperativeBoardTasks = useMemo(() => {
     const order: Record<string, number> = { urgente: 0, alta: 1, media: 2, baja: 3 };
     return [...openTasksForKpi]
       .sort((a, b) => {
-        const pa = order[a.priority ?? "baja"] ?? 4;
-        const pb = order[b.priority ?? "baja"] ?? 4;
-        if (pa !== pb) return pa - pb;
         const da = a.due_date?.slice(0, 10) ?? "9999-12-31";
         const db = b.due_date?.slice(0, 10) ?? "9999-12-31";
-        return da.localeCompare(db);
+        if (da !== db) return da.localeCompare(db);
+        const pa = order[a.priority ?? "baja"] ?? 4;
+        const pb = order[b.priority ?? "baja"] ?? 4;
+        return pa - pb;
       })
       .slice(0, 5);
   }, [openTasksForKpi]);
@@ -550,6 +552,17 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
           </div>
         )}
 
+        {/* Tareas del tablero + pasos de proyecto — promovidas arriba de los tabs
+            para que tus pendientes reales (ordenados por fecha) sean lo primero. */}
+        <div className="animate-fade-in stagger-3" style={{ animationFillMode: "both" }}>
+          <PersonalBoardTasksAndProjectSteps
+            topTasks={topOperativeBoardTasks}
+            enCursoTotal={openTasksForKpi.length}
+            topSteps={topOperativeSteps}
+            assignedStepCount={assignedSteps.length}
+          />
+        </div>
+
         {/* Tabs for sections */}
       <Tabs value={dashboardActiveTab} onValueChange={onDashboardTabChange} className="w-full min-w-0 mt-1">
         <div className="overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
@@ -603,13 +616,6 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
             completedToday={completedToday ?? 0}
             overdueCount={overdueTasks}
             dueTodayCount={dueTodayPending}
-          />
-
-          <PersonalBoardTasksAndProjectSteps
-            topTasks={topOperativeBoardTasks}
-            enCursoTotal={openTasksForKpi.length}
-            topSteps={topOperativeSteps}
-            assignedStepCount={assignedSteps.length}
           />
 
           {myClients && myClients.length > 0 && (

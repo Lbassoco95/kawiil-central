@@ -75,24 +75,6 @@ export function DailyBriefing({
     enabled: !!user,
   });
 
-  const { data: teamDeadlines } = useQuery({
-    queryKey: ["briefing-team-deadlines", todayKey],
-    queryFn: async () => {
-      const futureDate = new Date(today.getTime() + 3 * 86400000);
-      const { data, error } = await supabase
-        .from("tasks")
-        .select("title, priority, due_date, assigned_to")
-        .in("status", ["pendiente", "en_progreso"])
-        .gte("due_date", todayKey)
-        .lte("due_date", futureDate.toISOString().split("T")[0])
-        .order("due_date", { ascending: true })
-        .limit(10);
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!user,
-  });
-
   const { data: profile } = useQuery({
     queryKey: ["briefing-profile", user?.id],
     queryFn: async () => {
@@ -116,16 +98,14 @@ export function DailyBriefing({
 
   const payload = useMemo(() => {
     const taskIds = (taskDetails ?? []).map((t, i) => `${i}:${t.title}:${t.due_date ?? ""}:${t.status}:${t.priority}`);
-    const teamIds = (teamDeadlines ?? []).map((t, i) => `${i}:${t.title}:${t.due_date ?? ""}:${t.priority}`);
     return {
-      v: 1,
+      v: 2,
       module: "dashboard",
       date: todayKey,
       counts: { tasksCount, completedToday, overdueCount, remindersCount },
       tasks: taskIds,
-      team: teamIds,
     };
-  }, [taskDetails, teamDeadlines, todayKey, tasksCount, completedToday, overdueCount, remindersCount]);
+  }, [taskDetails, todayKey, tasksCount, completedToday, overdueCount, remindersCount]);
 
   const [payloadHash, setPayloadHash] = useState<string>("");
   useEffect(() => {
@@ -145,16 +125,15 @@ export function DailyBriefing({
 
 DATOS: ${tasksCount} pendientes, ${completedToday} completadas hoy, ${overdueCount} vencidas, ${remindersCount} recordatorios.
 
-TAREAS: ${JSON.stringify((taskDetails ?? []).map((t) => ({ titulo: t.title, prioridad: t.priority, vence: t.due_date, area: t.area, cliente: (t as unknown as { clients?: { name?: string } }).clients?.name ?? null, estado: t.status })))}
-
-DEADLINES EQUIPO (3 días): ${JSON.stringify((teamDeadlines ?? []).map((t) => ({ titulo: t.title, prioridad: t.priority, vence: t.due_date })))}
+TAREAS (SOLO las asignadas a ${firstName}, ordenadas por vencimiento): ${JSON.stringify((taskDetails ?? []).map((t) => ({ titulo: t.title, prioridad: t.priority, vence: t.due_date, area: t.area, cliente: (t as unknown as { clients?: { name?: string } }).clients?.name ?? null, estado: t.status })))}
 
 INSTRUCCIONES PARA "markdown":
 1. Resume en máximo 3 puntos clave con emojis.
-2. Si hay vencidas, menciona con empatía.
-3. Si completó, reconoce.
-4. Máximo 80 palabras. Sé ultra-conciso.
-5. Markdown obligatorio: línea de título con emoji (ej. 🗒️ **Briefing del …**), subtítulo **Situación actual**, viñetas con emojis (🔥 ⚠️ ✅), **negritas** en cifras y alertas. Sin saludo largo.
+2. Usa ÚNICAMENTE las tareas y fechas del bloque TAREAS de arriba; NO inventes clientes, tareas ni fechas que no estén ahí.
+3. Si hay vencidas, menciona con empatía.
+4. Si completó, reconoce.
+5. Máximo 80 palabras. Sé ultra-conciso.
+6. Markdown obligatorio: línea de título con emoji (ej. 🗒️ **Briefing del …**), subtítulo **Situación actual**, viñetas con emojis (🔥 ⚠️ ✅), **negritas** en cifras y alertas. Sin saludo largo.
 
 INSTRUCCIONES PARA "metric_insights":
 - tasks_pendientes: 1 frase sobre la carga de tareas pendientes y el siguiente foco.
