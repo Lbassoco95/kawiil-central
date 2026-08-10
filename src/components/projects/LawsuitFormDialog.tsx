@@ -26,29 +26,12 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useClients } from "@/hooks/useClients";
 import { useOrgProfiles } from "@/hooks/useClients";
 import { toast } from "sonner";
-
-const LAWSUIT_TYPES = [
-  { value: "laboral", label: "Laboral" },
-  { value: "mercantil", label: "Mercantil" },
-  { value: "civil", label: "Civil" },
-  { value: "fiscal", label: "Fiscal" },
-  { value: "penal", label: "Penal" },
-  { value: "administrativo", label: "Administrativo" },
-  { value: "familiar", label: "Familiar" },
-];
-
-const DEFAULT_STAGES = [
-  { key: "demanda", label: "Demanda", status: "pendiente", date: null, notes: "", completed_at: null },
-  { key: "emplazamiento", label: "Emplazamiento", status: "pendiente", date: null, notes: "", completed_at: null },
-  { key: "contestacion", label: "Contestación de demanda", status: "pendiente", date: null, notes: "", completed_at: null },
-  { key: "pruebas", label: "Ofrecimiento y admisión de pruebas", status: "pendiente", date: null, notes: "", completed_at: null },
-  { key: "desahogo", label: "Desahogo de pruebas", status: "pendiente", date: null, notes: "", completed_at: null },
-  { key: "alegatos", label: "Alegatos", status: "pendiente", date: null, notes: "", completed_at: null },
-  { key: "sentencia", label: "Sentencia", status: "pendiente", date: null, notes: "", completed_at: null },
-  { key: "apelacion", label: "Apelación", status: "pendiente", date: null, notes: "", completed_at: null },
-  { key: "amparo", label: "Amparo", status: "pendiente", date: null, notes: "", completed_at: null },
-  { key: "ejecucion", label: "Ejecución de sentencia", status: "pendiente", date: null, notes: "", completed_at: null },
-];
+import {
+  LAWSUIT_TYPES,
+  LAWSUIT_JURISDICTIONS,
+  LAWSUIT_INSTANCIAS,
+  getDefaultStages,
+} from "@/lib/lawsuitStageCatalog";
 
 interface LawsuitFormDialogProps {
   open: boolean;
@@ -57,6 +40,8 @@ interface LawsuitFormDialogProps {
 
 export function LawsuitFormDialog({ open, onOpenChange }: LawsuitFormDialogProps) {
   const [lawsuitType, setLawsuitType] = useState("");
+  const [jurisdiction, setJurisdiction] = useState("");
+  const [instancia, setInstancia] = useState("primera");
   const [caseNumber, setCaseNumber] = useState("");
   const [court, setCourt] = useState("");
   const [plaintiff, setPlaintiff] = useState("");
@@ -87,6 +72,8 @@ export function LawsuitFormDialog({ open, onOpenChange }: LawsuitFormDialogProps
 
       const lawsuitDetails = {
         lawsuit_type: lawsuitType,
+        jurisdiction: jurisdiction || null,
+        instancia: instancia || null,
         case_number: caseNumber || null,
         court: court || null,
         plaintiff: plaintiff || null,
@@ -94,7 +81,7 @@ export function LawsuitFormDialog({ open, onOpenChange }: LawsuitFormDialogProps
         lead_attorney: leadAttorney || null,
         substitute_attorney: substituteAttorney || null,
         authorized_persons: authorizedPersons.length > 0 ? authorizedPersons : [],
-        stages: DEFAULT_STAGES,
+        stages: getDefaultStages(lawsuitType, jurisdiction),
         deadlines: [],
       };
 
@@ -126,6 +113,8 @@ export function LawsuitFormDialog({ open, onOpenChange }: LawsuitFormDialogProps
 
   const resetForm = () => {
     setLawsuitType("");
+    setJurisdiction("");
+    setInstancia("primera");
     setCaseNumber("");
     setCourt("");
     setPlaintiff("");
@@ -170,6 +159,34 @@ export function LawsuitFormDialog({ open, onOpenChange }: LawsuitFormDialogProps
                 placeholder="Seleccionar cliente"
                 searchPlaceholder="Buscar cliente..."
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Rama / Jurisdicción</Label>
+              <Select value={jurisdiction} onValueChange={setJurisdiction}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccionar rama" />
+                </SelectTrigger>
+                <SelectContent>
+                  {LAWSUIT_JURISDICTIONS.map((j) => (
+                    <SelectItem key={j.value} value={j.value}>{j.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Instancia</Label>
+              <Select value={instancia} onValueChange={setInstancia}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccionar instancia" />
+                </SelectTrigger>
+                <SelectContent>
+                  {LAWSUIT_INSTANCIAS.map((i) => (
+                    <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2">
@@ -264,9 +281,9 @@ export function LawsuitFormDialog({ open, onOpenChange }: LawsuitFormDialogProps
 
           <div className="rounded-md border p-3 bg-muted/30">
             <p className="text-xs text-muted-foreground">
-              Se crearán automáticamente las etapas procesales: Demanda, Emplazamiento, Contestación, 
-              Pruebas, Desahogo, Alegatos, Sentencia, Apelación, Amparo y Ejecución. 
-              Podrás agregar términos y fechas clave desde el detalle del juicio.
+              Se crearán automáticamente las etapas procesales según la materia
+              seleccionada. Podrás agregar, quitar o reordenar etapas y registrar
+              términos y fechas clave desde el detalle del juicio.
             </p>
           </div>
 

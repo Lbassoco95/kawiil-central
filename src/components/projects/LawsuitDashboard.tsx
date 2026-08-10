@@ -53,6 +53,13 @@ import { CriticalityDelayCard } from "./CriticalityDelayCard";
 import { UnifiedStepRow } from "./UnifiedStepRow";
 import { PhaseManager, type Phase } from "./PhaseManager";
 import type { AccountingStep, StepStatus } from "@/hooks/useAccountingPeriods";
+import {
+  LAWSUIT_TYPE_LABELS,
+  LAWSUIT_JURISDICTIONS,
+  LAWSUIT_INSTANCIAS,
+  getJurisdictionLabel,
+  getInstanciaLabel,
+} from "@/lib/lawsuitStageCatalog";
 
 import { useProfiles, useUpdateTask, useDeleteTask } from "@/hooks/useTasks";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -100,6 +107,8 @@ interface LawsuitDeadline {
 
 interface LawsuitDetails {
   lawsuit_type: string;
+  jurisdiction?: string | null;
+  instancia?: string | null;
   case_number: string | null;
   court: string | null;
   plaintiff: string | null;
@@ -143,16 +152,6 @@ const DEADLINE_TYPE_LABELS: Record<string, string> = {
   audiencia: "Audiencia",
   entrega: "Entrega de documentos",
   vencimiento: "Vencimiento",
-};
-
-const LAWSUIT_TYPE_LABELS: Record<string, string> = {
-  laboral: "Laboral",
-  mercantil: "Mercantil",
-  civil: "Civil",
-  fiscal: "Fiscal",
-  penal: "Penal",
-  administrativo: "Administrativo",
-  familiar: "Familiar",
 };
 
 // Map lawsuit stage status to AccountingStep status
@@ -579,10 +578,14 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
           <CardContent className="p-4">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Scale className="h-4 w-4" />
-              <span>Tipo</span>
+              <span>Materia · Rama</span>
             </div>
             <p className="text-lg font-semibold mt-1">
               {LAWSUIT_TYPE_LABELS[lawsuitDetails.lawsuit_type] || lawsuitDetails.lawsuit_type}
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {getJurisdictionLabel(localDetails.jurisdiction)}
+              {localDetails.instancia ? ` · ${getInstanciaLabel(localDetails.instancia)}` : ""}
             </p>
           </CardContent>
         </Card>
@@ -628,6 +631,38 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
           <CardTitle className="text-base">Datos del juicio</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-2 text-sm">
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground">Rama / Jurisdicción</span>
+            <Select
+              value={localDetails.jurisdiction || ""}
+              onValueChange={(v) => persistDetails({ ...localDetails, jurisdiction: v || null })}
+            >
+              <SelectTrigger className="w-2/3 h-8 text-sm">
+                <SelectValue placeholder="—" />
+              </SelectTrigger>
+              <SelectContent>
+                {LAWSUIT_JURISDICTIONS.map((j) => (
+                  <SelectItem key={j.value} value={j.value}>{j.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground">Instancia</span>
+            <Select
+              value={localDetails.instancia || ""}
+              onValueChange={(v) => persistDetails({ ...localDetails, instancia: v || null })}
+            >
+              <SelectTrigger className="w-2/3 h-8 text-sm">
+                <SelectValue placeholder="—" />
+              </SelectTrigger>
+              <SelectContent>
+                {LAWSUIT_INSTANCIAS.map((i) => (
+                  <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="flex justify-between items-center">
             <span className="text-muted-foreground">Juzgado/Tribunal</span>
             <Input
