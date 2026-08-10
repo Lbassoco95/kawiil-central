@@ -1,5 +1,21 @@
 import { useMemo } from "react";
-import { useProjects } from "@/hooks/useProjects";
+import { useProjects, type Project } from "@/hooks/useProjects";
+
+interface RawStage {
+  status?: string;
+}
+
+interface RawLawsuitDetails {
+  stages?: RawStage[];
+  deadlines?: LitigioDeadline[];
+  jurisdiction?: string | null;
+  instancia?: string | null;
+  lawsuit_type?: string;
+  case_number?: string | null;
+  court?: string | null;
+}
+
+type ProjectRow = Project & { clients?: { name?: string | null } | null };
 
 export interface LitigioDeadline {
   id: string;
@@ -47,11 +63,11 @@ export function useLitigationAgenda() {
   const { data: projects = [], isLoading } = useProjects();
 
   const cases = useMemo<LitigioCase[]>(() => {
-    return (projects as any[])
+    return (projects as ProjectRow[])
       .filter((p) => p.area === "juicios")
       .map((p) => {
-        const d = (p.lawsuit_details || {}) as Record<string, any>;
-        const stages: any[] = Array.isArray(d.stages) ? d.stages : [];
+        const d = (p.lawsuit_details || {}) as RawLawsuitDetails;
+        const stages: RawStage[] = Array.isArray(d.stages) ? d.stages : [];
         const deadlines: LitigioDeadline[] = Array.isArray(d.deadlines) ? d.deadlines : [];
         return {
           id: p.id,
