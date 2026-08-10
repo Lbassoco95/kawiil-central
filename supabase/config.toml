@@ -151,3 +151,5 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = true
   [functions.buho-sync-acuerdos]
     verify_jwt = false
+  [functions.litigation-deadline-alerts]
+    verify_jwt = false
