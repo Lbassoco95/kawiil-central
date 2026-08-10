@@ -70,6 +70,7 @@ import { MentionTextarea } from "./MentionTextarea";
 import { useProfiles } from "@/hooks/useTasks";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { useUserRole } from "@/hooks/useUserRole";
+import { canRenameEntity } from "@/lib/kawiilerPermissions";
 import { useDeleteTask } from "@/hooks/useTasks";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { DocumentChecklistButton } from "@/components/shared/DocumentChecklistButton";
@@ -134,7 +135,9 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { celulaLabelMap, getCelulaLabel } = useCelulaOptions();
-  const { canEditDueDates, canDeleteTasks } = useUserRole();
+  const { canEditDueDates, canDeleteTasks, role } = useUserRole();
+  // Renombrar (cambiar el título) solo lo permite un G4 o quien creó la tarea.
+  const canRenameTask = canRenameEntity(role, task?.created_by, user?.id);
   const deleteTask = useDeleteTask();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [commentText, setCommentText] = useState("");
@@ -820,8 +823,20 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
                     value={currentTitle}
                     onChange={(e) => setPending("title", e.target.value)}
                     placeholder="Nombre de la tarea"
+                    readOnly={!canRenameTask}
+                    aria-readonly={!canRenameTask}
+                    title={
+                      canRenameTask
+                        ? undefined
+                        : "Solo un G4 (Transformador) o quien creó la tarea puede cambiar el nombre."
+                    }
                   />
                 </h1>
+                {!canRenameTask && (
+                  <p className="text-[11px] text-muted-foreground -mt-1">
+                    Solo un G4 o quien creó la tarea puede cambiar el nombre.
+                  </p>
+                )}
                 <div className="meta-pills">
                   {task.due_date && (
                     <span className={`pill ${overdueBadge ? "overdue" : ""}`}>

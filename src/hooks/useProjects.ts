@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import type { Tables } from "@/integrations/supabase/types";
 import { toast } from "sonner";
+import { assertCanRenameProject } from "@/lib/renamePermission";
 
 export type Project = Tables<"projects">;
 
@@ -81,8 +82,15 @@ export function useProjectDetail(projectId: string | undefined) {
 
 export function useUpdateProject() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async ({ id, ...updates }: { id: string } & Partial<Omit<Project, "id" | "created_at" | "organization_id">>) => {
+      // Renombrar el proyecto solo lo permite un G4 o quien lo creó. Aplica al
+      // nombre enviado explícitamente por la UI; el autorenombrado por cambio de
+      // cliente (más abajo) es una consecuencia del sistema, no un rename manual.
+      if (typeof updates.name === "string") {
+        await assertCanRenameProject(id, user!.id);
+      }
       // If client_id is changing, auto-rename project to reflect new client
       if (updates.client_id) {
         const { data: currentProject } = await supabase
