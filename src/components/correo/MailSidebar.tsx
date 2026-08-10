@@ -454,7 +454,7 @@ export function MailSidebar({
   const isTabActive = (id: MailTabId) => activeTab === id && !activeCustomFolderId && activeLabelId == null;
 
   return (
-    <div className="w-[200px] shrink-0 bg-card border-r border-border/40 flex flex-col h-full min-h-0">
+    <div className="hidden lg:flex w-[200px] shrink-0 bg-card border-r border-border/40 flex-col h-full min-h-0">
       {/* Compose button */}
       <div className="px-3 pt-4 pb-2 shrink-0">
         <button

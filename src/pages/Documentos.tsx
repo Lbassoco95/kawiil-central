@@ -506,7 +506,7 @@ function DropboxLiveBrowser() {
   return (
     <div className="space-y-4">
       {/* Header row: breadcrumbs + folder actions */}
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1 text-sm min-w-0 flex-wrap">
           {!isRoot && (
             <Button variant="ghost" size="sm" className="h-7 px-2 shrink-0" onClick={goBack}>

@@ -706,6 +706,7 @@ const Tareas = () => {
 
         {/* TABLA */}
         {vista === "activas" ? (
+          <div className="mtable-scroll">
           <div className="mtable tareas">
             <div className="thead">
               <div />
@@ -930,7 +931,9 @@ const Tareas = () => {
               })
             )}
           </div>
+          </div>
         ) : (
+          <div className="mtable-scroll">
           <div className="mtable tareas">
             <div className="thead">
               <div />
@@ -1099,6 +1102,7 @@ const Tareas = () => {
               })
             )}
           </div>
+          </div>
         )}
 
         {/* Pasos de proyecto asignados a ti */}
@@ -1108,7 +1112,7 @@ const Tareas = () => {
               Pasos de proyecto asignados a ti
               <span className="count-pill">{assignedSteps.length}</span>
             </summary>
-            <div className="body" style={{ padding: "8px 0 0" }}>
+            <div className="body" style={{ padding: "8px 0 0", overflowX: "auto" }}>
               {assignedSteps.slice(0, 50).map((step) => {
                 const overdue = step.dueDate && isPastDueCalendarMX(step.dueDate);
                 const due = formatDueCell(step.dueDate ?? null, todayYmd);
@@ -1134,11 +1138,12 @@ const Tareas = () => {
                       padding: "10px 16px",
                       borderTop: "1px solid hsl(var(--border) / 0.4)",
                       display: "grid",
-                      gridTemplateColumns: "130px 1fr 120px 90px",
+                      gridTemplateColumns: "130px minmax(160px, 1fr) 120px 90px",
                       gap: 12,
                       alignItems: "center",
                       fontSize: 12.5,
                       cursor: "pointer",
+                      minWidth: 520,
                     }}
                   >
                     <span

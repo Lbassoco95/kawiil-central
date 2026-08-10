@@ -279,7 +279,7 @@ export function MoffinSatStatusSummary({
         {rows.length > 0 ? (
           <div className="mt-4 pt-4 border-t border-border/60 space-y-2">
             <h3 className="text-xs font-medium text-muted-foreground">Historial reciente (por consulta)</h3>
-            <div className="max-h-56 overflow-y-auto rounded-md border border-border/60 overflow-hidden">
+            <div className="max-h-56 overflow-auto rounded-md border border-border/60">
               <table className="w-full text-left text-[11px]">
                 <thead className="bg-muted/40 text-muted-foreground sticky top-0">
                   <tr>
