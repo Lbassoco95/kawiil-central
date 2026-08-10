@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -24,6 +24,7 @@ import {
   useGenerateComplianceTasks,
   type ComplianceTaskTemplate,
 } from "@/hooks/useCompliance";
+import { isFiscalComplianceCategory } from "@/lib/compliancePhaseCatalog";
 
 const CATEGORY_LABELS: Record<string, string> = {
   reportes_uif: "Reportes al SAT/UIF",
@@ -81,6 +82,24 @@ export function ComplianceTaskGeneratorModal({
   const { data: templates = [] } = useComplianceTemplates(entityTypeIds);
   const generateTasks = useGenerateComplianceTasks();
   const [deselected, setDeselected] = useState<Set<string>>(new Set());
+
+  // Por defecto se desmarcan las obligaciones fiscales (SAT): las lleva
+  // Contabilidad. Se re-inicializa cuando cambia el conjunto de plantillas
+  // (p. ej. al cambiar los tipos de entidad), preservando los toggles manuales
+  // mientras el conjunto no cambie.
+  const templatesSignature = useMemo(
+    () => templates.map((t) => t.id).sort().join(","),
+    [templates],
+  );
+  const lastSignatureRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (lastSignatureRef.current === templatesSignature) return;
+    lastSignatureRef.current = templatesSignature;
+    const fiscalIds = templates
+      .filter((t) => isFiscalComplianceCategory(t.category))
+      .map((t) => t.id);
+    setDeselected(new Set(fiscalIds));
+  }, [templatesSignature, templates]);
 
   const grouped = useMemo(() => {
     const groups: Record<string, typeof templates> = {};
@@ -151,13 +170,17 @@ export function ComplianceTaskGeneratorModal({
           {clientId
             ? " En cada tarea se añade el contexto regulatorio del cliente (tipos de entidad, folio, fechas) tomado de la ficha Cumplimiento."
             : " Vincula el proyecto al cliente para incluir folio y tipo de entidad en las descripciones de las tareas."}{" "}
-          Desmarca las obligaciones que no apliquen.
+          Desmarca las obligaciones que no apliquen. Las obligaciones{" "}
+          <strong>fiscales (SAT)</strong> vienen desmarcadas porque las lleva
+          Contabilidad; márcalas solo si Kawiil también da el cumplimiento de
+          control interno.
         </div>
 
         <ScrollArea className="max-h-[50vh]">
           <div className="space-y-4 pr-4">
             {grouped.map(([category, tpls]) => {
               const CategoryIcon = CATEGORY_ICONS[category];
+              const isFiscal = isFiscalComplianceCategory(category);
               return (
               <div key={category}>
                 <h4 className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
@@ -165,6 +188,11 @@ export function ComplianceTaskGeneratorModal({
                     <CategoryIcon className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
                   ) : null}
                   {CATEGORY_LABELS[category] || category}
+                  {isFiscal ? (
+                    <Badge variant="outline" className="ml-1 text-[9px] font-normal normal-case">
+                      Lo lleva Contabilidad
+                    </Badge>
+                  ) : null}
                 </h4>
                 <div className="space-y-1">
                   {tpls.map((tpl) => (

@@ -9,6 +9,7 @@ import {
   complianceAnchorYmdFromProject,
   shouldIncludeComplianceOccurrence,
 } from "@/lib/complianceDueDates";
+import { isFiscalComplianceCategory } from "@/lib/compliancePhaseCatalog";
 
 type ServiceArea = Database["public"]["Enums"]["service_area"];
 
@@ -89,6 +90,13 @@ async function syncComplianceTasksForTemplates(params: {
     .order("sort_order");
   if (tplErr) throw tplErr;
 
+  // Las obligaciones fiscales (SAT) las lleva Contabilidad: no se siembran
+  // automáticamente en proyectos de cumplimiento. Siguen disponibles en el
+  // generador manual por si se contrata cumplimiento/control interno.
+  const eligibleTemplates = (templates || []).filter(
+    (tpl) => !isFiscalComplianceCategory(tpl.category as string | null),
+  );
+
   const { data: existingRows, error: exErr } = await supabase
     .from("tasks")
     .select("compliance_template_id, due_date, compliance_period")
@@ -121,7 +129,7 @@ async function syncComplianceTasksForTemplates(params: {
 
   const tasksToInsert: Record<string, unknown>[] = [];
 
-  for (const tpl of templates || []) {
+  for (const tpl of eligibleTemplates) {
     const dates = calculateDueDates(
       {
         periodicity: tpl.periodicity as string,

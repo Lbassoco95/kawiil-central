@@ -11,3 +11,21 @@ export const PROJECT_PHASE_CARD_COLORS = [
 export function projectPhaseColorClass(index: number): string {
   return PROJECT_PHASE_CARD_COLORS[index % PROJECT_PHASE_CARD_COLORS.length];
 }
+
+/**
+ * Variante ligera: solo un acento en el borde izquierdo por color de fase.
+ * Evita el look de "rectángulos gigantes" rellenos y deja las fases como
+ * secciones legibles separadas por color.
+ */
+export const PROJECT_PHASE_ACCENT_COLORS = [
+  "border-l-blue-500",
+  "border-l-emerald-500",
+  "border-l-amber-500",
+  "border-l-purple-500",
+  "border-l-rose-500",
+  "border-l-cyan-500",
+] as const;
+
+export function projectPhaseAccentClass(index: number): string {
+  return PROJECT_PHASE_ACCENT_COLORS[index % PROJECT_PHASE_ACCENT_COLORS.length];
+}

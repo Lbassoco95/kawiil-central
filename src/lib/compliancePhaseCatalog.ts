@@ -25,6 +25,19 @@ export const COMPLIANCE_CATEGORY_ORDER: string[] = [
   "otros",
 ];
 
+/**
+ * Categorías de plantilla que son obligaciones fiscales (SAT) y que por defecto
+ * NO se siembran en proyectos de cumplimiento: eso le corresponde a Contabilidad.
+ * Se mantienen disponibles en el generador manual por si se contrata a Kawiil como
+ * cumplimiento/control interno y se quieren incluir explícitamente, pero nunca se
+ * dejan como establecidas de forma automática.
+ */
+export const FISCAL_COMPLIANCE_CATEGORIES: ReadonlySet<string> = new Set(["fiscal"]);
+
+export function isFiscalComplianceCategory(category: string | null | undefined): boolean {
+  return !!category && FISCAL_COMPLIANCE_CATEGORIES.has(category);
+}
+
 const ORDER_INDEX = new Map(COMPLIANCE_CATEGORY_ORDER.map((k, i) => [k, i]));
 
 export function complianceCategoryLabel(key: string): string {

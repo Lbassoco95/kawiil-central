@@ -18,7 +18,6 @@ import {
   AlertTriangle,
   Settings2,
   Plus,
-  Layers,
   ArrowUp,
   ArrowDown,
 } from "lucide-react";
@@ -33,7 +32,7 @@ import { nowMX } from "@/lib/dateUtils";
 import { CriticalityDelayCard } from "./CriticalityDelayCard";
 import { isTaskOpenStatus, isTaskClosedStatus } from "@/lib/taskStatusGroups";
 import { cn } from "@/lib/utils";
-import { projectPhaseColorClass } from "./projectPhaseVisual";
+import { projectPhaseAccentClass } from "./projectPhaseVisual";
 import { ensureCompliancePhasesOnProject, type SyncPhase } from "@/lib/projectPhaseSync";
 import { complianceCategoryLabel } from "@/lib/compliancePhaseCatalog";
 import { TaskFormDialog } from "@/components/tasks/TaskFormDialog";
@@ -216,15 +215,21 @@ function CompliancePhaseCard({
   onMovePhase: (phaseKey: string, direction: "up" | "down") => void;
   persistedInProject: boolean;
 }) {
-  const [open, setOpen] = useState(true);
   const total = tasksOpen.length + tasksClosed.length;
+  // Empieza colapsada si no hay tareas en curso: evita que las fases vacías se
+  // vean como rectángulos gigantes y deja el panel como una lista compacta.
+  const [open, setOpen] = useState(tasksOpen.length > 0);
   const completed = tasksOpen.concat(tasksClosed).filter((t) => t.status === "completada").length;
   const groupPct = total > 0 ? Math.round((completed / total) * 100) : 0;
-  const shellClass = cn("rounded-xl border overflow-hidden", projectPhaseColorClass(phaseIndex));
+  const shellClass = cn(
+    "rounded-lg border border-border/60 border-l-[3px] bg-card/40 overflow-hidden transition-colors",
+    projectPhaseAccentClass(phaseIndex),
+    total === 0 && "opacity-70",
+  );
 
   return (
     <Collapsible open={open} onOpenChange={setOpen} className={shellClass}>
-      <div className="flex flex-wrap items-center gap-1.5 px-3 py-2.5">
+      <div className="flex flex-wrap items-center gap-1.5 px-3 py-2">
         <CollapsibleTrigger asChild>
           <button type="button" className="shrink-0 rounded-sm hover:bg-muted/50 p-0.5">
             {open ? (
@@ -235,7 +240,6 @@ function CompliancePhaseCard({
           </button>
         </CollapsibleTrigger>
         <Shield className="h-3.5 w-3.5 text-primary shrink-0" />
-        <Layers className="h-3.5 w-3.5 text-muted-foreground/70 shrink-0 hidden sm:block" />
         <span className="text-sm font-semibold flex-1 min-w-0 truncate">{phase.name}</span>
         {persistedInProject && persistedOrderIndex >= 0 && (
           <div className="flex items-center gap-0.5 shrink-0">
@@ -762,7 +766,7 @@ export function ComplianceDashboard({
         </CardContent>
       </Card>
 
-      <div className="space-y-3">
+      <div className="space-y-2">
         {orderedPhases.map((phase, listIndex) => {
           const bucketTasks = tasksByBucket.get(phase.key) || [];
           const tasksOpen = bucketTasks.filter((t) => !isTaskClosedStatus(t.status));
