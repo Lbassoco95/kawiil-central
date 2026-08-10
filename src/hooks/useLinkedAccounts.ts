@@ -486,17 +486,99 @@ export function useRoutedUpdateEvent() {
     },
   });
 
+  const google = useMutation({
+    mutationFn: async (vars: { accountId: string | null; calendarId: string | null; eventId: string; payload: Record<string, any> }) => {
+      const { data, error } = await supabase.functions.invoke("google-api", {
+        body: { action: "update-event", params: { accountId: vars.accountId, calendarId: vars.calendarId, eventId: vars.eventId, payload: vars.payload } },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: () => {
+      setTimeout(() => queryClient.invalidateQueries({ queryKey: ["google-calendar-events"] }), 1500);
+    },
+  });
+
   const mutate = (args: { eventId: string; calendarId?: string | null; payload: Record<string, any> }) => {
     const ref = parseCalendarEventRef(args.eventId, args.calendarId);
     if (ref.provider === "outlook") {
       outlook.mutate({ accountId: ref.accountId, eventId: ref.rawEventId!, payload: args.payload });
-    } else if (ref.provider === "primary") {
+    } else if (ref.provider === "google") {
+      // Google no tiene categorías; el backend ignora ese campo. Útil para mover fecha/hora.
+      google.mutate({ accountId: ref.accountId, calendarId: ref.rawCalendarId, eventId: ref.rawEventId!, payload: args.payload });
+    } else {
       primary.mutate({ eventId: args.eventId, payload: args.payload });
     }
-    // Google: sin categorías nativas → no-op.
   };
 
-  return { mutate, isPending: primary.isPending || outlook.isPending };
+  return { mutate, isPending: primary.isPending || outlook.isPending || google.isPending };
+}
+
+/**
+ * Edita un evento de una cuenta VINCULADA (Outlook o Google) desde el diálogo.
+ * (La cuenta principal usa useUpdateCalendarEvent.) El payload va en estilo Graph;
+ * google-api lo traduce a los campos de Google.
+ */
+export function useUpdateLinkedEvent() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: { eventId: string; calendarId?: string | null; payload: Record<string, any> }) => {
+      const ref = parseCalendarEventRef(vars.eventId, vars.calendarId);
+      if (ref.provider === "outlook") {
+        const { data, error } = await supabase.functions.invoke("outlook-account-api", {
+          body: { action: "update-event", params: { accountId: ref.accountId, eventId: ref.rawEventId, payload: vars.payload } },
+        });
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
+        return data;
+      }
+      if (ref.provider === "google") {
+        const { data, error } = await supabase.functions.invoke("google-api", {
+          body: { action: "update-event", params: { accountId: ref.accountId, calendarId: ref.rawCalendarId, eventId: ref.rawEventId, payload: vars.payload } },
+        });
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
+        return data;
+      }
+      throw new Error("Cuenta no soportada para edición");
+    },
+    onSuccess: (_d, vars) => {
+      toast.success("Evento actualizado");
+      const ref = parseCalendarEventRef(vars.eventId, vars.calendarId);
+      const key = ref.provider === "google" ? "google-calendar-events" : "outlook-account-events";
+      setTimeout(() => queryClient.invalidateQueries({ queryKey: [key] }), 800);
+      setTimeout(() => queryClient.invalidateQueries({ queryKey: [key] }), 3000);
+    },
+    onError: (err: Error) => toast.error("No se pudo actualizar: " + err.message),
+  });
+}
+
+/** Elimina un evento de una cuenta VINCULADA (Outlook o Google). */
+export function useDeleteLinkedEvent() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: { eventId: string; calendarId?: string | null }) => {
+      const ref = parseCalendarEventRef(vars.eventId, vars.calendarId);
+      const fn = ref.provider === "google" ? "google-api" : "outlook-account-api";
+      const params = ref.provider === "google"
+        ? { accountId: ref.accountId, calendarId: ref.rawCalendarId, eventId: ref.rawEventId }
+        : { accountId: ref.accountId, eventId: ref.rawEventId };
+      const { data, error } = await supabase.functions.invoke(fn, {
+        body: { action: "delete-event", params },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: (_d, vars) => {
+      toast.success("Evento eliminado");
+      const ref = parseCalendarEventRef(vars.eventId, vars.calendarId);
+      const key = ref.provider === "google" ? "google-calendar-events" : "outlook-account-events";
+      setTimeout(() => queryClient.invalidateQueries({ queryKey: [key] }), 800);
+    },
+    onError: (err: Error) => toast.error("No se pudo eliminar: " + err.message),
+  });
 }
 
 // ─── Account color utility ────────────────────────────────────────────────────

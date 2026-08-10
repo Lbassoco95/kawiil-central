@@ -323,6 +323,104 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    if (action === "update-event") {
+      // Edita un evento de Google. params: { accountId, calendarId, eventId, payload }
+      // El payload llega en estilo Graph (como el diálogo de edición); lo traducimos.
+      const acc = accountId ? accounts.find((a) => a.id === accountId) : (accounts.find((a) => a.calendar_enabled) || accounts[0]);
+      if (!acc) return new Response(JSON.stringify({ error: "no_account" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const token = await ensureAccessToken(supabaseAdmin, acc);
+      if (!token) return new Response(JSON.stringify({ error: "no_valid_token" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+      const calId = String(params?.calendarId || "primary").replace(/^google:[^:]+:/, "");
+      const rawEventId = String(params?.eventId || "").replace(/^google:/, "");
+      if (!rawEventId) return new Response(JSON.stringify({ error: "missing_event" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+      const p = params?.payload && typeof params.payload === "object" ? params.payload : {};
+      const tz = p?.start?.timeZone || "America/Mexico_City";
+
+      // Leemos el evento actual para respetar su naturaleza (día completo vs con hora)
+      // y no convertir por accidente un evento de día completo en uno con hora.
+      const base = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${encodeURIComponent(rawEventId)}`;
+      let existing: any = null;
+      try {
+        const getRes = await fetch(base, { headers: { Authorization: `Bearer ${token}` } });
+        if (getRes.ok) existing = await getRes.json();
+      } catch { /* si falla, seguimos con lo que haya */ }
+      const isAllDay = !!(existing?.start?.date && !existing?.start?.dateTime);
+
+      const gPatch: Record<string, any> = {};
+      if (typeof p.subject === "string") gPatch.summary = p.subject;
+      if (p.start?.dateTime || p.end?.dateTime) {
+        if (isAllDay) {
+          // Mantener día completo: Google usa `date` (fin exclusivo, +1 día).
+          const sd = String(p.start?.dateTime || "").slice(0, 10);
+          const edRaw = String(p.end?.dateTime || p.start?.dateTime || "").slice(0, 10);
+          if (sd) gPatch.start = { date: sd };
+          if (edRaw) {
+            // Si inicio == fin (mismo día), Google exige fin exclusivo (+1 día).
+            let end = edRaw;
+            if (edRaw <= sd) { const n = new Date(`${sd}T00:00:00Z`); n.setUTCDate(n.getUTCDate() + 1); end = n.toISOString().slice(0, 10); }
+            gPatch.end = { date: end };
+          }
+        } else {
+          if (p.start?.dateTime) gPatch.start = { dateTime: p.start.dateTime, timeZone: tz };
+          if (p.end?.dateTime) gPatch.end = { dateTime: p.end.dateTime, timeZone: p.end.timeZone || tz };
+        }
+      }
+      if (p.body?.content !== undefined) {
+        // El diálogo manda HTML; Google muestra texto plano. Convertimos saltos y quitamos
+        // etiquetas, preservando los saltos de línea del contenido.
+        gPatch.description = String(p.body.content)
+          .replace(/<br\s*\/?>/gi, "\n")
+          .replace(/<\/(p|div|li|h[1-6])>/gi, "\n")
+          .replace(/<[^>]+>/g, "")
+          .replace(/[ \t]+/g, " ")
+          .replace(/\n{3,}/g, "\n\n")
+          .trim();
+      }
+      if (p.location !== undefined) gPatch.location = p.location?.displayName ?? "";
+      // Solo tocamos asistentes si el cliente los envía explícitamente (evita resetear RSVPs).
+      if (Array.isArray(p.attendees)) {
+        gPatch.attendees = p.attendees.map((a: any) => ({ email: a?.emailAddress?.address })).filter((a: any) => a.email);
+      }
+
+      // sendUpdates=none por defecto para no enviar correos en cada guardado/arrastre;
+      // solo notificamos si cambian los asistentes.
+      const sendUpdates = Array.isArray(p.attendees) ? "all" : "none";
+      const res = await fetch(`${base}?sendUpdates=${sendUpdates}`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify(gPatch),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        return new Response(JSON.stringify({ error: json?.error?.message || "update_failed" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      return new Response(JSON.stringify({ success: true, id: `google:${json.id}` }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    if (action === "delete-event") {
+      // Elimina un evento de Google. params: { accountId, calendarId, eventId }
+      const acc = accountId ? accounts.find((a) => a.id === accountId) : (accounts.find((a) => a.calendar_enabled) || accounts[0]);
+      if (!acc) return new Response(JSON.stringify({ error: "no_account" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const token = await ensureAccessToken(supabaseAdmin, acc);
+      if (!token) return new Response(JSON.stringify({ error: "no_valid_token" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+      const calId = String(params?.calendarId || "primary").replace(/^google:[^:]+:/, "");
+      const rawEventId = String(params?.eventId || "").replace(/^google:/, "");
+      if (!rawEventId) return new Response(JSON.stringify({ error: "missing_event" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+      const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${encodeURIComponent(rawEventId)}?sendUpdates=none`;
+      const res = await fetch(url, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+      // Google responde 204 al borrar; 404/410 = ya no existe (lo tratamos como éxito).
+      if (!res.ok && res.status !== 204 && res.status !== 404 && res.status !== 410) {
+        let msg = `HTTP ${res.status}`;
+        try { msg = (await res.json())?.error?.message || msg; } catch { /* sin cuerpo */ }
+        return new Response(JSON.stringify({ error: msg }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     // ─── GMAIL EMAIL ACTIONS ───────────────────────────────────────────────
 
     function decodeBase64Url(data: string, charset = "utf-8"): string {

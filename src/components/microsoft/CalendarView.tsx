@@ -53,7 +53,7 @@ import { CreateTaskFromEventDialog } from "@/components/microsoft/CreateTaskFrom
 import {
   useLinkedAccounts, useGoogleConnection, useGoogleCalendarEvents, useGoogleCalendars,
   useOutlookConnection, useOutlookAccountEvents, useOutlookAccountCalendars, useRenameLinkedAccount,
-  useRoutedRespondEvent, useRoutedUpdateEvent, parseCalendarEventRef,
+  useRoutedRespondEvent, useRoutedUpdateEvent, useUpdateLinkedEvent, useDeleteLinkedEvent, parseCalendarEventRef,
 } from "@/hooks/useLinkedAccounts";
 import { ColorPickerPopover, paletteColorFor, hexAlpha } from "@/components/microsoft/ColorPickerPopover";
 import {
@@ -447,6 +447,8 @@ export function CalendarView({
   const updateEvent = useUpdateCalendarEvent();
   const respondEvent = useRoutedRespondEvent();
   const routedUpdateEvent = useRoutedUpdateEvent();
+  const updateLinkedEvent = useUpdateLinkedEvent();
+  const deleteLinkedEvent = useDeleteLinkedEvent();
   const { data: outlookCategories = [] } = useOutlookCategories();
   const createOutlookCategory = useCreateOutlookCategory();
   const deleteOutlookCategory = useDeleteOutlookCategory();
@@ -472,13 +474,17 @@ export function CalendarView({
       const newStartMs = new Date(`${newStartDate}T${newStartTime}:00`).getTime();
       const newEnd = new Date(newStartMs + durationMs);
       const deltaMs = newStartMs - startDt.getTime();
-      updateEvent.mutate({
-        eventId: draggedEvent.id,
-        payload: {
-          start: { dateTime: `${newStartDate}T${newStartTime}:00`, timeZone: CDMX_TZ },
-          end: { dateTime: `${format(newEnd, "yyyy-MM-dd")}T${format(newEnd, "HH:mm")}:00`, timeZone: CDMX_TZ },
-        },
-      });
+      const movePayload = {
+        start: { dateTime: `${newStartDate}T${newStartTime}:00`, timeZone: CDMX_TZ },
+        end: { dateTime: `${format(newEnd, "yyyy-MM-dd")}T${format(newEnd, "HH:mm")}:00`, timeZone: CDMX_TZ },
+      };
+      const dropRef = parseCalendarEventRef(draggedEvent.id, draggedEvent.calendarId);
+      if (dropRef.provider === "primary") {
+        updateEvent.mutate({ eventId: draggedEvent.id, payload: movePayload });
+      } else {
+        // Mover cuentas vinculadas: hook silencioso (sin toast por evento).
+        routedUpdateEvent.mutate({ eventId: draggedEvent.id, calendarId: draggedEvent.calendarId, payload: movePayload });
+      }
 
       // Detecta los siguientes de la misma secuencia (mismo nombre base, posteriores).
       const stem = sequenceStem(draggedEvent.subject);
@@ -497,7 +503,7 @@ export function CalendarView({
       }
       setDraggedEvent(null);
     },
-    [draggedEvent, updateEvent]
+    [draggedEvent, updateEvent, routedUpdateEvent]
   );
 
   // Aplica el mismo desplazamiento a los eventos seleccionados de la secuencia.
@@ -509,16 +515,16 @@ export function CalendarView({
       const e = parseEventTime(ev.end?.dateTime || ev.start.dateTime, new Date(s.getTime() + 60 * 60 * 1000));
       const ns = new Date(s.getTime() + cascade.deltaMs);
       const ne = new Date(e.getTime() + cascade.deltaMs);
-      updateEvent.mutate({
-        eventId: ev.id,
-        payload: {
-          start: { dateTime: `${format(ns, "yyyy-MM-dd")}T${format(ns, "HH:mm")}:00`, timeZone: CDMX_TZ },
-          end: { dateTime: `${format(ne, "yyyy-MM-dd")}T${format(ne, "HH:mm")}:00`, timeZone: CDMX_TZ },
-        },
-      });
+      const cascadePayload = {
+        start: { dateTime: `${format(ns, "yyyy-MM-dd")}T${format(ns, "HH:mm")}:00`, timeZone: CDMX_TZ },
+        end: { dateTime: `${format(ne, "yyyy-MM-dd")}T${format(ne, "HH:mm")}:00`, timeZone: CDMX_TZ },
+      };
+      const cRef = parseCalendarEventRef(ev.id, ev.calendarId);
+      if (cRef.provider === "primary") updateEvent.mutate({ eventId: ev.id, payload: cascadePayload });
+      else routedUpdateEvent.mutate({ eventId: ev.id, calendarId: ev.calendarId, payload: cascadePayload });
     }
     setCascade(null);
-  }, [cascade, updateEvent]);
+  }, [cascade, updateEvent, routedUpdateEvent]);
 
   const [editForm, setEditForm] = useState({
     subject: "", startDate: "", startTime: "09:00", endDate: "", endTime: "10:00",
@@ -730,12 +736,18 @@ export function CalendarView({
   }, [workLocations, teamDayYmd]);
 
   const calendarById = useMemo(() => {
-    const m = new Map<string, { name: string; color: string; hexColor?: string }>();
-    calendars.forEach((c, i) => m.set(c.id, { name: c.name, color: calendarAccentColor(c.id, i), hexColor: c.hexColor }));
-    googleCalendars.forEach((c) => m.set(c.id, { name: c.name, color: accountColorForId(c._accountId), hexColor: c.hexColor }));
-    outlookCalendars.forEach((c) => m.set(c.id, { name: c.name, color: accountColorForId(c._accountId), hexColor: c.hexColor }));
+    const m = new Map<string, { name: string; color: string; hexColor?: string; canEdit?: boolean }>();
+    calendars.forEach((c, i) => m.set(c.id, { name: c.name, color: calendarAccentColor(c.id, i), hexColor: c.hexColor, canEdit: (c as any).canEdit }));
+    googleCalendars.forEach((c) => m.set(c.id, { name: c.name, color: accountColorForId(c._accountId), hexColor: c.hexColor, canEdit: (c as any).canEdit }));
+    outlookCalendars.forEach((c) => m.set(c.id, { name: c.name, color: accountColorForId(c._accountId), hexColor: c.hexColor, canEdit: (c as any).canEdit }));
     return m;
   }, [calendars, googleCalendars, outlookCalendars, accountColors]);
+  // ¿Se puede editar/eliminar el evento? Solo bloqueamos si el calendario reporta
+  // explícitamente canEdit=false (p. ej. Días festivos / Cumpleaños). Si no hay dato, se permite.
+  const eventIsEditable = (ev: any): boolean => {
+    const cal = ev?.calendarId ? calendarById.get(ev.calendarId) : null;
+    return cal?.canEdit !== false;
+  };
   const showCalendarColors = calendars.length > 1 || hasGoogle || hasOutlookLinked;
   // Color de un calendario: 1) override del usuario, 2) color real (Outlook/Google), 3) hash de respaldo.
   const calendarColorFor = (id?: string | null) => {
@@ -988,7 +1000,15 @@ export function CalendarView({
 
   const handleUpdateEvent = () => {
     if (!selectedEventId) return;
-    const attendees = editForm.attendees.split(",").map((s) => s.trim()).filter(Boolean).map((address) => ({ emailAddress: { address }, type: "required" }));
+    const ev = cachedEvent || eventDetail;
+    const emails = editForm.attendees.split(",").map((s) => s.trim()).filter(Boolean);
+    // Solo enviamos asistentes si cambiaron respecto al evento original; así una simple
+    // edición (renombrar, mover) NO reenvía invitaciones ni resetea los RSVP existentes.
+    const origEmails = (Array.isArray(ev?.attendees) ? ev.attendees : [])
+      .map((a: any) => String(a?.emailAddress?.address || "").toLowerCase()).filter(Boolean).sort();
+    const newEmailsLc = emails.map((e) => e.toLowerCase()).sort();
+    const attendeesChanged = JSON.stringify(origEmails) !== JSON.stringify(newEmailsLc);
+    const attendees = emails.map((address) => ({ emailAddress: { address }, type: "required" }));
     const payload: any = {
       subject: editForm.subject,
       start: { dateTime: `${editForm.startDate}T${editForm.startTime}:00`, timeZone: CDMX_TZ },
@@ -996,11 +1016,32 @@ export function CalendarView({
       location: editForm.location.trim() ? { displayName: editForm.location.trim() } : undefined,
       body: editForm.description.trim() ? { contentType: "html", content: editForm.description.trim() } : undefined,
       categories: editForm.categories,
-      attendees: attendees.length > 0 ? attendees : undefined,
+      attendees: attendeesChanged ? attendees : undefined,
       sensitivity: editForm.isPrivate ? "private" : "normal",
     };
     Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k]);
-    updateEvent.mutate({ eventId: selectedEventId, payload }, { onSuccess: () => setSelectedEventId(null) });
+
+    const ref = parseCalendarEventRef(selectedEventId, ev?.calendarId);
+    const close = { onSuccess: () => setSelectedEventId(null) };
+    if (ref.provider === "primary") {
+      updateEvent.mutate({ eventId: selectedEventId, payload }, close);
+    } else {
+      // Cuentas vinculadas: Google no maneja categorías ni sensibilidad; el backend
+      // ignora esos campos. Enviamos el mismo payload y el hook rutea.
+      updateLinkedEvent.mutate({ eventId: selectedEventId, calendarId: ev?.calendarId, payload }, close);
+    }
+  };
+
+  const handleDeleteEvent = () => {
+    if (!selectedEventId) return;
+    const ev = cachedEvent || eventDetail;
+    const ref = parseCalendarEventRef(selectedEventId, ev?.calendarId);
+    const close = { onSuccess: () => setSelectedEventId(null) };
+    if (ref.provider === "primary") {
+      deleteEvent.mutate(selectedEventId, close);
+    } else {
+      deleteLinkedEvent.mutate({ eventId: selectedEventId, calendarId: ev?.calendarId }, close);
+    }
   };
 
   const toggleNewEventCategory = (name: string) => {
@@ -1456,10 +1497,17 @@ export function CalendarView({
                                         </button>
                                       )}
                                     </div>
-                                    <button className="absolute right-0.5 top-0.5 opacity-0 group-hover:opacity-100 transition-opacity p-0.5"
-                                      onClick={(e) => { e.stopPropagation(); deleteEvent.mutate(event.id); }}>
-                                      <Trash2 className="h-3 w-3 text-destructive" />
-                                    </button>
+                                    {eventIsEditable(event) && (
+                                      <button className="absolute right-0.5 top-0.5 opacity-0 group-hover:opacity-100 transition-opacity p-0.5"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          const ref = parseCalendarEventRef(event.id, event.calendarId);
+                                          if (ref.provider === "primary") deleteEvent.mutate(event.id);
+                                          else deleteLinkedEvent.mutate({ eventId: event.id, calendarId: event.calendarId });
+                                        }}>
+                                        <Trash2 className="h-3 w-3 text-destructive" />
+                                      </button>
+                                    )}
                                   </div>
                                 </div>
                               );
@@ -2615,28 +2663,38 @@ export function CalendarView({
               )}
             </div>
           ) : null}
-          {isGoogleEvent && (cachedEvent || eventDetail) && (
-            <p className="text-[11px] text-muted-foreground -mt-1">
-              Evento de una cuenta añadida. Puedes responder la invitación y crear una tarea desde aquí; editar o eliminar aún se hace en la app de origen.
-            </p>
-          )}
-          <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:items-center">
-            {!isGoogleEvent && (
-              <Button variant="destructive" onClick={() => { if (selectedEventId) deleteEvent.mutate(selectedEventId, { onSuccess: () => setSelectedEventId(null) }); }} disabled={deleteEvent.isPending}>
-                {deleteEvent.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Eliminar
-              </Button>
-            )}
-            <div className="hidden sm:block sm:flex-1" />
-            <Button variant="outline" onClick={() => setShowTaskFromEvent(true)} disabled={!cachedEvent && !eventDetail}>
-              <CheckSquare className="mr-1.5 h-4 w-4" /> Crear tarea
-            </Button>
-            <Button variant="outline" onClick={() => setSelectedEventId(null)}>Cerrar</Button>
-            {!isGoogleEvent && (
-              <Button onClick={handleUpdateEvent} disabled={updateEvent.isPending || !editForm.subject}>
-                {updateEvent.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Guardar
-              </Button>
-            )}
-          </DialogFooter>
+          {(() => {
+            const ev = cachedEvent || eventDetail;
+            const editable = !!ev && eventIsEditable(ev);
+            const savePending = updateEvent.isPending || updateLinkedEvent.isPending;
+            const delPending = deleteEvent.isPending || deleteLinkedEvent.isPending;
+            return (
+              <>
+                {ev && !editable && (
+                  <p className="text-[11px] text-muted-foreground -mt-1">
+                    Este calendario es de solo lectura (p. ej. Días festivos). Puedes responder invitaciones y crear tareas, pero no editar ni eliminar aquí.
+                  </p>
+                )}
+                <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:items-center">
+                  {editable && (
+                    <Button variant="destructive" onClick={handleDeleteEvent} disabled={delPending}>
+                      {delPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Eliminar
+                    </Button>
+                  )}
+                  <div className="hidden sm:block sm:flex-1" />
+                  <Button variant="outline" onClick={() => setShowTaskFromEvent(true)} disabled={!cachedEvent && !eventDetail}>
+                    <CheckSquare className="mr-1.5 h-4 w-4" /> Crear tarea
+                  </Button>
+                  <Button variant="outline" onClick={() => setSelectedEventId(null)}>Cerrar</Button>
+                  {editable && (
+                    <Button onClick={handleUpdateEvent} disabled={savePending || !editForm.subject}>
+                      {savePending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Guardar
+                    </Button>
+                  )}
+                </DialogFooter>
+              </>
+            );
+          })()}
         </DialogContent>
       </Dialog>
 
