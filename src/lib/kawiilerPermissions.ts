@@ -34,3 +34,17 @@ export function taskPermissionDefaultsForRole(role: AppGrado | string): Kawiiler
   if (role === "referente") return { can_delete_tasks: false, can_edit_task_due_dates: false };
   return { can_delete_tasks: false, can_edit_task_due_dates: false };
 }
+
+/**
+ * Renombrar (cambiar el nombre de un proyecto o el título de una tarea) solo
+ * lo puede hacer un G4 (Kawiiler Transformador) o la persona que lo creó.
+ * El resto del equipo puede editar los demás campos, pero no el nombre.
+ */
+export function canRenameEntity(
+  role: AppGrado | string,
+  createdBy: string | null | undefined,
+  currentUserId: string | null | undefined,
+): boolean {
+  if (role === "transformador") return true;
+  return !!currentUserId && !!createdBy && createdBy === currentUserId;
+}

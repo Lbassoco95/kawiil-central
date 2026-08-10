@@ -28,6 +28,8 @@ import { ProjectTeamCard } from "./ProjectTeamCard";
 import { ProjectKawiilAiCard } from "./ProjectKawiilAiCard";
 import { ProjectLogTab } from "./ProjectLogTab";
 import { computeAutoCriticality } from "@/lib/projectCriticality";
+import { useUserRole } from "@/hooks/useUserRole";
+import { canRenameEntity } from "@/lib/kawiilerPermissions";
 
 type ProjectStatus = Database["public"]["Enums"]["project_status"];
 
@@ -57,7 +59,11 @@ export function ProjectGeneralTab({ project }: Props) {
   const updateProject = useUpdateProject();
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const { role } = useUserRole();
+  // Renombrar el proyecto solo lo permite un G4 o quien lo creó.
+  const canRename = canRenameEntity(role, project.created_by, user?.id);
   const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(project.name);
   const [status, setStatus] = useState<ProjectStatus>(project.status);
   const [startDate, setStartDate] = useState(project.start_date || "");
   const [endDate, setEndDate] = useState(project.end_date || "");
@@ -67,6 +73,11 @@ export function ProjectGeneralTab({ project }: Props) {
   const [showMeetingDialog, setShowMeetingDialog] = useState(false);
   const createTemplate = useCreateProjectTemplate();
   const [savedAsTemplate, setSavedAsTemplate] = useState(false);
+
+  // Mantener el nombre editable sincronizado si el proyecto cambia fuera de edición.
+  useEffect(() => {
+    if (!editing) setName(project.name);
+  }, [project.name, editing]);
 
   const handleSaveAsTemplate = async () => {
     const tasks = projectTasks || [];
@@ -360,25 +371,14 @@ INSTRUCCIONES:
       client_id: clientId || null,
     };
 
-    // Auto-update project name when client changes
-    if (clientId !== (project.client_id || "") && clients) {
-      const oldClientName = (project as any).clients?.name || "";
-      const newClient = clients.find((c) => c.id === clientId);
-      const newClientName = newClient?.name || "";
-
-      if (oldClientName && project.name.includes(oldClientName) && newClientName) {
-        updates.name = project.name.replace(oldClientName, newClientName);
-      }
-    } else if (clientId && clients) {
-      // Handle desync: client_id already set but project name doesn't reflect client name
-      const currentClient = clients.find((c) => c.id === clientId);
-      if (currentClient?.name && !project.name.includes(currentClient.name)) {
-        // Extract prefix (e.g. "Juicio Administrativo - ") and replace the old suffix
-        const dashIndex = project.name.lastIndexOf(" - ");
-        if (dashIndex > 0) {
-          updates.name = project.name.substring(0, dashIndex) + " - " + currentClient.name;
-        }
-      }
+    // Renombrado manual: solo si el usuario puede y realmente cambió el nombre.
+    // El autorenombrado por cambio de cliente lo resuelve `useUpdateProject`
+    // internamente (acción del sistema, sin la restricción de G4/creador); por
+    // eso aquí NO tocamos `updates.name` salvo en un renombrado manual explícito.
+    const trimmedName = name.trim();
+    const nameChanged = canRename && !!trimmedName && trimmedName !== project.name;
+    if (nameChanged) {
+      updates.name = trimmedName;
     }
 
     updateProject.mutate(updates, {
@@ -387,6 +387,7 @@ INSTRUCCIONES:
   };
 
   const handleCancel = () => {
+    setName(project.name);
     setStatus(project.status);
     setStartDate(project.start_date || "");
     setEndDate(project.end_date || "");
@@ -449,6 +450,26 @@ INSTRUCCIONES:
           )}
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
+          {/* Nombre */}
+          <div className="flex justify-between items-start gap-2">
+            <span className="text-muted-foreground shrink-0 pt-1">Nombre</span>
+            {editing && canRename ? (
+              <Input
+                className="w-40 sm:w-56 h-8 text-xs"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Nombre del proyecto"
+              />
+            ) : (
+              <span className="text-right font-medium">{project.name}</span>
+            )}
+          </div>
+          {editing && !canRename && (
+            <p className="text-[11px] text-muted-foreground -mt-1 text-right">
+              Solo un G4 o quien creó el proyecto puede cambiar el nombre.
+            </p>
+          )}
+
           {/* Status */}
           <div className="flex justify-between items-center">
             <span className="text-muted-foreground">Estado</span>

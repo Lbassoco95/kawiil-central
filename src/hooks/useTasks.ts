@@ -8,6 +8,7 @@ import { logEntityActivity } from "@/lib/activityLog";
 import { createNotifications } from "@/lib/notificationHelpers";
 import { extractDropboxFilenameFromUrl } from "@/lib/dropboxLinkLabel";
 import { calculateNextOccurrenceDate, formatRecurrenceDate } from "@/lib/recurrenceUtils";
+import { assertCanRenameTask } from "@/lib/renamePermission";
 
 /** Bloquea completar una tarea padre si el checklist tiene ítems abiertos o subtareas enlazadas no cerradas. */
 async function assertCanCompleteParentTask(taskId: string) {
@@ -512,6 +513,10 @@ export function useUpdateTask() {
   const { user } = useAuth();
   return useMutation({
     mutationFn: async ({ id, ...updates }: { id: string; [key: string]: any }) => {
+      // Renombrar (cambiar el título) solo lo permite un G4 o quien creó la tarea.
+      if (typeof updates.title === "string") {
+        await assertCanRenameTask(id, user!.id);
+      }
       if (updates.status === "completada") {
         await assertCanCompleteParentTask(id);
       }
