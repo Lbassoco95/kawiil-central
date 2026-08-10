@@ -2227,7 +2227,7 @@ export function CalendarView({
           <DialogHeader>
             <DialogTitle className="pr-6">Nuevo evento – {newEvent.date ? format(new Date(`${newEvent.date}T00:00:00`), "EEEE d 'de' MMMM, yyyy", { locale: es }) : format(selectedDate, "EEEE d 'de' MMMM, yyyy", { locale: es })}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-2">
+          <div className="space-y-4 py-2 min-w-0">
             <div className="space-y-2">
               <Label>Asunto</Label>
               <Input value={newEvent.subject} onChange={(e) => setNewEvent({ ...newEvent, subject: e.target.value })} placeholder="Nombre del evento..." />
