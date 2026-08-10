@@ -366,7 +366,7 @@ interface TopbarWidgetsProps {
 export function TopbarWidgets({ className }: TopbarWidgetsProps) {
   return (
     <TooltipProvider delayDuration={250}>
-      <div className={cn("hidden md:flex items-center gap-3", className)}>
+      <div className={cn("hidden lg:flex items-center gap-3", className)}>
         <WeatherPill />
         <PrimaryClock />
         <div className="hidden xl:block">

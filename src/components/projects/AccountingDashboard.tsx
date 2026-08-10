@@ -982,7 +982,7 @@ export function AccountingDashboard({
                   Ver historial completo ({moffinRows.length})
                 </Button>
               </CollapsibleTrigger>
-              <CollapsibleContent className="rounded-md border border-border/60 overflow-hidden max-h-72 overflow-y-auto">
+              <CollapsibleContent className="rounded-md border border-border/60 max-h-72 overflow-auto">
                 <table className="w-full text-left text-[11px]">
                   <thead className="bg-muted/40 text-muted-foreground sticky top-0 z-[1]">
                     <tr>

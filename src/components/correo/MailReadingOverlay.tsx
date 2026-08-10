@@ -263,16 +263,16 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onReply,
       )}
     >
       {/* Nav bar */}
-      <div className="shrink-0 flex items-center gap-2 px-4 py-2.5 border-b border-border/40">
+      <div className="shrink-0 flex items-center gap-2 px-4 py-2.5 border-b border-border/40 overflow-x-auto scrollbar-hide">
         <button
           onClick={onClose}
-          className="flex items-center gap-1.5 text-[12.5px] text-muted-foreground hover:text-foreground px-2 py-1.5 rounded-md hover:bg-accent transition-colors"
+          className="flex items-center gap-1.5 text-[12.5px] text-muted-foreground hover:text-foreground px-2 py-1.5 rounded-md hover:bg-accent transition-colors shrink-0"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
           Lista
         </button>
 
-        <div className="ml-auto flex items-center gap-0.5">
+        <div className="ml-auto flex items-center gap-0.5 shrink-0">
           <button
             className="h-[30px] flex items-center gap-1.5 px-2.5 rounded-md bg-primary text-primary-foreground text-[12px] font-semibold hover:bg-primary/90 transition-colors"
             onClick={onReply ?? onCompose}

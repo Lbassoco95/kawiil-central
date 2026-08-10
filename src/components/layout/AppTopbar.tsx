@@ -75,7 +75,7 @@ export function AppTopbar({ isFullWidth = false }: AppTopbarProps) {
           aria-label="Abrir buscador global"
           className={cn(
             "group relative inline-flex items-center gap-2 rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground transition hover:bg-muted",
-            isMobile ? "h-9 w-9 justify-center px-0" : "min-w-[260px] justify-between",
+            isMobile ? "h-9 w-9 justify-center px-0" : "min-w-0 shrink lg:min-w-[260px] justify-between",
           )}
         >
           <span className="flex items-center gap-2">

@@ -116,9 +116,22 @@
 .kwv24 .mtable.tareas .trow {
   grid-template-columns: 6px minmax(0, 2.4fr) 140px 170px 130px 110px 32px;
 }
+/* Piso de ancho: en pantallas angostas o con zoom la tabla densa hace scroll
+   horizontal (dentro de .mtable-scroll) en lugar de recortar columnas. */
+.kwv24 .mtable.tareas {
+  min-width: 720px;
+}
 .kwv24 .mtable.proyectos .thead,
 .kwv24 .mtable.proyectos .trow {
   grid-template-columns: 6px minmax(300px, 2.6fr) 110px 160px 170px 100px 32px;
+}
+.kwv24 .mtable.proyectos {
+  min-width: 900px;
+}
+/* Contenedor con scroll horizontal para las tablas densas (mtable). */
+.kwv24 .mtable-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .kwv24 .mtable.proyectos .tname .meta {
   white-space: nowrap;

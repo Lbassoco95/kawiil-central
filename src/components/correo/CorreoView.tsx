@@ -329,7 +329,7 @@ ${detail.body?.contentType === "html" ? origBody : `<pre style="font-family:inhe
       </div>
 
       {/* Right: vista previa del correo seleccionado; con la vista completa abierta, panel de contacto */}
-      <div className="w-[290px] shrink-0 border-l border-border/30 overflow-hidden">
+      <div className="hidden xl:block w-[290px] shrink-0 border-l border-border/30 overflow-hidden">
         {selectedEmailId && !readingOpen ? (
           <MailPreviewPanel
             emailId={selectedEmailId}

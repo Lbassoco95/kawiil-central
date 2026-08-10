@@ -3608,7 +3608,7 @@ export function EmailView() {
             </ScrollArea>
 
             {/* Kawiil AI right panel — visible when aiCardOpen */}
-            {aiCardOpen && selectedEmailId && (
+            {aiCardOpen && selectedEmailId && !isMobile && (
               <div className="w-[320px] shrink-0 border-l border-border/40 overflow-y-auto bg-muted/10">
                 <div className="flex items-center justify-between px-3 py-2 border-b border-border/40 sticky top-0 bg-background/80 backdrop-blur-sm z-10">
                   <span className="flex items-center gap-1.5 text-xs font-semibold text-foreground/80">

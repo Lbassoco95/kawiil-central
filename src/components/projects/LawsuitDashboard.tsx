@@ -1037,7 +1037,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
                 onChange={(e) => setNewDeadline((p) => ({ ...p, title: e.target.value }))}
               />
             </div>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Fecha *</Label>
                 <Input

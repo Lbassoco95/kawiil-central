@@ -439,6 +439,7 @@ const Proyectos = () => {
           </select>
         </div>
 
+        <div className="mtable-scroll">
         <div className="mtable proyectos">
           <div className="thead">
             <div />
@@ -579,6 +580,7 @@ const Proyectos = () => {
               );
             })
           )}
+        </div>
         </div>
 
         <div className="note">

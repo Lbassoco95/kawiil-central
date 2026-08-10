@@ -169,7 +169,7 @@ export function ProjectSidebar({
   );
 
   return (
-    <div className="w-64 shrink-0 border-r border-border/40 flex flex-col bg-secondary/10">
+    <div className="w-full sm:w-64 shrink-0 border-r border-border/40 flex flex-col bg-secondary/10">
       {/* New conversation CTA */}
       <div className="p-2 border-b border-border/30">
         <button
