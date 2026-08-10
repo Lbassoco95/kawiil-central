@@ -6,6 +6,7 @@ import {
   CheckSquare,
   FileText,
   FolderKanban,
+  Gavel,
   Kanban,
   LayoutDashboard,
   Mail,
@@ -27,6 +28,7 @@ import { useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
+import { useLegalAccess } from "@/hooks/useLegalAccess";
 import { useUnreadCount } from "@/hooks/useMentionNotifications";
 import { useUnreadEmailCount } from "@/hooks/useMicrosoft";
 import { useSlackChannelNotificationBadges } from "@/hooks/useSlackChannelNotificationBadges";
@@ -49,6 +51,8 @@ type NavItem = {
   /** Slot key used by .kw-sb-link[data-view-link] for color theming. */
   view: string;
   moduleKey?: string;
+  /** Solo visible para usuarios del área legal (litigio/gestoría) o admin/manager. */
+  legalOnly?: boolean;
   tooltip?: string;
 };
 
@@ -64,6 +68,7 @@ const NAV_GROUPS: NavGroup[] = [
       { title: "Dashboard", url: "/", icon: LayoutDashboard, view: "dashboard" },
       { title: "Tareas", url: "/tareas", icon: CheckSquare, view: "tareas" },
       { title: "Proyectos", url: "/proyectos", icon: FolderKanban, view: "proyectos" },
+      { title: "Litigio", url: "/litigio", icon: Gavel, view: "litigio", legalOnly: true, tooltip: "Agenda de audiencias y términos de todos los juicios" },
       { title: "Actividades", url: "/actividades", icon: PartyPopper, view: "actividades" },
       { title: "Calendario", url: "/microsoft365/calendario", icon: Calendar, view: "calendario", moduleKey: "calendario" },
       { title: "Clientes", url: "/clientes", icon: Users, view: "clientes" },
@@ -217,12 +222,15 @@ function SidebarBody({
   onMobileNavigate?: () => void;
 }) {
   const { hasModule } = useModulePermissions();
+  const { hasLegalAccess } = useLegalAccess();
   const getBadge = useNavBadges();
 
   const visibleGroups = NAV_GROUPS
     .map((g) => ({
       ...g,
-      items: g.items.filter((i) => !i.moduleKey || hasModule(i.moduleKey)),
+      items: g.items.filter(
+        (i) => (!i.moduleKey || hasModule(i.moduleKey)) && (!i.legalOnly || hasLegalAccess),
+      ),
     }))
     .filter((g) => g.items.length > 0);
 

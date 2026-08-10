@@ -72,6 +72,14 @@ export function getInstanciaLabel(value?: string | null): string {
   return LAWSUIT_INSTANCIA_LABELS[value] || value;
 }
 
+/** Tipos de término / fecha clave. */
+export const DEADLINE_TYPE_LABELS: Record<string, string> = {
+  termino: "Término",
+  audiencia: "Audiencia",
+  entrega: "Entrega de documentos",
+  vencimiento: "Vencimiento",
+};
+
 const stage = (key: string, label: string): LawsuitStageSeed => ({
   key,
   label,

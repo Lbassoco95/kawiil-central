@@ -14,6 +14,7 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Clientes from "./pages/Clientes";
 import Proyectos from "./pages/Proyectos";
+import Litigio from "./pages/Litigio";
 import Tareas from "./pages/Tareas";
 import Documentos from "./pages/Documentos";
 import Configuracion from "./pages/Admin";
@@ -76,6 +77,7 @@ const App = () => (
               {/* Ruta estática antes de la dinámica: "nuevo" no es un UUID */}
               <Route path="/proyectos/nuevo" element={<Navigate to="/proyectos" replace />} />
               <Route path="/proyectos/:id" element={<ProtectedRoute><ProyectoDetalle /></ProtectedRoute>} />
+              <Route path="/litigio" element={<ProtectedRoute><Litigio /></ProtectedRoute>} />
               <Route path="/actividades" element={<ProtectedRoute><Actividades /></ProtectedRoute>} />
               <Route path="/actividades/:id" element={<ProtectedRoute><ActividadDetalle /></ProtectedRoute>} />
               <Route path="/tareas" element={<ProtectedRoute><Tareas /></ProtectedRoute>} />
