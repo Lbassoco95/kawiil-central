@@ -31,6 +31,8 @@ import {
 } from "@/components/ui/select";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { useUpdateClient, useOrgProfiles } from "@/hooks/useClients";
+import { useOrgUsers } from "@/hooks/useOrgUsers";
+import { gradoLabel } from "@/lib/gradoLabels";
 import { useClientCollaboratorIds } from "@/hooks/useClientCollaborators";
 import { useFinanceAccess } from "@/hooks/useFinanceAccess";
 import { useSavioIncomeAccess } from "@/hooks/useSavioIncomeAccess";
@@ -149,6 +151,11 @@ interface ClientEditDialogProps {
 export function ClientEditDialog({ open, onOpenChange, client }: ClientEditDialogProps) {
   const updateClient = useUpdateClient();
   const { data: profiles } = useOrgProfiles();
+  const { data: orgUsersWithGrade = [] } = useOrgUsers();
+  const gradoByUserId = useMemo(
+    () => new Map(orgUsersWithGrade.map((u) => [u.user_id, u.role])),
+    [orgUsersWithGrade]
+  );
   const { hasFinanceAccess, isLoading: financeAccessLoading } = useFinanceAccess();
   const { data: canViewSavioIncome = false, isLoading: savioIncomeLoading } = useSavioIncomeAccess();
   const showSavioBlock =
@@ -247,6 +254,10 @@ export function ClientEditDialog({ open, onOpenChange, client }: ClientEditDialo
   );
   const allServices = computeServices(form.getValues());
   const includedServices = PACKAGE_INCLUDED_SERVICES[servicePackage] || [];
+
+  // Aviso (no bloquea): se recomienda que el equipo del cliente incluya un G4.
+  const teamIds = [responsibleId, ...(collaboratorIds || [])].filter(Boolean) as string[];
+  const teamHasG4 = teamIds.some((uid) => gradoByUserId.get(uid) === "transformador");
 
   const onSubmit = async (values: ClientFormValues) => {
     const services = computeServices(values);
@@ -522,7 +533,10 @@ export function ClientEditDialog({ open, onOpenChange, client }: ClientEditDialo
                   <FormItem>
                     <FormLabel>Responsable</FormLabel>
                     <SearchableSelect
-                      options={(profiles || []).map((p) => ({ value: p.user_id, label: p.full_name }))}
+                      options={(profiles || []).map((p) => ({
+                        value: p.user_id,
+                        label: `${p.full_name} · ${gradoLabel(gradoByUserId.get(p.user_id) || "ejecutor")}`,
+                      }))}
                       value={field.value || ""}
                       onValueChange={field.onChange}
                       placeholder="Seleccionar responsable"
@@ -543,7 +557,10 @@ export function ClientEditDialog({ open, onOpenChange, client }: ClientEditDialo
                         p.user_id !== (form.getValues("responsible_user_id") || "") &&
                         !field.value.includes(p.user_id)
                     )
-                    .map((p) => ({ value: p.user_id, label: p.full_name }))
+                    .map((p) => ({
+                      value: p.user_id,
+                      label: `${p.full_name} · ${gradoLabel(gradoByUserId.get(p.user_id) || "ejecutor")}`,
+                    }))
                     .sort((a, b) => a.label.localeCompare(b.label, "es"));
                   return (
                     <FormItem className="md:col-span-2">
@@ -580,6 +597,15 @@ export function ClientEditDialog({ open, onOpenChange, client }: ClientEditDialo
                   );
                 }}
               />
+
+              {!teamHasG4 && (
+                <div className="md:col-span-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+                  <p className="text-[12px] text-amber-800 dark:text-amber-200">
+                    ⚠️ El equipo de este cliente no incluye un <strong>G4 (Transformador)</strong>. Se
+                    recomienda tener al menos uno como responsable o colaborador. (No impide guardar.)
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Service Package */}
