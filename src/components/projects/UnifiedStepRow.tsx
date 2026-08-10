@@ -73,12 +73,14 @@ export interface UnifiedStepRowProps {
   projectDueAnchorYmd?: string | null;
   /** Clases del contenedor raíz (p. ej. dentro de ProjectPhaseStageCard) */
   rootClassName?: string;
+  /** Habilita el botón "Escanear" en los archivos del paso. */
+  allowScan?: boolean;
 }
 
 export function UnifiedStepRow({
   step, index, projectId, onSave, onToggle, saving,
   showTimer = true, showCheckbox = true, clientDropboxPath, extraFields,
-  commentStepKey, clientId, rootClassName, projectDueAnchorYmd,
+  commentStepKey, clientId, rootClassName, projectDueAnchorYmd, allowScan,
 }: UnifiedStepRowProps) {
   const [open, setOpen] = useState(false);
   const [localStatus, setLocalStatus] = useState<StepStatus>((step.step_status as StepStatus) || "pendiente");
@@ -685,6 +687,7 @@ export function UnifiedStepRow({
                 projectId={projectId}
                 clientDropboxPath={clientDropboxPath}
                 disabled={saving}
+                allowScan={allowScan}
               />
 
               <div className="flex justify-end pt-3 mt-2 border-t border-border">

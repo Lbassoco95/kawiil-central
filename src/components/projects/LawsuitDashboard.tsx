@@ -795,6 +795,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
                   saving={updateLawsuit.isPending}
                   extraFields={buildStageExtraFields(stage)}
                   rootClassName="border-border/50 shadow-sm bg-background/90"
+                  allowScan
                 />
               );
             }}
@@ -917,6 +918,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
                             onDocumentAdded={(newIds) => updateDeadlineField(dl.id, "document_ids", newIds)}
                             projectId={projectId}
                             clientDropboxPath={dropboxInitialPath || undefined}
+                            allowScan
                           />
 
                           <div className="flex items-center justify-end pt-3 mt-2 border-t border-border">

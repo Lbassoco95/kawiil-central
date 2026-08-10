@@ -254,6 +254,7 @@ export function GestoriaDashboard({ projectId, gestoriaDetails, responsibleUserI
                   onSave={(updates) => updateStep(step.key, updates as Partial<GestoriaStep>)}
                   saving={saveMutation.isPending}
                   rootClassName="border-border/50 shadow-sm"
+                  allowScan
                   extraFields={hasAppointment ? (
                     <div className="space-y-1">
                       <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">

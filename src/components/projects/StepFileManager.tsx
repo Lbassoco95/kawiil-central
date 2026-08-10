@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Upload, FileText, Loader2, Link2, Plus, Eye, PenTool, FileSpreadsheet, Presentation, FileType, ExternalLink, Trash2, FolderOpen, Archive } from "lucide-react";
+import { Upload, FileText, Loader2, Link2, Plus, Eye, PenTool, FileSpreadsheet, Presentation, FileType, ExternalLink, Trash2, FolderOpen, Archive, Camera } from "lucide-react";
 import { FileDropzone } from "@/components/shared/FileDropzone";
 import { documentsLimits, withLimits, STANDARD_BATCH_MAX_FILES } from "@/lib/fileIntake/limits";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -43,11 +43,14 @@ interface Props {
   projectId: string;
   clientDropboxPath?: string;
   disabled?: boolean;
+  /** Muestra el botón "Escanear" (captura con cámara → tarea/paso + Dropbox). */
+  allowScan?: boolean;
 }
 
-export function StepFileManager({ documentIds, onDocumentAdded, projectId, clientDropboxPath, disabled }: Props) {
+export function StepFileManager({ documentIds, onDocumentAdded, projectId, clientDropboxPath, disabled, allowScan }: Props) {
   const { user } = useAuth();
   const [uploading, setUploading] = useState(false);
+  const scanFileRef = useRef<HTMLInputElement>(null);
   const [showDropboxInput, setShowDropboxInput] = useState(false);
   const [dropboxUrl, setDropboxUrl] = useState("");
   const [savingLink, setSavingLink] = useState(false);
@@ -282,6 +285,19 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
     setShowDropboxUpload(true);
   };
 
+  // Escaneo: captura con la cámara y reutiliza el flujo de subida a Dropbox
+  // (handleDropboxUploaded crea el registro `documents` y lo enlaza al paso/término).
+  const handleScanCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (scanFileRef.current) scanFileRef.current.value = "";
+    if (!file) return;
+    const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+    const renamed = fileWithName(file, `escaneo_${Date.now()}.${ext}`);
+    setDropboxUploadQueue([]);
+    setDropboxUploadFile(renamed);
+    setShowDropboxUpload(true);
+  };
+
   const handleDropboxUploaded = async (result: { name: string; path: string; url: string }) => {
     if (!user) return;
     try {
@@ -345,6 +361,29 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
       <div className="flex items-center justify-between">
         <label className="text-xs font-medium text-muted-foreground">Archivos</label>
         <div className="flex items-center gap-1">
+          {/* Escanear (captura con cámara → paso/término + Dropbox) */}
+          {allowScan && (
+            <>
+              <input
+                ref={scanFileRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={handleScanCapture}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs gap-1"
+                disabled={disabled}
+                onClick={() => scanFileRef.current?.click()}
+              >
+                <Camera className="h-3 w-3" />
+                Escanear
+              </Button>
+            </>
+          )}
           {/* Upload to Dropbox - primary action */}
           <input
             ref={dropboxFileRef}
