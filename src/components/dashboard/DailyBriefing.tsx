@@ -99,7 +99,7 @@ export function DailyBriefing({
   const payload = useMemo(() => {
     const taskIds = (taskDetails ?? []).map((t, i) => `${i}:${t.title}:${t.due_date ?? ""}:${t.status}:${t.priority}`);
     return {
-      v: 2,
+      v: 3,
       module: "dashboard",
       date: todayKey,
       counts: { tasksCount, completedToday, overdueCount, remindersCount },
@@ -123,20 +123,21 @@ export function DailyBriefing({
     buildMessages: () => {
       const contextPrompt = `Genera un briefing corto y motivador del día para ${firstName}. Hoy es ${todayStr}.
 
-DATOS: ${tasksCount} pendientes, ${completedToday} completadas hoy, ${overdueCount} vencidas, ${remindersCount} recordatorios.
+DATOS (cifras oficiales — úsalas para cualquier total): ${tasksCount} tareas pendientes en total, ${completedToday} completadas hoy, ${overdueCount} vencidas, ${remindersCount} recordatorios.
 
-TAREAS (SOLO las asignadas a ${firstName}, ordenadas por vencimiento): ${JSON.stringify((taskDetails ?? []).map((t) => ({ titulo: t.title, prioridad: t.priority, vence: t.due_date, area: t.area, cliente: (t as unknown as { clients?: { name?: string } }).clients?.name ?? null, estado: t.status })))}
+PRÓXIMAS TAREAS (solo una MUESTRA de las ${tasksCount} pendientes: las más próximas por vencer, asignadas a ${firstName}, ordenadas por fecha): ${JSON.stringify((taskDetails ?? []).map((t) => ({ titulo: t.title, prioridad: t.priority, vence: t.due_date, area: t.area, cliente: (t as unknown as { clients?: { name?: string } }).clients?.name ?? null, estado: t.status })))}
 
 INSTRUCCIONES PARA "markdown":
 1. Resume en máximo 3 puntos clave con emojis.
-2. Usa ÚNICAMENTE las tareas y fechas del bloque TAREAS de arriba; NO inventes clientes, tareas ni fechas que no estén ahí.
-3. Si hay vencidas, menciona con empatía.
-4. Si completó, reconoce.
-5. Máximo 80 palabras. Sé ultra-conciso.
-6. Markdown obligatorio: línea de título con emoji (ej. 🗒️ **Briefing del …**), subtítulo **Situación actual**, viñetas con emojis (🔥 ⚠️ ✅), **negritas** en cifras y alertas. Sin saludo largo.
+2. Al nombrar tareas, fechas o clientes usa ÚNICAMENTE los del bloque PRÓXIMAS TAREAS; NO inventes ninguno que no esté ahí.
+3. Para cualquier TOTAL de pendientes usa la cifra de DATOS (${tasksCount}); NUNCA cuentes las filas de la muestra — es solo un extracto de las más próximas, no el total.
+4. Si hay vencidas, menciona con empatía.
+5. Si completó, reconoce.
+6. Máximo 80 palabras. Sé ultra-conciso.
+7. Markdown obligatorio: línea de título con emoji (ej. 🗒️ **Briefing del …**), subtítulo **Situación actual**, viñetas con emojis (🔥 ⚠️ ✅), **negritas** en cifras y alertas. Sin saludo largo.
 
 INSTRUCCIONES PARA "metric_insights":
-- tasks_pendientes: 1 frase sobre la carga de tareas pendientes y el siguiente foco.
+- tasks_pendientes: 1 frase sobre la carga de tareas pendientes (usa el total ${tasksCount}, no el tamaño de la muestra) y el siguiente foco.
 - completadas_hoy: 1 frase que reconozca el avance o anime a avanzar si es 0.
 - vencidas: 1 frase concreta con la acción para retomar si hay vencidas; si es 0, omite la clave.
 - recordatorios: 1 frase útil sobre el estado de los recordatorios; si es 0, omite la clave.${briefingJsonInstructions({ metricKeys: [...DASHBOARD_METRIC_KEYS] })}`;
