@@ -37,7 +37,7 @@ export function AppTopbar({ isFullWidth = false }: AppTopbarProps) {
       <div
         className={cn(
           "flex items-center gap-4",
-          isFullWidth ? "w-full max-w-none px-0" : "max-w-7xl mx-auto",
+          isFullWidth ? "w-full max-w-none px-0" : "w-full",
         )}
       >
         {isMobile && (
@@ -62,7 +62,7 @@ export function AppTopbar({ isFullWidth = false }: AppTopbarProps) {
               👋
             </span>
             {!isMobile && (
-              <span className="ml-2 font-normal text-muted-foreground">
+              <span className="ml-2 hidden font-normal text-muted-foreground 2xl:inline">
                 · ¿qué quieres avanzar hoy?
               </span>
             )}
