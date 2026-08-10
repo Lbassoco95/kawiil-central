@@ -1777,6 +1777,7 @@ export type Database = {
           id: string
           name: string
           notes: string | null
+          offboarding: Json | null
           organization_id: string
           payroll_type: string | null
           phone: string | null
@@ -1803,6 +1804,7 @@ export type Database = {
           id?: string
           name: string
           notes?: string | null
+          offboarding?: Json | null
           organization_id: string
           payroll_type?: string | null
           phone?: string | null
@@ -1829,6 +1831,7 @@ export type Database = {
           id?: string
           name?: string
           notes?: string | null
+          offboarding?: Json | null
           organization_id?: string
           payroll_type?: string | null
           phone?: string | null

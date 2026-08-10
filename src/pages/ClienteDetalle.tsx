@@ -6,9 +6,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   ArrowLeft, Mail, Phone, MapPin, User, FileText,
-  CheckSquare, FolderOpen, Pencil, Shield, Building2, ChevronRight, Landmark,
+  CheckSquare, FolderOpen, Pencil, Shield, Building2, ChevronRight, Landmark, DoorOpen,
 } from "lucide-react";
 import { ClientProjectsTab } from "@/components/clients/ClientProjectsTab";
+import { ClientOffboardingSection } from "@/components/clients/ClientOffboardingSection";
 import { ClientEditDialog } from "@/components/clients/ClientEditDialog";
 import { ClientHealthScoreCard } from "@/components/clients/ClientHealthScoreCard";
 import { ClientSatCertificatesSection } from "@/components/clients/ClientSatCertificatesSection";
@@ -40,6 +41,8 @@ import { useOpenTaskAssigneeUserIds } from "@/hooks/useOpenTaskAssigneeUserIds";
 import { useClientCollaboratorIds } from "@/hooks/useClientCollaborators";
 import { useGlobalClientAccessUserIds } from "@/hooks/useGlobalClientAccess";
 import { useProfiles } from "@/hooks/useTasks";
+import { useOrgUsers } from "@/hooks/useOrgUsers";
+import { parseOffboarding } from "@/lib/clientOffboarding";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFinanceAccess } from "@/hooks/useFinanceAccess";
 import { useSavioIncomeAccess } from "@/hooks/useSavioIncomeAccess";
@@ -69,6 +72,7 @@ const baseTabs: { key: string; label: string; icon?: typeof Shield }[] = [
   { key: "proyectos", label: "Proyectos" },
   { key: "tareas", label: "Tareas" },
   { key: "documentos", label: "Documentos" },
+  { key: "cierre", label: "Cierre", icon: DoorOpen },
 ];
 
 const ClienteDetalle = () => {
@@ -107,6 +111,11 @@ const ClienteDetalle = () => {
   const { data: declaredCollaboratorIds = [], isLoading: loadingDeclaredCollaborators } = useClientCollaboratorIds(id);
   const { data: globalAccessUserIds = [] } = useGlobalClientAccessUserIds();
   const { data: orgProfiles = [] } = useProfiles();
+  const { data: orgUsersWithGrade = [] } = useOrgUsers();
+  const gradoByUserId = useMemo(
+    () => new Map(orgUsersWithGrade.map((u) => [u.user_id, u.role])),
+    [orgUsersWithGrade]
+  );
   const profilesByUserId = useMemo(
     () => new Map(orgProfiles.map((p) => [p.user_id, p])),
     [orgProfiles]
@@ -172,6 +181,15 @@ const ClienteDetalle = () => {
     ? [...baseTabs, { key: "cobranza", label: "Cobranza (Savio)", icon: Landmark }]
     : baseTabs;
 
+  // Equipo explícito del cliente (responsable + colaboradores de la ficha) y si
+  // incluye un G4 (Transformador). Solo es un indicador; no bloquea nada.
+  const explicitTeamIds = [client.responsible_user_id, ...declaredCollaboratorIds].filter(
+    (x): x is string => !!x
+  );
+  const teamHasG4 = explicitTeamIds.some((uid) => gradoByUserId.get(uid) === "transformador");
+
+  const offboardingInfo = parseOffboarding(client.offboarding);
+
   const savioBanner = clientSavioLinkStatus(
     {
       id: client.id,
@@ -197,6 +215,33 @@ const ClienteDetalle = () => {
                 <h1 className="text-xl font-bold tracking-tight gradient-text truncate">{client.name}</h1>
                 <Badge variant="outline" className={`text-[10px] border-0 px-1.5 py-0 ${STATUS_STYLES[client.status]}`}>
                   {STATUS_LABELS[client.status]}
+                </Badge>
+                {offboardingInfo && (
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] border-0 px-1.5 py-0 ${
+                      offboardingInfo.stage === "cerrado"
+                        ? "bg-muted text-muted-foreground"
+                        : "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
+                    }`}
+                  >
+                    {offboardingInfo.stage === "cerrado" ? "Cierre completado" : "En proceso de baja"}
+                  </Badge>
+                )}
+                <Badge
+                  variant="outline"
+                  className={`text-[10px] border-0 px-1.5 py-0 ${
+                    teamHasG4
+                      ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                      : "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
+                  }`}
+                  title={
+                    teamHasG4
+                      ? "El equipo del cliente incluye un G4 (Transformador)"
+                      : "Recomendado: asigna un G4 (Transformador) como responsable o colaborador"
+                  }
+                >
+                  {teamHasG4 ? "G4 ✓" : "Falta G4"}
                 </Badge>
               </div>
               <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
@@ -473,6 +518,8 @@ const ClienteDetalle = () => {
             </div>
           )
         )}
+
+        {tab === "cierre" && <ClientOffboardingSection client={client} />}
       </div>
 
       <ClientEditDialog open={editOpen} onOpenChange={setEditOpen} client={client} />
