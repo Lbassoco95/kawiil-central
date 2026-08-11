@@ -29,13 +29,15 @@ interface Props {
   disabled?: boolean;
   userMap?: Record<string, UserSuggestion | undefined>;
   onTyping?: () => void;
+  /** Hay un archivo arrastrándose sobre el chat: puntea la caja para indicar dónde soltar. */
+  dropTargetActive?: boolean;
 }
 
 // Emoji rápidos para el picker simple
 const QUICK_EMOJIS = ["😊","👍","❤️","🔥","✅","😂","🎉","👀","🙏","💪","😅","🤔","👏","🚀","💯","😍","🤝","📌","⚠️","❓"];
 
 export const SlackComposerNew = forwardRef<SlackComposerHandle, Props>(function SlackComposerNew(
-  { channelName, isSending, onSend, onSchedule, disabled, userMap = {}, onTyping },
+  { channelName, isSending, onSend, onSchedule, disabled, userMap = {}, onTyping, dropTargetActive = false },
   ref,
 ) {
   const [text, setText] = useState("");
@@ -486,7 +488,34 @@ export const SlackComposerNew = forwardRef<SlackComposerHandle, Props>(function 
         </div>
       )}
 
-      <div className="sl-compose-box">
+      <div
+        className="sl-compose-box"
+        style={
+          dropTargetActive
+            ? {
+                outline: "2px dashed hsl(var(--primary))",
+                outlineOffset: 2,
+                borderRadius: 10,
+                background: "hsl(var(--primary) / 0.06)",
+                transition: "outline-color .15s, background .15s",
+              }
+            : undefined
+        }
+      >
+        {dropTargetActive && (
+          <div
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              padding: "4px 10px", fontSize: 11.5, fontWeight: 600,
+              color: "hsl(var(--primary))",
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            Suelta aquí el archivo para adjuntarlo
+          </div>
+        )}
         {/* Barra de formato */}
         <div className="sl-compose-fmt">
           <button className="sl-fmt-btn" title="Negrita (Ctrl+B)" onMouseDown={(e) => { e.preventDefault(); applyFormat("bold"); }}>

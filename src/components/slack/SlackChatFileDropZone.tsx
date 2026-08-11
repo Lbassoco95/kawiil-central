@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -9,6 +9,9 @@ type Props = {
   busy?: boolean;
   /** Archivos crudos del `DataTransfer`; el compositor aplica intake (ZIP, límites). */
   onDroppedFileList: (files: FileList) => void | Promise<void>;
+  /** Notifica al padre cuando hay un archivo siendo arrastrado sobre el chat
+      (para puntear/resaltar la caja de respuesta e indicar dónde soltar). */
+  onDraggingChange?: (dragging: boolean) => void;
   className?: string;
 };
 
@@ -20,10 +23,15 @@ export function SlackChatFileDropZone({
   enabled,
   busy = false,
   onDroppedFileList,
+  onDraggingChange,
   className,
 }: Props) {
   const dragCounterRef = useRef(0);
   const [dragging, setDragging] = useState(false);
+
+  useEffect(() => {
+    onDraggingChange?.(dragging);
+  }, [dragging, onDraggingChange]);
 
   const interactiveDisabled = !enabled || busy;
 

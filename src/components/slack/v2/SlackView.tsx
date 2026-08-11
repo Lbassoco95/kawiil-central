@@ -119,6 +119,8 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
   const [groupsDialogOpen, setGroupsDialogOpen] = useState(false);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [activityOpen, setActivityOpen] = useState(false);
+  /** Hay un archivo arrastrándose sobre el chat → puntea la caja de respuesta. */
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
   const composerRef = useRef<SlackComposerHandle>(null);
   const threadComposerRef = useRef<SlackComposerHandle>(null);
   const [taskMsg, setTaskMsg] = useState<SlackMessage | null>(null);
@@ -994,6 +996,7 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
           enabled={!!selectedChannel}
           busy={sendMutation.isPending}
           onDroppedFileList={(fl) => composerRef.current?.addFiles(Array.from(fl))}
+          onDraggingChange={setIsDraggingFile}
         >
           <MessageArea
             channel={currentConv}
@@ -1032,6 +1035,7 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
             disabled={!selectedChannel}
             userMap={userMap}
             onTyping={onTyping}
+            dropTargetActive={isDraggingFile}
           />
         </SlackChatFileDropZone>
 
