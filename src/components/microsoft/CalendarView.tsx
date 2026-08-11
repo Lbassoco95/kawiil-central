@@ -460,6 +460,8 @@ export function CalendarView({
   const [draggedEvent, setDraggedEvent] = useState<any>(null);
   // Al mover un evento de una secuencia, propone recorrer los siguientes el mismo lapso.
   const [cascade, setCascade] = useState<{ deltaMs: number; events: any[]; selected: Set<string> } | null>(null);
+  // Diálogo de alcance para eventos recurrentes: ¿este evento o toda la serie?
+  const [seriesPrompt, setSeriesPrompt] = useState<{ action: "update" | "delete" } | null>(null);
   // Ref con el listado vigente de eventos (allEvents se declara más abajo).
   const allEventsRef = useRef<any[]>([]);
 
@@ -1008,8 +1010,23 @@ export function CalendarView({
     });
   };
 
-  const handleUpdateEvent = () => {
-    if (!selectedEventId) return;
+  // ¿El evento pertenece a una serie recurrente? (ocurrencia MS / instancia Google / maestro)
+  const isSeriesEvent = (ev: any): boolean => {
+    if (!ev) return false;
+    if (ev.type === "occurrence" || ev.type === "exception" || ev.type === "seriesMaster") return true;
+    return !!(ev.seriesMasterId || ev.recurringEventId);
+  };
+  // Id (con prefijo de cuenta) del evento MAESTRO de la serie, para editar/eliminar todo.
+  const seriesMasterEventId = (ev: any): string | null => {
+    if (!ev) return null;
+    const id = String(ev.id || "");
+    const prefix = id.startsWith("google:") ? "google:" : id.startsWith("outlook:") ? "outlook:" : "";
+    const rawMaster = ev.seriesMasterId || ev.recurringEventId
+      || (ev.type === "seriesMaster" ? id.replace(/^(google:|outlook:)/, "") : null);
+    return rawMaster ? prefix + rawMaster : null;
+  };
+
+  const buildEditPayload = () => {
     const ev = cachedEvent || eventDetail;
     const emails = editForm.attendees.split(",").map((s) => s.trim()).filter(Boolean);
     // Solo enviamos asistentes si cambiaron respecto al evento original; así una simple
@@ -1030,28 +1047,48 @@ export function CalendarView({
       sensitivity: editForm.isPrivate ? "private" : "normal",
     };
     Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k]);
+    return payload;
+  };
 
-    const ref = parseCalendarEventRef(selectedEventId, ev?.calendarId);
-    const close = { onSuccess: () => setSelectedEventId(null) };
-    if (ref.provider === "primary") {
-      updateEvent.mutate({ eventId: selectedEventId, payload }, close);
-    } else {
-      // Cuentas vinculadas: Google no maneja categorías ni sensibilidad; el backend
-      // ignora esos campos. Enviamos el mismo payload y el hook rutea.
-      updateLinkedEvent.mutate({ eventId: selectedEventId, calendarId: ev?.calendarId, payload }, close);
-    }
+  // Ejecuta la actualización con el alcance elegido (este evento o toda la serie).
+  const doUpdate = (scope: "single" | "series") => {
+    if (!selectedEventId) return;
+    const ev = cachedEvent || eventDetail;
+    const payload = buildEditPayload();
+    // En "toda la serie" NO cambiamos fecha/hora: mover el ancla del maestro a la fecha
+    // de una ocurrencia posterior descuadraría todo el calendario. Se cambian los demás
+    // campos (título, ubicación, notas, categorías, invitados) en toda la serie.
+    if (scope === "series") { delete payload.start; delete payload.end; }
+    const targetId = scope === "series" ? (seriesMasterEventId(ev) || selectedEventId) : selectedEventId;
+    const ref = parseCalendarEventRef(targetId, ev?.calendarId);
+    const close = { onSuccess: () => { setSelectedEventId(null); setSeriesPrompt(null); } };
+    if (ref.provider === "primary") updateEvent.mutate({ eventId: targetId, payload }, close);
+    else updateLinkedEvent.mutate({ eventId: targetId, calendarId: ev?.calendarId, payload }, close);
+  };
+
+  const doDelete = (scope: "single" | "series") => {
+    if (!selectedEventId) return;
+    const ev = cachedEvent || eventDetail;
+    const targetId = scope === "series" ? (seriesMasterEventId(ev) || selectedEventId) : selectedEventId;
+    const ref = parseCalendarEventRef(targetId, ev?.calendarId);
+    const close = { onSuccess: () => { setSelectedEventId(null); setSeriesPrompt(null); } };
+    if (ref.provider === "primary") deleteEvent.mutate(targetId, close);
+    else deleteLinkedEvent.mutate({ eventId: targetId, calendarId: ev?.calendarId }, close);
+  };
+
+  const handleUpdateEvent = () => {
+    if (!selectedEventId) return;
+    const ev = cachedEvent || eventDetail;
+    // Si es parte de una serie, preguntamos el alcance; si no, guardamos directo.
+    if (isSeriesEvent(ev)) { setSeriesPrompt({ action: "update" }); return; }
+    doUpdate("single");
   };
 
   const handleDeleteEvent = () => {
     if (!selectedEventId) return;
     const ev = cachedEvent || eventDetail;
-    const ref = parseCalendarEventRef(selectedEventId, ev?.calendarId);
-    const close = { onSuccess: () => setSelectedEventId(null) };
-    if (ref.provider === "primary") {
-      deleteEvent.mutate(selectedEventId, close);
-    } else {
-      deleteLinkedEvent.mutate({ eventId: selectedEventId, calendarId: ev?.calendarId }, close);
-    }
+    if (isSeriesEvent(ev)) { setSeriesPrompt({ action: "delete" }); return; }
+    doDelete("single");
   };
 
   const toggleNewEventCategory = (name: string) => {
@@ -2276,6 +2313,37 @@ export function CalendarView({
               Recorrer {cascade?.selected.size || 0}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Alcance para eventos recurrentes: este evento o toda la serie */}
+      <Dialog open={!!seriesPrompt} onOpenChange={(o) => !o && setSeriesPrompt(null)}>
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RefreshCw className="h-4 w-4" /> Evento recurrente
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Este evento es parte de una serie que se repite. ¿Qué quieres {seriesPrompt?.action === "delete" ? "eliminar" : "actualizar"}?
+          </p>
+          <div className="grid gap-2 pt-1">
+            <Button
+              variant={seriesPrompt?.action === "delete" ? "destructive" : "default"}
+              onClick={() => (seriesPrompt?.action === "delete" ? doDelete("single") : doUpdate("single"))}
+              disabled={updateEvent.isPending || updateLinkedEvent.isPending || deleteEvent.isPending || deleteLinkedEvent.isPending}
+            >
+              Solo este evento
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => (seriesPrompt?.action === "delete" ? doDelete("series") : doUpdate("series"))}
+              disabled={updateEvent.isPending || updateLinkedEvent.isPending || deleteEvent.isPending || deleteLinkedEvent.isPending}
+            >
+              Toda la serie
+            </Button>
+            <Button variant="ghost" onClick={() => setSeriesPrompt(null)}>Cancelar</Button>
+          </div>
         </DialogContent>
       </Dialog>
 
