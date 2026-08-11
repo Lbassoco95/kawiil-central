@@ -53,7 +53,7 @@ import { CreateTaskFromEventDialog } from "@/components/microsoft/CreateTaskFrom
 import {
   useLinkedAccounts, useGoogleConnection, useGoogleCalendarEvents, useGoogleCalendars,
   useOutlookConnection, useOutlookAccountEvents, useOutlookAccountCalendars, useRenameLinkedAccount,
-  useRoutedRespondEvent, useRoutedUpdateEvent, useUpdateLinkedEvent, useDeleteLinkedEvent, parseCalendarEventRef,
+  useRoutedRespondEvent, useRoutedUpdateEvent, useUpdateLinkedEvent, useDeleteLinkedEvent, useCreateLinkedEvent, parseCalendarEventRef,
 } from "@/hooks/useLinkedAccounts";
 import { ColorPickerPopover, paletteColorFor, hexAlpha } from "@/components/microsoft/ColorPickerPopover";
 import {
@@ -428,6 +428,7 @@ export function CalendarView({
     repeatEnd: "never" as "never" | "on" | "after",
     repeatUntil: "",
     repeatCount: 8,
+    accountId: "microsoft-primary", // PRIMARY_MS_ID por defecto
   });
   // Al abrir "Nuevo evento", precarga la fecha con el día seleccionado (editable
   // por si se eligió el día equivocado).
@@ -449,6 +450,7 @@ export function CalendarView({
   const routedUpdateEvent = useRoutedUpdateEvent();
   const updateLinkedEvent = useUpdateLinkedEvent();
   const deleteLinkedEvent = useDeleteLinkedEvent();
+  const createLinkedEvent = useCreateLinkedEvent();
   const { data: outlookCategories = [] } = useOutlookCategories();
   const createOutlookCategory = useCreateOutlookCategory();
   const deleteOutlookCategory = useDeleteOutlookCategory();
@@ -917,7 +919,15 @@ export function CalendarView({
     if (newEvent.categories.length > 0) baseEvent.categories = newEvent.categories;
 
     const DOW = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-    const resetNewEvent = () => setNewEvent({ subject: "", date: "", startTime: "09:00", endTime: "10:00", attendees: "", location: "", description: "", isOnlineMeeting: false, isAllDay: false, isPrivate: false, categories: [], repeat: "none", repeatInterval: 1, repeatDays: [], repeatEnd: "never", repeatUntil: "", repeatCount: 8 });
+    const resetNewEvent = () => setNewEvent({ subject: "", date: "", startTime: "09:00", endTime: "10:00", attendees: "", location: "", description: "", isOnlineMeeting: false, isAllDay: false, isPrivate: false, categories: [], repeat: "none", repeatInterval: 1, repeatDays: [], repeatEnd: "never", repeatUntil: "", repeatCount: 8, accountId: PRIMARY_MS_ID });
+
+    // Cuenta destino: principal (Microsoft) o una vinculada (Google/Outlook).
+    const targetLinked = newEvent.accountId !== PRIMARY_MS_ID ? linkedAccounts.find((a) => a.id === newEvent.accountId) : null;
+    const submitOne = (event: any, opts?: any) => {
+      if (!targetLinked) { createEvent.mutate(event, opts); return; }
+      const provider = targetLinked.provider === "google" ? "google" : "microsoft";
+      createLinkedEvent.mutate({ provider, accountId: targetLinked.id, event }, opts);
+    };
 
     // "Personalizado (editable)": genera eventos INDEPENDIENTES (uno por ocurrencia)
     // para poder editar/mover cada uno por separado — no una serie fija de Graph.
@@ -960,7 +970,7 @@ export function CalendarView({
         if (baseEvent.attendees) ev.attendees = baseEvent.attendees;
         if (baseEvent.sensitivity) ev.sensitivity = baseEvent.sensitivity;
         if (baseEvent.categories) ev.categories = baseEvent.categories;
-        createEvent.mutate(ev);
+        submitOne(ev);
         created++;
       });
       toast.success(`${created} eventos creados (editables por separado)`);
@@ -990,7 +1000,7 @@ export function CalendarView({
       baseEvent.recurrence = { pattern, range };
     }
 
-    createEvent.mutate(baseEvent, {
+    submitOne(baseEvent, {
       onSuccess: () => {
         setShowCreate(false);
         resetNewEvent();
@@ -2276,6 +2286,28 @@ export function CalendarView({
             <DialogTitle className="pr-6">Nuevo evento – {newEvent.date ? format(new Date(`${newEvent.date}T00:00:00`), "EEEE d 'de' MMMM, yyyy", { locale: es }) : format(selectedDate, "EEEE d 'de' MMMM, yyyy", { locale: es })}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2 min-w-0">
+            {(() => {
+              const options = linkedAccounts.filter((a) => a.status !== "disconnected" && a.calendar_enabled);
+              if (options.length === 0) return null;
+              return (
+                <div className="space-y-2">
+                  <Label>Cuenta</Label>
+                  <select
+                    value={newEvent.accountId}
+                    onChange={(e) => setNewEvent({ ...newEvent, accountId: e.target.value })}
+                    className="w-full h-10 rounded-md border border-border bg-background px-3 text-sm"
+                  >
+                    <option value={PRIMARY_MS_ID}>{primaryLabel} · principal (Microsoft 365)</option>
+                    {options.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {(accountLabelById.get(a.id) || a.email || "Cuenta")} · {a.provider === "google" ? "Google Calendar" : "Outlook"}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-muted-foreground">El evento se creará en el calendario principal de esta cuenta.</p>
+                </div>
+              );
+            })()}
             <div className="space-y-2">
               <Label>Asunto</Label>
               <Input value={newEvent.subject} onChange={(e) => setNewEvent({ ...newEvent, subject: e.target.value })} placeholder="Nombre del evento..." />

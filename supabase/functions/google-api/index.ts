@@ -217,13 +217,74 @@ Deno.serve(async (req) => {
     }
 
     if (action === "create-event") {
-      // Crea un evento en el calendario principal de la primera cuenta Google conectada.
-      // params: { summary, description?, location?, date? (all-day YYYY-MM-DD),
-      //           startDateTime?, endDateTime? (timed, ISO) }
-      const acc = accounts.find((a) => a.calendar_enabled) || accounts[0];
+      // Crea un evento en una cuenta Google. params: { accountId?, calendarId?, event? (estilo Graph)
+      //   | summary, description?, location?, date?, startDateTime?, endDateTime? }
+      const acc = accountId ? (accounts.find((a) => a.id === accountId) || accounts[0]) : (accounts.find((a) => a.calendar_enabled) || accounts[0]);
       const token = await ensureAccessToken(supabaseAdmin, acc);
       if (!token) {
         return new Response(JSON.stringify({ error: "no_valid_token" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      const targetCal = params?.calendarId ? String(params.calendarId).replace(/^google:[^:]+:/, "") : "primary";
+
+      // Cuerpo estilo Graph (del diálogo): lo traducimos a los campos de Google.
+      if (params?.event && typeof params.event === "object") {
+        const p = params.event;
+        const tz = p?.start?.timeZone || "America/Mexico_City";
+        const gBody: Record<string, any> = { summary: p.subject || "(sin título)" };
+        // Día completo: el diálogo manda isAllDay + dateTime a medianoche; Google usa `date`.
+        if (p.isAllDay || (p.start?.date && !p.start?.dateTime)) {
+          const d = String(p.start?.date || p.start?.dateTime || new Date().toISOString().slice(0, 10)).slice(0, 10);
+          const endRaw = String(p.end?.date || p.end?.dateTime || "").slice(0, 10);
+          const next = new Date(`${d}T00:00:00Z`); next.setUTCDate(next.getUTCDate() + 1);
+          gBody.start = { date: d };
+          gBody.end = { date: endRaw && endRaw > d ? endRaw : next.toISOString().slice(0, 10) };
+        } else if (p.start?.dateTime) {
+          gBody.start = { dateTime: p.start.dateTime, timeZone: tz };
+          gBody.end = { dateTime: p.end?.dateTime || p.start.dateTime, timeZone: p.end?.timeZone || tz };
+        } else {
+          const d = String(p.start?.date || new Date().toISOString().slice(0, 10)).slice(0, 10);
+          const next = new Date(`${d}T00:00:00Z`); next.setUTCDate(next.getUTCDate() + 1);
+          gBody.start = { date: d };
+          gBody.end = { date: p.end?.date || next.toISOString().slice(0, 10) };
+        }
+        if (p.body?.content) {
+          gBody.description = String(p.body.content)
+            .replace(/<br\s*\/?>/gi, "\n").replace(/<\/(p|div|li|h[1-6])>/gi, "\n")
+            .replace(/<[^>]+>/g, "").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+        }
+        if (p.location?.displayName) gBody.location = p.location.displayName;
+        if (Array.isArray(p.attendees) && p.attendees.length > 0) {
+          gBody.attendees = p.attendees.map((a: any) => ({ email: a?.emailAddress?.address })).filter((a: any) => a.email);
+        }
+        // Recurrencia estilo Graph → RRULE de Google.
+        if (p.recurrence?.pattern) {
+          const pat = p.recurrence.pattern;
+          const rng = p.recurrence.range || {};
+          const interval = Math.max(1, Number(pat.interval) || 1);
+          const parts: string[] = [];
+          if (pat.type === "daily") parts.push("FREQ=DAILY");
+          else if (pat.type === "weekly") {
+            parts.push("FREQ=WEEKLY");
+            const map: Record<string, string> = { sunday: "SU", monday: "MO", tuesday: "TU", wednesday: "WE", thursday: "TH", friday: "FR", saturday: "SA" };
+            const days = (pat.daysOfWeek || []).map((d: string) => map[String(d).toLowerCase()]).filter(Boolean);
+            if (days.length) parts.push(`BYDAY=${days.join(",")}`);
+          } else {
+            parts.push("FREQ=MONTHLY");
+            if (pat.dayOfMonth) parts.push(`BYMONTHDAY=${pat.dayOfMonth}`);
+          }
+          parts.push(`INTERVAL=${interval}`);
+          if (rng.type === "numbered" && rng.numberOfOccurrences) parts.push(`COUNT=${rng.numberOfOccurrences}`);
+          else if (rng.type === "endDate" && rng.endDate) parts.push(`UNTIL=${String(rng.endDate).replace(/-/g, "")}T235959Z`);
+          gBody.recurrence = [`RRULE:${parts.join(";")}`];
+        }
+        const sendUpdates = gBody.attendees ? "all" : "none";
+        const res = await fetch(
+          `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(targetCal)}/events?sendUpdates=${sendUpdates}`,
+          { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(gBody) },
+        );
+        const json = await res.json();
+        if (!res.ok) return new Response(JSON.stringify({ error: json?.error?.message || "create_failed" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        return new Response(JSON.stringify({ id: json.id, htmlLink: json.htmlLink }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
       const tz = "America/Mexico_City";
@@ -250,7 +311,7 @@ Deno.serve(async (req) => {
       if (params?.location) body.location = params.location;
 
       const res = await fetch(
-        "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(targetCal)}/events`,
         {
           method: "POST",
           headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
