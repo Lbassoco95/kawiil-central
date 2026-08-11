@@ -162,6 +162,20 @@ Deno.serve(async (req) => {
       if (!acc) return jsonResp({ error: "no_account" }, 400);
       const token = await ensureAccessToken(supabaseAdmin, acc);
       if (!token) return jsonResp({ error: "no_valid_token" }, 400);
+
+      // Cuerpo completo estilo Graph (para asignar el evento a esta cuenta con todas
+      // sus opciones: asistentes, categorías, recurrencia, Teams, privado…).
+      if (params?.event && typeof params.event === "object") {
+        const res = await graphFetch(token, "/me/events", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Prefer: 'outlook.timezone="America/Mexico_City"' },
+          body: JSON.stringify(params.event),
+        });
+        const json = await res.json();
+        if (!res.ok) return jsonResp({ error: json?.error?.message || "create_failed" }, 400);
+        return jsonResp({ id: json.id, htmlLink: json.webLink });
+      }
+
       const tz = "America/Mexico_City";
       const body: Record<string, unknown> = { subject: params?.summary || "(sin título)" };
       if (params?.startDateTime) {

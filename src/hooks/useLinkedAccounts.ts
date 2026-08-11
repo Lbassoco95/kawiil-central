@@ -554,6 +554,31 @@ export function useUpdateLinkedEvent() {
   });
 }
 
+/**
+ * Crea un evento en una cuenta VINCULADA (Outlook o Google) a partir de un cuerpo
+ * estilo Graph (el que arma el diálogo de crear). El backend traduce lo necesario.
+ */
+export function useCreateLinkedEvent() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: { provider: "microsoft" | "google"; accountId: string; event: Record<string, any> }) => {
+      const fn = vars.provider === "google" ? "google-api" : "outlook-account-api";
+      const { data, error } = await supabase.functions.invoke(fn, {
+        body: { action: "create-event", params: { accountId: vars.accountId, event: vars.event } },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: (_d, vars) => {
+      const key = vars.provider === "google" ? "google-calendar-events" : "outlook-account-events";
+      setTimeout(() => queryClient.invalidateQueries({ queryKey: [key] }), 800);
+      setTimeout(() => queryClient.invalidateQueries({ queryKey: [key] }), 3000);
+    },
+    onError: (err: Error) => toast.error("No se pudo crear el evento: " + err.message),
+  });
+}
+
 /** Elimina un evento de una cuenta VINCULADA (Outlook o Google). */
 export function useDeleteLinkedEvent() {
   const queryClient = useQueryClient();
