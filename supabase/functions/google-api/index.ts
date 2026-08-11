@@ -256,6 +256,11 @@ Deno.serve(async (req) => {
         if (Array.isArray(p.attendees) && p.attendees.length > 0) {
           gBody.attendees = p.attendees.map((a: any) => ({ email: a?.emailAddress?.address })).filter((a: any) => a.email);
         }
+        // Reunión en línea → Google Meet (equivalente a Teams en Microsoft).
+        const wantsMeet = !!p.isOnlineMeeting;
+        if (wantsMeet) {
+          gBody.conferenceData = { createRequest: { requestId: crypto.randomUUID(), conferenceSolutionKey: { type: "hangoutsMeet" } } };
+        }
         // Recurrencia estilo Graph → RRULE de Google.
         if (p.recurrence?.pattern) {
           const pat = p.recurrence.pattern;
@@ -278,8 +283,9 @@ Deno.serve(async (req) => {
           gBody.recurrence = [`RRULE:${parts.join(";")}`];
         }
         const sendUpdates = gBody.attendees ? "all" : "none";
+        const confParam = wantsMeet ? "&conferenceDataVersion=1" : "";
         const res = await fetch(
-          `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(targetCal)}/events?sendUpdates=${sendUpdates}`,
+          `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(targetCal)}/events?sendUpdates=${sendUpdates}${confParam}`,
           { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(gBody) },
         );
         const json = await res.json();
