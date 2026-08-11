@@ -737,13 +737,36 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
               <div className="bc">
                 {clientChip && (
                   <>
-                    <strong title={clientChip}>{clientChip}</strong>
+                    {task.client_id ? (
+                      <button
+                        type="button"
+                        className="font-semibold text-primary hover:underline"
+                        title={`Ir al cliente: ${clientChip}`}
+                        onClick={() => { onClose(); navigate(`/clientes/${task.client_id}`); }}
+                      >
+                        {clientChip}
+                      </button>
+                    ) : (
+                      <strong title={clientChip}>{clientChip}</strong>
+                    )}
                     <span className="sep">›</span>
                   </>
                 )}
                 {projectChip && (
                   <>
-                    <strong title={projectChip}>{projectChip}</strong>
+                    {task.project_id ? (
+                      <button
+                        type="button"
+                        className="font-semibold text-primary hover:underline inline-flex items-center gap-1"
+                        title={`Ir al proyecto: ${projectChip}`}
+                        onClick={() => { onClose(); navigate(`/proyectos/${task.project_id}`); }}
+                      >
+                        {projectChip}
+                        <ExternalLink className="h-3 w-3 opacity-70" />
+                      </button>
+                    ) : (
+                      <strong title={projectChip}>{projectChip}</strong>
+                    )}
                     <span className="sep">›</span>
                   </>
                 )}

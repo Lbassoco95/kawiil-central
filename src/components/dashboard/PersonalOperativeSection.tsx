@@ -142,6 +142,8 @@ type PersonalBoardTasksAndProjectStepsProps = {
   enCursoTotal: number;
   topSteps: AssignedStep[];
   assignedStepCount: number;
+  /** Abre el detalle de la tarea en el lugar (modal). Si no se pasa, navega a /tareas. */
+  onOpenTask?: (taskId: string) => void;
 };
 
 /**
@@ -153,6 +155,7 @@ export function PersonalBoardTasksAndProjectSteps({
   enCursoTotal,
   topSteps,
   assignedStepCount,
+  onOpenTask,
 }: PersonalBoardTasksAndProjectStepsProps) {
   const navigate = useNavigate();
   const today = useMexicoToday();
@@ -214,7 +217,7 @@ export function PersonalBoardTasksAndProjectSteps({
                 <button
                   key={t.id}
                   type="button"
-                  onClick={() => navigate(`/tareas?taskId=${t.id}`)}
+                  onClick={() => (onOpenTask ? onOpenTask(t.id) : navigate(`/tareas?taskId=${t.id}`))}
                   className={cn(
                     "flex w-full items-center gap-3 rounded-xl border border-border/50 bg-card px-3 py-2.5 text-left transition-colors hover:bg-secondary/30",
                     priorityBarClass(t.priority),
