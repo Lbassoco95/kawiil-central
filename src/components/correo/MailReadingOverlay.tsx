@@ -10,7 +10,11 @@ import { useMemo, useState, useCallback } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { inferMimeFromFileName, type OutlookAttachment } from "@/lib/outlookEmailMedia";
+import DOMPurify from "dompurify";
 import { toast } from "sonner";
+
+// Extensiones con vista previa in-app (además de PDF e imágenes).
+const PREVIEWABLE_RE = /\.(pdf|png|jpe?g|gif|webp|svg|bmp|docx|xlsx|xls|csv|tsv|txt|md|json|log|xml|ya?ml|html?)$/i;
 
 interface EmailShape {
   id?: string;
@@ -64,8 +68,8 @@ function AttachmentChip({ messageId, att, onPreview }: { messageId: string; att:
 
   const kind = fileKind(att.name || "");
   const Icon = kind.Icon;
-  // Tipos que el navegador puede mostrar directo (PDF e imágenes) → botón "Ver" (in-app).
-  const isViewable = /\.(pdf|png|jpe?g|gif|webp|svg|bmp)$/i.test(att.name || "");
+  // Tipos con vista previa in-app (PDF, imágenes, Word, Excel/CSV, texto) → botón "Ver".
+  const isViewable = PREVIEWABLE_RE.test(att.name || "");
 
   const resolveBlobUrl = useCallback(async () => {
     // fetchRoutedAttachmentBlob rutea por prefijo del ID (principal / outlook / gmail).
@@ -168,23 +172,50 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onReply,
       ),
     [attachments],
   );
-  // Vista previa in-app de adjuntos (PDF / imágenes) sin salir de la pantalla.
-  const [preview, setPreview] = useState<{ url: string; name: string; kind: "pdf" | "image" } | null>(null);
+  // Vista previa in-app de adjuntos (PDF, imágenes, Word, Excel/CSV, texto) sin salir de la pantalla.
+  const [preview, setPreview] = useState<
+    { name: string; downloadUrl: string; kind: "pdf" | "image"; url: string }
+    | { name: string; downloadUrl: string; kind: "html"; html: string }
+    | { name: string; downloadUrl: string; kind: "text"; text: string }
+    | null
+  >(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const openPreview = useCallback(async (att: OutlookAttachment) => {
     if (!emailId) return;
     const name = att.name || "adjunto";
-    const isPdf = /\.pdf$/i.test(name);
-    const isImage = /\.(png|jpe?g|gif|webp|svg|bmp)$/i.test(name);
-    if (!isPdf && !isImage) return;
+    if (!PREVIEWABLE_RE.test(name)) return;
+    const ext = (name.split(".").pop() || "").toLowerCase();
     setPreviewLoading(true);
     try {
       const r = await fetchRoutedAttachmentBlob(emailId, att as unknown as EmailAttachmentMeta);
+      // URL de descarga (por si el usuario quiere el archivo original desde la vista previa).
       const fromApi = (r.contentType || "").toLowerCase();
       const inferred = inferMimeFromFileName(name);
       const mime = fromApi && fromApi !== "application/octet-stream" ? r.contentType : inferred || "application/octet-stream";
-      const url = URL.createObjectURL(new Blob([r.blob], { type: mime }));
-      setPreview({ url, name, kind: isPdf ? "pdf" : "image" });
+      const downloadUrl = URL.createObjectURL(new Blob([r.blob], { type: mime }));
+
+      if (ext === "pdf") {
+        setPreview({ name, downloadUrl, kind: "pdf", url: downloadUrl });
+      } else if (/^(png|jpe?g|gif|webp|svg|bmp)$/i.test(ext)) {
+        setPreview({ name, downloadUrl, kind: "image", url: downloadUrl });
+      } else if (ext === "docx") {
+        const mammoth = await import("mammoth");
+        const arrayBuffer = await r.blob.arrayBuffer();
+        const { value } = await mammoth.convertToHtml({ arrayBuffer });
+        setPreview({ name, downloadUrl, kind: "html", html: DOMPurify.sanitize(value, { USE_PROFILES: { html: true } }) });
+      } else if (ext === "xlsx" || ext === "xls" || ext === "csv" || ext === "tsv") {
+        const XLSX = await import("xlsx");
+        const arrayBuffer = await r.blob.arrayBuffer();
+        const wb = XLSX.read(arrayBuffer, { type: "array" });
+        const html = wb.SheetNames
+          .map((n) => `<h3 style="margin:12px 0 4px;font-size:13px;font-weight:600">${n}</h3>${XLSX.utils.sheet_to_html(wb.Sheets[n])}`)
+          .join("");
+        setPreview({ name, downloadUrl, kind: "html", html: DOMPurify.sanitize(html, { USE_PROFILES: { html: true } }) });
+      } else {
+        // Texto plano / código / datos.
+        const text = await r.blob.text();
+        setPreview({ name, downloadUrl, kind: "text", text });
+      }
     } catch (e) {
       toast.error("No se pudo abrir la vista previa: " + (e instanceof Error ? e.message : "Error desconocido"));
     } finally {
@@ -192,7 +223,7 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onReply,
     }
   }, [emailId]);
   const closePreview = useCallback(() => {
-    setPreview((p) => { if (p) URL.revokeObjectURL(p.url); return null; });
+    setPreview((p) => { if (p) URL.revokeObjectURL(p.downloadUrl); return null; });
   }, []);
 
   const { html: resolvedHtml } = useResolvedEmailHtml(
@@ -527,7 +558,7 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onReply,
             <div className="flex items-center gap-1.5 shrink-0">
               {preview && (
                 <a
-                  href={preview.url}
+                  href={preview.downloadUrl}
                   download={preview.name}
                   className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-white/15 hover:bg-white/25 text-[12px] font-medium transition-colors"
                 >
@@ -550,8 +581,17 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onReply,
               <div className="text-white/80 text-[13px]">Cargando vista previa…</div>
             ) : preview?.kind === "pdf" ? (
               <iframe src={preview.url} title={preview.name} className="w-full h-full rounded-lg bg-white" />
-            ) : preview ? (
+            ) : preview?.kind === "image" ? (
               <img src={preview.url} alt={preview.name} className="max-w-full max-h-full object-contain rounded-lg" />
+            ) : preview?.kind === "html" ? (
+              <div className="w-full h-full overflow-auto rounded-lg bg-white text-black">
+                <div
+                  className="mx-auto max-w-3xl p-6 text-[13px] leading-relaxed [&_table]:border-collapse [&_td]:border [&_td]:border-gray-300 [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-gray-300 [&_th]:px-2 [&_th]:py-1 [&_img]:max-w-full"
+                  dangerouslySetInnerHTML={{ __html: preview.html }}
+                />
+              </div>
+            ) : preview?.kind === "text" ? (
+              <pre className="w-full h-full overflow-auto rounded-lg bg-white text-black p-4 text-[12px] leading-relaxed whitespace-pre-wrap break-words">{preview.text}</pre>
             ) : null}
           </div>
         </div>
