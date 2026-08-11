@@ -88,6 +88,8 @@ function normalizeEvent(ev: Record<string, any>, namespacedCalendarId: string, c
     })),
     isOrganizer,
     responseStatus: { response: isOrganizer ? "organizer" : googleResponseToGraph(selfAttendee?.responseStatus) },
+    // Serie recurrente: id del evento maestro (para editar/eliminar toda la serie).
+    recurringEventId: ev.recurringEventId ?? null,
     _source: "google",
   };
 }
