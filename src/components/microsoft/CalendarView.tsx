@@ -2428,13 +2428,26 @@ export function CalendarView({
                 departureISO={!newEvent.isAllDay && newEvent.startTime ? `${format(selectedDate, "yyyy-MM-dd")}T${newEvent.startTime}:00` : null}
               />
             )}
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <Label className="text-sm">Reunión de Teams</Label>
-                <p className="text-xs text-muted-foreground">Outlook generará enlace automáticamente.</p>
-              </div>
-              <Switch checked={newEvent.isOnlineMeeting} onCheckedChange={(checked) => setNewEvent({ ...newEvent, isOnlineMeeting: checked })} />
-            </div>
+            {(() => {
+              const isGoogleTarget = newEvent.accountId !== PRIMARY_MS_ID &&
+                linkedAccounts.find((a) => a.id === newEvent.accountId)?.provider === "google";
+              return (
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <Label className="text-sm flex items-center gap-1.5">
+                      <Video className="h-3.5 w-3.5" />
+                      {isGoogleTarget ? "Reunión de Google Meet" : "Reunión de Teams"}
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      {isGoogleTarget
+                        ? "Google Calendar generará el enlace de Meet automáticamente."
+                        : "Outlook generará el enlace de Teams automáticamente."}
+                    </p>
+                  </div>
+                  <Switch checked={newEvent.isOnlineMeeting} onCheckedChange={(checked) => setNewEvent({ ...newEvent, isOnlineMeeting: checked })} />
+                </div>
+              );
+            })()}
             <div className="flex items-center justify-between gap-2">
               <div>
                 <Label className="text-sm flex items-center gap-1.5"><Lock className="h-3.5 w-3.5" /> Personal (privado)</Label>
@@ -2526,13 +2539,18 @@ export function CalendarView({
                   </div>
                 );
               })()}
-              {(eventDetail?.onlineMeeting?.joinUrl || cachedEvent?.onlineMeeting?.joinUrl || cachedEvent?.onlineMeetingUrl) && (
-                <div className="flex justify-end">
-                  <Button variant="outline" size="sm" onClick={() => window.open(eventDetail?.onlineMeeting?.joinUrl || cachedEvent?.onlineMeeting?.joinUrl || cachedEvent?.onlineMeetingUrl, "_blank")}>
-                    <Video className="mr-1 h-4 w-4" /> Unirse (Teams)
-                  </Button>
-                </div>
-              )}
+              {(() => {
+                const joinUrl = eventDetail?.onlineMeeting?.joinUrl || cachedEvent?.onlineMeeting?.joinUrl || cachedEvent?.onlineMeetingUrl;
+                if (!joinUrl) return null;
+                const isMeet = /meet\.google\.com/i.test(String(joinUrl));
+                return (
+                  <div className="flex justify-end">
+                    <Button variant="outline" size="sm" onClick={() => window.open(joinUrl, "_blank")}>
+                      <Video className="mr-1 h-4 w-4" /> Unirse ({isMeet ? "Google Meet" : "Teams"})
+                    </Button>
+                  </div>
+                );
+              })()}
               {/* RSVP: responder invitación en cualquier cuenta conectada (principal, Outlook o Google) */}
               {(() => {
                 const src = eventDetail || cachedEvent;
