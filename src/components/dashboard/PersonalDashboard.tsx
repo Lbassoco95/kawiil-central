@@ -18,6 +18,7 @@ import {
   PersonalBoardTasksAndProjectSteps,
 } from "@/components/dashboard/PersonalOperativeSection";
 import { AISummaryCard } from "@/components/shared/AISummaryCard";
+import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
 import { useMyActiveProjectsProgress } from "@/hooks/useMyActiveProjectsProgress";
 import { useMyAssignedTasks } from "@/hooks/useTasks";
 import { useClients } from "@/hooks/useClients";
@@ -114,6 +115,11 @@ export function PersonalDashboard() {
   };
 
   const [showQuestionnaire, setShowQuestionnaire] = useState(false);
+
+  // Al abrir una tarea desde el dashboard mostramos el detalle EN EL LUGAR (modal),
+  // sin sacar al usuario de la página. Para ir al proyecto/tarea completa hay un
+  // acceso explícito dentro del propio diálogo.
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
   // Check if user has completed questionnaire
   const { data: userPrefs, refetch: refetchPrefs } = useQuery({
@@ -526,7 +532,7 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
             <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Siguiente acción</h3>
             <button
               type="button"
-              onClick={() => navigate(nextAction.project_id ? `/proyectos/${nextAction.project_id}?tab=tareas&taskId=${nextAction.id}` : `/tareas?taskId=${nextAction.id}`)}
+              onClick={() => setSelectedTaskId(nextAction.id)}
               className="w-full text-left page-list-card border-2 border-primary/20 p-4 group"
             >
               <div className="flex items-start gap-3">
@@ -560,6 +566,7 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
             enCursoTotal={openTasksForKpi.length}
             topSteps={topOperativeSteps}
             assignedStepCount={assignedSteps.length}
+            onOpenTask={setSelectedTaskId}
           />
         </div>
 
@@ -616,6 +623,7 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
             completedToday={completedToday ?? 0}
             overdueCount={overdueTasks}
             dueTodayCount={dueTodayPending}
+            onOpenTask={setSelectedTaskId}
           />
 
           {myClients && myClients.length > 0 && (
@@ -668,7 +676,7 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
                 <button
                   key={t.id}
                   className="flex items-center gap-3 w-full py-2.5 text-left row-hover px-2 rounded-lg"
-                  onClick={() => navigate(t.project_id ? `/proyectos/${t.project_id}?tab=tareas&taskId=${t.id}` : `/tareas?taskId=${t.id}`)}
+                  onClick={() => setSelectedTaskId(t.id)}
                 >
                   <span className={`h-2 w-2 rounded-full shrink-0 ${priorityDot(t.priority)}`} />
                   <span className="text-sm text-foreground truncate flex-1">{t.title}</span>
@@ -849,6 +857,9 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
 
         </div>{/* end right column */}
       </div>{/* end grid 2 cols */}
+
+      {/* Detalle de tarea en el lugar (sin sacar del dashboard) */}
+      <TaskDetailDialog taskId={selectedTaskId} onClose={() => setSelectedTaskId(null)} />
 
       {/* Questionnaire Dialog */}
       <PreferenceQuestionnaire

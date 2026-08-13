@@ -158,6 +158,8 @@ interface Props {
   completedToday: number;
   overdueCount: number;
   dueTodayCount: number;
+  /** Abre el detalle de la tarea en el lugar (modal). Si no se pasa, navega. */
+  onOpenTask?: (taskId: string) => void;
 }
 
 /**
@@ -171,6 +173,7 @@ export function DailyBriefingGrid({
   completedToday,
   overdueCount,
   dueTodayCount,
+  onOpenTask,
 }: Props) {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -293,7 +296,8 @@ export function DailyBriefingGrid({
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      navigate(t.project_id ? `/proyectos/${t.project_id}?tab=tareas&taskId=${t.id}` : `/tareas?taskId=${t.id}`);
+                      if (onOpenTask) onOpenTask(t.id);
+                      else navigate(t.project_id ? `/proyectos/${t.project_id}?tab=tareas&taskId=${t.id}` : `/tareas?taskId=${t.id}`);
                     }}
                   >
                     <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", priorityDot(t.priority))} />
