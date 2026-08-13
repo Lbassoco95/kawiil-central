@@ -48,6 +48,18 @@ describe("renderTextWithMentionHighlights", () => {
     expect(plainText(nodes)).toBe(text);
   });
 
+  it("resalta menciones precedidas de signos ((, ¿, comillas, guion)", () => {
+    for (const [text, expected] of [
+      ["revisa (@Habib Fernando) por favor", "@Habib Fernando"],
+      ["¿@Habib puedes?", "@Habib"],
+      ['"@Habib" dijo', "@Habib"],
+    ] as const) {
+      const nodes = renderTextWithMentionHighlights(text, "t");
+      expect(highlightedMentions(nodes)).toEqual([expected]);
+      expect(plainText(nodes)).toBe(text);
+    }
+  });
+
   it("resalta varias menciones conocidas en el mismo texto", () => {
     const text = "@Leopoldo Bassoco y @Habib Fernando Moreno Athie revisen esto";
     const nodes = renderTextWithMentionHighlights(text, "t", {

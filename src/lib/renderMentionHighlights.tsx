@@ -113,7 +113,10 @@ export function renderTextWithMentionHighlights(
   while (i < text.length) {
     const ch = text[i];
     const prev = i > 0 ? text[i - 1] : " ";
-    const atBoundary = prev === " " || prev === "\n" || prev === "\t" || i === 0;
+    // Una mención inicia si la '@' no está pegada a una palabra: así se evita
+    // tratar correos ("correo@dominio.com") como menciones, pero se permite que
+    // vaya precedida de signos como "(", "¿", comillas o guion.
+    const atBoundary = !isWordChar(prev);
 
     if (ch === "@" && atBoundary && isWordChar(text[i + 1])) {
       const name = matchMentionName(text.slice(i + 1), knownNames);
