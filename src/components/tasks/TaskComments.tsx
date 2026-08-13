@@ -43,8 +43,10 @@ export function TaskComments({ taskId }: { taskId: string }) {
   const [showLinkPopover, setShowLinkPopover] = useState(false);
   const [showDropbox, setShowDropbox] = useState(false);
 
+  const knownNames = (orgProfiles ?? []).map((p) => p.full_name).filter(Boolean);
+
   const renderMentions = (t: string, keyOffset: number): ReactNode[] =>
-    renderTextWithMentionHighlights(t, `cm-${keyOffset}`);
+    renderTextWithMentionHighlights(t, `cm-${keyOffset}`, { knownNames });
 
   const renderCommentContent = (content: string): ReactNode => {
     // Separa el texto de los adjuntos (📎 [nombre](url)): el texto se muestra con

@@ -481,10 +481,31 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
     );
   };
 
-  const renderMentions = (text: string, keyOffset: number): React.ReactNode[] =>
-    renderTextWithMentionHighlights(text, `cm-${keyOffset}`);
+  const knownNames = (orgProfiles ?? []).map((p) => p.full_name).filter(Boolean);
 
-  const handleStatusChange = (status: string) => setPending("status", status);
+  const renderMentions = (text: string, keyOffset: number): React.ReactNode[] =>
+    renderTextWithMentionHighlights(text, `cm-${keyOffset}`, { knownNames });
+
+  // El estado se aplica de inmediato (no se difiere con "Guardar") para que el
+  // selector de estado y el botón "Completar" nunca queden en estados
+  // contradictorios. El hook `useUpdateTask` sincroniza `completed_at`/`started_at`
+  // según el estado, de modo que completar y cambiar el estado son la misma acción.
+  const handleStatusChange = (status: string) => {
+    if (status === currentStatus) return;
+    // Descarta cualquier cambio de estado en el buffer para que no se reaplique al Guardar.
+    setPendingChanges((prev) => {
+      if (!("status" in prev)) return prev;
+      const { status: _omitStatus, ...rest } = prev;
+      return rest;
+    });
+    updateTask.mutate(
+      { id: taskId, status },
+      {
+        onSuccess: () =>
+          toast.success(status === "completada" ? "Tarea completada" : "Estado actualizado"),
+      },
+    );
+  };
 
   const handleSendComment = () => {
     if (!commentText.trim() && commentAttachments.length === 0) return;
@@ -801,7 +822,7 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
                   <Button
                     size="sm"
                     className="h-8 gap-1 text-xs"
-                    onClick={() => updateTask.mutate({ id: taskId, status: "completada" })}
+                    onClick={() => handleStatusChange("completada")}
                     disabled={updateTask.isPending}
                     title="Marcar como completada"
                   >
