@@ -95,6 +95,8 @@ interface ComposeEmailDialogProps {
    * escribió el usuario. Sin esto, se envía como correo nuevo.
    */
   replyContext?: { messageId: string; replyAll?: boolean } | null;
+  /** Archivos precargados (p. ej. adjuntos del correo reenviado). */
+  initialFiles?: File[];
   /** Valores precargados para el selector de plantillas contables. */
   defaultTemplateContext?: ComposeDefaultTemplateContext;
   /** Muestra el selector de plantillas del área contable. Por defecto true. */
@@ -124,6 +126,7 @@ export function ComposeEmailDialog({
   initialSubject,
   initialBodyHtml,
   replyContext,
+  initialFiles,
   defaultTemplateContext,
   showAccountingTemplates = true,
   onAfterSend,
@@ -270,6 +273,14 @@ export function ComposeEmailDialog({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  // Adjuntos precargados (p. ej. archivos del correo reenviado): se cargan a la lista de adjuntos
+  // cuando llegan (la descarga es asíncrona), para que se envíen con el correo.
+  useEffect(() => {
+    if (open && initialFiles && initialFiles.length > 0) {
+      setPendingFiles(initialFiles);
+    }
+  }, [open, initialFiles]);
 
   useEffect(() => {
     if (!open) {
