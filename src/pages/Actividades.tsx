@@ -1,6 +1,7 @@
 import { useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Navigate } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
+import { useUserRole } from "@/hooks/useUserRole";
 import { PageHeader, type PageHeaderStat } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +19,7 @@ const TYPE_ORDER: ActivityType[] = ["convivencia", "capacitacion", "despacho", "
 
 const Actividades = () => {
   const navigate = useNavigate();
+  const { isTransformador, isLoading: roleLoading } = useUserRole();
   const { data: activities, isLoading } = useActivities();
 
   const list = useMemo(() => activities ?? [], [activities]);
@@ -44,6 +46,11 @@ const Actividades = () => {
       .filter((t) => map.has(t))
       .map((t) => ({ type: t, label: ACTIVITY_TYPE_LABELS[t], items: map.get(t)! }));
   }, [list]);
+
+  // Módulo exclusivo para G4 (transformador).
+  if (!roleLoading && !isTransformador) {
+    return <Navigate to="/" replace />;
+  }
 
   return (
     <AppLayout>

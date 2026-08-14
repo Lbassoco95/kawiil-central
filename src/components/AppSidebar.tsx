@@ -27,6 +27,7 @@ import { useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
+import { useUserRole } from "@/hooks/useUserRole";
 import { useUnreadCount } from "@/hooks/useMentionNotifications";
 import { useUnreadEmailCount } from "@/hooks/useMicrosoft";
 import { useSlackChannelNotificationBadges } from "@/hooks/useSlackChannelNotificationBadges";
@@ -50,6 +51,8 @@ type NavItem = {
   view: string;
   moduleKey?: string;
   tooltip?: string;
+  /** Solo visible para G4 (rol transformador). */
+  g4Only?: boolean;
 };
 
 type NavGroup = {
@@ -64,7 +67,7 @@ const NAV_GROUPS: NavGroup[] = [
       { title: "Dashboard", url: "/", icon: LayoutDashboard, view: "dashboard" },
       { title: "Tareas", url: "/tareas", icon: CheckSquare, view: "tareas" },
       { title: "Proyectos", url: "/proyectos", icon: FolderKanban, view: "proyectos" },
-      { title: "Actividades", url: "/actividades", icon: PartyPopper, view: "actividades" },
+      { title: "Actividades", url: "/actividades", icon: PartyPopper, view: "actividades", g4Only: true },
       { title: "Calendario", url: "/microsoft365/calendario", icon: Calendar, view: "calendario", moduleKey: "calendario" },
       { title: "Clientes", url: "/clientes", icon: Users, view: "clientes" },
     ],
@@ -217,12 +220,15 @@ function SidebarBody({
   onMobileNavigate?: () => void;
 }) {
   const { hasModule } = useModulePermissions();
+  const { isTransformador } = useUserRole();
   const getBadge = useNavBadges();
 
   const visibleGroups = NAV_GROUPS
     .map((g) => ({
       ...g,
-      items: g.items.filter((i) => !i.moduleKey || hasModule(i.moduleKey)),
+      items: g.items.filter(
+        (i) => (!i.moduleKey || hasModule(i.moduleKey)) && (!i.g4Only || isTransformador),
+      ),
     }))
     .filter((g) => g.items.length > 0);
 
