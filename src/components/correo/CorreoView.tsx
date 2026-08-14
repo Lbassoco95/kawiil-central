@@ -14,7 +14,7 @@ import { TaskFormDialog } from "@/components/tasks/TaskFormDialog";
 import { MailTranslateDrawer } from "./MailTranslateDrawer";
 import { type MailTabId } from "./MailTabs";
 import { useMailFolders, useMarkEmailRead, useMicrosoftConnection } from "@/hooks/useMicrosoft";
-import { useMarkLinkedOutlookEmailRead, useMarkGmailRead, useRoutedEmailDetail } from "@/hooks/useLinkedAccounts";
+import { useMarkLinkedOutlookEmailRead, useMarkGmailRead, useRoutedEmailDetail, useRoutedEmailAttachments, fetchRoutedAttachmentBlob } from "@/hooks/useLinkedAccounts";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -77,6 +77,8 @@ export function CorreoView() {
   // Detalle ruteado por prefijo de ID: funciona con la cuenta principal Y las vinculadas
   // (necesario para Reenviar, crear regla, Slack, crear evento desde correos vinculados).
   const { data: selectedEmailDetail } = useRoutedEmailDetail(selectedEmailId);
+  const { data: selectedEmailAttachments = [] } = useRoutedEmailAttachments(selectedEmailId);
+  const [forwardFiles, setForwardFiles] = useState<File[]>([]);
   const { profile: msProfile } = useMicrosoftConnection();
   const myEmail = ((msProfile?.mail || msProfile?.userPrincipalName || "") as string).toLowerCase();
   const markRead = useMarkEmailRead();
@@ -185,7 +187,7 @@ export function CorreoView() {
     setRuleDialogOpen(true);
   }, [selectedEmailDetail]);
 
-  const handleForward = useCallback(() => {
+  const handleForward = useCallback(async () => {
     const detail = selectedEmailDetail as any;
     if (!detail) return;
     const origSubject = detail.subject || "(sin asunto)";
@@ -200,8 +202,30 @@ export function CorreoView() {
 <b>Asunto:</b> ${origSubject}<br/><br/>
 ${detail.body?.contentType === "html" ? origBody : `<pre style="font-family:inherit">${origBody}</pre>`}`;
     setForwardState({ subject: `Fwd: ${origSubject}`, bodyHtml });
+    setForwardFiles([]);
     setComposeOpen(true);
-  }, [selectedEmailDetail]);
+    // Adjuntar los archivos del correo original (no inline) para que el reenvío los lleve.
+    const downloadable = (selectedEmailAttachments as any[]).filter(
+      (a) =>
+        !a?.isInline &&
+        !a?.["@odata.type"]?.includes("itemAttachment") &&
+        !a?.["@odata.type"]?.includes("referenceAttachment"),
+    );
+    if (downloadable.length && selectedEmailId) {
+      const toastId = toast.loading(`Adjuntando ${downloadable.length} archivo(s) del correo…`);
+      try {
+        const files: File[] = [];
+        for (const att of downloadable) {
+          const r = await fetchRoutedAttachmentBlob(selectedEmailId, att);
+          files.push(new File([r.blob], att.name || r.name || "adjunto", { type: r.contentType || "application/octet-stream" }));
+        }
+        setForwardFiles(files);
+        toast.success("Adjuntos listos para reenviar", { id: toastId });
+      } catch (e) {
+        toast.error("No se pudieron adjuntar los archivos del correo reenviado", { id: toastId });
+      }
+    }
+  }, [selectedEmailDetail, selectedEmailId, selectedEmailAttachments]);
 
   const handleReply = useCallback(() => {
     const detail = selectedEmailDetail as any;
@@ -379,7 +403,8 @@ ${detail.body?.contentType === "html" ? origBody : `<pre style="font-family:inhe
       {/* Dialogs */}
       <ComposeEmailDialog
         open={composeOpen}
-        onOpenChange={(o) => { setComposeOpen(o); if (!o) setForwardState(null); }}
+        onOpenChange={(o) => { setComposeOpen(o); if (!o) { setForwardState(null); setForwardFiles([]); } }}
+        initialFiles={forwardFiles}
         initialTo={forwardState?.to}
         initialCc={forwardState?.cc}
         initialSubject={forwardState?.subject}
