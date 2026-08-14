@@ -142,3 +142,22 @@ export function providerStatusLabel(value?: string | null): string {
   if (!value) return "—";
   return PROVIDER_STATUS_LABELS[value as ProviderStatus] ?? value;
 }
+
+// ─── Tipo de archivo (cotizaciones / diseños / muestras) ─────────────────────
+export type ActivityFileKind = "cotizacion" | "diseno" | "muestra" | "otro";
+
+export const FILE_KIND_LABELS: Record<ActivityFileKind, string> = {
+  cotizacion: "Cotización",
+  diseno: "Diseño",
+  muestra: "Muestra",
+  otro: "Otro",
+};
+
+export const FILE_KIND_OPTIONS = (
+  Object.entries(FILE_KIND_LABELS) as [ActivityFileKind, string][]
+).map(([value, label]) => ({ value, label }));
+
+export function fileKindLabel(value?: string | null): string {
+  if (!value) return "—";
+  return FILE_KIND_LABELS[value as ActivityFileKind] ?? value;
+}

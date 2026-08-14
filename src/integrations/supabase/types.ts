@@ -197,6 +197,88 @@ export type Database = {
           }
         ]
       }
+      activity_file_votes: {
+        Row: {
+          activity_file_id: string
+          created_at: string
+          organization_id: string
+          user_id: string
+        }
+        Insert: {
+          activity_file_id: string
+          created_at?: string
+          organization_id: string
+          user_id: string
+        }
+        Update: {
+          activity_file_id?: string
+          created_at?: string
+          organization_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_file_votes_activity_file_id_fkey"
+            columns: ["activity_file_id"]
+            isOneToOne: false
+            referencedRelation: "activity_files"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      activity_files: {
+        Row: {
+          activity_id: string
+          created_at: string
+          file_path: string
+          file_size: number | null
+          id: string
+          kind: string
+          mime_type: string | null
+          name: string
+          organization_id: string
+          provider_id: string | null
+          updated_at: string
+          uploaded_by: string
+        }
+        Insert: {
+          activity_id: string
+          created_at?: string
+          file_path: string
+          file_size?: number | null
+          id?: string
+          kind?: string
+          mime_type?: string | null
+          name: string
+          organization_id: string
+          provider_id?: string | null
+          updated_at?: string
+          uploaded_by: string
+        }
+        Update: {
+          activity_id?: string
+          created_at?: string
+          file_path?: string
+          file_size?: number | null
+          id?: string
+          kind?: string
+          mime_type?: string | null
+          name?: string
+          organization_id?: string
+          provider_id?: string | null
+          updated_at?: string
+          uploaded_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_files_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       activity_items: {
         Row: {
           activity_id: string
