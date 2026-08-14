@@ -6,7 +6,9 @@ import { AttachmentCard } from "@/components/shared/AttachmentCard";
 import { formatMX } from "@/lib/dateUtils";
 import {
   parseComment,
-  attachmentsToLines,
+  isRichHtml,
+  combineBodyAndAttachments,
+  plainTextToEditableHtml,
   CommentTextBody,
 } from "@/lib/commentContent";
 import {
@@ -53,7 +55,10 @@ export function CommentItem({ comment, taskId, currentUserId, profiles, knownNam
   const isAuthor = !!currentUserId && currentUserId === comment.user_id;
 
   const startEdit = () => {
-    setEditHtml(body);
+    // Los comentarios heredados de texto plano se convierten a HTML con nodos de
+    // mención para que, al guardar, no se pierdan ni la asociación ni el resaltado.
+    const initial = isRichHtml(body) ? body : plainTextToEditableHtml(body, profiles);
+    setEditHtml(initial);
     setEditMentions(comment.mentions ?? []);
     setEditing(true);
   };
@@ -61,10 +66,15 @@ export function CommentItem({ comment, taskId, currentUserId, profiles, knownNam
   const saveEdit = () => {
     const html = editorRef.current?.getHtml() ?? editHtml;
     if (editorRef.current?.isEmpty()) return;
-    const lines = attachmentsToLines(attachments);
-    const content = lines ? `${html}\n${lines}` : html;
+    const content = combineBodyAndAttachments(html, attachments);
     updateComment.mutate(
-      { commentId: comment.id, taskId, content, mentions: editMentions },
+      {
+        commentId: comment.id,
+        taskId,
+        content,
+        mentions: editMentions,
+        previousMentions: comment.mentions ?? [],
+      },
       { onSuccess: () => setEditing(false) },
     );
   };

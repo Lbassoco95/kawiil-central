@@ -531,6 +531,7 @@ export function useUpdateComment() {
       taskId: string;
       content: string;
       mentions?: string[];
+      previousMentions?: string[];
     }) => {
       // Solo el autor puede editar (RLS lo refuerza además en el backend).
       const { error } = await supabase
@@ -540,9 +541,47 @@ export function useUpdateComment() {
         .eq("user_id", user!.id);
       if (error) throw error;
     },
-    onSuccess: (_, vars) => {
+    onSuccess: async (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ["task-comments", vars.taskId] });
+      queryClient.invalidateQueries({ queryKey: ["user-notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["unread-notifications-count"] });
       toast.success("Comentario actualizado");
+
+      // Notifica solo a las personas mencionadas por primera vez en esta edición.
+      const prev = new Set(vars.previousMentions ?? []);
+      const added = (vars.mentions ?? []).filter((id) => !prev.has(id) && id !== user!.id);
+      if (added.length === 0) return;
+
+      const preview = commentPlainText(vars.content);
+      sendSlackNotification("comment_mention", {
+        task_title: "Tarea",
+        comment_preview: preview.substring(0, 100),
+        mentioned_ids: added,
+      });
+      try {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("organization_id, full_name")
+          .eq("user_id", user!.id)
+          .single();
+        if (profile) {
+          const notifications = added.map((uid) => ({
+            user_id: uid,
+            type: "mention" as const,
+            title: `${profile.full_name} te mencionó en una tarea`,
+            body: preview.substring(0, 200),
+            entity_type: "task",
+            entity_id: vars.taskId,
+            source_user_id: user!.id,
+            organization_id: profile.organization_id,
+          }));
+          if (notifications.length > 0) {
+            await supabase.from("notifications").insert(notifications);
+          }
+        }
+      } catch {
+        // No crítico: no bloquear la edición.
+      }
     },
     onError: (err: Error) => {
       toast.error("Error al actualizar comentario: " + err.message);

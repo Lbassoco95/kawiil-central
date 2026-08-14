@@ -41,12 +41,74 @@ export function attachmentsToLines(attachments: CommentAttachmentRef[]): string 
   return attachments.map((a) => `📎 [${a.name}](${a.url})`).join("\n");
 }
 
-const RICH_TAG_RE =
-  /<(?:p|br|strong|b|em|i|u|s|ul|ol|li|a|span|h[1-6]|blockquote|code|pre)\b[^>]*>/i;
+/** Une el cuerpo con las líneas de adjuntos `📎 [n](url)` para persistir. */
+export function combineBodyAndAttachments(
+  body: string,
+  attachments: CommentAttachmentRef[],
+): string {
+  const lines = attachmentsToLines(attachments);
+  if (!lines) return body;
+  return body ? `${body}\n${lines}` : lines;
+}
+
+// El editor (TipTap) siempre envuelve el contenido en un bloque de nivel superior
+// (<p>, <ul>, …) o incluye un <span data-type="mention">. Anclar a eso evita que
+// texto plano heredado con `<...>` sueltos (p. ej. "usa <b> para negritas") se
+// confunda con HTML y termine sanitizado/borrado.
+const RICH_BLOCK_START_RE = /^\s*<(?:p|ul|ol|h[1-3]|blockquote|pre)[\s/>]/i;
 
 /** Heurística: ¿el cuerpo es HTML enriquecido (y no texto plano heredado)? */
 export function isRichHtml(body: string): boolean {
-  return RICH_TAG_RE.test(body);
+  return RICH_BLOCK_START_RE.test(body) || /data-type="mention"/.test(body);
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+const MENTION_WORD_CHAR = /[a-zA-ZáéíóúñÁÉÍÓÚÑüÜ0-9_]/;
+
+/**
+ * Convierte un comentario de texto plano heredado a HTML editable, envolviendo
+ * las @menciones que coinciden con el directorio en nodos de mención (para que,
+ * al editar y guardar, se conserven la asociación y el resaltado).
+ */
+export function plainTextToEditableHtml(
+  text: string,
+  profiles: { user_id: string; full_name: string }[],
+): string {
+  const escaped = escapeHtml(text);
+  const names = profiles
+    .filter((p) => p.full_name && p.full_name.trim().length > 0)
+    .slice()
+    .sort((a, b) => b.full_name.length - a.full_name.length);
+
+  const isWord = (ch: string | undefined) => !!ch && MENTION_WORD_CHAR.test(ch);
+  let out = "";
+  let i = 0;
+  while (i < escaped.length) {
+    if (escaped[i] === "@" && (i === 0 || !isWord(escaped[i - 1]))) {
+      const rest = escaped.slice(i + 1);
+      const match = names.find(
+        (p) =>
+          rest.slice(0, p.full_name.length).toLowerCase() === p.full_name.toLowerCase() &&
+          !isWord(rest[p.full_name.length]),
+      );
+      if (match) {
+        const label = escapeHtml(match.full_name);
+        out += `<span data-type="mention" class="mention" data-id="${escapeHtml(match.user_id)}" data-label="${label}">@${label}</span>`;
+        i += 1 + match.full_name.length;
+        continue;
+      }
+    }
+    out += escaped[i];
+    i++;
+  }
+  return `<p>${out.replace(/\n/g, "<br>")}</p>`;
 }
 
 const ALLOWED_TAGS = [

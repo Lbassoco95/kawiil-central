@@ -8,7 +8,7 @@ import {
   type RichCommentEditorHandle,
 } from "@/components/tasks/RichCommentEditor";
 import { CommentItem } from "@/components/tasks/CommentItem";
-import { richTextIsEmpty } from "@/lib/commentContent";
+import { richTextIsEmpty, combineBodyAndAttachments } from "@/lib/commentContent";
 import { FileDropzone } from "@/components/shared/FileDropzone";
 import { DropboxFilePicker } from "@/components/projects/DropboxFilePicker";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -51,11 +51,7 @@ export function TaskComments({ taskId }: { taskId: string }) {
   const send = () => {
     if (bodyEmpty && attachments.length === 0) return;
     const html = editorRef.current?.getHtml() ?? text;
-    let finalContent = bodyEmpty ? "" : html;
-    if (attachments.length > 0) {
-      const lines = attachments.map((a) => `📎 [${a.name}](${a.url})`).join("\n");
-      finalContent = finalContent ? `${finalContent}\n${lines}` : lines;
-    }
+    const finalContent = combineBodyAndAttachments(bodyEmpty ? "" : html, attachments);
     addComment.mutate(
       { taskId, content: finalContent, mentions },
       {

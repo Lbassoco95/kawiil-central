@@ -74,6 +74,7 @@ export const RichCommentEditor = forwardRef<RichCommentEditorHandle, Props>(
     const [menu, setMenu] = useState<MentionMenu | null>(null);
     const menuRef = useRef<MentionMenu | null>(null);
     menuRef.current = menu;
+    const menuElRef = useRef<HTMLDivElement>(null);
 
     // Extensión de mención creada una sola vez: el dropdown de TipTap se puentea
     // a estado de React leyendo `profilesRef`/`menuRef` (estables) desde los handlers.
@@ -175,12 +176,20 @@ export const RichCommentEditor = forwardRef<RichCommentEditorHandle, Props>(
       if (autoFocus && editor) editor.commands.focus("end");
     }, [autoFocus, editor]);
 
-    // Cierra el menú si se hace clic fuera del editor.
+    // Cierra el menú al hacer scroll (se despega del cursor) o al hacer clic
+    // fuera del propio dropdown.
     useEffect(() => {
       if (!menu) return;
-      const handler = () => setMenu(null);
-      window.addEventListener("scroll", handler, true);
-      return () => window.removeEventListener("scroll", handler, true);
+      const closeOnScroll = () => setMenu(null);
+      const closeOnOutsideClick = (e: MouseEvent) => {
+        if (!menuElRef.current?.contains(e.target as Node)) setMenu(null);
+      };
+      window.addEventListener("scroll", closeOnScroll, true);
+      document.addEventListener("mousedown", closeOnOutsideClick, true);
+      return () => {
+        window.removeEventListener("scroll", closeOnScroll, true);
+        document.removeEventListener("mousedown", closeOnOutsideClick, true);
+      };
     }, [menu]);
 
     useImperativeHandle(
@@ -245,6 +254,7 @@ export const RichCommentEditor = forwardRef<RichCommentEditorHandle, Props>(
         <EditorContent editor={editor} />
         {menu && menu.items.length > 0 && menu.rect && (
           <div
+            ref={menuElRef}
             style={{
               position: "fixed",
               top: menu.rect.bottom + 4,

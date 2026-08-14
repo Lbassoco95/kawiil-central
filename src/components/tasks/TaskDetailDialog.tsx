@@ -70,7 +70,7 @@ import {
   type RichCommentEditorHandle,
 } from "./RichCommentEditor";
 import { CommentItem } from "./CommentItem";
-import { richTextIsEmpty } from "@/lib/commentContent";
+import { richTextIsEmpty, combineBodyAndAttachments } from "@/lib/commentContent";
 import { useProfiles } from "@/hooks/useTasks";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -480,11 +480,7 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
   const handleSendComment = () => {
     if (commentBodyEmpty && commentAttachments.length === 0) return;
     const html = commentEditorRef.current?.getHtml() ?? commentText;
-    let finalContent = commentBodyEmpty ? "" : html;
-    if (commentAttachments.length > 0) {
-      const attachmentLines = commentAttachments.map(a => `📎 [${a.name}](${a.url})`).join("\n");
-      finalContent = finalContent ? `${finalContent}\n${attachmentLines}` : attachmentLines;
-    }
+    const finalContent = combineBodyAndAttachments(commentBodyEmpty ? "" : html, commentAttachments);
     addComment.mutate({ taskId, content: finalContent, mentions: commentMentions }, {
       onSuccess: () => {
         commentEditorRef.current?.clear();
