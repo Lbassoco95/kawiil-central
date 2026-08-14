@@ -238,6 +238,7 @@ export type Database = {
           name: string
           organization_id: string
           provider_id: string | null
+          task_id: string | null
           updated_at: string
           uploaded_by: string
         }
@@ -252,6 +253,7 @@ export type Database = {
           name: string
           organization_id: string
           provider_id?: string | null
+          task_id?: string | null
           updated_at?: string
           uploaded_by: string
         }
@@ -266,6 +268,7 @@ export type Database = {
           name?: string
           organization_id?: string
           provider_id?: string | null
+          task_id?: string | null
           updated_at?: string
           uploaded_by?: string
         }
