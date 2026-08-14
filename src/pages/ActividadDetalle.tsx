@@ -11,7 +11,6 @@ import { ActivityFormDialog } from "@/components/actividades/ActivityFormDialog"
 import { ActivityTasksCard } from "@/components/actividades/ActivityTasksCard";
 import { ActivityAttendeesCard } from "@/components/actividades/ActivityAttendeesCard";
 import { ActivityProvidersCard } from "@/components/actividades/ActivityProvidersCard";
-import { ActivityFilesCard } from "@/components/actividades/ActivityFilesCard";
 import { useActivity, useDeleteActivity } from "@/hooks/useActivities";
 import { useProfiles } from "@/hooks/useTasks";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -136,7 +135,6 @@ const ActividadDetalle = () => {
                 <TabsTrigger value="pendientes">Pendientes</TabsTrigger>
                 <TabsTrigger value="asistentes">Asistentes</TabsTrigger>
                 <TabsTrigger value="proveedores">Proveedores</TabsTrigger>
-                <TabsTrigger value="cotizaciones">Cotizaciones</TabsTrigger>
               </TabsList>
               <TabsContent value="pendientes" className="mt-4">
                 <ActivityTasksCard activityId={activity.id} />
@@ -146,9 +144,6 @@ const ActividadDetalle = () => {
               </TabsContent>
               <TabsContent value="proveedores" className="mt-4">
                 <ActivityProvidersCard activityId={activity.id} />
-              </TabsContent>
-              <TabsContent value="cotizaciones" className="mt-4">
-                <ActivityFilesCard activityId={activity.id} />
               </TabsContent>
             </Tabs>
           </div>

@@ -1,5 +1,6 @@
 /**
- * Archivos (cotizaciones/diseños/muestras) de una actividad + votación.
+ * Archivos (cotizaciones/diseños/muestras) LIGADOS A UN PENDIENTE (tarea) +
+ * votación. Se suben y se ven dentro de cada pendiente, no en una sección aparte.
  * Los archivos se guardan en el bucket privado `documents` (URL firmada);
  * en la BD solo vive la metadata. RLS acota por organización.
  */
@@ -26,15 +27,16 @@ export function isImageMime(mime?: string | null, name?: string) {
   return /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(name ?? "");
 }
 
-export function useActivityFiles(activityId?: string) {
+/** Archivos de un pendiente (tarea) con conteo de votos, mi-voto y URL firmada. */
+export function useTaskFiles(taskId?: string) {
   const { user } = useAuth();
   return useQuery({
-    queryKey: ["activity-files", activityId],
+    queryKey: ["task-files", taskId],
     queryFn: async (): Promise<ActivityFileWithMeta[]> => {
       const { data: files, error } = await supabase
         .from("activity_files")
         .select("*")
-        .eq("activity_id", activityId!)
+        .eq("task_id", taskId!)
         .order("created_at", { ascending: false });
       if (error) throw error;
       const list = (files ?? []) as ActivityFile[];
@@ -68,15 +70,38 @@ export function useActivityFiles(activityId?: string) {
         };
       });
     },
+    enabled: !!user && !!taskId,
+  });
+}
+
+/** Conteo de archivos por pendiente para toda una actividad (una sola consulta). */
+export function useActivityFileCounts(activityId?: string) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["activity-file-counts", activityId],
+    queryFn: async (): Promise<Record<string, number>> => {
+      const { data, error } = await supabase
+        .from("activity_files")
+        .select("task_id")
+        .eq("activity_id", activityId!);
+      if (error) throw error;
+      const map: Record<string, number> = {};
+      for (const r of data ?? []) {
+        if (r.task_id) map[r.task_id] = (map[r.task_id] ?? 0) + 1;
+      }
+      return map;
+    },
     enabled: !!user && !!activityId,
   });
 }
 
-export function useUploadActivityFile() {
+export function useUploadTaskFile() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   return useMutation({
-    mutationFn: async ({ activityId, file, kind }: { activityId: string; file: File; kind: string }) => {
+    mutationFn: async ({
+      activityId, taskId, file, kind,
+    }: { activityId: string; taskId: string; file: File; kind: string }) => {
       const { data: orgId } = await supabase.rpc("get_user_org_id", { _user_id: user!.id });
       if (!orgId) throw new Error("No se encontró la organización del usuario.");
       const safe = sanitizeStorageFileName(file.name);
@@ -88,6 +113,7 @@ export function useUploadActivityFile() {
         .from("activity_files")
         .insert({
           activity_id: activityId,
+          task_id: taskId,
           organization_id: orgId as string,
           kind,
           name: file.name,
@@ -102,7 +128,8 @@ export function useUploadActivityFile() {
       return data as ActivityFile;
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["activity-files", data.activity_id] });
+      queryClient.invalidateQueries({ queryKey: ["task-files", data.task_id] });
+      queryClient.invalidateQueries({ queryKey: ["activity-file-counts", data.activity_id] });
     },
     onError: (e: Error) => toast.error("Error al subir el archivo: " + e.message),
   });
@@ -118,7 +145,8 @@ export function useDeleteActivityFile() {
       return file.id;
     },
     onSuccess: (_id, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["activity-files", variables.file.activity_id] });
+      queryClient.invalidateQueries({ queryKey: ["task-files", variables.file.task_id] });
+      queryClient.invalidateQueries({ queryKey: ["activity-file-counts", variables.file.activity_id] });
     },
     onError: (e: Error) => toast.error("Error al eliminar el archivo: " + e.message),
   });
@@ -149,7 +177,7 @@ export function useToggleFileVote() {
       return file.id;
     },
     onSuccess: (_id, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["activity-files", variables.file.activity_id] });
+      queryClient.invalidateQueries({ queryKey: ["task-files", variables.file.task_id] });
     },
     onError: (e: Error) => toast.error("Error al votar: " + e.message),
   });

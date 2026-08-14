@@ -14,11 +14,13 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
-import { Plus, Pencil, Trash2, ListChecks } from "lucide-react";
+import { Plus, Pencil, Trash2, ListChecks, Images } from "lucide-react";
 import { formatDateMX } from "@/lib/dateUtils";
 import { TASK_STATUS_CONFIG, PRIORITY_CONFIG } from "@/lib/statusStyles";
 import { useProfiles, useCreateTask, useUpdateTask, useDeleteTask } from "@/hooks/useTasks";
 import { useActivityTasks, type ActivityTask } from "@/hooks/useActivities";
+import { useActivityFileCounts } from "@/hooks/useActivityFiles";
+import { TaskFilesDialog } from "@/components/actividades/TaskFilesDialog";
 
 type TaskStatus = keyof typeof TASK_STATUS_CONFIG;
 
@@ -157,6 +159,7 @@ export function ActivityTasksCard({ activityId }: { activityId: string }) {
   const updateTask = useUpdateTask();
   const deleteTask = useDeleteTask();
 
+  const { data: fileCounts } = useActivityFileCounts(activityId);
   const list = tasks ?? [];
   const done = list.filter((t) => t.status === "completada").length;
   const nameFor = (uid: string | null) =>
@@ -203,6 +206,7 @@ export function ActivityTasksCard({ activityId }: { activityId: string }) {
                   <TableHead>Responsable</TableHead>
                   <TableHead>Estatus</TableHead>
                   <TableHead>Fecha límite</TableHead>
+                  <TableHead>Cotizaciones</TableHead>
                   <TableHead className="w-[80px]" />
                 </TableRow>
               </TableHeader>
@@ -232,6 +236,19 @@ export function ActivityTasksCard({ activityId }: { activityId: string }) {
                       </TableCell>
                       <TableCell className={overdue ? "text-destructive font-medium" : ""}>
                         {t.due_date ? formatDateMX(t.due_date) : "—"}
+                      </TableCell>
+                      <TableCell>
+                        <TaskFilesDialog
+                          activityId={activityId}
+                          taskId={t.id}
+                          taskTitle={t.title}
+                          trigger={
+                            <Button size="sm" variant="outline" className="h-8 gap-1.5">
+                              <Images className="h-3.5 w-3.5" />
+                              {fileCounts?.[t.id] ? fileCounts[t.id] : "Subir"}
+                            </Button>
+                          }
+                        />
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center justify-end gap-1">
