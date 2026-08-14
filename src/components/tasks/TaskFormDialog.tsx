@@ -16,7 +16,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { findSimilarTasks, type SimilarTaskCandidate } from "@/lib/taskSimilarity";
 import { Badge } from "@/components/ui/badge";
-import { X, Plus, Link, ChevronDown, ChevronUp, RefreshCw, AlertTriangle } from "lucide-react";
+import { X, Plus, Link, ChevronDown, ChevronUp, RefreshCw, AlertTriangle, Forward } from "lucide-react";
 import { toast } from "sonner";
 import { AIDescriptionButton } from "@/components/tasks/AIDescriptionButton";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
@@ -45,11 +45,20 @@ interface Props {
   sourceEmailId?: string;
   sourceEmailSubject?: string;
   sourceEmailFrom?: string;
+  /** Si se provee (contexto de correo), habilita el botón "Reenviar correo" al derivar. */
+  onForwardEmail?: () => void;
   /** Callback tras crear la tarea con éxito (además de cerrar el diálogo). */
   onCreated?: () => void;
 }
 
-export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultClientId, defaultArea, defaultPhaseKey, defaultTitle, defaultDescription, defaultDueDate, defaultPriority, sourceEmailId, sourceEmailSubject, sourceEmailFrom, onCreated }: Props) {
+const ACTION_TYPE_OPTIONS = [
+  { value: "propia", label: "La hacemos nosotros", hint: "Kawiil ejecuta la tarea (normal)." },
+  { value: "seguimiento", label: "Seguimiento (un tercero la hace)", hint: "No la ejecutamos; solo monitoreamos y actualizamos." },
+  { value: "derivar", label: "Derivar / reenviar a alguien", hint: "La acción es mandar el correo a otra persona." },
+  { value: "registro", label: "Solo registrar en lista", hint: "Anotar en una lista interna, sin dueño de ejecución." },
+];
+
+export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultClientId, defaultArea, defaultPhaseKey, defaultTitle, defaultDescription, defaultDueDate, defaultPriority, sourceEmailId, sourceEmailSubject, sourceEmailFrom, onForwardEmail, onCreated }: Props) {
   const { user } = useAuth();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -65,6 +74,9 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurrencePattern, setRecurrencePattern] = useState<string>("weekly");
   const [recurrenceType, setRecurrenceType] = useState<string>("on_complete");
+  const [actionType, setActionType] = useState<string>("propia");
+  const [followUpDate, setFollowUpDate] = useState<string>("");
+  const [derivedTo, setDerivedTo] = useState<string>("");
   /** Al abrir el modal mostramos todas las opciones (descripción, cliente, proyecto…); la rápida queda en QuickTaskInput. */
   const [showAdvanced, setShowAdvanced] = useState(true);
   /** Tareas existentes similares detectadas al intentar crear (aviso de posible duplicado). */
@@ -84,6 +96,9 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
   useEffect(() => {
     if (!open) return;
     setShowAdvanced(true);
+    setActionType("propia");
+    setFollowUpDate("");
+    setDerivedTo("");
     if (user?.id) setAssignedTo(user.id);
     setDueDate(defaultDueDate || defaultDueDatePlusThreeBusinessDays());
     if (defaultArea !== undefined) setArea(defaultArea || "");
@@ -180,6 +195,9 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
         source_email_id: sourceEmailId || undefined,
         source_email_subject: sourceEmailSubject || undefined,
         source_email_from: sourceEmailFrom || undefined,
+        action_type: actionType,
+        follow_up_date: actionType === "seguimiento" && followUpDate ? followUpDate : undefined,
+        derived_to: actionType === "derivar" && derivedTo.trim() ? derivedTo.trim() : undefined,
       },
       {
         onSuccess: () => {
@@ -211,6 +229,7 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
     setDueDate(""); setAssignedTo(""); setAdditionalAssignees([]);
     setClientId(""); setProjectId(""); setDropboxLinks([]); setNewLink("");
     setIsRecurring(false); setRecurrencePattern("weekly"); setRecurrenceType("on_complete");
+    setActionType("propia"); setFollowUpDate(""); setDerivedTo("");
     setShowAdvanced(true); setDupeMatches([]);
   };
 
@@ -357,6 +376,44 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
                     <> · Próxima: <span className="text-foreground font-medium">{formatRecurrenceDate(nextRecurrencePreview)}</span></>
                   )}
                 </p>
+              </div>
+            )}
+          </div>
+
+          {/* ── Tipo de acción: qué hay que hacer con esto ── */}
+          <div className="rounded-lg border border-border/60 px-3 py-2.5 space-y-2 bg-muted/10">
+            <Label className="text-sm font-normal">¿Qué hay que hacer con esto?</Label>
+            <Select value={actionType} onValueChange={setActionType}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {ACTION_TYPE_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] text-muted-foreground">
+              {ACTION_TYPE_OPTIONS.find((o) => o.value === actionType)?.hint}
+            </p>
+
+            {actionType === "seguimiento" && (
+              <div className="pt-1">
+                <Label className="text-xs">Fecha de revisión / recordatorio</Label>
+                <Input type="date" value={followUpDate} onChange={(e) => setFollowUpDate(e.target.value)} className="h-9" />
+                <p className="text-[10.5px] text-muted-foreground mt-1">Para revisar cómo va y actualizar el estatus.</p>
+              </div>
+            )}
+
+            {actionType === "derivar" && (
+              <div className="space-y-2 pt-1">
+                <div>
+                  <Label className="text-xs">Derivar a (persona o correo)</Label>
+                  <Input value={derivedTo} onChange={(e) => setDerivedTo(e.target.value)} placeholder="nombre@ejemplo.com" className="h-9" />
+                </div>
+                {onForwardEmail && (
+                  <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5" onClick={onForwardEmail}>
+                    <Forward className="h-3.5 w-3.5" /> Reenviar correo
+                  </Button>
+                )}
               </div>
             )}
           </div>
