@@ -67,6 +67,25 @@ Deno.serve(async (req) => {
       byUser.get(uid)!.push(t);
     }
 
+    // Tareas de "seguimiento" cuya fecha de revisión ya llegó → recordatorio en la fecha (reusa el
+    // digest). Se avisa al responsable hasta que la tarea se complete/cancele.
+    const todayYmd = new Date().toISOString().slice(0, 10);
+    const { data: dueFollowUps } = await svc
+      .from("tasks")
+      .select("assigned_to, title, follow_up_date, status, action_type")
+      .eq("action_type", "seguimiento")
+      .not("follow_up_date", "is", null)
+      .lte("follow_up_date", todayYmd)
+      .not("status", "in", "(completada,cancelada)")
+      .in("assigned_to", userIds);
+    for (const t of dueFollowUps ?? []) {
+      const uid = (t as { assigned_to?: string }).assigned_to;
+      if (!uid) continue;
+      const title = `Seguimiento: ${((t as { title?: string }).title ?? "").trim() || "(sin título)"}`;
+      if (!byUser.has(uid)) byUser.set(uid, []);
+      byUser.get(uid)!.push(title);
+    }
+
     const sinceIso = new Date(Date.now() - DEDUPE_MS).toISOString();
     const { data: recentDigests } = await svc
       .from("notifications")

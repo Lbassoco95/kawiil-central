@@ -13,6 +13,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useTasks, useMyAssignedTasks, useDeleteTask, useProfiles, useUpdateTask } from "@/hooks/useTasks";
+import { TaskActionTypeBadge } from "@/components/tasks/TaskActionTypeBadge";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAssignedSteps } from "@/hooks/useAssignedSteps";
 import { useReminders } from "@/hooks/useReminders";
@@ -47,7 +48,7 @@ import {
 import { TASK_STATUS_CONFIG, STEP_STATUS_CONFIG } from "@/lib/statusStyles";
 import { isTaskClosedStatus } from "@/lib/taskStatusGroups";
 
-type StatusFilter = "mias" | "equipo" | "vencidas" | "sin_resp";
+type StatusFilter = "mias" | "equipo" | "vencidas" | "sin_resp" | "seguimiento";
 type OrderMode = "fecha" | "prioridad" | "responsable";
 type Vista = "activas" | "historial";
 
@@ -389,6 +390,10 @@ const Tareas = () => {
     () => orgOpen.filter((t) => !t.assigned_to).length,
     [orgOpen],
   );
+  const seguimientoCount = useMemo(
+    () => orgOpen.filter((t) => t.action_type === "seguimiento").length,
+    [orgOpen],
+  );
   const miasCount = mineOpen.length;
   const equipoCount = orgOpen.length;
 
@@ -404,6 +409,9 @@ const Tareas = () => {
         break;
       case "sin_resp":
         list = orgOpen.filter((t) => !t.assigned_to);
+        break;
+      case "seguimiento":
+        list = orgOpen.filter((t) => t.action_type === "seguimiento");
         break;
       case "mias":
       default:
@@ -600,6 +608,14 @@ const Tareas = () => {
               onClick={() => setStatusFilter("sin_resp")}
             >
               Sin resp.<span className="count">{sinRespCount}</span>
+            </button>
+            <button
+              type="button"
+              className={statusFilter === "seguimiento" ? "active" : ""}
+              onClick={() => setStatusFilter("seguimiento")}
+              title="Tareas de terceros que solo damos seguimiento"
+            >
+              Seguimiento<span className="count">{seguimientoCount}</span>
             </button>
           </div>
           <div className="divider" />
@@ -814,6 +830,7 @@ const Tareas = () => {
                             )}
                             {task.title}
                           </span>
+                          <TaskActionTypeBadge actionType={(task as any).action_type} className="ml-1.5 align-middle" />
                           <div className="meta">
                             {isSubtask && parentTask?.id && (
                               <>
@@ -1026,6 +1043,7 @@ const Tareas = () => {
                           >
                             {task.title}
                           </span>
+                          <TaskActionTypeBadge actionType={(task as any).action_type} className="ml-1.5 align-middle" />
                           <div className="meta">
                             {task.clients?.name && <span>{task.clients.name}</span>}
                             {task.projects?.name && (
