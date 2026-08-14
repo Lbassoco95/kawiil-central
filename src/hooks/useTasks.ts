@@ -9,6 +9,7 @@ import { createNotifications } from "@/lib/notificationHelpers";
 import { extractDropboxFilenameFromUrl } from "@/lib/dropboxLinkLabel";
 import { calculateNextOccurrenceDate, formatRecurrenceDate } from "@/lib/recurrenceUtils";
 import { assertCanRenameTask } from "@/lib/renamePermission";
+import { commentPlainText } from "@/lib/commentContent";
 
 /** Bloquea completar una tarea padre si el checklist tiene ítems abiertos o subtareas enlazadas no cerradas. */
 async function assertCanCompleteParentTask(taskId: string) {
@@ -475,7 +476,7 @@ export function useAddComment() {
       if (vars.mentions && vars.mentions.length > 0) {
         sendSlackNotification("comment_mention", {
           task_title: "Tarea",
-          comment_preview: vars.content.substring(0, 100),
+          comment_preview: commentPlainText(vars.content).substring(0, 100),
           mentioned_ids: vars.mentions,
         });
 
@@ -494,7 +495,7 @@ export function useAddComment() {
                 user_id: uid,
                 type: "mention" as const,
                 title: `${profile.full_name} te mencionó en una tarea`,
-                body: vars.content.substring(0, 200),
+                body: commentPlainText(vars.content).substring(0, 200),
                 entity_type: "task",
                 entity_id: vars.taskId,
                 source_user_id: user!.id,
@@ -512,6 +513,39 @@ export function useAddComment() {
     },
     onError: (err: Error) => {
       toast.error("Error al guardar comentario: " + err.message);
+    },
+  });
+}
+
+export function useUpdateComment() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+
+  return useMutation({
+    mutationFn: async ({
+      commentId,
+      content,
+      mentions,
+    }: {
+      commentId: string;
+      taskId: string;
+      content: string;
+      mentions?: string[];
+    }) => {
+      // Solo el autor puede editar (RLS lo refuerza además en el backend).
+      const { error } = await supabase
+        .from("task_comments")
+        .update({ content, mentions: mentions ?? [], updated_at: new Date().toISOString() })
+        .eq("id", commentId)
+        .eq("user_id", user!.id);
+      if (error) throw error;
+    },
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["task-comments", vars.taskId] });
+      toast.success("Comentario actualizado");
+    },
+    onError: (err: Error) => {
+      toast.error("Error al actualizar comentario: " + err.message);
     },
   });
 }
