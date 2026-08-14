@@ -103,6 +103,7 @@ interface Props {
 // Nested subtask dialog state
 
 import { TASK_STATUS_CONFIG, PRIORITY_CONFIG } from "@/lib/statusStyles";
+import { TaskActionTypeBadge } from "@/components/tasks/TaskActionTypeBadge";
 
 const statusLabels = TASK_STATUS_CONFIG;
 
@@ -792,6 +793,13 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
                   </>
                 )}
                 <span>Tarea</span>
+                <TaskActionTypeBadge actionType={task.action_type} className="ml-1" />
+                {task.action_type === "seguimiento" && task.follow_up_date && (
+                  <span className="text-[11px] text-muted-foreground">· revisar {formatMX(task.follow_up_date, "dd MMM")}</span>
+                )}
+                {task.action_type === "derivar" && task.derived_to && (
+                  <span className="text-[11px] text-muted-foreground">· a {task.derived_to}</span>
+                )}
                 {parentTask && (
                   <>
                     <span className="sep">›</span>

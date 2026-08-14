@@ -401,6 +401,7 @@ ${detail.body?.contentType === "html" ? origBody : `<pre style="font-family:inhe
         sourceEmailId={taskEmail?.id || undefined}
         sourceEmailSubject={taskEmail?.subject || undefined}
         sourceEmailFrom={taskEmail?.from?.emailAddress?.address || taskEmail?.from?.emailAddress?.name || undefined}
+        onForwardEmail={() => { setTaskEmail(null); handleForward(); }}
         defaultTitle={taskEmail?.subject || ""}
         defaultDescription={(() => {
           if (!taskEmail) return "";

@@ -53,6 +53,10 @@ export type Task = Tables<"tasks"> & {
   assignee_profile?: { full_name: string; email: string } | null;
   /** Tarea principal (solo se rellena para subtareas, para poder enlazarla en las listas). */
   parent_task?: { id: string; title: string | null } | null;
+  /** Tipo de acción (columnas nuevas; aún no en los tipos generados de Supabase). */
+  action_type?: string | null;
+  follow_up_date?: string | null;
+  derived_to?: string | null;
 };
 
 export type TaskComment = Tables<"task_comments"> & {
@@ -326,6 +330,10 @@ export function useCreateTask() {
       source_email_id?: string;
       source_email_subject?: string;
       source_email_from?: string;
+      // Tipo de acción: propia | seguimiento | derivar | registro (+ datos asociados).
+      action_type?: string;
+      follow_up_date?: string;
+      derived_to?: string;
     }) => {
       const { data: profile } = await supabase
         .from("profiles")
