@@ -45,9 +45,13 @@ export function formatMX(date: string | Date, pattern: string): string {
  */
 export function formatDateMX(date: string | Date | null | undefined): string {
   if (date == null || (typeof date === "string" && date.trim() === "")) return "—";
-  const d = typeof date === "string" ? new Date(date) : date;
+  // Usa toMXDate para que las fechas date-only (YYYY-MM-DD) NO se corran un día
+  // hacia atrás en CDMX (bug: `new Date("2026-08-14")` es medianoche UTC → 13 en
+  // UTC-6). toMXDate ya deja el objeto en horario de pared CDMX, así que se
+  // formatea en zona local (sin volver a aplicar timeZone) para no doble-convertir.
+  const d = toMXDate(date);
   if (isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("es-MX", { timeZone: CDMX_TZ });
+  return d.toLocaleDateString("es-MX");
 }
 
 /**

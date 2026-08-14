@@ -3,7 +3,6 @@ import { DropboxFilePicker } from "@/components/projects/DropboxFilePicker";
 import { DropboxUploadDialog } from "@/components/documents/DropboxUploadDialog";
 import { BlockTimeDialog } from "@/components/microsoft/BlockTimeDialog";
 import { DocumentPreviewDialog } from "@/components/documents/DocumentPreviewDialog";
-import { AttachmentCard } from "@/components/shared/AttachmentCard";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,7 +65,12 @@ import { mimeTypeForFile } from "@/lib/mimeFromFilename";
 import { useResolveDuplicateFilenames } from "@/hooks/useResolveDuplicateFilenames";
 import { FileDropzone } from "@/components/shared/FileDropzone";
 import { genericLimits, withLimits } from "@/lib/fileIntake/limits";
-import { MentionTextarea } from "./MentionTextarea";
+import {
+  RichCommentEditor,
+  type RichCommentEditorHandle,
+} from "./RichCommentEditor";
+import { CommentItem } from "./CommentItem";
+import { richTextIsEmpty, combineBodyAndAttachments } from "@/lib/commentContent";
 import { useProfiles } from "@/hooks/useTasks";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -75,7 +79,6 @@ import { useDeleteTask } from "@/hooks/useTasks";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { DocumentChecklistButton } from "@/components/shared/DocumentChecklistButton";
 import { createNotifications } from "@/lib/notificationHelpers";
-import { renderTextWithMentionHighlights } from "@/lib/renderMentionHighlights";
 import { useNavigate } from "react-router-dom";
 
 interface CommentAttachment {
@@ -141,6 +144,7 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
   const canRenameTask = canRenameEntity(role, task?.created_by, user?.id);
   const deleteTask = useDeleteTask();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const commentEditorRef = useRef<RichCommentEditorHandle>(null);
   const [commentText, setCommentText] = useState("");
   const [commentMentions, setCommentMentions] = useState<string[]>([]);
   const [commentAttachments, setCommentAttachments] = useState<CommentAttachment[]>([]);
@@ -448,44 +452,7 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
     updateChecklist(checklist.filter((c) => c.id !== itemId));
   };
 
-  const LINK_REGEX = /📎\s*\[([^\]]+)\]\(([^)]+)\)/g;
-
-  const renderCommentContent = (content: string): React.ReactNode => {
-    // Separa el texto de los adjuntos (📎 [nombre](url)): el texto conserva las
-    // menciones resaltadas y cada adjunto se muestra como tarjeta con vista previa
-    // y descarga (mismo diseño por tipo de archivo que la pestaña Archivos).
-    const atts: { name: string; url: string }[] = [];
-    let lastIndex = 0;
-    let linkMatch: RegExpExecArray | null;
-    const linkRegex = new RegExp(LINK_REGEX.source, "g");
-    const textParts: string[] = [];
-
-    while ((linkMatch = linkRegex.exec(content)) !== null) {
-      textParts.push(content.slice(lastIndex, linkMatch.index));
-      atts.push({ name: linkMatch[1], url: linkMatch[2] });
-      lastIndex = linkMatch.index + linkMatch[0].length;
-    }
-    textParts.push(content.slice(lastIndex));
-    const text = textParts.join("").trim();
-
-    return (
-      <>
-        {text && <div className="whitespace-pre-wrap break-words">{renderMentions(text, 0)}</div>}
-        {atts.length > 0 && (
-          <div className="mt-1.5 flex flex-col gap-1.5">
-            {atts.map((a, i) => (
-              <AttachmentCard key={i} name={a.name} url={a.url} />
-            ))}
-          </div>
-        )}
-      </>
-    );
-  };
-
   const knownNames = (orgProfiles ?? []).map((p) => p.full_name).filter(Boolean);
-
-  const renderMentions = (text: string, keyOffset: number): React.ReactNode[] =>
-    renderTextWithMentionHighlights(text, `cm-${keyOffset}`, { knownNames });
 
   // El estado se aplica de inmediato (no se difiere con "Guardar") para que el
   // selector de estado y el botón "Completar" nunca queden en estados
@@ -508,15 +475,19 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
     );
   };
 
+  const commentBodyEmpty = richTextIsEmpty(commentText);
+
   const handleSendComment = () => {
-    if (!commentText.trim() && commentAttachments.length === 0) return;
-    let finalContent = commentText;
-    if (commentAttachments.length > 0) {
-      const attachmentLines = commentAttachments.map(a => `📎 [${a.name}](${a.url})`).join("\n");
-      finalContent = finalContent ? `${finalContent}\n${attachmentLines}` : attachmentLines;
-    }
+    if (commentBodyEmpty && commentAttachments.length === 0) return;
+    const html = commentEditorRef.current?.getHtml() ?? commentText;
+    const finalContent = combineBodyAndAttachments(commentBodyEmpty ? "" : html, commentAttachments);
     addComment.mutate({ taskId, content: finalContent, mentions: commentMentions }, {
-      onSuccess: () => { setCommentText(""); setCommentMentions([]); setCommentAttachments([]); },
+      onSuccess: () => {
+        commentEditorRef.current?.clear();
+        setCommentText("");
+        setCommentMentions([]);
+        setCommentAttachments([]);
+      },
     });
   };
 
@@ -1276,22 +1247,14 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
                       <p className="text-sm text-muted-foreground text-center py-4">Sin comentarios aún</p>
                     )}
                     {comments.map((c) => (
-                      <div key={c.id} className="comment">
-                        <UserAvatar
-                          name={c.profile?.full_name}
-                          avatarUrl={c.profile?.avatar_url}
-                          userId={c.user_id}
-                          size="md"
-                          className="shrink-0"
-                        />
-                        <div className="body">
-                          <div className="head">
-                            <span className="who">{c.profile?.full_name || "Usuario"}</span>
-                            <span className="when">{formatMX(c.created_at, "dd MMM HH:mm")}</span>
-                          </div>
-                          <div className="text">{renderCommentContent(c.content)}</div>
-                        </div>
-                      </div>
+                      <CommentItem
+                        key={c.id}
+                        comment={c}
+                        taskId={taskId}
+                        currentUserId={user?.id}
+                        profiles={orgProfiles ?? []}
+                        knownNames={knownNames}
+                      />
                     ))}
                   </div>
 
@@ -1316,11 +1279,13 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
 
                   <div className="comment-composer">
                     <div className="flex-1 min-w-0">
-                      <MentionTextarea
-                        value={commentText} onChange={setCommentText} profiles={orgProfiles ?? []}
-                        placeholder="Escribe un comentario... usa @ para mencionar" rows={2}
+                      <RichCommentEditor
+                        ref={commentEditorRef}
+                        profiles={orgProfiles ?? []}
+                        placeholder="Escribe un comentario... usa @ para mencionar"
+                        onChange={setCommentText}
                         onMentionsChange={setCommentMentions}
-                        onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSendComment(); }}
+                        onSubmit={handleSendComment}
                       />
                     </div>
                     <div className="flex flex-col gap-0.5 shrink-0">
@@ -1372,7 +1337,7 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
                         </PopoverContent>
                       </Popover>
                     </div>
-                    <Button size="icon" className="h-8 w-8 shrink-0 self-end" onClick={handleSendComment} disabled={addComment.isPending || (!commentText.trim() && commentAttachments.length === 0)}>
+                    <Button size="icon" className="h-8 w-8 shrink-0 self-end" onClick={handleSendComment} disabled={addComment.isPending || (commentBodyEmpty && commentAttachments.length === 0)}>
                       <Send className="h-4 w-4" />
                     </Button>
                   </div>

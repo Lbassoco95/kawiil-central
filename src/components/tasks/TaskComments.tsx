@@ -1,18 +1,20 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useTaskDetail, useAddComment, useProfiles } from "@/hooks/useTasks";
-import { UserAvatar } from "@/components/shared/UserAvatar";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import { MentionTextarea } from "@/components/tasks/MentionTextarea";
+import {
+  RichCommentEditor,
+  type RichCommentEditorHandle,
+} from "@/components/tasks/RichCommentEditor";
+import { CommentItem } from "@/components/tasks/CommentItem";
+import { richTextIsEmpty, combineBodyAndAttachments } from "@/lib/commentContent";
 import { FileDropzone } from "@/components/shared/FileDropzone";
 import { DropboxFilePicker } from "@/components/projects/DropboxFilePicker";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { genericLimits } from "@/lib/fileIntake/limits";
-import { formatMX } from "@/lib/dateUtils";
-import { renderTextWithMentionHighlights } from "@/lib/renderMentionHighlights";
 import { extractDropboxFilenameFromUrl, getDropboxLinkDisplayLabel } from "@/lib/dropboxLinkLabel";
 import { sanitizeStorageFileName } from "@/lib/storageFilename";
-import { AttachmentCard } from "@/components/shared/AttachmentCard";
 import { Send, Link2, X } from "lucide-react";
 import { toast } from "sonner";
 
@@ -21,8 +23,6 @@ interface CommentAttachment {
   name: string;
   url: string;
 }
-
-const LINK_REGEX = /📎\s*\[([^\]]+)\]\(([^)]+)\)/g;
 
 /**
  * Comentarios de una tarea con el mismo diseño y funciones del detalle:
@@ -34,6 +34,8 @@ export function TaskComments({ taskId }: { taskId: string }) {
   const addComment = useAddComment();
   const { data: orgProfiles } = useProfiles();
 
+  const { user } = useAuth();
+  const editorRef = useRef<RichCommentEditorHandle>(null);
   const [text, setText] = useState("");
   const [mentions, setMentions] = useState<string[]>([]);
   const [attachments, setAttachments] = useState<CommentAttachment[]>([]);
@@ -44,50 +46,17 @@ export function TaskComments({ taskId }: { taskId: string }) {
   const [showDropbox, setShowDropbox] = useState(false);
 
   const knownNames = (orgProfiles ?? []).map((p) => p.full_name).filter(Boolean);
-
-  const renderMentions = (t: string, keyOffset: number): ReactNode[] =>
-    renderTextWithMentionHighlights(t, `cm-${keyOffset}`, { knownNames });
-
-  const renderCommentContent = (content: string): ReactNode => {
-    // Separa el texto de los adjuntos (📎 [nombre](url)): el texto se muestra con
-    // menciones resaltadas y cada adjunto como tarjeta con vista previa y descarga.
-    const atts: { name: string; url: string }[] = [];
-    let lastIndex = 0;
-    let m: RegExpExecArray | null;
-    const rx = new RegExp(LINK_REGEX.source, "g");
-    const textParts: string[] = [];
-    while ((m = rx.exec(content)) !== null) {
-      textParts.push(content.slice(lastIndex, m.index));
-      atts.push({ name: m[1], url: m[2] });
-      lastIndex = m.index + m[0].length;
-    }
-    textParts.push(content.slice(lastIndex));
-    const text = textParts.join("").trim();
-    return (
-      <>
-        {text && <div className="whitespace-pre-wrap break-words">{renderMentions(text, 0)}</div>}
-        {atts.length > 0 && (
-          <div className="mt-1.5 flex flex-col gap-1.5">
-            {atts.map((a, i) => (
-              <AttachmentCard key={i} name={a.name} url={a.url} />
-            ))}
-          </div>
-        )}
-      </>
-    );
-  };
+  const bodyEmpty = richTextIsEmpty(text);
 
   const send = () => {
-    if (!text.trim() && attachments.length === 0) return;
-    let finalContent = text;
-    if (attachments.length > 0) {
-      const lines = attachments.map((a) => `📎 [${a.name}](${a.url})`).join("\n");
-      finalContent = finalContent ? `${finalContent}\n${lines}` : lines;
-    }
+    if (bodyEmpty && attachments.length === 0) return;
+    const html = editorRef.current?.getHtml() ?? text;
+    const finalContent = combineBodyAndAttachments(bodyEmpty ? "" : html, attachments);
     addComment.mutate(
       { taskId, content: finalContent, mentions },
       {
         onSuccess: () => {
+          editorRef.current?.clear();
           setText("");
           setMentions([]);
           setAttachments([]);
@@ -145,22 +114,14 @@ export function TaskComments({ taskId }: { taskId: string }) {
       {comments.length > 0 && (
         <div className="comment-list max-h-[220px] overflow-y-auto">
           {comments.map((c: any) => (
-            <div key={c.id} className="comment">
-              <UserAvatar
-                name={c.profile?.full_name}
-                avatarUrl={c.profile?.avatar_url}
-                userId={c.user_id}
-                size="md"
-                className="shrink-0"
-              />
-              <div className="body">
-                <div className="head">
-                  <span className="who">{c.profile?.full_name || "Usuario"}</span>
-                  <span className="when">{formatMX(c.created_at, "dd MMM HH:mm")}</span>
-                </div>
-                <div className="text">{renderCommentContent(c.content)}</div>
-              </div>
-            </div>
+            <CommentItem
+              key={c.id}
+              comment={c}
+              taskId={taskId}
+              currentUserId={user?.id}
+              profiles={orgProfiles ?? []}
+              knownNames={knownNames}
+            />
           ))}
         </div>
       )}
@@ -190,16 +151,13 @@ export function TaskComments({ taskId }: { taskId: string }) {
 
       <div className="comment-composer">
         <div className="flex-1 min-w-0">
-          <MentionTextarea
-            value={text}
-            onChange={setText}
+          <RichCommentEditor
+            ref={editorRef}
             profiles={orgProfiles ?? []}
             placeholder="Escribe un comentario... usa @ para mencionar"
-            rows={2}
+            onChange={setText}
             onMentionsChange={setMentions}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) send();
-            }}
+            onSubmit={send}
           />
         </div>
         <div className="flex flex-col gap-0.5 shrink-0">
@@ -254,7 +212,7 @@ export function TaskComments({ taskId }: { taskId: string }) {
           size="icon"
           className="h-8 w-8 shrink-0 self-end"
           onClick={send}
-          disabled={addComment.isPending || (!text.trim() && attachments.length === 0)}
+          disabled={addComment.isPending || (bodyEmpty && attachments.length === 0)}
         >
           <Send className="h-4 w-4" />
         </Button>

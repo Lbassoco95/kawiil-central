@@ -546,7 +546,7 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
                       </Badge>
                     )}
                     {nextAction.due_date && (
-                      <span className={`text-xs ${new Date(nextAction.due_date) < today ? "text-destructive font-medium" : "text-muted-foreground"}`}>
+                      <span className={`text-xs ${nextAction.due_date.slice(0, 10) < todayYmd ? "text-destructive font-medium" : "text-muted-foreground"}`}>
                         {formatDateMX(nextAction.due_date)}
                       </span>
                     )}
@@ -686,7 +686,7 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
                     </Badge>
                   )}
                   {t.due_date && (
-                    <span className={`text-xs shrink-0 ${new Date(t.due_date) < today ? "text-destructive font-medium" : "text-muted-foreground"}`}>
+                    <span className={`text-xs shrink-0 ${t.due_date.slice(0, 10) < todayYmd ? "text-destructive font-medium" : "text-muted-foreground"}`}>
                       {formatDateMX(t.due_date)}
                     </span>
                   )}
