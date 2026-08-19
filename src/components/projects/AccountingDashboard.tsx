@@ -73,6 +73,7 @@ import { MoffinSatCiecSection } from "./MoffinSatCiecSection";
 import { MoffinFacturasDialog } from "./MoffinFacturasDialog";
 import { MOFFIN_USE_SOLUTIONS } from "@/lib/moffinUseSolutions";
 import { ComposeEmailDialog } from "@/components/microsoft/ComposeEmailDialog";
+import { useAccountingEmailStepSync } from "@/hooks/useAccountingEmailStepSync";
 
 type MoffinConsultType = "lista_69b" | "constancia_situacion_fiscal" | "opinion_cumplimiento";
 
@@ -353,6 +354,7 @@ export function AccountingDashboard({
   const profileMap = useMemo(() => new Map(profiles.map((p) => [p.user_id, p.full_name])), [profiles]);
 
   const [composeOpen, setComposeOpen] = useState(false);
+  const syncAccountingStep = useAccountingEmailStepSync();
 
   const { data: clientInfo } = useQuery({
     queryKey: ["accounting-dashboard-client", clientId],
@@ -724,6 +726,8 @@ export function AccountingDashboard({
               clientId,
               projectId,
             }}
+            /* Envío de plantilla contable → cierra el paso del periodo. */
+            onAfterSend={(info) => void syncAccountingStep(info)}
           />
         </div>
       ) : null}

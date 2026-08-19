@@ -34,6 +34,8 @@ import {
   useMailFolders,
 } from "@/hooks/useMicrosoft";
 import { useReplyForwardCompose } from "@/hooks/useReplyForwardCompose";
+import { useAccountingEmailStepSync } from "@/hooks/useAccountingEmailStepSync";
+import { mergeSentAccountingEmailInfo, type SentAccountingEmailInfo } from "@/lib/accountingEmailStepSync";
 import { ReplyForwardDialog } from "@/components/microsoft/ReplyForwardDialog";
 import {
   getAvatarGradient,
@@ -113,10 +115,24 @@ export function MailPreview({ emailId, onCompose: _onCompose, onCreateTask, onTr
     typeof detail?.conversationId === "string" ? detail.conversationId : null;
   const { data: threadEmails = [] } = useEmailConversation(conversationId);
 
+  /**
+   * Plantilla contable aplicada en responder/reenviar: al enviarse, cierra el
+   * paso del periodo (ver `src/lib/accountingEmailStepSync.ts`).
+   */
+  const syncAccountingStep = useAccountingEmailStepSync();
+  const replyTemplateInfoRef = useRef<SentAccountingEmailInfo | null>(null);
+
   const replyForward = useReplyForwardCompose({
     messageId: emailId,
     emailDetail: detail as Record<string, unknown> | null | undefined,
     threadEmails: threadEmails as Record<string, unknown>[],
+    onSuccess: () => {
+      const info = replyTemplateInfoRef.current;
+      replyTemplateInfoRef.current = null;
+      if (info?.templateCategory) {
+        void syncAccountingStep({ ...info, sentAt: new Date().toISOString() });
+      }
+    },
   });
 
   const [showAllRecipients, setShowAllRecipients] = useState(false);
@@ -595,7 +611,10 @@ export function MailPreview({ emailId, onCompose: _onCompose, onCreateTask, onTr
         <ReplyForwardDialog
           open
           onOpenChange={(open) => {
-            if (!open) replyForward.resetAction();
+            if (!open) {
+              replyTemplateInfoRef.current = null;
+              replyForward.resetAction();
+            }
           }}
           action={emailAction}
           emailDetail={detail as Record<string, unknown>}
@@ -628,6 +647,9 @@ export function MailPreview({ emailId, onCompose: _onCompose, onCreateTask, onTr
           onRequestReadReceiptChange={replyForward.setRequestReadReceipt}
           receiptsDisabled={!replyForward.draftId}
           showAccountingTemplates
+          onTemplateApplied={(info) => {
+            replyTemplateInfoRef.current = mergeSentAccountingEmailInfo(replyTemplateInfoRef.current, info);
+          }}
         />
       )}
     </div>

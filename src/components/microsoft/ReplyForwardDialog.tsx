@@ -42,6 +42,7 @@ import { useEmailComposeAiAssist } from "@/hooks/useEmailComposeAiAssist";
 import { AccountingTemplatePicker } from "@/components/accounting/AccountingTemplatePicker";
 import { TemplatePickerBoundary } from "@/components/accounting/TemplatePickerBoundary";
 import type { ComposeDefaultTemplateContext } from "@/components/microsoft/ComposeEmailDialog";
+import type { SentAccountingEmailInfo } from "@/lib/accountingEmailStepSync";
 
 export type ReplyForwardAction = "reply" | "reply-all" | "forward";
 
@@ -89,6 +90,12 @@ export interface ReplyForwardDialogProps {
   receiptsDisabled: boolean;
   defaultTemplateContext?: ComposeDefaultTemplateContext;
   showAccountingTemplates?: boolean;
+  /**
+   * Se dispara al insertar una plantilla contable. El padre guarda la info y,
+   * tras el envío exitoso, cierra el paso del periodo con
+   * `useAccountingEmailStepSync` (ver `src/lib/accountingEmailStepSync.ts`).
+   */
+  onTemplateApplied?: (info: SentAccountingEmailInfo) => void;
 }
 
 export function ReplyForwardDialog({
@@ -128,6 +135,7 @@ export function ReplyForwardDialog({
   receiptsDisabled,
   defaultTemplateContext,
   showAccountingTemplates = true,
+  onTemplateApplied,
 }: ReplyForwardDialogProps) {
   const [scheduleAt, setScheduleAt] = useState("");
   const [scheduledOpen, setScheduledOpen] = useState(false);
@@ -239,12 +247,20 @@ export function ReplyForwardDialog({
     );
 
   const applyAccountingTemplate = useCallback(
-    (result: { subject: string; bodyHtml: string }) => {
+    (result: { subject: string; bodyHtml: string; template?: { category?: string | null } }) => {
       void result.subject;
       editorRef.current?.setHtml(result.bodyHtml);
       setDraftHtml(result.bodyHtml);
+      onTemplateApplied?.({
+        templateCategory: result.template?.category ?? null,
+        clientId: defaultTemplateContext?.clientId ?? null,
+        clientName: defaultTemplateContext?.razon_social ?? null,
+        projectId: defaultTemplateContext?.projectId ?? null,
+        periodId: defaultTemplateContext?.periodId ?? null,
+        subject: subject || null,
+      });
     },
-    [setDraftHtml],
+    [setDraftHtml, onTemplateApplied, defaultTemplateContext, subject],
   );
 
   const iaToolbarButton = (
@@ -255,6 +271,7 @@ export function ReplyForwardDialog({
             onApply={applyAccountingTemplate}
             defaults={defaultTemplateContext as Record<string, string> | undefined}
             onClientSelected={(client) => {
+              onTemplateApplied?.({ clientId: client.id, clientName: client.name });
               if (!client.email) return;
               if (action === "forward" && !forwardTo.trim()) setForwardTo(client.email);
               if ((action === "reply" || action === "reply-all") && !replyTo.trim()) setReplyTo(client.email);

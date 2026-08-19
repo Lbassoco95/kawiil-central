@@ -136,6 +136,8 @@ import { buildThreadContextForAi } from "@/lib/emailThreadContext";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { supabase } from "@/integrations/supabase/client";
+import { useAccountingEmailStepSync } from "@/hooks/useAccountingEmailStepSync";
+import { mergeSentAccountingEmailInfo, type SentAccountingEmailInfo } from "@/lib/accountingEmailStepSync";
 import { toast } from "sonner";
 import {
   emailsToGraphRecipients,
@@ -1497,6 +1499,33 @@ export function EmailView() {
     }
   };
 
+  /**
+   * Envío de plantilla contable → cierra «Envío de acuses al cliente» del
+   * periodo. La lógica vive en `useAccountingEmailStepSync` (compartida con
+   * CorreoView) para que no se pierda al modificar la sección de Correo.
+   */
+  const syncAccountingStep = useAccountingEmailStepSync();
+  /** Plantilla aplicada en el diálogo de responder/reenviar, pendiente de envío. */
+  const replyTemplateInfoRef = useRef<SentAccountingEmailInfo | null>(null);
+
+  /**
+   * Cierre de la ruta responder/reenviar: si se aplicó una plantilla contable,
+   * cierra el paso del periodo antes de limpiar el diálogo.
+   */
+  const finishReplySend = (recipients: string[], attachmentNames: string[]) => {
+    const info = replyTemplateInfoRef.current;
+    replyTemplateInfoRef.current = null;
+    if (info?.templateCategory) {
+      void syncAccountingStep({
+        ...info,
+        recipients,
+        attachmentNames,
+        sentAt: new Date().toISOString(),
+      });
+    }
+    resetAction();
+  };
+
   const handleSendReply = async () => {
     if (!selectedEmailId) return;
     if (emailAction === "forward") {
@@ -1521,6 +1550,7 @@ export function EmailView() {
           return;
         }
       }
+      const forwardAttachmentNames = replyFiles.map((f) => f.name);
       if (draftId) {
         sendDraft.mutate(
           {
@@ -1533,7 +1563,7 @@ export function EmailView() {
             requestDeliveryReceipt,
             requestReadReceipt,
           },
-          { onSuccess: resetAction }
+          { onSuccess: () => finishReplySend(forwardToList, forwardAttachmentNames) }
         );
       } else {
         if (forwardCcList.length > 0 || forwardBccList.length > 0) {
@@ -1549,7 +1579,7 @@ export function EmailView() {
             toRecipients: forwardToList,
             attachments,
           },
-          { onSuccess: resetAction }
+          { onSuccess: () => finishReplySend(forwardToList, forwardAttachmentNames) }
         );
       }
       return;
@@ -1576,6 +1606,7 @@ export function EmailView() {
           return;
         }
       }
+      const replyAttachmentNames = replyFiles.map((f) => f.name);
       sendDraft.mutate(
         {
           draftId,
@@ -1587,12 +1618,12 @@ export function EmailView() {
           requestDeliveryReceipt,
           requestReadReceipt,
         },
-        { onSuccess: resetAction }
+        { onSuccess: () => finishReplySend(replyToList, replyAttachmentNames) }
       );
     } else {
       replyEmail.mutate(
         { messageId: selectedEmailId, comment: stripTags(draftHtml), replyAll: emailAction === "reply-all" },
-        { onSuccess: resetAction }
+        { onSuccess: () => finishReplySend(parseRecipients(replyTo), []) }
       );
     }
   };
@@ -1885,66 +1916,6 @@ export function EmailView() {
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [movePopoverOpen]);
-
-  const handleAfterSendTemplate = useCallback(async (info: { templateCategory?: string; clientId?: string; clientName?: string }) => {
-    const declarationCategories = ["pagos_provisionales", "declaracion_ceros", "envio_anuales", "previos_provisionales", "isn_imss", "envio_nominas"];
-    if (!info.templateCategory || !declarationCategories.includes(info.templateCategory)) return;
-    if (!info.clientId) return;
-
-    try {
-      const { data: projects } = await supabase
-        .from("projects")
-        .select("id")
-        .eq("client_id", info.clientId);
-
-      if (!projects?.length) return;
-
-      const now = new Date();
-      for (const project of projects) {
-        const { data: period } = await supabase
-          .from("accounting_periods")
-          .select("id, steps")
-          .eq("project_id", project.id)
-          .eq("year", now.getFullYear())
-          .eq("month", now.getMonth() + 1)
-          .maybeSingle();
-
-        if (!period) continue;
-
-        const steps = period.steps as Array<{ key: string; completed: boolean; label: string }>;
-        const step = steps.find((s) => s.key === "envio_acuses");
-        if (!step || step.completed) continue;
-
-        toast.success(
-          `Plantilla enviada a ${info.clientName || "cliente"}. ¿Marcar "${step.label}" como completado?`,
-          {
-            action: {
-              label: "Marcar completo",
-              onClick: async () => {
-                const updatedSteps = steps.map((s) =>
-                  s.key === "envio_acuses"
-                    ? { ...s, completed: true, completed_at: new Date().toISOString(), completed_by: user?.id, step_status: "completado" }
-                    : s,
-                );
-                const { error } = await supabase
-                  .from("accounting_periods")
-                  .update({ steps: updatedSteps as any })
-                  .eq("id", period.id);
-                if (!error) {
-                  queryClient.invalidateQueries({ queryKey: ["accounting-periods", project.id] });
-                  toast.success("Paso marcado como completado");
-                }
-              },
-            },
-            duration: 10000,
-          },
-        );
-        break;
-      }
-    } catch {
-      // silent fail - no interrumpir el flujo de correo
-    }
-  }, [user?.id, queryClient]);
 
   const isSending =
     replyEmail.isPending ||
@@ -3727,7 +3698,10 @@ export function EmailView() {
         <ReplyForwardDialog
           open
           onOpenChange={(o) => {
-            if (!o) resetAction();
+            if (!o) {
+              replyTemplateInfoRef.current = null;
+              resetAction();
+            }
           }}
           action={emailAction}
           emailDetail={(emailDetail ?? {}) as Record<string, unknown>}
@@ -3761,9 +3735,12 @@ export function EmailView() {
           onRequestDeliveryReceiptChange={setRequestDeliveryReceipt}
           onRequestReadReceiptChange={setRequestReadReceipt}
           receiptsDisabled={!draftId}
+          onTemplateApplied={(info) => {
+            replyTemplateInfoRef.current = mergeSentAccountingEmailInfo(replyTemplateInfoRef.current, info);
+          }}
         />
       )}
-      <ComposeEmailDialog open={composeOpen} onOpenChange={setComposeOpen} onAfterSend={handleAfterSendTemplate} />
+      <ComposeEmailDialog open={composeOpen} onOpenChange={setComposeOpen} onAfterSend={(info) => void syncAccountingStep(info)} />
 
       <CreateMailRuleDialog
         open={mailRuleDialogOpen}
