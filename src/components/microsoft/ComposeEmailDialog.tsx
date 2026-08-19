@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/microsoft/RichTextEditor";
 import { useSendNewEmail, useOutlookComposeSignature, useMicrosoftConnection, useCreateReplyDraft, useSendDraft } from "@/hooks/useMicrosoft";
+import type { SentAccountingEmailInfo } from "@/lib/accountingEmailStepSync";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { useMailDirectoryContacts, useSyncMailDirectory } from "@/hooks/useMailDirectory";
 import { ComposeRecipientInput } from "@/components/microsoft/ComposeRecipientInput";
@@ -78,6 +79,8 @@ export interface ComposeDefaultTemplateContext {
   razon_social?: string;
   clientId?: string;
   projectId?: string;
+  /** Periodo contable exacto cuando el correo se compone desde un periodo. */
+  periodId?: string;
   [key: string]: string | undefined;
 }
 
@@ -101,8 +104,13 @@ interface ComposeEmailDialogProps {
   defaultTemplateContext?: ComposeDefaultTemplateContext;
   /** Muestra el selector de plantillas del área contable. Por defecto true. */
   showAccountingTemplates?: boolean;
-  /** Callback fired after a successful send, with info about the applied template (if any). */
-  onAfterSend?: (info: { templateCategory?: string; clientId?: string; clientName?: string }) => void;
+  /**
+   * Se dispara después de CADA envío exitoso (cuenta principal, cuentas
+   * vinculadas y respuesta enganchada al hilo) cuando se aplicó una plantilla
+   * contable. Sirve para cerrar el paso del periodo — ver el contrato en
+   * `src/lib/accountingEmailStepSync.ts`.
+   */
+  onAfterSend?: (info: SentAccountingEmailInfo) => void;
 }
 
 /** Firma limpia (nombre + correo) para cuentas vinculadas, cuando no hay firma guardada de esa cuenta. */
@@ -154,11 +162,7 @@ export function ComposeEmailDialog({
   const [customSched, setCustomSched] = useState("");
   const [minimized, setMinimized] = useState(false);
   const [expanded, setExpanded] = useState(false);
-  const [appliedTemplateInfo, setAppliedTemplateInfo] = useState<{
-    templateCategory?: string;
-    clientId?: string;
-    clientName?: string;
-  } | null>(null);
+  const [appliedTemplateInfo, setAppliedTemplateInfo] = useState<SentAccountingEmailInfo | null>(null);
   const lastInstructionRef = useRef("");
   const bodyRef = useRef("");
   const editorRef = useRef<RichTextEditorHandle>(null);
@@ -355,6 +359,33 @@ export function ComposeEmailDialog({
     }
   }, [subject, to]);
 
+  /**
+   * Aviso de "se envió un correo con plantilla contable" → cierra el paso del
+   * periodo. DEBE llamarse en TODAS las rutas de envío exitosas: cuenta
+   * principal, cuentas vinculadas (Outlook/Gmail) y respuesta enganchada al
+   * hilo. Si agregas otra ruta de envío, llámalo ahí también
+   * (ver `src/lib/accountingEmailStepSync.ts`).
+   */
+  const emitAfterSend = useCallback(
+    (recipients: string[], attachmentNames: string[]) => {
+      const info = appliedTemplateInfo;
+      if (!info?.templateCategory || !onAfterSend) return;
+      onAfterSend({
+        ...info,
+        clientId: info.clientId ?? defaultTemplateContext?.clientId ?? null,
+        clientName: info.clientName ?? defaultTemplateContext?.razon_social ?? null,
+        projectId: info.projectId ?? defaultTemplateContext?.projectId ?? null,
+        periodId: info.periodId ?? defaultTemplateContext?.periodId ?? null,
+        subject: subject || null,
+        recipients,
+        attachmentNames,
+        sentAt: new Date().toISOString(),
+      });
+      setAppliedTemplateInfo(null);
+    },
+    [appliedTemplateInfo, onAfterSend, defaultTemplateContext, subject],
+  );
+
   const handleSend = async () => {
     const toList = parseRecipients(to);
     const ccList = parseRecipients(cc);
@@ -374,6 +405,7 @@ export function ComposeEmailDialog({
         return;
       }
     }
+    const attachmentNames = pendingFiles.map((f) => f.name);
 
     // Envío desde una cuenta VINCULADA (Outlook/Gmail) elegida en "De": se envía por esa cuenta
     // (send-as), no por la principal. Los adjuntos aún no se soportan por esta vía.
@@ -402,6 +434,7 @@ export function ComposeEmailDialog({
           });
         }
         toast.success(`Enviado desde ${fromOption.email}`);
+        emitAfterSend(toList, attachmentNames);
         onOpenChange(false);
         return;
       } catch (err) {
@@ -430,6 +463,7 @@ export function ComposeEmailDialog({
             requestDeliveryReceipt,
             requestReadReceipt,
           });
+          emitAfterSend(toList, attachmentNames);
           onOpenChange(false);
           return;
         }
@@ -449,13 +483,15 @@ export function ComposeEmailDialog({
       requestReadReceipt,
     });
 
+    emitAfterSend(toList, attachmentNames);
     onOpenChange(false);
-    if (appliedTemplateInfo?.templateCategory && onAfterSend) {
-      onAfterSend(appliedTemplateInfo);
-    }
-    setAppliedTemplateInfo(null);
   };
 
+  /**
+   * Envío programado: NO dispara `emitAfterSend` a propósito — el correo aún no
+   * sale, así que el paso del periodo no debe cerrarse hasta que el job lo
+   * envíe.
+   */
   const handleScheduleSend = async (when: Date) => {
     const toList = parseRecipients(to);
     if (!toList.length) { toast.error("Añade al menos un destinatario"); return; }
