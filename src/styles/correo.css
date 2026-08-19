@@ -1407,3 +1407,85 @@
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ─── Vista previa de adjuntos (Word / Excel / CSV) ────────────────
+   El HTML lo generan mammoth (Word) y SheetJS (Excel), así que se estiliza
+   por etiqueta: sin esto las tablas salen sin bordes y el documento se ve roto. */
+.mail-attach-doc {
+  color: #1f2937;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.mail-attach-doc > :first-child { margin-top: 0; }
+
+.mail-attach-doc p { margin: 0 0 10px; }
+
+.mail-attach-doc h1, .mail-attach-doc h2, .mail-attach-doc h3,
+.mail-attach-doc h4, .mail-attach-doc h5, .mail-attach-doc h6 {
+  margin: 18px 0 8px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.mail-attach-doc h1 { font-size: 20px; }
+.mail-attach-doc h2 { font-size: 17px; }
+.mail-attach-doc h3 { font-size: 15px; }
+
+.mail-attach-doc ul, .mail-attach-doc ol { margin: 0 0 10px; padding-left: 22px; }
+.mail-attach-doc li { margin-bottom: 4px; }
+
+.mail-attach-doc a { color: #2563eb; text-decoration: underline; }
+
+.mail-attach-doc img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 10px 0;
+}
+
+.mail-attach-doc blockquote {
+  margin: 10px 0;
+  padding-left: 12px;
+  border-left: 3px solid #d1d5db;
+  color: #4b5563;
+}
+
+.mail-attach-doc hr { border: 0; border-top: 1px solid #e5e7eb; margin: 16px 0; }
+
+/* Nombre de la hoja cuando el Excel trae varias. */
+.mail-attach-doc .sheet-title {
+  margin: 20px 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #374151;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Las hojas anchas hacen scroll dentro de su propio contenedor. */
+.mail-attach-doc .sheet-scroll { overflow-x: auto; max-width: 100%; }
+
+.mail-attach-doc table {
+  border-collapse: collapse;
+  font-size: 12px;
+  margin: 0 0 12px;
+}
+
+.mail-attach-doc th, .mail-attach-doc td {
+  border: 1px solid #d1d5db;
+  padding: 5px 9px;
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.mail-attach-doc th { background: #f3f4f6; font-weight: 600; }
+
+/* SheetJS repite la primera fila como encabezado visual. */
+.mail-attach-doc tr:first-child td { background: #f9fafb; font-weight: 600; }
+
+/* SheetJS marca el tipo de cada celda: los números se leen mejor alineados a la derecha. */
+.mail-attach-doc td[data-t="n"] {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
