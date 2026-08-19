@@ -1,12 +1,12 @@
 import { cn } from "@/lib/utils";
-import { ArrowLeft, Reply, ReplyAll, Forward, Archive, Trash2, CheckSquare, Filter, Tag, FolderInput, ChevronRight, MessageSquare, CalendarPlus, Paperclip, Download, FileArchive, FileText, FileSpreadsheet, Image as ImageIcon, File, Eye, type LucideIcon } from "lucide-react";
+import { ArrowLeft, Reply, ReplyAll, Forward, Archive, Trash2, CheckSquare, Filter, Tag, FolderInput, ChevronRight, MessageSquare, CalendarPlus, Paperclip, Download, FileArchive, FileText, FileSpreadsheet, Image as ImageIcon, File, Eye, X, ExternalLink, Loader2, Lock, type LucideIcon } from "lucide-react";
 import { useEmailDetail, useArchiveEmail, useDeleteEmail, useMoveEmail, useMailFolders, useMicrosoftConnection } from "@/hooks/useMicrosoft";
 import { useLinkedOutlookEmailDetail, useGmailEmailDetail, useRoutedEmailAttachments, fetchRoutedAttachmentBlob, useLinkedAccounts, type EmailAttachmentMeta } from "@/hooks/useLinkedAccounts";
 import { useResolvedEmailHtml } from "@/hooks/useResolvedEmailHtml";
 import { MailLabelPicker } from "./MailLabelPicker";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { inferMimeFromFileName, type OutlookAttachment } from "@/lib/outlookEmailMedia";
@@ -15,6 +15,47 @@ import { toast } from "sonner";
 
 // Extensiones con vista previa in-app (además de PDF e imágenes).
 const PREVIEWABLE_RE = /\.(pdf|png|jpe?g|gif|webp|svg|bmp|docx|xlsx|xls|csv|tsv|txt|md|json|log|xml|ya?ml|html?)$/i;
+
+/** Estado de la vista previa in-app de un adjunto. */
+type PreviewState =
+  | { name: string; downloadUrl: string; kind: "pdf" | "image"; url: string }
+  | { name: string; downloadUrl: string; kind: "html"; html: string }
+  | { name: string; downloadUrl: string; kind: "text"; text: string };
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/**
+ * Decodifica un CSV/TSV a texto. Excel en Windows los exporta en Windows-1252 y
+ * sin este respaldo los acentos salen como "Ã±" en vez de "ñ".
+ */
+async function decodeDelimitedText(blob: Blob): Promise<string> {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return new TextDecoder("windows-1252").decode(bytes);
+  }
+}
+
+/**
+ * Sanitiza el HTML que generan mammoth (Word) y SheetJS (Excel) antes de pintarlo.
+ * Se permiten los atributos de tabla (colspan/rowspan) y las imágenes en data: URI
+ * que mammoth incrusta, porque sin ellos el documento se ve roto.
+ */
+function sanitizeDocHtml(html: string): string {
+  return DOMPurify.sanitize(html, {
+    USE_PROFILES: { html: true },
+    ADD_ATTR: ["colspan", "rowspan", "align", "valign", "target"],
+    FORBID_TAGS: ["style", "script", "iframe", "object", "embed", "form", "input"],
+    FORBID_ATTR: ["srcset"],
+  });
+}
 
 interface EmailShape {
   id?: string;
@@ -61,6 +102,23 @@ function fileKind(name: string): { label: string; Icon: LucideIcon; color: strin
   if (/\.(png|jpe?g|gif|webp|svg|bmp|tiff?)$/.test(n)) return { label: "Imagen", Icon: ImageIcon, color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-500/12" };
   if (/\.txt$/.test(n)) return { label: "Texto", Icon: FileText, color: "text-slate-500 dark:text-slate-400", bg: "bg-slate-500/12" };
   return { label: "Archivo", Icon: File, color: "text-muted-foreground", bg: "bg-muted" };
+}
+
+/** Documento válido pero sin contenido legible (Word vacío, hoja en blanco): ofrecer la descarga. */
+function EmptyPreview({ name, downloadUrl }: { name: string; downloadUrl: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-3 text-center px-6">
+      <File className="w-8 h-8 text-white/70" />
+      <p className="text-[13px] text-white/85">No hay contenido que mostrar de este archivo.</p>
+      <a
+        href={downloadUrl}
+        download={name}
+        className="h-8 px-4 inline-flex items-center gap-1.5 rounded-full bg-white/15 hover:bg-white/25 text-white text-[12px] font-semibold transition-colors"
+      >
+        <Download className="w-3.5 h-3.5" /> Descargar el original
+      </a>
+    </div>
+  );
 }
 
 function AttachmentChip({ messageId, att, onPreview }: { messageId: string; att: OutlookAttachment; onPreview?: (att: OutlookAttachment) => void }) {
@@ -173,58 +231,112 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onReply,
     [attachments],
   );
   // Vista previa in-app de adjuntos (PDF, imágenes, Word, Excel/CSV, texto) sin salir de la pantalla.
-  const [preview, setPreview] = useState<
-    { name: string; downloadUrl: string; kind: "pdf" | "image"; url: string }
-    | { name: string; downloadUrl: string; kind: "html"; html: string }
-    | { name: string; downloadUrl: string; kind: "text"; text: string }
-    | null
-  >(null);
+  const [preview, setPreview] = useState<PreviewState | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  // Token para ignorar cargas que quedaron atrás (el usuario cerró o abrió otro adjunto).
+  const previewToken = useRef(0);
+  // URL de objeto vigente: se libera al cerrar, al abrir otro adjunto y al desmontar.
+  const previewUrl = useRef<string | null>(null);
+  const releasePreviewUrl = useCallback(() => {
+    if (previewUrl.current) {
+      URL.revokeObjectURL(previewUrl.current);
+      previewUrl.current = null;
+    }
+  }, []);
+  const closePreview = useCallback(() => {
+    previewToken.current += 1;
+    releasePreviewUrl();
+    setPreview(null);
+    setPreviewLoading(false);
+  }, [releasePreviewUrl]);
   const openPreview = useCallback(async (att: OutlookAttachment) => {
     if (!emailId) return;
     const name = att.name || "adjunto";
     if (!PREVIEWABLE_RE.test(name)) return;
     const ext = (name.split(".").pop() || "").toLowerCase();
+    // Abrir otro adjunto invalida la carga anterior y libera su URL.
+    const token = ++previewToken.current;
+    releasePreviewUrl();
+    setPreview(null);
     setPreviewLoading(true);
     try {
       const r = await fetchRoutedAttachmentBlob(emailId, att as unknown as EmailAttachmentMeta);
+      if (previewToken.current !== token) return;
       // URL de descarga (por si el usuario quiere el archivo original desde la vista previa).
       const fromApi = (r.contentType || "").toLowerCase();
       const inferred = inferMimeFromFileName(name);
       const mime = fromApi && fromApi !== "application/octet-stream" ? r.contentType : inferred || "application/octet-stream";
-      const downloadUrl = URL.createObjectURL(new Blob([r.blob], { type: mime }));
+      const blob = r.blob.type === mime ? r.blob : new Blob([r.blob], { type: mime });
 
+      let next: PreviewState;
       if (ext === "pdf") {
-        setPreview({ name, downloadUrl, kind: "pdf", url: downloadUrl });
+        next = { name, downloadUrl: "", kind: "pdf", url: "" };
       } else if (/^(png|jpe?g|gif|webp|svg|bmp)$/i.test(ext)) {
-        setPreview({ name, downloadUrl, kind: "image", url: downloadUrl });
+        next = { name, downloadUrl: "", kind: "image", url: "" };
       } else if (ext === "docx") {
         const mammoth = await import("mammoth");
-        const arrayBuffer = await r.blob.arrayBuffer();
+        const arrayBuffer = await blob.arrayBuffer();
         const { value } = await mammoth.convertToHtml({ arrayBuffer });
-        setPreview({ name, downloadUrl, kind: "html", html: DOMPurify.sanitize(value, { USE_PROFILES: { html: true } }) });
+        next = { name, downloadUrl: "", kind: "html", html: sanitizeDocHtml(value) };
       } else if (ext === "xlsx" || ext === "xls" || ext === "csv" || ext === "tsv") {
         const XLSX = await import("xlsx");
-        const arrayBuffer = await r.blob.arrayBuffer();
-        const wb = XLSX.read(arrayBuffer, { type: "array" });
+        // cellDates + dateNF: las fechas se ven como fechas en formato local,
+        // no como números de serie ni en formato m/d/yy.
+        const readOpts = { cellDates: true, dateNF: "dd/mm/yyyy" } as const;
+        const wb = ext === "csv" || ext === "tsv"
+          ? XLSX.read(await decodeDelimitedText(blob), {
+              ...readOpts,
+              type: "string",
+              ...(ext === "tsv" ? { FS: "\t" } : {}),
+            })
+          : XLSX.read(await blob.arrayBuffer(), { ...readOpts, type: "array" });
         const html = wb.SheetNames
-          .map((n) => `<h3 style="margin:12px 0 4px;font-size:13px;font-weight:600">${n}</h3>${XLSX.utils.sheet_to_html(wb.Sheets[n])}`)
+          .map((sheetName) => {
+            const table = XLSX.utils.sheet_to_html(wb.Sheets[sheetName], { header: "", footer: "" });
+            const title = wb.SheetNames.length > 1
+              ? `<h3 class="sheet-title">${escapeHtml(sheetName)}</h3>`
+              : "";
+            return `${title}<div class="sheet-scroll">${table}</div>`;
+          })
           .join("");
-        setPreview({ name, downloadUrl, kind: "html", html: DOMPurify.sanitize(html, { USE_PROFILES: { html: true } }) });
+        next = { name, downloadUrl: "", kind: "html", html: sanitizeDocHtml(html) };
       } else {
         // Texto plano / código / datos.
-        const text = await r.blob.text();
-        setPreview({ name, downloadUrl, kind: "text", text });
+        next = { name, downloadUrl: "", kind: "text", text: await blob.text() };
       }
+
+      if (previewToken.current !== token) return;
+      const downloadUrl = URL.createObjectURL(blob);
+      previewUrl.current = downloadUrl;
+      setPreview(
+        next.kind === "pdf" || next.kind === "image"
+          ? { ...next, downloadUrl, url: downloadUrl }
+          : { ...next, downloadUrl },
+      );
     } catch (e) {
-      toast.error("No se pudo abrir la vista previa: " + (e instanceof Error ? e.message : "Error desconocido"));
+      if (previewToken.current === token) {
+        setPreview(null);
+        toast.error("No se pudo abrir la vista previa: " + (e instanceof Error ? e.message : "Error desconocido"));
+      }
     } finally {
-      setPreviewLoading(false);
+      if (previewToken.current === token) setPreviewLoading(false);
     }
-  }, [emailId]);
-  const closePreview = useCallback(() => {
-    setPreview((p) => { if (p) URL.revokeObjectURL(p.downloadUrl); return null; });
-  }, []);
+  }, [emailId, releasePreviewUrl]);
+  // Cerrar la vista previa con Escape, y liberar la URL al desmontar.
+  useEffect(() => {
+    if (!preview && !previewLoading) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        closePreview();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [preview, previewLoading, closePreview]);
+  useEffect(() => releasePreviewUrl, [releasePreviewUrl]);
+  // Al cambiar de correo, la vista previa del anterior ya no aplica.
+  useEffect(() => { closePreview(); }, [emailId, closePreview]);
 
   const { html: resolvedHtml } = useResolvedEmailHtml(
     emailId ?? undefined,
@@ -550,12 +662,29 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onReply,
         )}
       </div>
 
-      {/* Vista previa in-app del adjunto (PDF / imagen) — sin salir de la pantalla */}
+      {/* Vista previa in-app del adjunto (PDF, imagen, Word, Excel/CSV, texto) — sin salir de la pantalla */}
       {(preview || previewLoading) && (
-        <div className="fixed inset-0 z-[130] flex flex-col bg-black/75 animate-in fade-in-0 duration-150" onClick={closePreview}>
+        <div
+          className="fixed inset-0 z-[130] flex flex-col bg-black/80 animate-in fade-in-0 duration-150"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Vista previa de ${preview?.name ?? "adjunto"}`}
+          onClick={closePreview}
+        >
           <div className="flex items-center justify-between gap-3 px-4 py-2.5 text-white shrink-0" onClick={(e) => e.stopPropagation()}>
             <span className="text-[13px] font-medium truncate">{preview?.name ?? "Cargando…"}</span>
             <div className="flex items-center gap-1.5 shrink-0">
+              {preview && (preview.kind === "pdf" || preview.kind === "image") && (
+                <a
+                  href={preview.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-white/15 hover:bg-white/25 text-[12px] font-medium transition-colors"
+                  title="Abrir en una pestaña nueva"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" /> Abrir aparte
+                </a>
+              )}
               {preview && (
                 <a
                   href={preview.downloadUrl}
@@ -569,7 +698,7 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onReply,
                 type="button"
                 onClick={closePreview}
                 className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/15 hover:bg-white/25 transition-colors"
-                title="Cerrar"
+                title="Cerrar (Esc)"
                 aria-label="Cerrar vista previa"
               >
                 <X className="w-4 h-4" />
@@ -578,20 +707,44 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onReply,
           </div>
           <div className="flex-1 min-h-0 p-3 sm:p-6 flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
             {previewLoading && !preview ? (
-              <div className="text-white/80 text-[13px]">Cargando vista previa…</div>
+              <div className="flex items-center gap-2 text-white/85 text-[13px]">
+                <Loader2 className="w-4 h-4 animate-spin" /> Cargando vista previa…
+              </div>
             ) : preview?.kind === "pdf" ? (
-              <iframe src={preview.url} title={preview.name} className="w-full h-full rounded-lg bg-white" />
+              <object data={preview.url} type="application/pdf" aria-label={preview.name} className="w-full h-full rounded-lg bg-white">
+                {/* Safari/iOS no siempre pinta un PDF de blob: incrustado — ahí queda el respaldo. */}
+                <div className="w-full h-full flex flex-col items-center justify-center gap-3 rounded-lg bg-white text-center px-6">
+                  <FileText className="w-8 h-8 text-red-500" />
+                  <p className="text-[13px] text-gray-700">Este navegador no puede mostrar el PDF aquí.</p>
+                  <a
+                    href={preview.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="h-8 px-4 inline-flex items-center gap-1.5 rounded-full bg-primary text-primary-foreground text-[12px] font-semibold"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" /> Abrir en una pestaña nueva
+                  </a>
+                </div>
+              </object>
             ) : preview?.kind === "image" ? (
               <img src={preview.url} alt={preview.name} className="max-w-full max-h-full object-contain rounded-lg" />
             ) : preview?.kind === "html" ? (
-              <div className="w-full h-full overflow-auto rounded-lg bg-white text-black">
-                <div
-                  className="mx-auto max-w-3xl p-6 text-[13px] leading-relaxed [&_table]:border-collapse [&_td]:border [&_td]:border-gray-300 [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-gray-300 [&_th]:px-2 [&_th]:py-1 [&_img]:max-w-full"
-                  dangerouslySetInnerHTML={{ __html: preview.html }}
-                />
-              </div>
+              preview.html.trim() ? (
+                <div className="w-full h-full overflow-auto rounded-lg bg-white text-black">
+                  <div
+                    className="mail-attach-doc mx-auto w-fit min-w-full max-w-[1400px] p-6 text-[13px] leading-relaxed"
+                    dangerouslySetInnerHTML={{ __html: preview.html }}
+                  />
+                </div>
+              ) : (
+                <EmptyPreview name={preview.name} downloadUrl={preview.downloadUrl} />
+              )
             ) : preview?.kind === "text" ? (
-              <pre className="w-full h-full overflow-auto rounded-lg bg-white text-black p-4 text-[12px] leading-relaxed whitespace-pre-wrap break-words">{preview.text}</pre>
+              preview.text.trim() ? (
+                <pre className="w-full h-full overflow-auto rounded-lg bg-white text-black p-4 text-[12px] leading-relaxed whitespace-pre-wrap break-words">{preview.text}</pre>
+              ) : (
+                <EmptyPreview name={preview.name} downloadUrl={preview.downloadUrl} />
+              )
             ) : null}
           </div>
         </div>
