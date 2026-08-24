@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import DOMPurify from "dompurify";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
-import { useLeadEmailLog, useSyncInboxEmails } from "@/hooks/usePipeline";
+import { useImportLeadEmails, useLeadEmailLog, useSyncInboxEmails } from "@/hooks/usePipeline";
 import type { Tables } from "@/integrations/supabase/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +21,7 @@ import {
   MousePointer,
   RefreshCw,
   Clock,
+  MailSearch,
 } from "lucide-react";
 import { SendEmailModal, type ReplyToEmail } from "@/components/pipeline/modals/SendEmailModal";
 
@@ -230,6 +231,7 @@ export function LeadEmailPanel({ leadId, leadEmail, leadName }: Props) {
   const [replyTo, setReplyTo] = useState<ReplyToEmail | null>(null);
   const { data: emails = [], isLoading } = useLeadEmailLog(leadId);
   const syncMutation = useSyncInboxEmails();
+  const importMutation = useImportLeadEmails();
 
   const grouped = useMemo(() => groupByConversation(emails), [emails]);
   const mailboxLabel = "Kawiil";
@@ -263,6 +265,32 @@ export function LeadEmailPanel({ leadId, leadEmail, leadName }: Props) {
           Correo electrónico
         </CardTitle>
         <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            type="button"
+            disabled={!leadEmail || importMutation.isPending}
+            onClick={() =>
+              importMutation.mutate(
+                { leadId, email: leadEmail },
+                {
+                  onSuccess: (data) => {
+                    const n = typeof data?.imported === "number" ? data.imported : 0;
+                    toast.success(
+                      n > 0
+                        ? `Se migraron ${n} correo(s) del buzón a este lead`
+                        : "No hay correos nuevos de este prospecto en el buzón",
+                    );
+                  },
+                  onError: (e: Error) => toast.error(e.message || "Error al buscar en el buzón"),
+                },
+              )
+            }
+            title="Buscar en el buzón los correos de este prospecto y migrarlos al lead"
+          >
+            <MailSearch className={`h-4 w-4 ${importMutation.isPending ? "animate-pulse" : ""}`} />
+            <span className="ml-1 hidden text-xs sm:inline">Buscar en buzón</span>
+          </Button>
           <Button
             variant="outline"
             size="sm"

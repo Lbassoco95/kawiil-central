@@ -176,6 +176,37 @@ export function useSyncInboxEmails() {
   });
 }
 
+/**
+ * Busca en el buzón (bandeja + enviados) los correos del prospecto y los migra
+ * al lead, para retomar el seguimiento de conversaciones que ya existían fuera
+ * del pipeline.
+ */
+export function useImportLeadEmails() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: { leadId: string; email?: string | null }) => {
+      const { data, error } = await supabase.functions.invoke("import-lead-emails", {
+        body: { lead_id: vars.leadId, email: vars.email || undefined },
+      });
+      if (error) throw error;
+      const res = data as {
+        ok?: boolean;
+        imported?: number;
+        skipped?: number;
+        examined?: number;
+        error?: string;
+      };
+      if (res?.error) throw new Error(res.error);
+      return res;
+    },
+    onSuccess: (_d, v) => {
+      qc.invalidateQueries({ queryKey: pipelineQueryKeys.emailLog(v.leadId) });
+      qc.invalidateQueries({ queryKey: pipelineQueryKeys.activities(v.leadId) });
+      qc.invalidateQueries({ queryKey: pipelineQueryKeys.lead(v.leadId) });
+    },
+  });
+}
+
 export function useEmailTemplates() {
   return useQuery({
     queryKey: pipelineQueryKeys.templates,
