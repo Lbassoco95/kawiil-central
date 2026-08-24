@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import type { Json } from "@/integrations/supabase/types";
 import { renderTextWithMentionHighlights } from "@/lib/renderMentionHighlights";
+import { useProfiles } from "@/hooks/useTasks";
 
 interface Activity {
   id: string;
@@ -122,6 +123,17 @@ function getActivityDescription(type: string, metadata: Record<string, unknown> 
 }
 
 export function LeadActivityTimeline({ activities, tasks }: Props) {
+  const { data: profiles = [] } = useProfiles();
+
+  /** Nombre del usuario que registró cada actividad (para saber quién da seguimiento). */
+  const nameByUserId = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const p of profiles) {
+      if (p.user_id) m.set(p.user_id, p.full_name || p.email || "Usuario");
+    }
+    return m;
+  }, [profiles]);
+
   const pendingTasks = useMemo(
     () => tasks.filter((t) => !t.is_completed).sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime()),
     [tasks],
@@ -183,6 +195,7 @@ export function LeadActivityTimeline({ activities, tasks }: Props) {
             const meta = a.metadata as Record<string, unknown> | null;
             const description = getActivityDescription(a.type, meta);
             const isImportant = a.type === "note" && meta?.is_important;
+            const author = a.user_id ? nameByUserId.get(a.user_id) || "Usuario" : null;
 
             return (
               <div key={a.id} className="flex gap-3 relative pb-3">
@@ -198,6 +211,11 @@ export function LeadActivityTimeline({ activities, tasks }: Props) {
                     <span className="text-[11px] text-muted-foreground">
                       {formatRelativeTime(a.created_at)}
                     </span>
+                    {author ? (
+                      <span className="truncate text-[11px] text-muted-foreground">
+                        · por <strong className="font-medium text-foreground/80">{author}</strong>
+                      </span>
+                    ) : null}
                   </div>
                   {description && (
                     <p className="text-xs text-muted-foreground mt-0.5 break-words">

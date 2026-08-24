@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   DndContext,
   DragEndEvent,
@@ -20,10 +20,21 @@ import {
 } from "@/hooks/usePipeline";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { Plus, Flame, Sparkles, ArrowRight, Filter } from "lucide-react";
+import {
+  Plus,
+  Flame,
+  Sparkles,
+  ArrowRight,
+  Filter,
+  Mail,
+  X,
+  CheckSquare,
+  ArrowRightLeft,
+} from "lucide-react";
+import { BulkEmailModal } from "@/components/pipeline/modals/BulkEmailModal";
 import {
   Dialog,
   DialogContent,
@@ -33,6 +44,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
@@ -63,7 +81,19 @@ function getTaskIndicator(summary: LeadTaskSummary | undefined) {
   return null;
 }
 
-function LeadCard({ lead, stage, taskSummary }: { lead: Lead; stage: PipelineStage | undefined; taskSummary?: LeadTaskSummary }) {
+function LeadCard({
+  lead,
+  stage,
+  taskSummary,
+  selected,
+  onToggleSelected,
+}: {
+  lead: Lead;
+  stage: PipelineStage | undefined;
+  taskSummary?: LeadTaskSummary;
+  selected: boolean;
+  onToggleSelected: (leadId: string) => void;
+}) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: lead.id,
     data: { lead },
@@ -87,7 +117,12 @@ function LeadCard({ lead, stage, taskSummary }: { lead: Lead; stage: PipelineSta
 
   return (
     <Card
-      className="overflow-hidden border-border/50 bg-card shadow-sm"
+      className={cn(
+        // `w-full min-w-0` evita que un nombre largo estire la tarjeta más allá
+        // del ancho de la columna (eso empujaba el pie de la tarjeta fuera de vista).
+        "w-full min-w-0 max-w-full overflow-hidden border-border/50 bg-card shadow-sm",
+        selected && "ring-2 ring-primary ring-offset-1",
+      )}
       style={{ borderLeftWidth: 4, borderLeftColor: stageColor }}
     >
       <div
@@ -149,13 +184,28 @@ function LeadCard({ lead, stage, taskSummary }: { lead: Lead; stage: PipelineSta
           </div>
         </CardContent>
       </div>
-      <div className="border-t border-border/40 bg-muted/20 px-2 py-1.5 backdrop-blur-sm">
+      {/* Pie de tarjeta: siempre visible (selección + abrir ficha). */}
+      <div className="flex w-full min-w-0 items-center gap-1 border-t border-border/40 bg-muted/20 px-2 py-1.5 backdrop-blur-sm">
+        <label
+          className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-1 py-1 text-[11px] font-medium text-muted-foreground hover:bg-muted/60"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          title={`Seleccionar ${lead.full_name}`}
+        >
+          <Checkbox
+            checked={selected}
+            onCheckedChange={() => onToggleSelected(lead.id)}
+            aria-label={`Seleccionar ${lead.full_name}`}
+            className="h-3.5 w-3.5"
+          />
+          <span className="hidden sm:inline">Sel.</span>
+        </label>
         <Link
           to={`/pipeline/leads/${lead.id}`}
-          className="inline-flex w-full items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-semibold text-primary hover:bg-primary/10 transition-colors"
+          className="inline-flex min-w-0 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-1 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/10"
           onPointerDown={(e) => e.stopPropagation()}
         >
-          <ArrowRight className="h-3 w-3" aria-hidden />
+          <ArrowRight className="h-3 w-3 shrink-0" aria-hidden />
           Ver tarjeta
         </Link>
       </div>
@@ -169,14 +219,21 @@ function StageColumn({
   tasksByLead,
   sumMxn,
   onAddLead,
+  selectedIds,
+  onToggleSelected,
+  onToggleStageSelection,
 }: {
   stage: PipelineStage;
   leads: Lead[];
   tasksByLead: Map<string, LeadTaskSummary>;
   sumMxn: number;
   onAddLead: (stageId: string) => void;
+  selectedIds: Set<string>;
+  onToggleSelected: (leadId: string) => void;
+  onToggleStageSelection: (leadIds: string[], select: boolean) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
+  const allSelected = leads.length > 0 && leads.every((l) => selectedIds.has(l.id));
 
   return (
     <div className="flex flex-col min-w-[280px] max-w-[320px] flex-1 h-[min(72vh,680px)]">
@@ -205,6 +262,19 @@ function StageColumn({
             </span>
             <button
               type="button"
+              onClick={() => onToggleStageSelection(leads.map((l) => l.id), !allSelected)}
+              disabled={leads.length === 0}
+              className={cn(
+                "inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted/70 hover:text-foreground disabled:opacity-40",
+                allSelected && "bg-primary/10 text-primary",
+              )}
+              title={allSelected ? `Quitar selección de ${stage.name}` : `Seleccionar todos en ${stage.name}`}
+              aria-label={allSelected ? `Quitar selección de ${stage.name}` : `Seleccionar todos en ${stage.name}`}
+            >
+              <CheckSquare className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
               onClick={() => onAddLead(stage.id)}
               className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted/70 hover:text-foreground"
               title={`Agregar lead a ${stage.name}`}
@@ -222,10 +292,20 @@ function StageColumn({
           isOver && "ring-2 ring-primary ring-offset-2",
         )}
       >
-        <ScrollArea className="h-full pr-2">
-          <div className="flex flex-col gap-2 pb-4">
+        {/* Scroll nativo: el viewport de Radix ScrollArea usa `display:table`,
+            lo que dejaba que las tarjetas crecieran más que la columna y el
+            botón "Ver tarjeta" quedara recortado fuera del área visible. */}
+        <div className="h-full w-full overflow-x-hidden overflow-y-auto pr-1">
+          <div className="flex w-full min-w-0 flex-col gap-2 pb-4">
             {leads.map((l) => (
-              <LeadCard key={l.id} lead={l} stage={stage} taskSummary={tasksByLead.get(l.id)} />
+              <LeadCard
+                key={l.id}
+                lead={l}
+                stage={stage}
+                taskSummary={tasksByLead.get(l.id)}
+                selected={selectedIds.has(l.id)}
+                onToggleSelected={onToggleSelected}
+              />
             ))}
             {leads.length === 0 ? (
               <div className="rounded-md border border-dashed border-border/60 px-3 py-6 text-center">
@@ -233,7 +313,7 @@ function StageColumn({
               </div>
             ) : null}
           </div>
-        </ScrollArea>
+        </div>
       </div>
     </div>
   );
@@ -363,6 +443,9 @@ export default function PipelineBoard() {
   const [filter, setFilter] = useState<BoardFilter>("all");
   const [newLeadOpen, setNewLeadOpen] = useState(false);
   const [newLeadStageId, setNewLeadStageId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkEmailOpen, setBulkEmailOpen] = useState(false);
+  const [bulkMoving, setBulkMoving] = useState(false);
   const moveStage = useMoveLeadStage();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -404,6 +487,65 @@ export default function PipelineBoard() {
         return byQuery;
     }
   }, [leadsRaw, pipelineQ, filter, stages, currentUserId]);
+
+  const toggleSelected = useCallback((leadId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(leadId)) next.delete(leadId);
+      else next.add(leadId);
+      return next;
+    });
+  }, []);
+
+  const toggleStageSelection = useCallback((leadIds: string[], select: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const id of leadIds) {
+        if (select) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
+
+  /** Solo los leads visibles con el filtro/búsqueda actual. */
+  const selectedLeads = useMemo(
+    () => leads.filter((l) => selectedIds.has(l.id)),
+    [leads, selectedIds],
+  );
+
+  const bulkMoveToStage = async (stageId: string) => {
+    if (selectedLeads.length === 0) return;
+    const pending = selectedLeads.filter((l) => l.stage_id !== stageId);
+    if (pending.length === 0) {
+      toast.info("Los leads seleccionados ya están en esa etapa");
+      return;
+    }
+    setBulkMoving(true);
+    let moved = 0;
+    const errors: string[] = [];
+    for (const lead of pending) {
+      try {
+        await moveStage.mutateAsync({ leadId: lead.id, newStageId: stageId });
+        moved++;
+      } catch (e: unknown) {
+        errors.push(`${lead.full_name}: ${e instanceof Error ? e.message : "error"}`);
+      }
+    }
+    setBulkMoving(false);
+    if (moved > 0) {
+      toast.success(
+        errors.length === 0
+          ? `${moved} lead(s) movido(s) de etapa`
+          : `${moved} movido(s); ${errors.length} con error`,
+      );
+      clearSelection();
+    } else {
+      toast.error(errors[0] || "No se pudo mover ningún lead");
+    }
+  };
 
   const stageAgg = useMemo(() => aggregateStageValues(leads), [leads]);
 
@@ -541,6 +683,42 @@ export default function PipelineBoard() {
           Búsqueda activa: se muestran <strong>{leads.length}</strong> lead(s) que coinciden.
         </p>
       ) : null}
+      {selectedLeads.length > 0 ? (
+        <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-3 py-2 shadow-sm backdrop-blur-sm">
+          <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary">
+            <CheckSquare className="h-4 w-4" />
+            {selectedLeads.length} seleccionado(s)
+          </span>
+          <span className="text-[11px] text-muted-foreground">
+            {selectedLeads.filter((l) => (l.email || "").trim()).length} con correo
+          </span>
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <Button size="sm" onClick={() => setBulkEmailOpen(true)}>
+              <Mail className="mr-1 h-4 w-4" />
+              Enviar correo
+            </Button>
+            <Select value="" onValueChange={(v) => void bulkMoveToStage(v)} disabled={bulkMoving}>
+              <SelectTrigger className="h-8 w-[190px] text-xs">
+                <span className="inline-flex items-center gap-1.5">
+                  <ArrowRightLeft className="h-3.5 w-3.5" />
+                  <SelectValue placeholder={bulkMoving ? "Moviendo…" : "Mover a etapa…"} />
+                </span>
+              </SelectTrigger>
+              <SelectContent className="max-h-72">
+                {stages.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button size="sm" variant="ghost" onClick={clearSelection}>
+              <X className="mr-1 h-4 w-4" />
+              Limpiar
+            </Button>
+          </div>
+        </div>
+      ) : null}
       <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={onDragEnd}>
         <div className="flex gap-3 overflow-x-auto pb-4 items-stretch">
           {stages.map((stage) => (
@@ -551,6 +729,9 @@ export default function PipelineBoard() {
               tasksByLead={tasksByLead}
               sumMxn={stageAgg.get(stage.id)?.sumMxn ?? 0}
               onAddLead={openNewLead}
+              selectedIds={selectedIds}
+              onToggleSelected={toggleSelected}
+              onToggleStageSelection={toggleStageSelection}
             />
           ))}
         </div>
@@ -561,6 +742,19 @@ export default function PipelineBoard() {
         open={newLeadOpen}
         onOpenChange={setNewLeadOpen}
       />
+      {bulkEmailOpen ? (
+        <BulkEmailModal
+          open={bulkEmailOpen}
+          onClose={() => setBulkEmailOpen(false)}
+          leads={selectedLeads.map((l) => ({
+            id: l.id,
+            full_name: l.full_name,
+            email: l.email,
+            company_name: l.company_name,
+          }))}
+          onSent={clearSelection}
+        />
+      ) : null}
     </div>
   );
 }
