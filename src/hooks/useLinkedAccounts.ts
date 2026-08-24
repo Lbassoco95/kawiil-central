@@ -606,6 +606,81 @@ export function useDeleteLinkedEvent() {
   });
 }
 
+// ─── Categorías NATIVAS por cuenta (masterCategories de Outlook) ────────────────
+// Una sola fuente de categorías, ligada a cada cuenta conectada y sincronizada con
+// su bandeja. accountId === "microsoft-primary" es la cuenta principal (Kawiil).
+
+const PRIMARY_MS_ACCOUNT_ID = "microsoft-primary";
+
+export interface AccountCategory {
+  id: string;
+  displayName: string;
+  color?: string;
+  accountId: string;
+}
+
+/** Categorías nativas de TODAS las cuentas Microsoft conectadas (principal + Outlook vinculadas). */
+export function useAccountCategories() {
+  const { user } = useAuth();
+  const { data: linked = [] } = useLinkedAccounts();
+  const outlookAccounts = linked.filter((a) => a.provider === "microsoft" && a.status !== "disconnected");
+  const acctKey = outlookAccounts.map((a) => a.id).sort().join(",");
+  return useQuery({
+    queryKey: ["account-categories", acctKey],
+    enabled: !!user,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async (): Promise<AccountCategory[]> => {
+      const out: AccountCategory[] = [];
+      const { data: primary } = await supabase.functions.invoke("microsoft-api", { body: { action: "outlook-categories" } });
+      if (Array.isArray(primary)) {
+        for (const c of primary) out.push({ id: c.id, displayName: c.displayName, color: c.color, accountId: PRIMARY_MS_ACCOUNT_ID });
+      }
+      for (const acc of outlookAccounts) {
+        try {
+          const { data } = await supabase.functions.invoke("outlook-account-api", { body: { action: "outlook-categories", params: { accountId: acc.id } } });
+          for (const c of (data?.value ?? [])) out.push({ id: c.id, displayName: c.displayName, color: c.color, accountId: acc.id });
+        } catch { /* cuenta sin acceso: se omite */ }
+      }
+      return out;
+    },
+  });
+}
+
+/** Crea una categoría nativa en la cuenta elegida (principal u Outlook vinculada). */
+export function useCreateAccountCategory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ accountId, displayName }: { accountId: string; displayName: string }): Promise<AccountCategory | null> => {
+      const isPrimary = accountId === PRIMARY_MS_ACCOUNT_ID;
+      const { data, error } = await supabase.functions.invoke(isPrimary ? "microsoft-api" : "outlook-account-api", {
+        body: { action: "create-outlook-category", params: isPrimary ? { displayName } : { accountId, displayName } },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data ? { id: data.id, displayName: data.displayName, color: data.color, accountId } : null;
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["account-categories"] }); toast.success("Categoría creada"); },
+    onError: (e: Error) => toast.error("No se pudo crear la categoría: " + e.message),
+  });
+}
+
+/** Elimina una categoría nativa de la cuenta indicada. */
+export function useDeleteAccountCategory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ accountId, id }: { accountId: string; id: string }) => {
+      const isPrimary = accountId === PRIMARY_MS_ACCOUNT_ID;
+      const { data, error } = await supabase.functions.invoke(isPrimary ? "microsoft-api" : "outlook-account-api", {
+        body: { action: "delete-outlook-category", params: isPrimary ? { id } : { accountId, id } },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["account-categories"] }); toast.success("Categoría eliminada"); },
+    onError: (e: Error) => toast.error("No se pudo eliminar: " + e.message),
+  });
+}
+
 // ─── Account color utility ────────────────────────────────────────────────────
 const LINKED_ACCOUNT_COLORS = [
   "hsl(210 100% 47%)",
