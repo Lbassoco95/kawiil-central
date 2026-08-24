@@ -38,7 +38,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { ArrowLeft, Sparkles, Plane, Landmark, User, StickyNote, Info } from "lucide-react";
+import { ArrowLeft, Sparkles, Plane, Landmark, User, StickyNote, Info, Handshake } from "lucide-react";
 import { KAWIIL_AI_GRADIENT, KAWIIL_AI_HEADER_BG } from "@/lib/kawiilAi";
 import { useEffect, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -48,6 +48,8 @@ import { LeadFollowUpNotes } from "@/components/pipeline/LeadFollowUpNotes";
 import { LeadSavioPromotionCard } from "@/components/pipeline/LeadSavioPromotionCard";
 import { formatMxnShort } from "@/lib/pipelineFormat";
 import { SERVICE_LABELS } from "@/lib/serviceLabels";
+import { usePipelinePartners } from "@/hooks/usePartners";
+import { estimateCommission, formatArrangement } from "@/lib/partnerArrangement";
 
 const priorityOptions = [
   { value: "urgent", label: "Urgente" },
@@ -125,6 +127,9 @@ const schema = z.object({
   stage_id: z.string().uuid(),
   priority: z.enum(["urgent", "high", "medium", "low"]),
   service_type: z.string().optional().nullable(),
+  // Atribución a partner / convenio
+  partner_id: z.string().optional().nullable(),
+  partner_notes: z.string().optional().nullable(),
   // Softlanding fields
   country_origin: z.string().optional().nullable(),
   entity_type: z.string().optional().nullable(),
@@ -165,6 +170,9 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
+/** Columnas que sólo existen tras aplicar la migración de partners. */
+const PARTNER_COLUMNS = ["partner_id", "partner_notes"] as const;
+
 /** Columnas que sólo existen tras aplicar la migración de servicio/constitución. */
 const CONSTITUCION_COLUMNS = [
   "constitucion_denominacion_1",
@@ -184,7 +192,7 @@ const CONSTITUCION_COLUMNS = [
 ] as const;
 
 function isMissingColumnError(message: string): boolean {
-  return /service_type|constitucion_|schema cache|column .* does not exist/i.test(message);
+  return /service_type|constitucion_|partner_id|partner_notes|schema cache|column .* does not exist/i.test(message);
 }
 
 // ─── Formularios por servicio ────────────────────────────────────────────────
@@ -486,6 +494,8 @@ export default function LeadDetailPage() {
       stage_id: lead.stage_id,
       priority: lead.priority as FormValues["priority"],
       service_type: (leadAny.service_type as string) || null,
+      partner_id: (leadAny.partner_id as string) || null,
+      partner_notes: (leadAny.partner_notes as string) || null,
       country_origin: (leadAny.country_origin as string) || null,
       entity_type: (leadAny.entity_type as string) || null,
       industry: (leadAny.industry as string) || null,
@@ -514,7 +524,19 @@ export default function LeadDetailPage() {
     });
   }, [lead, form]);
 
+  const { data: partners = [] } = usePipelinePartners();
   const serviceType = form.watch("service_type");
+  const partnerId = form.watch("partner_id");
+  const selectedPartner = useMemo(
+    () => partners.find((p) => p.id === partnerId) || null,
+    [partners, partnerId],
+  );
+  /** Comisión que le tocaría al partner con el valor estimado capturado. */
+  const partnerCommission = useMemo(() => {
+    if (!selectedPartner) return null;
+    const value = form.getValues("estimated_value");
+    return estimateCommission(selectedPartner, typeof value === "number" ? value : null);
+  }, [selectedPartner, form]);
   const showSoftlanding = serviceType === "softlanding";
   const showConstitucion =
     serviceType === "constitucion_nacional" || serviceType === "softlanding";
@@ -538,6 +560,8 @@ export default function LeadDetailPage() {
     // Columnas que pueden no existir todavía en la base (migraciones pendientes).
     const extras: Record<string, unknown> = {
       service_type: vals.service_type || null,
+      partner_id: vals.partner_id || null,
+      partner_notes: vals.partner_notes || null,
       country_origin: vals.country_origin || null,
       entity_type: vals.entity_type || null,
       industry: vals.industry || null,
@@ -575,12 +599,14 @@ export default function LeadDetailPage() {
       const fallback = { ...extras };
       delete fallback.service_type;
       for (const c of CONSTITUCION_COLUMNS) delete fallback[c];
+      for (const c of PARTNER_COLUMNS) delete fallback[c];
       try {
         await updateLead.mutateAsync({ ...base, ...(fallback as Record<string, never>) });
         toast.warning(
           "Se guardó lo demás, pero faltan columnas en la base. Ejecuta la migración " +
-            "20260824120000_lead_service_type_and_constitucion.sql en Supabase para guardar " +
-            "tipo de servicio y datos de Constitución.",
+            "20260824120000_lead_service_type_and_constitucion.sql y " +
+            "20260824190000_pipeline_partners_commissions.sql en Supabase para guardar " +
+            "tipo de servicio, datos de Constitución y el partner que refirió al lead.",
         );
       } catch (e2: unknown) {
         toast.error(e2 instanceof Error ? e2.message : "Error al guardar");
@@ -818,6 +844,71 @@ export default function LeadDetailPage() {
                         <Label>Campaña</Label>
                         <Input {...form.register("campaign_name")} />
                       </div>
+                    </div>
+
+                    {/* Atribución: ¿llegó por un partner o convenio? */}
+                    <div className="space-y-2 rounded-lg border border-border/60 bg-muted/20 p-2.5">
+                      <Label className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        <Handshake className="h-3.5 w-3.5" />
+                        Viene de (partner / convenio)
+                      </Label>
+                      <Select
+                        value={partnerId || "__none__"}
+                        onValueChange={(v) =>
+                          form.setValue("partner_id", v === "__none__" ? null : v, {
+                            shouldDirty: true,
+                          })
+                        }
+                      >
+                        <SelectTrigger className="bg-background">
+                          <SelectValue placeholder="Canal propio (sin partner)" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-72">
+                          <SelectItem value="__none__">Canal propio (sin partner)</SelectItem>
+                          {partners.map((p) => (
+                            <SelectItem key={p.id} value={p.id}>
+                              {p.name}
+                              {p.status !== "activo" ? ` (${p.status})` : ""}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {selectedPartner ? (
+                        <>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <Badge className="bg-primary/10 text-primary hover:bg-primary/15">
+                              {formatArrangement(selectedPartner)}
+                            </Badge>
+                            {partnerCommission ? (
+                              <span className="text-[11px] text-muted-foreground">
+                                {partnerCommission.manual
+                                  ? "Comisión a capturar a mano al cerrar"
+                                  : partnerCommission.amount != null
+                                    ? `Comisión estimada: ${formatMxnShort(partnerCommission.amount)} ${partnerCommission.currency}`
+                                    : "Captura el valor estimado para calcular la comisión"}
+                              </span>
+                            ) : null}
+                          </div>
+                          <div>
+                            <Label className="text-xs">Nota de la referencia</Label>
+                            <Textarea
+                              rows={2}
+                              className="bg-background"
+                              placeholder="Quién lo refirió, qué se acordó en este caso…"
+                              {...form.register("partner_notes")}
+                            />
+                          </div>
+                          <p className="text-[11px] text-muted-foreground">
+                            La comisión se devenga automáticamente cuando el lead llega a la etapa
+                            “Cerrado”; se administra en la pestaña <strong>Partners</strong>.
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-[11px] text-muted-foreground">
+                          Si no aparece el partner, regístralo primero en la pestaña{" "}
+                          <strong>Partners</strong> del módulo.
+                        </p>
+                      )}
                     </div>
                     <div>
                       <Label>Valor estimado al cierre (MXN)</Label>

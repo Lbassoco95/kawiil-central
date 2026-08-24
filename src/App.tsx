@@ -42,6 +42,7 @@ import LeadDetailPage from "./pages/pipeline/LeadDetailPage";
 import EmailTemplates from "./pages/pipeline/EmailTemplates";
 import EmailSequences from "./pages/pipeline/EmailSequences";
 import PipelineSettings from "./pages/pipeline/PipelineSettings";
+import PipelinePartners from "./pages/pipeline/PipelinePartners";
 import PipelineActivities from "./pages/pipeline/PipelineActivities";
 import EmailTemplatesContabilidad from "./pages/contabilidad/EmailTemplatesContabilidad";
 
@@ -129,6 +130,7 @@ const App = () => (
                 <Route path="activities" element={<PipelineActivities />} />
                 <Route path="templates" element={<EmailTemplates />} />
                 <Route path="sequences" element={<EmailSequences />} />
+                <Route path="partners" element={<PipelinePartners />} />
                 <Route path="settings" element={<PipelineSettings />} />
               </Route>
               <Route path="/contabilidad/plantillas" element={<ProtectedRoute><EmailTemplatesContabilidad /></ProtectedRoute>} />
