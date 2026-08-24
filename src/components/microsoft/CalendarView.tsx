@@ -621,6 +621,8 @@ export function CalendarView({
   const deleteCategory = useDeleteCalendarCategory();
   const toggleEventTag = useToggleEventTag();
   const [newCategoryName, setNewCategoryName] = useState("");
+  // Nombre para crear una etiqueta directamente desde el diálogo del evento.
+  const [inlineCatName, setInlineCatName] = useState("");
   const [activeKawiilCatIds, setActiveKawiilCatIds] = useState<string[]>(() => {
     if (typeof window === "undefined") return [];
     try { return JSON.parse(window.localStorage.getItem("kawiil-cal-kawiilcat-filters") || "[]"); } catch { return []; }
@@ -686,6 +688,29 @@ export function CalendarView({
         : current.filter((c) => c !== cat.name);
       routedUpdateEvent.mutate({ eventId: ev.id, calendarId: ev.calendarId, payload: { categories: next } });
     }
+  };
+
+  // Crea una etiqueta desde el diálogo del evento y la aplica al instante (o solo la
+  // aplica si ya existe una con ese nombre). Evita tener que ir al panel derecho.
+  const createAndApplyTag = () => {
+    const name = inlineCatName.trim();
+    if (!name || !selectedEventId) return;
+    const ev = cachedEvent || eventDetail;
+    const existing = kawiilCatByName.get(name.toLowerCase());
+    if (existing) {
+      if (!(eventTags[selectedEventId] || []).includes(existing.id)) handleToggleEventTag(ev, existing, true);
+      setInlineCatName("");
+      return;
+    }
+    createCategory.mutate(
+      { name, color: paletteColorFor(name) },
+      {
+        onSuccess: (created) => {
+          if (created?.id) handleToggleEventTag(ev, { id: created.id, name: created.name }, true);
+          setInlineCatName("");
+        },
+      },
+    );
   };
 
   const allEvents = useMemo(() => {
@@ -2685,6 +2710,41 @@ export function CalendarView({
                 <Label>Asunto</Label>
                 <Input value={editForm.subject} onChange={(e) => setEditForm({ ...editForm, subject: e.target.value })} />
               </div>
+              {/* Categoría/Etiqueta del evento — arriba y visible. Lista universal Kawiil:
+                  aplica a cualquier cuenta, colorea el evento y persiste. Se puede crear al vuelo. */}
+              {selectedEventId && (
+                <div className="space-y-2">
+                  <Label>Categoría <span className="text-[10px] font-normal text-muted-foreground">· identifica de qué es el evento (aplica a cualquier cuenta)</span></Label>
+                  {kawiilCategories.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {kawiilCategories.map((cat) => {
+                        const checked = (eventTags[selectedEventId] || []).includes(cat.id);
+                        return (
+                          <label key={cat.id} className={cn("flex items-center gap-1.5 text-sm cursor-pointer rounded-full border px-2.5 py-1 transition-colors", checked ? "border-transparent" : "border-border hover:bg-accent/50")} style={checked ? { backgroundColor: hexAlpha(cat.color, 0.18), borderColor: hexAlpha(cat.color, 0.5) } : undefined}>
+                            <Checkbox checked={checked} onCheckedChange={() => handleToggleEventTag(cachedEvent || eventDetail, cat, !checked)} className="h-3.5 w-3.5" />
+                            <span className="inline-flex items-center gap-1">
+                              <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />{cat.name}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {/* Crear y aplicar una categoría nueva al momento (ej. "Capacitación"). */}
+                  <div className="flex items-center gap-1.5">
+                    <Input
+                      value={inlineCatName}
+                      onChange={(e) => setInlineCatName(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); createAndApplyTag(); } }}
+                      placeholder={kawiilCategories.length > 0 ? "Nueva categoría (ej. Capacitación)" : "Escribe una categoría (ej. Capacitación) y agrégala"}
+                      className="h-8 text-sm"
+                    />
+                    <Button type="button" size="sm" variant="outline" className="shrink-0 h-8" disabled={!inlineCatName.trim() || createCategory.isPending} onClick={createAndApplyTag}>
+                      {createCategory.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><Plus className="mr-1 h-3.5 w-3.5" />Agregar</>}
+                    </Button>
+                  </div>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1 min-w-0"><Label>Fecha inicio</Label><Input type="date" value={editForm.startDate} onChange={(e) => {
                   const newStart = e.target.value;
@@ -2753,32 +2813,6 @@ export function CalendarView({
                 </div>
                 <Switch checked={editForm.isPrivate} onCheckedChange={(checked) => setEditForm({ ...editForm, isPrivate: checked })} />
               </div>
-              {/* Etiquetas: lista universal Kawiil, aplican a eventos de CUALQUIER cuenta
-                  (Google/Outlook/M365) y colorean el evento en el calendario. */}
-              {selectedEventId && (
-                <div className="space-y-2">
-                  <Label>Etiquetas <span className="text-[10px] font-normal text-muted-foreground">· aplican a cualquier cuenta</span></Label>
-                  {kawiilCategories.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {kawiilCategories.map((cat) => {
-                        const checked = (eventTags[selectedEventId] || []).includes(cat.id);
-                        return (
-                          <label key={cat.id} className={cn("flex items-center gap-1.5 text-sm cursor-pointer rounded-full border px-2.5 py-1 transition-colors", checked ? "border-transparent" : "border-border hover:bg-accent/50")} style={checked ? { backgroundColor: hexAlpha(cat.color, 0.18), borderColor: hexAlpha(cat.color, 0.5) } : undefined}>
-                            <Checkbox checked={checked} onCheckedChange={() => handleToggleEventTag(cachedEvent || eventDetail, cat, !checked)} className="h-3.5 w-3.5" />
-                            <span className="inline-flex items-center gap-1">
-                              <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />{cat.name}
-                            </span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">
-                      Crea o importa categorías en el panel derecho (sección “Etiquetas Kawiil”) para aplicarlas aquí — funcionan en todas tus cuentas.
-                    </p>
-                  )}
-                </div>
-              )}
             </div>
           ) : null}
           {(() => {
