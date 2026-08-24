@@ -7,14 +7,25 @@ import {
   CloudRain,
   CloudSnow,
   CloudSun,
+  DollarSign,
   MapPin,
+  Minus,
   Moon,
   Plus,
   RefreshCw,
   Sun as SunIcon,
+  TrendingDown,
+  TrendingUp,
   X,
 } from "lucide-react";
 import { useWeather } from "@/hooks/useWeather";
+import {
+  ExchangeRateError,
+  formatFxDate,
+  formatFxValue,
+  isToday,
+  useExchangeRate,
+} from "@/hooks/useExchangeRate";
 import {
   formatTimeInZone,
   TIMEZONE_COUNTRIES,
@@ -87,6 +98,154 @@ function WeatherPill() {
         <RefreshCw className={cn("h-3 w-3", isFetching && "animate-spin")} />
       </button>
     </div>
+  );
+}
+
+function FxTrendIcon({ cambio }: { cambio: number | null }) {
+  if (cambio === null || cambio === 0) return <Minus className="h-3 w-3" />;
+  return cambio > 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />;
+}
+
+/**
+ * Tipo de cambio oficial de Banxico (serie SF60653: para solventar obligaciones
+ * denominadas en moneda extranjera, la que se publica en el DOF). Al hacer clic
+ * muestra la variación contra la publicación anterior y el FIX como referencia.
+ */
+function FxPill() {
+  const { data, isLoading, error, refetch, isFetching } = useExchangeRate();
+  const [open, setOpen] = useState(false);
+  const fx = data?.obligaciones;
+  const notConfigured =
+    error instanceof ExchangeRateError &&
+    (error.code === "banxico_not_configured" || error.code === "not_deployed");
+
+  const valueLabel = fx ? formatFxValue(fx.valor) : isLoading ? "—" : "n/d";
+  const trendClass =
+    fx?.cambio == null || fx.cambio === 0
+      ? "kw-tb-fx-flat"
+      : fx.cambio > 0
+        ? "kw-tb-fx-up"
+        : "kw-tb-fx-down";
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="kw-tb-fx"
+          aria-label={
+            fx
+              ? `Tipo de cambio para solventar obligaciones: ${valueLabel} pesos por dólar, publicado el ${formatFxDate(fx.fecha, true)}`
+              : "Tipo de cambio Banxico"
+          }
+        >
+          <span className="kw-tb-fx-ico">
+            <DollarSign className="h-5 w-5" />
+          </span>
+          <span className="kw-tb-fx-body min-w-0">
+            <span className="kw-tb-fx-value tabular-nums">
+              {valueLabel}
+              <span className="kw-tb-fx-unit">MXN/USD</span>
+            </span>
+            <span className="kw-tb-fx-label truncate">
+              {notConfigured ? "Sin configurar" : "Solventar obligaciones"}
+            </span>
+            {fx && (
+              <span className="kw-tb-fx-meta hidden 2xl:flex">
+                <span className={cn("kw-tb-fx-trend", trendClass)}>
+                  <FxTrendIcon cambio={fx.cambio} />
+                  {fx.cambioPct !== null
+                    ? `${fx.cambioPct > 0 ? "+" : ""}${fx.cambioPct.toFixed(2)}%`
+                    : "—"}
+                </span>
+                <span className="kw-tb-fx-date">
+                  {isToday(fx.fecha) ? "hoy" : formatFxDate(fx.fecha)}
+                </span>
+              </span>
+            )}
+          </span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" sideOffset={8} className="w-72 p-3 text-sm">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <div className="font-semibold leading-tight">Tipo de cambio Banxico</div>
+            <div className="text-[11px] text-muted-foreground">
+              Pesos por dólar de E.U.A.
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => refetch()}
+            className="kw-tb-weather-refresh"
+            aria-label="Actualizar tipo de cambio"
+            disabled={isFetching}
+          >
+            <RefreshCw className={cn("h-3 w-3", isFetching && "animate-spin")} />
+          </button>
+        </div>
+
+        {fx ? (
+          <div className="mt-3 space-y-3">
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                Para solventar obligaciones (DOF)
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-xl font-bold tabular-nums">{formatFxValue(fx.valor)}</span>
+                <span className={cn("kw-tb-fx-trend", trendClass)}>
+                  <FxTrendIcon cambio={fx.cambio} />
+                  {fx.cambio !== null
+                    ? `${fx.cambio > 0 ? "+" : ""}${fx.cambio.toFixed(4)}`
+                    : "—"}
+                </span>
+              </div>
+              <div className="text-[11px] text-muted-foreground">
+                Publicado el {formatFxDate(fx.fecha, true)}
+                {fx.fechaPrevia && ` · anterior ${formatFxValue(fx.valorPrevio ?? 0)} (${formatFxDate(fx.fechaPrevia)})`}
+              </div>
+            </div>
+
+            {data?.fix && (
+              <div className="border-t border-border/60 pt-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    FIX (referencia)
+                  </span>
+                  <span className="font-medium tabular-nums">{formatFxValue(data.fix.valor)}</span>
+                </div>
+                <div className="text-[11px] text-muted-foreground">
+                  Publicado el {formatFxDate(data.fix.fecha, true)}
+                </div>
+              </div>
+            )}
+
+            <div className="text-[10px] leading-snug text-muted-foreground">
+              Fuente: Banxico, serie {fx.idSerie}. Banxico publica un solo dato por día
+              hábil; el de hoy aparece alrededor del mediodía.
+            </div>
+          </div>
+        ) : (
+          <div className="mt-3 space-y-2 text-[12px] text-muted-foreground">
+            {isLoading ? (
+              <p>Consultando Banxico…</p>
+            ) : notConfigured ? (
+              <>
+                <p>
+                  Falta el token de Banxico en el servidor. Genera uno gratis en
+                  banxico.org.mx y guárdalo como secret{" "}
+                  <code className="rounded bg-muted px-1">BANXICO_TOKEN</code> del proyecto
+                  de Supabase.
+                </p>
+                <p className="text-[11px]">Ver docs/banxico-tipo-de-cambio.md</p>
+              </>
+            ) : (
+              <p>{error instanceof Error ? error.message : "No se pudo obtener el tipo de cambio."}</p>
+            )}
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -368,6 +527,7 @@ export function TopbarWidgets({ className }: TopbarWidgetsProps) {
     <TooltipProvider delayDuration={250}>
       <div className={cn("hidden lg:flex items-center gap-3", className)}>
         <WeatherPill />
+        <FxPill />
         <PrimaryClock />
         <div className="hidden xl:block">
           <TimezoneStrip />
