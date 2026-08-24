@@ -23,7 +23,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCreateLead, usePipelineStages, type PipelineStage } from "@/hooks/usePipeline";
 import { usePipelinePartners } from "@/hooks/usePartners";
 import { LeadServicesPicker } from "@/components/pipeline/LeadServicesPicker";
-import { primaryService, type ServiceArea } from "@/lib/leadServices";
+import { LeadValueFields } from "@/components/pipeline/LeadValueFields";
+import {
+  computeTcv,
+  contractMonths,
+  normalizeServices,
+  primaryService,
+  type ServiceArea,
+  type ValueBreakdown,
+} from "@/lib/leadServices";
 import { cn } from "@/lib/utils";
 
 type PersonType = "fisica" | "moral";
@@ -35,10 +43,13 @@ const OPTIONAL_COLUMNS = [
   "service_type",
   "service_types",
   "partner_id",
+  "estimated_value_one_time",
+  "estimated_value_monthly",
+  "estimated_months",
 ] as const;
 
 function isMissingColumnError(message: string): boolean {
-  return /person_type|contact_role|service_type|service_types|partner_id|schema cache|column .* does not exist/i.test(
+  return /person_type|contact_role|service_type|service_types|partner_id|estimated_value_|estimated_months|schema cache|column .* does not exist/i.test(
     message,
   );
 }
@@ -71,7 +82,7 @@ export function NewLeadDialog({ open, onOpenChange, defaultStageId, stages: stag
   const [contactRole, setContactRole] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [estimatedValue, setEstimatedValue] = useState("");
+  const [value, setValue] = useState<ValueBreakdown>({ oneTime: null, monthly: null, months: null });
   const [serviceTypes, setServiceTypes] = useState<ServiceArea[]>([]);
   const [partnerId, setPartnerId] = useState<string>("");
   const [saving, setSaving] = useState(false);
@@ -100,7 +111,7 @@ export function NewLeadDialog({ open, onOpenChange, defaultStageId, stages: stag
     setContactRole("");
     setEmail("");
     setPhone("");
-    setEstimatedValue("");
+    setValue({ oneTime: null, monthly: null, months: null });
     setServiceTypes([]);
     setPartnerId("");
   }, [open]);
@@ -145,7 +156,8 @@ export function NewLeadDialog({ open, onOpenChange, defaultStageId, stages: stag
       stage_id: targetStage.id,
       source: "manual",
       priority: "medium",
-      estimated_value: estimatedValue ? Number(estimatedValue) : null,
+      // `estimated_value` es el valor total del contrato (TCV).
+      estimated_value: computeTcv(value) || null,
     };
     const optional: Record<string, unknown> = {
       person_type: personType,
@@ -153,6 +165,9 @@ export function NewLeadDialog({ open, onOpenChange, defaultStageId, stages: stag
       service_types: serviceTypes,
       service_type: primaryService(serviceTypes),
       partner_id: partnerId || null,
+      estimated_value_one_time: value.oneTime,
+      estimated_value_monthly: value.monthly,
+      estimated_months: value.monthly ? contractMonths(value.months) : null,
     };
 
     setSaving(true);
@@ -346,15 +361,17 @@ export function NewLeadDialog({ open, onOpenChange, defaultStageId, stages: stag
                       <LeadServicesPicker value={serviceTypes} onChange={setServiceTypes} />
                     </div>
                   </div>
-                  <div>
-                    <Label>Monto estimado MXN</Label>
-                    <Input
-                      type="number"
-                      inputMode="decimal"
-                      min={0}
-                      value={estimatedValue}
-                      onChange={(e) => setEstimatedValue(e.target.value)}
-                      placeholder="45000"
+                </div>
+                <div>
+                  <Label>Valor estimado</Label>
+                  <div className="mt-1.5">
+                    <LeadValueFields
+                      value={value}
+                      onChange={setValue}
+                      services={serviceTypes}
+                      onAddServices={(extra) =>
+                        setServiceTypes((prev) => normalizeServices([...prev, ...extra]))
+                      }
                     />
                   </div>
                 </div>
