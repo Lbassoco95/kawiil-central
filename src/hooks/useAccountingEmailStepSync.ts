@@ -22,7 +22,9 @@ import {
 export function useAccountingEmailStepSync() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const updateTask = useUpdateTask();
+  // `mutateAsync` es referencia estable; el objeto de mutación no, y usarlo
+  // como dependencia recrearía el callback en cada cambio de estado.
+  const { mutateAsync: updateTask } = useUpdateTask();
 
   return useCallback(
     async (info: SentAccountingEmailInfo): Promise<AccountingStepSyncResult> => {
@@ -35,7 +37,7 @@ export function useAccountingEmailStepSync() {
         const closedTasks: PeriodTaskLike[] = [];
         for (const task of await fetchAcusesTasksForPeriod(result.projectId, result.periodId)) {
           try {
-            await updateTask.mutateAsync({ id: task.id, status: "completada" });
+            await updateTask({ id: task.id, status: "completada" });
             closedTasks.push(task);
           } catch {
             // Una tarea con subtareas abiertas no se puede cerrar: se deja como
@@ -65,7 +67,7 @@ export function useAccountingEmailStepSync() {
               );
               for (const task of closedTasks) {
                 try {
-                  await updateTask.mutateAsync({ id: task.id, status: task.status });
+                  await updateTask({ id: task.id, status: task.status });
                 } catch {
                   // Si no se puede reabrir, el paso ya se revirtió: no se bloquea.
                 }
