@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { matchesSearch } from "@/lib/searchMatch";
 import { useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
@@ -144,12 +145,17 @@ const Clientes = () => {
       }
     }
     if (!search.trim()) return list;
-    const q = search.toLowerCase();
-    return list.filter(
-      (c) =>
-        c.name.toLowerCase().includes(q) ||
-        c.rfc?.toLowerCase().includes(q) ||
-        c.email?.toLowerCase().includes(q)
+    // Comparación sin acentos y por tokens: los nombres del acervo llevan acentos
+    // y casi nadie los escribe al buscar. Incluye al contacto y al teléfono para
+    // poder llegar al cliente por la persona con la que se trata.
+    return list.filter((c) =>
+      matchesSearch(search, [
+        c.name,
+        c.rfc,
+        c.email,
+        c.contact_name,
+        c.phone,
+      ])
     );
   }, [clients, search, clientTypeFilter, responsibleUserFilter]);
 
