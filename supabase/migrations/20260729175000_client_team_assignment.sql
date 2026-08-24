@@ -6,6 +6,13 @@
 --   * Responsable  = clients.responsible_user_id  (garantiza R1: 0 o 1 por cliente)
 --   * Colaboradores = client_collaborators (N a N)  (R2)
 -- Aquí solo se extiende lo existente.
+--
+-- Versión renombrada de 20260729170000 a 20260729175000: esa versión la usaban
+-- DOS archivos (también actividades_archivos_votacion) y solo uno puede
+-- registrarse en supabase_migrations.schema_migrations, así que `db push`
+-- fallaba aquí con "duplicate key ... schema_migrations_pkey" y bloqueaba todas
+-- las migraciones siguientes. El contenido es idempotente, así que re-aplicarlo
+-- es seguro.
 
 -- ---------------------------------------------------------------------------
 -- RF-06: acceso global a la cartera de clientes (en vez de insertar N filas de
