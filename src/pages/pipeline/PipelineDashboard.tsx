@@ -4,25 +4,15 @@ import {
   usePipelineStats,
   usePipelineStages,
   usePipelineLeads,
-  useCreateLead,
   useLeadActivitiesFeed,
   aggregateStageValues,
   type Lead,
   type LeadActivityFeedItem,
 } from "@/hooks/usePipeline";
 import { Button } from "@/components/ui/button";
+import { NewLeadDialog } from "@/components/pipeline/modals/NewLeadDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 import {
   Plus,
   Settings as SettingsIcon,
@@ -167,89 +157,29 @@ function AlertCard({ tone, eyebrow, body, ctaLabel, to, onClick }: AlertCardProp
   );
 }
 
-function NewLeadDialog() {
+/**
+ * Botón del hero + alta compartida (consciente de persona física / moral).
+ * El diálogo anterior era una copia del tablero y además nunca mandaba
+ * `organization_id`, columna NOT NULL: el alta desde aquí fallaba.
+ */
+function NewLeadButton() {
   const [open, setOpen] = useState(false);
-  const [fullName, setFullName] = useState("");
-  const [company, setCompany] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const createLead = useCreateLead();
-  const { data: stages = [] } = usePipelineStages();
-  const firstStage = stages.find((s) => !s.is_terminal) ?? stages[0];
-
-  const handleCreate = async () => {
-    if (!fullName.trim() || !firstStage) {
-      toast.error("Falta nombre o no hay etapas configuradas");
-      return;
-    }
-    try {
-      await createLead.mutateAsync({
-        full_name: fullName.trim(),
-        company_name: company.trim() || null,
-        email: email.trim() || null,
-        phone: phone.trim() || null,
-        stage_id: firstStage.id,
-        is_active: true,
-        priority: "medium",
-        score: 0,
-      } as Parameters<typeof createLead.mutateAsync>[0]);
-      toast.success("Lead creado");
-      setOpen(false);
-      setFullName("");
-      setCompany("");
-      setEmail("");
-      setPhone("");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "No se pudo crear el lead");
-    }
-  };
-
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button size="sm" className="bg-white/95 text-primary hover:bg-white border-0 shadow-sm font-semibold">
-          <Plus className="mr-1.5 h-3.5 w-3.5" />
-          Nuevo lead
-        </Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Crear lead</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="lead-full-name">Nombre completo *</Label>
-            <Input id="lead-full-name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="lead-company">Empresa</Label>
-            <Input id="lead-company" value={company} onChange={(e) => setCompany(e.target.value)} />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="lead-email">Email</Label>
-              <Input id="lead-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="lead-phone">Teléfono</Label>
-              <Input id="lead-phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
-            </div>
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>
-            Cancelar
-          </Button>
-          <Button onClick={handleCreate} disabled={createLead.isPending || !fullName.trim()}>
-            Crear
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <>
+      <Button
+        size="sm"
+        className="bg-white/95 text-primary hover:bg-white border-0 shadow-sm font-semibold"
+        onClick={() => setOpen(true)}
+      >
+        <Plus className="mr-1.5 h-3.5 w-3.5" />
+        Nuevo lead
+      </Button>
+      <NewLeadDialog open={open} onOpenChange={setOpen} />
+    </>
   );
 }
 
-// ─── Hot leads card ──────────────────────────────────────────────────────────
+// ─── Hot leads card ────────────────────────────────────────────────────
 
 function Top5HotLeadsCard({ leads, stageNameById }: { leads: Lead[]; stageNameById: (id: string) => string }) {
   const hot = useMemo(() => {
@@ -311,7 +241,7 @@ function Top5HotLeadsCard({ leads, stageNameById }: { leads: Lead[]; stageNameBy
   );
 }
 
-// ─── Countries card ──────────────────────────────────────────────────────────
+// ─── Countries card ────────────────────────────────────────────────────
 
 function LeadsByCountryCard({ leads }: { leads: Lead[] }) {
   const rows = useMemo(() => {
@@ -365,7 +295,7 @@ function LeadsByCountryCard({ leads }: { leads: Lead[] }) {
   );
 }
 
-// ─── Activity feed card ──────────────────────────────────────────────────────
+// ─── Activity feed card ───────────────────────────────────────────────
 
 const ACTIVITY_ICON: Record<string, typeof Mail> = {
   email_sent: Mail,
@@ -455,7 +385,7 @@ function RecentActivityCard() {
   );
 }
 
-// ─── Probabilidades por slug ─────────────────────────────────────────────────
+// ─── Probabilidades por slug ───────────────────────────────────────────
 
 const STAGE_PROBABILITY: Record<string, number> = {
   registrado: 0.1,
@@ -480,7 +410,7 @@ export default function PipelineDashboard() {
   const stageById = useMemo(() => new Map(stages.map((s) => [s.id, s] as const)), [stages]);
   const stageNameById = (id: string) => stageById.get(id)?.name ?? "—";
 
-  // ─── Hero KPIs ───────────────────────────────────────────────
+  // ─── Hero KPIs ───────────────────────────────────────
   const heroKpis = useMemo(() => {
     const active = leads.length;
     const calientes = leads.filter((l) => {
@@ -507,7 +437,7 @@ export default function PipelineDashboard() {
     return { active, calientes, salud, pipelineMxn };
   }, [leads, stageById]);
 
-  // ─── Alert cards ─────────────────────────────────────────────
+  // ─── Alert cards ─────────────────────────────────────
   const alerts = useMemo(() => {
     const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
     const staleHot = leads.filter((l) => {
@@ -541,7 +471,7 @@ export default function PipelineDashboard() {
     return { staleHot, staleHotExample, opportunity, sequenceCandidates };
   }, [leads, stageById]);
 
-  // ─── KPI tiles ───────────────────────────────────────────────
+  // ─── KPI tiles ───────────────────────────────────────
   const kpiTiles = useMemo<KpiTileProps[]>(() => {
     const newLeads = Number(stats?.new_leads ?? 0);
     const emailReply = (stats?.email_reply as Record<string, unknown> | undefined) ?? {};
@@ -633,7 +563,7 @@ export default function PipelineDashboard() {
     ];
   }, [stats, stages, leads, stageById]);
 
-  // ─── Funnel + Velocity (v2.5) ────────────────────────────────
+  // ─── Funnel + Velocity (v2.5) ────────────────────────────
   const funnelData = useMemo(() => {
     const activeStages = stages
       .filter((s) => !s.is_terminal)
@@ -735,7 +665,7 @@ export default function PipelineDashboard() {
               <SettingsIcon className="mr-1.5 h-3.5 w-3.5" />
               Tweaks
             </Button>
-            <NewLeadDialog />
+            <NewLeadButton />
           </div>
         </div>
 
