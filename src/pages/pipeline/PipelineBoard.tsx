@@ -13,7 +13,6 @@ import {
   usePipelineStages,
   usePipelineLeads,
   useMoveLeadStage,
-  useCreateLead,
   aggregateStageValues,
   type Lead,
   type PipelineStage,
@@ -35,15 +34,7 @@ import {
   ArrowRightLeft,
 } from "lucide-react";
 import { BulkEmailModal } from "@/components/pipeline/modals/BulkEmailModal";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { NewLeadDialog } from "@/components/pipeline/modals/NewLeadDialog";
 import {
   Select,
   SelectContent,
@@ -316,115 +307,6 @@ function StageColumn({
         </div>
       </div>
     </div>
-  );
-}
-
-function NewLeadDialog({
-  stages,
-  defaultStageId,
-  open,
-  onOpenChange,
-}: {
-  stages: PipelineStage[];
-  defaultStageId: string | null;
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-}) {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [estimatedValue, setEstimatedValue] = useState<string>("");
-  const createLead = useCreateLead();
-  const { data: orgId } = useQuery({
-    queryKey: ["user-org-pipeline"],
-    queryFn: async () => {
-      const { data: u } = await supabase.auth.getUser();
-      if (!u.user) return null;
-      const { data } = await supabase.rpc("get_user_org_id", { _user_id: u.user.id });
-      return data as string | null;
-    },
-  });
-
-  const stageLabel = useMemo(
-    () => stages.find((s) => s.id === defaultStageId)?.name ?? "etapa inicial",
-    [stages, defaultStageId],
-  );
-
-  const submit = async () => {
-    if (!name.trim() || !orgId || !defaultStageId) {
-      toast.error("Nombre y etapa inicial requeridos");
-      return;
-    }
-    try {
-      const row = await createLead.mutateAsync({
-        organization_id: orgId,
-        full_name: name.trim(),
-        email: email.trim() || null,
-        stage_id: defaultStageId,
-        source: "manual",
-        estimated_value: estimatedValue ? Number(estimatedValue) : null,
-      });
-      const { data: u } = await supabase.auth.getUser();
-      if (u.user) {
-        await supabase.from("lead_activities").insert({
-          lead_id: row.id,
-          user_id: u.user.id,
-          type: "lead_created",
-          metadata: { source: "manual" },
-          organization_id: orgId,
-        });
-      }
-      toast.success("Lead creado");
-      onOpenChange(false);
-      setName("");
-      setEmail("");
-      setEstimatedValue("");
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Error al crear");
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Nuevo lead · {stageLabel}</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3">
-          <div>
-            <Label>Nombre completo</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="María Pérez" />
-          </div>
-          <div>
-            <Label>Email (opcional)</Label>
-            <Input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="correo@ejemplo.com"
-            />
-          </div>
-          <div>
-            <Label>Monto estimado MXN (opcional)</Label>
-            <Input
-              type="number"
-              inputMode="decimal"
-              min={0}
-              value={estimatedValue}
-              onChange={(e) => setEstimatedValue(e.target.value)}
-              placeholder="45000"
-            />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancelar
-          </Button>
-          <Button onClick={() => void submit()} disabled={createLead.isPending}>
-            Guardar
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
 

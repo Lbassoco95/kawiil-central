@@ -15,6 +15,7 @@ const tabs: Array<{ to: string; label: string; end?: boolean; counterKey?: "over
   { to: "/pipeline/list", label: "Lista" },
   { to: "/pipeline/activities", label: "Actividades", counterKey: "overdue" },
   { to: "/pipeline/sequences", label: "Secuencias" },
+  { to: "/pipeline/partners", label: "Partners" },
   { to: "/pipeline/templates", label: "Plantillas" },
   { to: "/pipeline/settings", label: "Ajustes" },
 ];
