@@ -22,28 +22,23 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCreateLead, usePipelineStages, type PipelineStage } from "@/hooks/usePipeline";
 import { usePipelinePartners } from "@/hooks/usePartners";
-import { SERVICE_LABELS } from "@/lib/serviceLabels";
+import { LeadServicesPicker } from "@/components/pipeline/LeadServicesPicker";
+import { primaryService, type ServiceArea } from "@/lib/leadServices";
 import { cn } from "@/lib/utils";
 
 type PersonType = "fisica" | "moral";
 
 /** Columnas que dependen de migraciones recientes; si faltan, se reintenta sin ellas. */
-const OPTIONAL_COLUMNS = ["person_type", "contact_role", "service_type", "partner_id"] as const;
-
-const serviceOptions = [
-  "softlanding",
-  "constitucion_nacional",
-  "contabilidad",
-  "legal",
-  "gestoria",
-  "pld_ft",
-  "cumplimiento",
-  "representacion",
-  "juicios",
+const OPTIONAL_COLUMNS = [
+  "person_type",
+  "contact_role",
+  "service_type",
+  "service_types",
+  "partner_id",
 ] as const;
 
 function isMissingColumnError(message: string): boolean {
-  return /person_type|contact_role|service_type|partner_id|schema cache|column .* does not exist/i.test(
+  return /person_type|contact_role|service_type|service_types|partner_id|schema cache|column .* does not exist/i.test(
     message,
   );
 }
@@ -77,7 +72,7 @@ export function NewLeadDialog({ open, onOpenChange, defaultStageId, stages: stag
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [estimatedValue, setEstimatedValue] = useState("");
-  const [serviceType, setServiceType] = useState<string>("");
+  const [serviceTypes, setServiceTypes] = useState<ServiceArea[]>([]);
   const [partnerId, setPartnerId] = useState<string>("");
   const [saving, setSaving] = useState(false);
 
@@ -106,7 +101,7 @@ export function NewLeadDialog({ open, onOpenChange, defaultStageId, stages: stag
     setEmail("");
     setPhone("");
     setEstimatedValue("");
-    setServiceType("");
+    setServiceTypes([]);
     setPartnerId("");
   }, [open]);
 
@@ -155,7 +150,8 @@ export function NewLeadDialog({ open, onOpenChange, defaultStageId, stages: stag
     const optional: Record<string, unknown> = {
       person_type: personType,
       contact_role: isMoral ? contactRole.trim() || null : null,
-      service_type: serviceType || null,
+      service_types: serviceTypes,
+      service_type: primaryService(serviceTypes),
       partner_id: partnerId || null,
     };
 
@@ -344,24 +340,11 @@ export function NewLeadDialog({ open, onOpenChange, defaultStageId, stages: stag
                   Opcional — se puede completar después
                 </p>
                 <div className="grid gap-2 sm:grid-cols-2">
-                  <div>
-                    <Label>Servicio que busca</Label>
-                    <Select
-                      value={serviceType || "__none__"}
-                      onValueChange={(v) => setServiceType(v === "__none__" ? "" : v)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Sin definir" />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-64">
-                        <SelectItem value="__none__">Sin definir</SelectItem>
-                        {serviceOptions.map((s) => (
-                          <SelectItem key={s} value={s}>
-                            {SERVICE_LABELS[s]}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  <div className="sm:col-span-2">
+                    <Label>Servicios que busca</Label>
+                    <div className="mt-1.5">
+                      <LeadServicesPicker value={serviceTypes} onChange={setServiceTypes} />
+                    </div>
                   </div>
                   <div>
                     <Label>Monto estimado MXN</Label>
