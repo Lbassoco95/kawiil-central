@@ -1,5 +1,5 @@
 -- =================================================================
--- ROLLBACK de supabase/migrations/20260824221000_juun_storage_bucket.sql
+-- ROLLBACK de supabase/migrations/20260825034520_juun_storage_bucket.sql
 -- Proyecto: qppfampapbxdgednkofc  ·  Fecha: 2026-08-24  ·  Módulo: Ju'un
 --
 -- Idempotente. El bucket solo se elimina si está VACÍO: borrar archivos de

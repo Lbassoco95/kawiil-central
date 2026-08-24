@@ -1,7 +1,7 @@
 /**
  * Máquina de estados de un ticket (`fis_receipts.status`).
  *
- * Espejo exacto del CHECK de la migración `20260824220000_juun_fis_schema.sql`.
+ * Espejo exacto del CHECK de la migración `20260825034512_juun_fis_schema.sql`.
  * Si aquí se agrega un estado y allá no (o al revés), la base rechaza el
  * INSERT: las dos listas se mueven juntas.
  */

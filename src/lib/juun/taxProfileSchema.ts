@@ -9,9 +9,10 @@ import { z } from "zod";
 import { validarRfc } from "@/lib/juun/rfc";
 import {
   USO_CFDI_DEFAULT,
+  getRegimenFiscal,
   isRegimenFiscalValido,
   isUsoCfdiValido,
-  getRegimenFiscal,
+  personaDelRegimen,
 } from "@/lib/juun/satCatalogs";
 import { tipoPersonaPorRfc } from "@/lib/juun/rfc";
 
@@ -60,22 +61,28 @@ export const TAX_PROFILE_DEFAULTS: TaxProfileSchemaValues = {
 };
 
 /**
- * Advertencia NO bloqueante: un RFC de persona física con un régimen de
- * persona moral (o al revés) casi siempre es un dedazo, pero la palabra final
- * la tiene la CSF, no nosotros. Devuelve null si no hay nada que advertir.
+ * Advertencia NO bloqueante para el dedazo que de verdad ocurre: dejar 601
+ * puesto —porque es el primero de la lista— en el perfil de una persona
+ * física.
+ *
+ * Solo dispara con RFC de 13 caracteres y un régimen que sabemos de cierto
+ * que es de persona moral (`REGIMENES_PERSONA_MORAL_CIERTOS`). En todo lo
+ * demás calla, aunque "huela" mal: mientras el catálogo oficial no esté
+ * cargado no tenemos con qué afirmarlo, y una advertencia que se equivoca es
+ * peor que no advertir — la gente aprende a ignorarla.
+ *
+ * Devuelve null si no hay nada que advertir.
  */
 export function avisoPersonaVsRegimen(
   rfc: string,
   regimenClave: string
 ): string | null {
-  const persona = tipoPersonaPorRfc(rfc);
-  const regimen = getRegimenFiscal(regimenClave);
-  if (!persona || !regimen || regimen.persona === "ambas") return null;
-  if (regimen.persona === persona) return null;
+  if (tipoPersonaPorRfc(rfc) !== "fisica") return null;
+  if (personaDelRegimen(regimenClave) !== "moral") return null;
 
-  const comoRfc = persona === "fisica" ? "persona física" : "persona moral";
-  const comoRegimen = regimen.persona === "fisica" ? "personas físicas" : "personas morales";
-  return `El RFC es de ${comoRfc} y el régimen ${regimen.clave} es de ${comoRegimen}. Revísalo contra la CSF antes de guardar.`;
+  const regimen = getRegimenFiscal(regimenClave);
+  const nombre = regimen ? `${regimen.clave} (${regimen.descripcion})` : regimenClave;
+  return `El RFC es de persona física y el régimen ${nombre} es de personas morales. Revísalo contra la CSF antes de guardar.`;
 }
 
 /** El texto que el usuario tiene que leer antes de guardar. No se recorta ni se esconde. */

@@ -1,5 +1,5 @@
 -- =================================================================
--- ROLLBACK de supabase/migrations/20260824220000_juun_fis_schema.sql
+-- ROLLBACK de supabase/migrations/20260825034512_juun_fis_schema.sql
 -- Proyecto: qppfampapbxdgednkofc  ·  Fecha: 2026-08-24  ·  Módulo: Ju'un
 --
 -- El pipeline del repo (supabase db push --include-all) es forward-only: este

@@ -29,7 +29,7 @@ describe("máquina de estados del ticket", () => {
 
   it("coincide con el CHECK de la migración", () => {
     const sql = readFileSync(
-      resolve(process.cwd(), "supabase/migrations/20260824220000_juun_fis_schema.sql"),
+      resolve(process.cwd(), "supabase/migrations/20260825034512_juun_fis_schema.sql"),
       "utf-8"
     );
     const bloque = sql.match(/status text NOT NULL DEFAULT 'received'\s*CHECK \(status IN \(([\s\S]*?)\)\)/);

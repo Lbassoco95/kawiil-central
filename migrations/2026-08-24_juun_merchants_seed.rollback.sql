@@ -1,5 +1,5 @@
 -- =================================================================
--- ROLLBACK de supabase/migrations/20260824222000_juun_merchants_seed.sql
+-- ROLLBACK de supabase/migrations/20260825034528_juun_merchants_seed.sql
 -- Proyecto: qppfampapbxdgednkofc  ·  Fecha: 2026-08-24  ·  Módulo: Ju'un
 --
 -- Quita solo los 15 comercios de la semilla; deja intactos los que se hayan

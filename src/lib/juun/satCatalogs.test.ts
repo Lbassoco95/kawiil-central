@@ -3,7 +3,10 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   C_REGIMEN_FISCAL,
+  C_REGIMEN_FISCAL_META,
   C_USO_CFDI,
+  C_USO_CFDI_META,
+  REGIMENES_PERSONA_MORAL_CIERTOS,
   REGIMEN_FISCAL_CLAVES,
   USO_CFDI_CLAVES,
   USO_CFDI_DEFAULT,
@@ -11,11 +14,12 @@ import {
   getRegimenFiscal,
   isRegimenFiscalValido,
   isUsoCfdiValido,
+  personaDelRegimen,
 } from "@/lib/juun/satCatalogs";
 
 const MIGRACION = resolve(
   process.cwd(),
-  "supabase/migrations/20260824220000_juun_fis_schema.sql"
+  "supabase/migrations/20260825034512_juun_fis_schema.sql"
 );
 
 /** Saca la lista de valores de un CHECK `columna IN ('a','b',...)` de la migración. */
@@ -27,14 +31,22 @@ function clavesDelCheck(sql: string, columna: string): string[] {
 }
 
 describe("catálogos del SAT", () => {
-  it("c_RegimenFiscal trae las 19 claves y ninguna repetida", () => {
-    expect(C_REGIMEN_FISCAL).toHaveLength(19);
-    expect(new Set(REGIMEN_FISCAL_CLAVES).size).toBe(19);
+  it("no repite claves en ninguno de los dos", () => {
+    expect(new Set(REGIMEN_FISCAL_CLAVES).size).toBe(C_REGIMEN_FISCAL.length);
+    expect(new Set(USO_CFDI_CLAVES).size).toBe(C_USO_CFDI.length);
   });
 
-  it("c_UsoCFDI trae las 24 claves y ninguna repetida", () => {
-    expect(C_USO_CFDI).toHaveLength(24);
-    expect(new Set(USO_CFDI_CLAVES).size).toBe(24);
+  it("ambos vienen cargados", () => {
+    expect(C_REGIMEN_FISCAL.length).toBeGreaterThan(0);
+    expect(C_USO_CFDI.length).toBeGreaterThan(0);
+  });
+
+  it("cada catálogo declara de dónde salió", () => {
+    for (const meta of [C_REGIMEN_FISCAL_META, C_USO_CFDI_META]) {
+      expect(meta.catalogo).toBeTruthy();
+      expect(meta.fuente).toBeTruthy();
+      expect(meta.nota).toBeTruthy();
+    }
   });
 
   it("toda entrada tiene descripción", () => {
@@ -78,5 +90,21 @@ describe("los catálogos coinciden con los CHECK de la migración", () => {
 
   it("uso_cfdi_default", () => {
     expect(clavesDelCheck(sql, "uso_cfdi_default").sort()).toEqual([...USO_CFDI_CLAVES].sort());
+  });
+});
+
+describe("certeza del tipo de persona", () => {
+  it("solo afirma «moral» en los seis regímenes confirmados", () => {
+    expect(REGIMENES_PERSONA_MORAL_CIERTOS).toHaveLength(6);
+    for (const clave of REGIMENES_PERSONA_MORAL_CIERTOS) {
+      expect(personaDelRegimen(clave)).toBe("moral");
+    }
+  });
+
+  it("todo lo demás queda «sin_verificar», que no es lo mismo que «física»", () => {
+    for (const clave of ["605", "606", "607", "612", "622", "625", "626", "999"]) {
+      expect(personaDelRegimen(clave)).toBe("sin_verificar");
+    }
+    expect(personaDelRegimen(null)).toBe("sin_verificar");
   });
 });

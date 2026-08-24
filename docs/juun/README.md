@@ -34,7 +34,7 @@ Situación Fiscal: RFC, razón social, código postal fiscal, régimen y uso de 
 
 ## Modelo de datos
 
-Seis tablas, prefijo `fis_`. Migración: `supabase/migrations/20260824220000_juun_fis_schema.sql`.
+Seis tablas, prefijo `fis_`. Migración: `supabase/migrations/20260825034512_juun_fis_schema.sql`.
 
 | Tabla | Qué guarda |
 |---|---|
@@ -82,9 +82,47 @@ Lo mismo con los catálogos del SAT (`src/lib/juun/satCatalogs.ts`).
 
 ---
 
+## Los catálogos del SAT
+
+La fuente son los JSON de `src/lib/juun/catalogs/`, no código tecleado a mano.
+Se generan del catálogo oficial del Anexo 20:
+
+```bash
+# Bajar catCFDI_V_4_*.xls de la página "Formato de factura (Anexo 20)" del SAT
+node scripts/juun/build-sat-catalogs.mjs ~/Descargas/catCFDI_V_4_20250714.xls
+npm run test        # las pruebas dicen qué claves faltan en el CHECK de la migración
+```
+
+Cada JSON lleva en `_meta` de qué archivo salió y con qué fecha. **Mientras
+`_meta.fuente` diga `"provisional"`, ese catálogo es el capturado a mano**:
+sirve para trabajar pero está incompleto — a `c_RegimenFiscal` le faltan al
+menos 609, 628, 629 y 630. No se agregan a mano: salen solas al correr el
+script.
+
+Cuando el catálogo oficial se cargue, la prueba que compara los catálogos
+contra los CHECK de la migración va a fallar a propósito, indicando qué claves
+hay que agregar con una migración nueva.
+
+### La advertencia de tipo de persona está recortada a propósito
+
+El formulario avisa —sin bloquear— cuando un RFC de persona física trae un
+régimen de personas morales. Solo dispara en los seis regímenes sobre los que
+hay certeza (`601`, `603`, `620`, `623`, `624`, `628`); en el resto calla.
+
+Las fuentes secundarias se contradicen entre sí sobre varios regímenes (el 607
+aparece como moral en unas y como física en otras), y una advertencia que se
+equivoca es peor que no advertir: la gente aprende a ignorarla. La lista se
+amplía cuando el catálogo oficial esté cargado, no antes.
+
+La **matriz de compatibilidad régimen × uso de CFDI** —que es lo que hace que
+el PAC del comercio rechace la factura— viene en el mismo archivo del SAT y
+sigue pendiente. Está marcada como `TODO` en `satCatalogs.ts`. No se inventa.
+
+---
+
 ## Almacenamiento
 
-Bucket privado **`juun`** (`supabase/migrations/20260824221000_juun_storage_bucket.sql`).
+Bucket privado **`juun`** (`supabase/migrations/20260825034520_juun_storage_bucket.sql`).
 
 ```
 {organization_id}/juun/clients/{client_id}/{yyyy}/{mm}/{tipo}/{ts}_{nombre}.{ext}
@@ -150,6 +188,20 @@ Kill switch por comercio: `fis_merchants.self_heal_enabled = false`.
 
 ---
 
+## El worker y la red (para no perder una tarde en el Bloque 2)
+
+`openclaw-gateway` corre en la VM como **servicio systemd nativo**, no en
+Docker: en el compose solo están Caddy y `kawiil-agents`. Dos consecuencias
+para cuando se configure la salida hacia el modelo:
+
+- `docker compose ps` **no** lo va a listar. Verificarlo con `systemctl status`
+  y un `curl` al puerto en el host.
+- `localhost` dentro del contenedor de `kawiil-agents` **no es el host**. La URL
+  del gateway tiene que ser `host.docker.internal` (con
+  `extra_hosts: ["host.docker.internal:host-gateway"]` en el compose) o la IP
+  del bridge. Un `localhost:<puerto>` da `connection refused` y parece un
+  gateway caído cuando en realidad está arriba.
+
 ## Cómo correr el worker en local
 
 Pendiente: el worker de Playwright es el Bloque 3. Cuando exista, va en la VM
@@ -187,12 +239,14 @@ sumar el 23.
 ## Archivos
 
 ```
-supabase/migrations/20260824220000_juun_fis_schema.sql      esquema + RLS + triggers
-supabase/migrations/20260824221000_juun_storage_bucket.sql  bucket privado juun
-supabase/migrations/20260824222000_juun_merchants_seed.sql  15 comercios, idempotente
+supabase/migrations/20260825034512_juun_fis_schema.sql      esquema + RLS + triggers
+supabase/migrations/20260825034520_juun_storage_bucket.sql  bucket privado juun
+supabase/migrations/20260825034528_juun_merchants_seed.sql  15 comercios, idempotente
 migrations/2026-08-24_juun_*.rollback.sql                   reversión (a mano; ver migrations/README.md)
 
-src/lib/juun/satCatalogs.ts        c_RegimenFiscal y c_UsoCFDI
+src/lib/juun/catalogs/*.json       c_RegimenFiscal y c_UsoCFDI (la fuente)
+scripts/juun/build-sat-catalogs.mjs  genera esos JSON del .xls del SAT
+src/lib/juun/satCatalogs.ts        acceso tipado a los catálogos
 src/lib/juun/rfc.ts                validación de RFC y CP
 src/lib/juun/taxProfileSchema.ts   validación del formulario (zod)
 src/lib/juun/storagePaths.ts       rutas del bucket juun
@@ -200,4 +254,5 @@ src/lib/juun/receiptStatus.ts      los 13 estados del ticket
 src/lib/juun/db.ts                 tipos de las tablas fis_* mientras types.ts no se regenera
 src/hooks/useClientTaxProfiles.ts  CRUD de perfiles fiscales
 src/components/clients/ClientTaxProfilesSection.tsx   sección «Datos fiscales»
+src/test/migrationVersions.test.ts  detecta prefijos de migración repetidos
 ```

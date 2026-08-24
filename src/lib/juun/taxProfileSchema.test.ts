@@ -5,6 +5,7 @@ import {
   avisoPersonaVsRegimen,
   taxProfileSchema,
 } from "@/lib/juun/taxProfileSchema";
+import { REGIMENES_PERSONA_MORAL_CIERTOS } from "@/lib/juun/satCatalogs";
 
 const valido = {
   rfc: "KACO850315J28",
@@ -51,27 +52,37 @@ describe("taxProfileSchema", () => {
 });
 
 describe("avisoPersonaVsRegimen", () => {
-  it("avisa si el RFC es de persona física y el régimen de morales", () => {
-    expect(avisoPersonaVsRegimen("KACO850315J28", "601")).toMatch(/persona física/);
+  it("avisa con el dedazo real: RFC de persona física con el 601 puesto", () => {
+    const aviso = avisoPersonaVsRegimen("KACO850315J28", "601");
+    expect(aviso).toMatch(/persona física/);
+    expect(aviso).toMatch(/601/);
   });
 
-  it("avisa al revés también", () => {
-    expect(avisoPersonaVsRegimen("ABC850315J28", "612")).toMatch(/persona moral/);
+  it("avisa con los otros regímenes de persona moral que sí están confirmados", () => {
+    for (const clave of ["603", "620", "623", "624"]) {
+      expect(avisoPersonaVsRegimen("KACO850315J28", clave)).not.toBeNull();
+    }
   });
 
-  it("calla cuando coinciden", () => {
-    expect(avisoPersonaVsRegimen("KACO850315J28", "612")).toBeNull();
+  it("calla cuando el RFC es de persona moral, aunque el régimen sea de morales", () => {
     expect(avisoPersonaVsRegimen("ABC850315J28", "601")).toBeNull();
   });
 
-  it("calla en regímenes que aplican a ambas personas", () => {
-    expect(avisoPersonaVsRegimen("KACO850315J28", "626")).toBeNull();
-    expect(avisoPersonaVsRegimen("ABC850315J28", "626")).toBeNull();
+  it("calla en los regímenes sin verificar, aunque el RFC sea de persona física", () => {
+    // 607 es justo el que las fuentes secundarias reportan distinto entre sí:
+    // mientras no venga del catálogo oficial, no se advierte nada.
+    for (const clave of ["607", "612", "622", "626"]) {
+      expect(avisoPersonaVsRegimen("KACO850315J28", clave)).toBeNull();
+    }
   });
 
   it("calla si falta información", () => {
     expect(avisoPersonaVsRegimen("", "601")).toBeNull();
     expect(avisoPersonaVsRegimen("KACO850315J28", "")).toBeNull();
+  });
+
+  it("cubrirá el 628 sin tocar código cuando se cargue el catálogo oficial", () => {
+    expect(REGIMENES_PERSONA_MORAL_CIERTOS).toContain("628");
   });
 });
 
