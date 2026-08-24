@@ -8,7 +8,7 @@
  * participante en TODO el buzón y migra el historial al lead para poder darle
  * seguimiento desde la ficha.
  *
- * Requiere: secrets AZURE_*/MICROSOFT_* (client credentials), SENDER_EMAIL y
+ * Requiere: secrets AZURE_* o MICROSOFT_* (client credentials), SENDER_EMAIL y
  * permiso de aplicación Mail.Read en Azure AD.
  * Deploy: `supabase functions deploy import-lead-emails` (verify_jwt true).
  */
