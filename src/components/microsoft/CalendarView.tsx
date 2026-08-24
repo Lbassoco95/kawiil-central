@@ -1592,8 +1592,17 @@ export function CalendarView({
                               const compact = height < 46;
                               const showLocation = height >= 64 && !!event.location?.displayName;
                               const innerStyle: Record<string, string | number> = {};
-                              if (catHex) { innerStyle.backgroundColor = hexAlpha(catHex, 0.15); innerStyle.borderColor = hexAlpha(catHex, 0.45); }
-                              if (accent) { innerStyle.borderLeftWidth = 3; innerStyle.borderLeftColor = accent; }
+                              // Si el evento tiene categoría, su color manda (fondo + borde
+                              // izquierdo); el color de la cuenta solo cuando NO hay categoría.
+                              if (catHex) {
+                                innerStyle.backgroundColor = hexAlpha(catHex, 0.22);
+                                innerStyle.borderColor = hexAlpha(catHex, 0.5);
+                                innerStyle.borderLeftWidth = 3;
+                                innerStyle.borderLeftColor = catHex;
+                              } else if (accent) {
+                                innerStyle.borderLeftWidth = 3;
+                                innerStyle.borderLeftColor = accent;
+                              }
                               const catChips = eventCategoryChips(event.id);
 
                               return (
