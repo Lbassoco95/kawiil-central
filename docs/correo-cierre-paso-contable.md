@@ -33,6 +33,20 @@ En este orden:
 2. `projectId` / `periodId` del contexto (correo compuesto desde el proyecto).
 3. Los destinatarios del correo, contra `clients.email`.
 
+### Tareas del periodo
+
+Además del paso, se cierran las **tareas abiertas del periodo cuyo título habla
+de acuses o del envío al cliente** (`isAcusesTaskTitle`). Las tareas se ligan al
+periodo por `phase_key = acct_period_<periodId>`.
+
+Deliberadamente **no** se cierra cualquier tarea del periodo: puede haber trabajo
+abierto que el correo no resuelve. El cierre pasa por `useUpdateTask`, así que
+respeta sus reglas (subtareas abiertas, `completed_at`, recurrencia); una tarea
+que esas reglas bloqueen se deja como está y el resto del flujo continúa.
+
+Los pasos «Presentación ante el SAT» y «Declaración: ...» **no** se tocan: se
+siguen palomeando a mano.
+
 ## Contrato para quien toque la sección de Correo
 
 **Todo punto de envío que pueda insertar una plantilla contable debe avisar tras
@@ -63,7 +77,8 @@ pasó antes de este documento).
 
 - Se cierra el paso, se registra `completed_at`, `completed_by` y una nota de
   auditoría con fecha, destinatarios, asunto y adjuntos.
+- Se cierran las tareas de acuses de ese periodo, si las hay.
 - Aviso `«Envío de acuses al cliente» completado — Julio 2026` con botón
-  **Deshacer** (10 s).
+  **Deshacer** (10 s), que revierte tanto el paso como las tareas cerradas.
 - Si no se pudo identificar cliente o periodo, el aviso lo dice y sugiere elegir
   el cliente en «Plantillas contables»; el correo siempre se envía igual.

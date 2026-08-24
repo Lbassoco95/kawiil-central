@@ -3,10 +3,13 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { getMonthName } from "@/hooks/useAccountingPeriods";
+import { useUpdateTask } from "@/hooks/useTasks";
 import {
+  fetchAcusesTasksForPeriod,
   revertAccountingStepSync,
   syncAccountingStepAfterEmail,
   type AccountingStepSyncResult,
+  type PeriodTaskLike,
   type SentAccountingEmailInfo,
 } from "@/lib/accountingEmailStepSync";
 
@@ -19,19 +22,38 @@ import {
 export function useAccountingEmailStepSync() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const updateTask = useUpdateTask();
 
   return useCallback(
     async (info: SentAccountingEmailInfo): Promise<AccountingStepSyncResult> => {
       const result = await syncAccountingStepAfterEmail(info, { userId: user?.id ?? null });
 
       if (result.status === "completed") {
+        // Además del paso, se cierran las tareas del periodo que hablan del
+        // envío de acuses. Se usa `useUpdateTask` para respetar sus reglas
+        // (subtareas abiertas, `completed_at`, recurrencia).
+        const closedTasks: PeriodTaskLike[] = [];
+        for (const task of await fetchAcusesTasksForPeriod(result.projectId, result.periodId)) {
+          try {
+            await updateTask.mutateAsync({ id: task.id, status: "completada" });
+            closedTasks.push(task);
+          } catch {
+            // Una tarea con subtareas abiertas no se puede cerrar: se deja como
+            // está y el resto del flujo continúa.
+          }
+        }
+
         queryClient.invalidateQueries({ queryKey: ["accounting-periods", result.projectId] });
         queryClient.invalidateQueries({ queryKey: ["my-active-projects-progress"] });
         const periodo = `${getMonthName(result.month)} ${result.year}`;
+        const tareasTxt = closedTasks.length
+          ? ` También se ${closedTasks.length === 1 ? "cerró 1 tarea" : `cerraron ${closedTasks.length} tareas`} del periodo.`
+          : "";
         toast.success(`«${result.stepLabel}» completado — ${periodo}`, {
-          description: info.clientName
-            ? `Se cerró el paso del periodo de ${info.clientName} al enviar el correo.`
-            : "Se cerró el paso del periodo al enviar el correo.",
+          description:
+            (info.clientName
+              ? `Se cerró el paso del periodo de ${info.clientName} al enviar el correo.`
+              : "Se cerró el paso del periodo al enviar el correo.") + tareasTxt,
           duration: 10000,
           action: {
             label: "Deshacer",
@@ -41,6 +63,13 @@ export function useAccountingEmailStepSync() {
                 result.previousSteps,
                 result.previousStatus,
               );
+              for (const task of closedTasks) {
+                try {
+                  await updateTask.mutateAsync({ id: task.id, status: task.status });
+                } catch {
+                  // Si no se puede reabrir, el paso ya se revirtió: no se bloquea.
+                }
+              }
               queryClient.invalidateQueries({ queryKey: ["accounting-periods", result.projectId] });
               queryClient.invalidateQueries({ queryKey: ["my-active-projects-progress"] });
               if (ok) toast.info(`«${result.stepLabel}» volvió a quedar pendiente`);
@@ -66,6 +95,6 @@ export function useAccountingEmailStepSync() {
 
       return result;
     },
-    [user?.id, queryClient],
+    [user?.id, queryClient, updateTask],
   );
 }
