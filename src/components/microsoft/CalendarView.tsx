@@ -704,6 +704,32 @@ export function CalendarView({
     if (id.startsWith("outlook:")) return linkedAccountIdFromCalendarId(ev?.calendarId);
     return PRIMARY_MS_ID;
   };
+  // Lista UNIFICADA de categorías (unión de todas las cuentas, sin duplicar por nombre).
+  // Se muestra en el diálogo del evento para poder elegir cualquiera; al guardar, si no
+  // existe en la cuenta del evento, se crea ahí (nativa) para que quede sincronizada.
+  const unifiedCategories = useMemo(() => {
+    // Ocultamos las 6 categorías por defecto de Outlook ("Red category"…) que son ruido;
+    // se muestran las categorías reales del usuario de todas las cuentas.
+    const DEFAULTS = new Set(["red category", "orange category", "yellow category", "green category", "blue category", "purple category"]);
+    const m = new Map<string, { displayName: string; color?: string }>();
+    accountCategories.forEach((c) => {
+      const key = c.displayName.trim().toLowerCase();
+      if (DEFAULTS.has(key) || m.has(key)) return;
+      m.set(key, { displayName: c.displayName, color: c.color });
+    });
+    return Array.from(m.values()).sort((a, b) => a.displayName.localeCompare(b.displayName, "es"));
+  }, [accountCategories]);
+  // Crea en la cuenta indicada las categorías (por nombre) que aún no tenga.
+  const ensureCategoriesInAccount = async (accountId: string, names: string[]) => {
+    if (!accountId) return;
+    const have = new Set(
+      accountCategories.filter((c) => c.accountId === accountId).map((c) => c.displayName.trim().toLowerCase()),
+    );
+    for (const name of names) {
+      if (have.has(name.trim().toLowerCase())) continue;
+      try { await createAccountCategory.mutateAsync({ accountId, displayName: name }); } catch { /* si falla, se aplica igual el nombre */ }
+    }
+  };
   const eventCategoryChips = (eventId?: string | null) =>
     ((eventId && eventTags[eventId]) || []).map((cid) => categoryById.get(cid)).filter(Boolean) as Array<{ name: string; color: string }>;
 
@@ -957,7 +983,7 @@ export function CalendarView({
     return d >= 0 && d <= 7;
   }).slice(0, 8);
 
-  const handleCreateEvent = () => {
+  const handleCreateEvent = async () => {
     if (!newEvent.subject) return;
     const dateStr = newEvent.date || format(selectedDate, "yyyy-MM-dd");
     const baseDate = newEvent.date ? new Date(`${newEvent.date}T00:00:00`) : selectedDate;
@@ -985,6 +1011,11 @@ export function CalendarView({
       const provider = targetLinked.provider === "google" ? "google" : "microsoft";
       createLinkedEvent.mutate({ provider, accountId: targetLinked.id, event }, opts);
     };
+
+    // Asegura que las categorías elegidas existan en la cuenta destino (Microsoft) antes de crear.
+    if (targetLinked?.provider !== "google" && newEvent.categories.length > 0) {
+      await ensureCategoriesInAccount(newEvent.accountId, newEvent.categories);
+    }
 
     // "Personalizado (editable)": genera eventos INDEPENDIENTES (uno por ocurrencia)
     // para poder editar/mover cada uno por separado — no una serie fija de Graph.
@@ -1106,7 +1137,7 @@ export function CalendarView({
   };
 
   // Ejecuta la actualización con el alcance elegido (este evento o toda la serie).
-  const doUpdate = (scope: "single" | "series") => {
+  const doUpdate = async (scope: "single" | "series") => {
     if (!selectedEventId) return;
     const ev = cachedEvent || eventDetail;
     const payload = buildEditPayload();
@@ -1114,6 +1145,12 @@ export function CalendarView({
     // de una ocurrencia posterior descuadraría todo el calendario. Se cambian los demás
     // campos (título, ubicación, notas, categorías, invitados) en toda la serie.
     if (scope === "series") { delete payload.start; delete payload.end; }
+    // Asegura que las categorías elegidas existan en la cuenta del evento (si vienen de
+    // otra cuenta, se crean ahí como nativas para que queden sincronizadas con su bandeja).
+    const evAccId = eventAccountIdOf(ev);
+    if (evAccId && Array.isArray(payload.categories) && payload.categories.length > 0) {
+      await ensureCategoriesInAccount(evAccId, payload.categories);
+    }
     const targetId = scope === "series" ? (seriesMasterEventId(ev) || selectedEventId) : selectedEventId;
     const ref = parseCalendarEventRef(targetId, ev?.calendarId);
     const close = { onSuccess: () => { setSelectedEventId(null); setSeriesPrompt(null); } };
@@ -2497,7 +2534,7 @@ export function CalendarView({
                     </>
                   );
                 }
-                const cats = accountCategories.filter((c) => c.accountId === newEvent.accountId);
+                const cats = unifiedCategories;
                 const addNew = () => {
                   const name = inlineCatName.trim();
                   if (!name) return;
@@ -2517,14 +2554,14 @@ export function CalendarView({
                 };
                 return (
                   <>
-                    <Label>Categoría <span className="text-[10px] font-normal text-muted-foreground">· de esta cuenta · se sincroniza con Outlook</span></Label>
+                    <Label>Categoría <span className="text-[10px] font-normal text-muted-foreground">· elige una o crea; se guarda en esta cuenta</span></Label>
                     {cats.length > 0 && (
                       <div className="flex flex-wrap gap-2">
                         {cats.map((cat) => {
                           const checked = newEvent.categories.includes(cat.displayName);
-                          const color = OUTLOOK_PRESET_HEX[cat.color || ""] || paletteColorFor(cat.displayName);
+                          const color = OUTLOOK_PRESET_HEX[cat.color || ""] || categoryColorFor(cat.displayName);
                           return (
-                            <label key={cat.id} className={cn("flex items-center gap-1.5 text-sm cursor-pointer rounded-full border px-2.5 py-1 transition-colors", checked ? "border-transparent" : "border-border hover:bg-accent/50")} style={checked ? { backgroundColor: hexAlpha(color, 0.18), borderColor: hexAlpha(color, 0.5) } : undefined}>
+                            <label key={cat.displayName} className={cn("flex items-center gap-1.5 text-sm cursor-pointer rounded-full border px-2.5 py-1 transition-colors", checked ? "border-transparent" : "border-border hover:bg-accent/50")} style={checked ? { backgroundColor: hexAlpha(color, 0.18), borderColor: hexAlpha(color, 0.5) } : undefined}>
                               <Checkbox checked={checked} onCheckedChange={() => toggleNewEventCategory(cat.displayName)} className="h-3.5 w-3.5" />
                               <span className="inline-flex items-center gap-1">
                                 <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />{cat.displayName}
@@ -2695,7 +2732,7 @@ export function CalendarView({
                     </div>
                   );
                 }
-                const cats = accountCategories.filter((c) => c.accountId === evAccId);
+                const cats = unifiedCategories;
                 const toggleCat = (name: string) =>
                   setEditForm((f) => ({ ...f, categories: f.categories.includes(name) ? f.categories.filter((x) => x !== name) : [...f.categories, name] }));
                 const applyNew = () => {
@@ -2703,6 +2740,7 @@ export function CalendarView({
                   if (!name) return;
                   const existing = cats.find((c) => c.displayName.trim().toLowerCase() === name.toLowerCase());
                   if (existing) { toggleCat(existing.displayName); setInlineCatName(""); return; }
+                  // Se crea en la cuenta del evento y se aplica; la lista unificada se refresca sola.
                   createAccountCategory.mutate({ accountId: evAccId, displayName: name }, {
                     onSuccess: (created) => {
                       const dn = created?.displayName || name;
@@ -2713,14 +2751,14 @@ export function CalendarView({
                 };
                 return (
                   <div className="space-y-2">
-                    <Label>Categoría <span className="text-[10px] font-normal text-muted-foreground">· de esta cuenta · se sincroniza con Outlook</span></Label>
+                    <Label>Categoría <span className="text-[10px] font-normal text-muted-foreground">· elige una o crea; se guarda en esta cuenta</span></Label>
                     {cats.length > 0 && (
                       <div className="flex flex-wrap gap-2">
                         {cats.map((cat) => {
                           const checked = editForm.categories.includes(cat.displayName);
-                          const color = OUTLOOK_PRESET_HEX[cat.color || ""] || paletteColorFor(cat.displayName);
+                          const color = OUTLOOK_PRESET_HEX[cat.color || ""] || categoryColorFor(cat.displayName);
                           return (
-                            <label key={cat.id} className={cn("flex items-center gap-1.5 text-sm cursor-pointer rounded-full border px-2.5 py-1 transition-colors", checked ? "border-transparent" : "border-border hover:bg-accent/50")} style={checked ? { backgroundColor: hexAlpha(color, 0.18), borderColor: hexAlpha(color, 0.5) } : undefined}>
+                            <label key={cat.displayName} className={cn("flex items-center gap-1.5 text-sm cursor-pointer rounded-full border px-2.5 py-1 transition-colors", checked ? "border-transparent" : "border-border hover:bg-accent/50")} style={checked ? { backgroundColor: hexAlpha(color, 0.18), borderColor: hexAlpha(color, 0.5) } : undefined}>
                               <Checkbox checked={checked} onCheckedChange={() => toggleCat(cat.displayName)} className="h-3.5 w-3.5" />
                               <span className="inline-flex items-center gap-1">
                                 <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />{cat.displayName}
