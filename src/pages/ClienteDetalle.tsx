@@ -13,6 +13,7 @@ import { ClientOffboardingSection } from "@/components/clients/ClientOffboarding
 import { ClientEditDialog } from "@/components/clients/ClientEditDialog";
 import { ClientHealthScoreCard } from "@/components/clients/ClientHealthScoreCard";
 import { ClientSatCertificatesSection } from "@/components/clients/ClientSatCertificatesSection";
+import { ClientTaxProfilesSection } from "@/components/clients/ClientTaxProfilesSection";
 import { MoffinSatStatusSummary } from "@/components/clients/MoffinSatStatusSummary";
 import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
 import { ComplianceClientSection } from "@/components/compliance/ComplianceClientSection";
@@ -390,6 +391,8 @@ const ClienteDetalle = () => {
               clientId={client.id}
               clientRfc={client.rfc ?? null}
             />
+
+            <ClientTaxProfilesSection clientId={client.id} clientRfc={client.rfc ?? null} />
 
             <section className="md:col-span-2 glass-card p-5">
               <h2 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-1.5">
