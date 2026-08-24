@@ -1,5 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { AccountingStep, StepStatus } from "@/hooks/useAccountingPeriods";
+import { accountingPeriodPhaseKey } from "@/lib/projectPhaseSync";
+import { isTaskClosedStatus } from "@/lib/taskStatusGroups";
 
 /**
  * Cierre automático del paso del periodo contable al enviar la plantilla al cliente.
@@ -160,6 +162,54 @@ export function mergeSentAccountingEmailInfo(
     (out as Record<string, unknown>)[key] = value;
   }
   return out;
+}
+
+/**
+ * Tareas del periodo que el envío del correo da por terminadas: las que hablan
+ * de acuses o del envío al cliente. Deliberadamente NO se cierra cualquier
+ * tarea del periodo — puede haber trabajo abierto que el correo no resuelve.
+ */
+const ACUSES_TASK_PATTERNS: RegExp[] = [
+  /\bacuse/i,
+  /\benv[ií]o?\s+(?:de\s+)?(?:los\s+)?acuses?/i,
+  /\benviar\s+(?:los\s+)?acuses?/i,
+  /\benv[ií]o?\s+(?:de\s+)?(?:la\s+)?declaraci[oó]n(?:es)?\s+al\s+cliente/i,
+  /\benviar\s+(?:la\s+)?declaraci[oó]n(?:es)?\s+al\s+cliente/i,
+];
+
+/** ¿El título de la tarea corresponde al envío de acuses al cliente? */
+export function isAcusesTaskTitle(title: string | null | undefined): boolean {
+  const t = (title ?? "").trim();
+  if (!t) return false;
+  return ACUSES_TASK_PATTERNS.some((re) => re.test(t));
+}
+
+export interface PeriodTaskLike {
+  id: string;
+  title: string;
+  status: string;
+}
+
+/** Tareas abiertas del periodo que el envío de acuses debe cerrar. */
+export function pickAcusesTasksToClose<T extends PeriodTaskLike>(tasks: T[]): T[] {
+  return tasks.filter((t) => !isTaskClosedStatus(t.status) && isAcusesTaskTitle(t.title));
+}
+
+/**
+ * Busca en el periodo las tareas abiertas de envío de acuses. Las tareas se
+ * ligan al periodo por `phase_key` (ver `accountingPeriodPhaseKey`).
+ */
+export async function fetchAcusesTasksForPeriod(
+  projectId: string,
+  periodId: string,
+): Promise<PeriodTaskLike[]> {
+  const { data, error } = await supabase
+    .from("tasks")
+    .select("id, title, status")
+    .eq("project_id", projectId)
+    .eq("phase_key", accountingPeriodPhaseKey(periodId));
+  if (error) return [];
+  return pickAcusesTasksToClose((data ?? []) as PeriodTaskLike[]);
 }
 
 /** Nota de auditoría que se anexa al paso cerrado por correo. */

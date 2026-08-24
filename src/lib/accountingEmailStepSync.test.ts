@@ -5,7 +5,9 @@ import {
   buildStepNote,
   candidatePeriodKeys,
   derivePeriodStatus,
+  isAcusesTaskTitle,
   mergeSentAccountingEmailInfo,
+  pickAcusesTasksToClose,
   pickPeriodForSend,
   stepKeyForTemplateCategory,
   type PeriodLike,
@@ -159,5 +161,35 @@ describe("mergeSentAccountingEmailInfo", () => {
       clientName: "Cliente",
       templateCategory: "pagos_provisionales",
     });
+  });
+});
+
+describe("isAcusesTaskTitle", () => {
+  it("reconoce las tareas de envío de acuses", () => {
+    expect(isAcusesTaskTitle("Envío de acuses al cliente")).toBe(true);
+    expect(isAcusesTaskTitle("Enviar acuses julio")).toBe(true);
+    expect(isAcusesTaskTitle("Mandar acuse de IVA")).toBe(true);
+    expect(isAcusesTaskTitle("Envio de la declaracion al cliente")).toBe(true);
+  });
+
+  it("no toca las demás tareas del periodo", () => {
+    expect(isAcusesTaskTitle("Conciliación bancaria")).toBe(false);
+    expect(isAcusesTaskTitle("Registro en ContPAQi")).toBe(false);
+    expect(isAcusesTaskTitle("Preparación de declaraciones")).toBe(false);
+    expect(isAcusesTaskTitle("")).toBe(false);
+    expect(isAcusesTaskTitle(null)).toBe(false);
+  });
+});
+
+describe("pickAcusesTasksToClose", () => {
+  it("solo toma las abiertas que hablan de acuses", () => {
+    const tasks = [
+      { id: "1", title: "Envío de acuses al cliente", status: "pendiente" },
+      { id: "2", title: "Envío de acuses al cliente", status: "completada" },
+      { id: "3", title: "Conciliación bancaria", status: "pendiente" },
+      { id: "4", title: "Enviar acuses", status: "en_progreso" },
+      { id: "5", title: "Enviar acuses", status: "cancelada" },
+    ];
+    expect(pickAcusesTasksToClose(tasks).map((t) => t.id)).toEqual(["1", "4"]);
   });
 });
