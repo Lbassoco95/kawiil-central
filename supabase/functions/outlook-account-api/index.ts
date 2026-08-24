@@ -276,6 +276,50 @@ Deno.serve(async (req) => {
       return jsonResp({ success: true });
     }
 
+    // ─── CATEGORÍAS NATIVAS (masterCategories) DE ESTA CUENTA ─────────────────
+
+    if (action === "outlook-categories") {
+      const acc = getAccount(params?.accountId);
+      if (!acc) return jsonResp({ value: [] });
+      const token = await ensureAccessToken(supabaseAdmin, acc);
+      if (!token) return jsonResp({ value: [] });
+      const res = await graphFetch(token, "/me/outlook/masterCategories");
+      if (!res.ok) return jsonResp({ value: [] });
+      const json = await res.json();
+      return jsonResp({ value: json.value || [] });
+    }
+
+    if (action === "create-outlook-category") {
+      const acc = getAccount(params?.accountId);
+      if (!acc) return jsonResp({ error: "no_account" }, 400);
+      const token = await ensureAccessToken(supabaseAdmin, acc);
+      if (!token) return jsonResp({ error: "no_valid_token" }, 400);
+      const displayName = String(params?.displayName || "").trim();
+      if (!displayName) return jsonResp({ error: "displayName required" }, 400);
+      let h = 0;
+      for (let i = 0; i < displayName.length; i++) h = (h * 31 + displayName.charCodeAt(i)) >>> 0;
+      const color = typeof params?.color === "string" && params.color.startsWith("preset") ? params.color : `preset${h % 25}`;
+      const res = await graphFetch(token, "/me/outlook/masterCategories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ displayName, color }),
+      });
+      const json = await res.json();
+      if (!res.ok) return jsonResp({ error: json?.error?.message || "create_failed" }, 400);
+      return jsonResp(json);
+    }
+
+    if (action === "delete-outlook-category") {
+      const acc = getAccount(params?.accountId);
+      if (!acc) return jsonResp({ error: "no_account" }, 400);
+      const token = await ensureAccessToken(supabaseAdmin, acc);
+      if (!token) return jsonResp({ error: "no_valid_token" }, 400);
+      const id = String(params?.id || "").trim();
+      if (!id) return jsonResp({ error: "id required" }, 400);
+      await graphFetch(token, `/me/outlook/masterCategories/${encodeURIComponent(id)}`, { method: "DELETE" });
+      return jsonResp({ success: true });
+    }
+
     // ─── EMAIL ACTIONS ───────────────────────────────────────────────────────
 
     if (action === "emails") {

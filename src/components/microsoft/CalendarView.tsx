@@ -54,6 +54,7 @@ import {
   useLinkedAccounts, useGoogleConnection, useGoogleCalendarEvents, useGoogleCalendars,
   useOutlookConnection, useOutlookAccountEvents, useOutlookAccountCalendars, useRenameLinkedAccount,
   useRoutedRespondEvent, useRoutedUpdateEvent, useUpdateLinkedEvent, useDeleteLinkedEvent, useCreateLinkedEvent, parseCalendarEventRef,
+  useAccountCategories, useCreateAccountCategory, useDeleteAccountCategory, type AccountCategory,
 } from "@/hooks/useLinkedAccounts";
 import { ColorPickerPopover, paletteColorFor, hexAlpha } from "@/components/microsoft/ColorPickerPopover";
 import {
@@ -105,6 +106,16 @@ function accountColorFor(accountId?: string | null): string {
 // Identidad de la cuenta principal de Microsoft (Kawiil), que no vive en linked_accounts.
 const PRIMARY_MS_ID = "microsoft-primary";
 const PRIMARY_MS_COLOR = "#0099bc"; // teal Kawiil por defecto (editable)
+
+// Colores de las categorías nativas de Outlook (preset0..preset24) a hex, para pintar
+// el evento con el mismo color que muestra Outlook.
+const OUTLOOK_PRESET_HEX: Record<string, string> = {
+  preset0: "#E74C3C", preset1: "#F39C12", preset2: "#A0522D", preset3: "#F1C40F", preset4: "#2ECC71",
+  preset5: "#1ABC9C", preset6: "#808000", preset7: "#3498DB", preset8: "#9B59B6", preset9: "#C2185B",
+  preset10: "#607D8B", preset11: "#455A64", preset12: "#95A5A6", preset13: "#616161", preset14: "#2C3E50",
+  preset15: "#B71C1C", preset16: "#D35400", preset17: "#6D4C41", preset18: "#B7950B", preset19: "#196F3D",
+  preset20: "#148F77", preset21: "#556B2F", preset22: "#1F618D", preset23: "#6C3483", preset24: "#880E4F",
+};
 
 // Detecta un enlace de videollamada dentro de un texto (p. ej. la Ubicación) y
 // devuelve el proveedor para mostrarlo como botón "Unirse", igual que Teams.
@@ -455,6 +466,12 @@ export function CalendarView({
   const createOutlookCategory = useCreateOutlookCategory();
   const deleteOutlookCategory = useDeleteOutlookCategory();
   const [newOutlookCatName, setNewOutlookCatName] = useState("");
+  // Categorías NATIVAS por cuenta (Outlook masterCategories de cada cuenta conectada) —
+  // fuente única, ligada a cada correo y sincronizada con su bandeja.
+  const { data: accountCategories = [] } = useAccountCategories();
+  const createAccountCategory = useCreateAccountCategory();
+  const deleteAccountCategory = useDeleteAccountCategory();
+  const [newCatAccountId, setNewCatAccountId] = useState<string>("microsoft-primary");
   // Trayectos guardados por evento -> bloque de traslado antes del evento.
   const { data: travelMap = {} } = useEventTravelMap();
   const [draggedEvent, setDraggedEvent] = useState<any>(null);
@@ -671,6 +688,22 @@ export function CalendarView({
     kawiilCategories.forEach((c) => m.set(c.name.trim().toLowerCase(), c));
     return m;
   }, [kawiilCategories]);
+  // Color hex de una categoría nativa por su nombre (desde el preset de Outlook).
+  const accountCatColorByName = useMemo(() => {
+    const m = new Map<string, string>();
+    accountCategories.forEach((c) => {
+      const key = c.displayName.trim().toLowerCase();
+      if (!m.has(key)) m.set(key, OUTLOOK_PRESET_HEX[c.color || ""] || paletteColorFor(c.displayName));
+    });
+    return m;
+  }, [accountCategories]);
+  // Categorías nativas de la cuenta a la que pertenece un evento (para el selector del diálogo).
+  const eventAccountIdOf = (ev: any): string | null => {
+    const id = String(ev?.id || "");
+    if (id.startsWith("google:")) return null; // Google no tiene categorías de texto
+    if (id.startsWith("outlook:")) return linkedAccountIdFromCalendarId(ev?.calendarId);
+    return PRIMARY_MS_ID;
+  };
   const eventCategoryChips = (eventId?: string | null) =>
     ((eventId && eventTags[eventId]) || []).map((cid) => categoryById.get(cid)).filter(Boolean) as Array<{ name: string; color: string }>;
 
@@ -725,11 +758,6 @@ export function CalendarView({
     return allEvents.filter((e: any) => {
       // Ocultar por calendario (M365 se filtra en el servidor; Google, aquí por calendarId).
       if (e.calendarId && hiddenCalendarIds.includes(e.calendarId)) return false;
-      // Filtro por etiquetas Kawiil (aplican a eventos de cualquier cuenta).
-      if (activeKawiilCatIds.length > 0) {
-        const tags = eventTags[e.id] || [];
-        if (!tags.some((t) => activeKawiilCatIds.includes(t))) return false;
-      }
       // Filtro por categorías nativas de Outlook.
       if (activeCategoryFilters.length > 0) {
         const cats: string[] = Array.isArray(e.categories) ? e.categories : [];
@@ -793,10 +821,12 @@ export function CalendarView({
     const accId = linkedAccountIdFromCalendarId(event?.calendarId);
     return accId ? accountColorForId(accId) : accountColorForId(PRIMARY_MS_ID);
   };
-  // Color de una categoría: 1) override del usuario, 2) color de la etiqueta Kawiil
-  // del mismo nombre (lista universal), 3) color determinista de la paleta.
-  const categoryColorFor = (name?: string | null) =>
-    categoryColors[name || ""] || kawiilCatByName.get((name || "").trim().toLowerCase())?.color || paletteColorFor(name);
+  // Color de una categoría: 1) override del usuario, 2) color de la categoría NATIVA de
+  // la cuenta (Outlook), 3) etiqueta Kawiil del mismo nombre, 4) color de la paleta.
+  const categoryColorFor = (name?: string | null) => {
+    const key = (name || "").trim().toLowerCase();
+    return categoryColors[name || ""] || accountCatColorByName.get(key) || kawiilCatByName.get(key)?.color || paletteColorFor(name);
+  };
   const calendarNameFor = (event: any) =>
     (event?.calendarId ? calendarById.get(event.calendarId)?.name : null) || event?.calendarName || null;
   const toggleCalendar = (id: string) => {
@@ -1514,9 +1544,10 @@ export function CalendarView({
                               const endStr = endDt ? formatMX(endDt, "HH:mm") : "";
                               // Color de la etiqueta: primero la etiqueta Kawiil (universal, cualquier
                               // cuenta), luego la categoría nativa de Outlook como respaldo.
+                              // Color por categoría NATIVA del evento (primero); etiqueta Kawiil como respaldo legado.
                               const kawiilTagColor = ((eventTags[event.id] || [])[0] && categoryById.get((eventTags[event.id] || [])[0])?.color) || undefined;
                               const primaryCategory: string | undefined = event.categories?.[0];
-                              const catHex = kawiilTagColor || (primaryCategory ? categoryColorFor(primaryCategory) : undefined);
+                              const catHex = (primaryCategory ? categoryColorFor(primaryCategory) : undefined) || kawiilTagColor;
                               const meetingUrl = event.onlineMeeting?.joinUrl || event.onlineMeetingUrl || detectMeetingUrl(event.location?.displayName || event.location)?.url;
                               const accent = showCalendarColors ? eventAccentColor(event) : undefined;
                               // Contenido adaptativo según la altura del evento (evita recortes ilegibles):
@@ -2081,186 +2112,88 @@ export function CalendarView({
                 </div>
               )}
 
-              {/* Category filters */}
-              {outlookCategories.length > 0 && (
-                <div className="order-3 border-t border-border/30 pt-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Categorías</p>
+              {/* Categorías NATIVAS por cuenta (Outlook masterCategories). Una sola lista,
+                  ligada a cada correo y sincronizada con su bandeja. Con selector de cuenta. */}
+              {(calendars.length > 0 || accountCategories.length > 0) && (() => {
+                const catAccounts = [
+                  { id: PRIMARY_MS_ID, label: primaryLabel },
+                  ...linkedAccounts
+                    .filter((a) => a.provider === "microsoft" && a.status !== "disconnected")
+                    .map((a) => ({ id: a.id, label: accountLabelById.get(a.id) || a.email || "Outlook" })),
+                ];
+                const createHere = () => {
+                  const name = newOutlookCatName.trim();
+                  if (!name) return;
+                  createAccountCategory.mutate({ accountId: newCatAccountId, displayName: name });
+                  setNewOutlookCatName("");
+                };
+                return (
+                  <div className="order-3 border-t border-border/30 pt-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Categorías</p>
+                      {activeCategoryFilters.length > 0 && (
+                        <button type="button" onClick={() => setActiveCategoryFilters([])} className="text-[10px] text-primary hover:underline">Limpiar</button>
+                      )}
+                    </div>
+                    <div className="space-y-1.5">
+                      {catAccounts.map((acc) => {
+                        const cats = accountCategories.filter((c) => c.accountId === acc.id);
+                        if (cats.length === 0) return null;
+                        return (
+                          <div key={acc.id} className="space-y-0.5">
+                            {catAccounts.length > 1 && (
+                              <p className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground/70 px-1 pt-0.5">
+                                <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: accountColorForId(acc.id) }} />
+                                <span className="truncate">{acc.label}</span>
+                              </p>
+                            )}
+                            {cats.map((cat) => {
+                              const name = cat.displayName;
+                              const active = activeCategoryFilters.includes(name);
+                              const color = categoryColorFor(name);
+                              return (
+                                <div key={cat.id} className={cn("group w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-[11px] transition-colors", active ? "bg-primary/10 text-foreground" : "hover:bg-accent/50 text-muted-foreground")}>
+                                  <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                                  <button type="button" onClick={() => setActiveCategoryFilters((prev) => prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name])} className="flex-1 min-w-0 flex items-center gap-2 text-left" title="Filtrar por esta categoría">
+                                    <span className="truncate flex-1">{name}</span>
+                                    {active && <span className="text-primary text-[10px]">●</span>}
+                                  </button>
+                                  <button type="button" onClick={() => { if (confirm(`¿Eliminar la categoría "${name}"?`)) deleteAccountCategory.mutate({ accountId: acc.id, id: cat.id }); }} className="shrink-0 p-0.5 text-muted-foreground/50 opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity" title="Eliminar categoría">
+                                    <Trash2 className="h-3 w-3" />
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {/* Crear categoría: elegir a qué correo se agrega (se sincroniza con su bandeja) */}
+                    <div className="mt-2 space-y-1">
+                      {catAccounts.length > 1 && (
+                        <select value={newCatAccountId} onChange={(e) => setNewCatAccountId(e.target.value)} className="w-full h-7 rounded border border-border/40 bg-muted/40 px-2 text-[11px] outline-none focus:border-primary/40" title="Cuenta a la que se agrega la categoría">
+                          {catAccounts.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
+                        </select>
+                      )}
+                      <div className="flex items-center gap-1">
+                        <input
+                          value={newOutlookCatName}
+                          onChange={(e) => setNewOutlookCatName(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") createHere(); }}
+                          placeholder="Nueva categoría…"
+                          className="flex-1 min-w-0 h-6 px-2 text-[11px] bg-muted/40 border border-border/40 rounded outline-none focus:border-primary/40"
+                        />
+                        <button type="button" onClick={createHere} disabled={!newOutlookCatName.trim() || createAccountCategory.isPending} className="shrink-0 h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent disabled:opacity-40" title="Agregar categoría">
+                          {createAccountCategory.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+                        </button>
+                      </div>
+                    </div>
                     {activeCategoryFilters.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setActiveCategoryFilters([])}
-                        className="text-[10px] text-primary hover:underline"
-                      >
-                        Limpiar
-                      </button>
+                      <p className="text-[10px] text-muted-foreground pt-1 border-t border-border/40 mt-1">Mostrando {events.length} de {allEvents.length} eventos</p>
                     )}
                   </div>
-                  <div className="space-y-0.5">
-                    {(outlookCategories as any[]).map((cat: any) => {
-                      const name: string = cat.displayName;
-                      const active = activeCategoryFilters.includes(name);
-                      const color = categoryColorFor(name);
-                      return (
-                        <div
-                          key={name}
-                          className={cn(
-                            "group w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-[11px] transition-colors",
-                            active ? "bg-primary/10 text-foreground" : "hover:bg-accent/50 text-muted-foreground",
-                          )}
-                        >
-                          <ColorPickerPopover
-                            value={color}
-                            onChange={(c) => setCategoryColor(name, c)}
-                            onReset={categoryColors[name] ? () => resetCategoryColor(name) : undefined}
-                            ariaLabel={`Color de ${name}`}
-                            size={11}
-                          />
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setActiveCategoryFilters((prev) =>
-                                prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name],
-                              )
-                            }
-                            className="flex-1 min-w-0 flex items-center gap-2 text-left"
-                            title="Filtrar por esta categoría"
-                          >
-                            <span className="truncate flex-1">{name}</span>
-                            {active && <span className="text-primary text-[10px]">●</span>}
-                          </button>
-                          {cat.id && (
-                            <button
-                              type="button"
-                              onClick={() => { if (confirm(`¿Eliminar la categoría "${name}"?`)) deleteOutlookCategory.mutate(cat.id); }}
-                              className="shrink-0 p-0.5 text-muted-foreground/50 opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity"
-                              title="Eliminar categoría"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div className="mt-1.5 flex items-center gap-1">
-                    <input
-                      value={newOutlookCatName}
-                      onChange={(e) => setNewOutlookCatName(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && newOutlookCatName.trim()) {
-                          createOutlookCategory.mutate({ displayName: newOutlookCatName.trim() });
-                          setNewOutlookCatName("");
-                        }
-                      }}
-                      placeholder="Nueva categoría…"
-                      className="flex-1 min-w-0 h-6 px-2 text-[11px] bg-muted/40 border border-border/40 rounded outline-none focus:border-primary/40"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => { if (newOutlookCatName.trim()) { createOutlookCategory.mutate({ displayName: newOutlookCatName.trim() }); setNewOutlookCatName(""); } }}
-                      disabled={!newOutlookCatName.trim() || createOutlookCategory.isPending}
-                      className="shrink-0 h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent disabled:opacity-40"
-                      title="Agregar categoría"
-                    >
-                      {createOutlookCategory.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
-                    </button>
-                  </div>
-                  {activeCategoryFilters.length > 0 && (
-                    <p className="text-[10px] text-muted-foreground pt-1 border-t border-border/40 mt-1">
-                      Mostrando {events.length} de {allEvents.length} eventos
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {/* Etiquetas Kawiil (categorías propias, aplican a eventos de cualquier cuenta) */}
-              <div className="order-3 border-t border-border/30 pt-3">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Etiquetas Kawiil</p>
-                <div className="space-y-0.5">
-                  {kawiilCategories.map((cat) => {
-                    const active = activeKawiilCatIds.includes(cat.id);
-                    const editing = renamingId === `cat:${cat.id}`;
-                    return (
-                      <div key={cat.id} className={cn("group w-full flex items-center gap-2 rounded-md px-2 py-1 text-[11px] transition-colors", active ? "bg-primary/10 text-foreground" : "hover:bg-accent/50 text-muted-foreground")}>
-                        <ColorPickerPopover
-                          value={cat.color}
-                          onChange={(c) => updateCategory.mutate({ id: cat.id, color: c })}
-                          ariaLabel={`Color de ${cat.name}`}
-                          size={11}
-                        />
-                        {editing ? (
-                          <Input
-                            autoFocus
-                            value={renameValue}
-                            onChange={(e) => setRenameValue(e.target.value)}
-                            onBlur={() => { if (renameValue.trim()) updateCategory.mutate({ id: cat.id, name: renameValue }); setRenamingId(null); }}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") { if (renameValue.trim()) updateCategory.mutate({ id: cat.id, name: renameValue }); setRenamingId(null); }
-                              if (e.key === "Escape") setRenamingId(null);
-                            }}
-                            className="h-6 text-xs px-1.5 py-0 flex-1"
-                          />
-                        ) : (
-                          <button type="button" onClick={() => setActiveKawiilCatIds((p) => p.includes(cat.id) ? p.filter((x) => x !== cat.id) : [...p, cat.id])} className="flex-1 min-w-0 text-left truncate" title="Filtrar por esta etiqueta">
-                            {cat.name}{active && <span className="text-primary text-[10px] ml-1">●</span>}
-                          </button>
-                        )}
-                        {!editing && (
-                          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                            <button type="button" onClick={() => { setRenamingId(`cat:${cat.id}`); setRenameValue(cat.name); }} className="p-0.5 hover:text-foreground" title="Renombrar"><Pencil className="h-3 w-3" /></button>
-                            <button type="button" onClick={() => deleteCategory.mutate(cat.id)} className="p-0.5 hover:text-destructive" title="Eliminar"><Trash2 className="h-3 w-3" /></button>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                  <div className="flex items-center gap-1 pt-1">
-                    <Input
-                      value={newCategoryName}
-                      onChange={(e) => setNewCategoryName(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && newCategoryName.trim()) {
-                          createCategory.mutate({ name: newCategoryName, color: paletteColorFor(newCategoryName) });
-                          setNewCategoryName("");
-                        }
-                      }}
-                      placeholder="Nueva etiqueta (ej. Cliente)"
-                      className="h-7 text-xs"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => { if (newCategoryName.trim()) { createCategory.mutate({ name: newCategoryName, color: paletteColorFor(newCategoryName) }); setNewCategoryName(""); } }}
-                      disabled={!newCategoryName.trim() || createCategory.isPending}
-                      className="shrink-0 p-1.5 rounded-md border border-dashed border-border text-muted-foreground hover:bg-accent hover:text-foreground"
-                      title="Agregar etiqueta"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                  {/* Migración: importar categorías de Outlook a la lista universal Kawiil */}
-                  {(() => {
-                    const pending = outlookCategories.filter(
-                      (oc: any) => oc?.displayName && !kawiilCatByName.has(String(oc.displayName).trim().toLowerCase()),
-                    );
-                    if (pending.length === 0) return null;
-                    return (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          pending.forEach((oc: any) => createCategory.mutate({ name: oc.displayName, color: paletteColorFor(oc.displayName) }));
-                          toast.success(`Importando ${pending.length} categoría(s) de Outlook`);
-                        }}
-                        disabled={createCategory.isPending}
-                        className="mt-1 w-full text-left text-[10px] text-muted-foreground hover:text-foreground rounded-md px-2 py-1 border border-dashed border-border/60 hover:bg-accent/50"
-                        title="Copiar tus categorías de Outlook a la lista universal (funcionan en todas las cuentas)"
-                      >
-                        + Importar {pending.length} categoría(s) de Outlook a esta lista
-                      </button>
-                    );
-                  })()}
-                </div>
-              </div>
+                );
+              })()}
 
               {/* AI analysis card */}
               {aiEvents && aiEvents.length > 0 && (
@@ -2553,24 +2486,63 @@ export function CalendarView({
               <Textarea placeholder="Agenda, notas, instrucciones..." value={newEvent.description} onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })} rows={3} />
             </div>
             <div className="space-y-2">
-              <Label>Etiquetas <span className="text-[10px] font-normal text-muted-foreground">· lista universal</span></Label>
-              {kawiilCategories.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                  {kawiilCategories.map((cat) => {
-                    const checked = newEvent.categories.includes(cat.name);
-                    return (
-                      <label key={cat.id} className={cn("flex items-center gap-1.5 text-sm cursor-pointer rounded-full border px-2.5 py-1 transition-colors", checked ? "border-transparent" : "border-border hover:bg-accent/50")} style={checked ? { backgroundColor: hexAlpha(cat.color, 0.18), borderColor: hexAlpha(cat.color, 0.5) } : undefined}>
-                        <Checkbox checked={checked} onCheckedChange={() => toggleNewEventCategory(cat.name)} className="h-3.5 w-3.5" />
-                        <span className="inline-flex items-center gap-1">
-                          <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />{cat.name}
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
-              ) : (
-                <Input placeholder="Ej: Personal, Trabajo" value={newEvent.categories.join(", ")} onChange={(e) => setNewEvent({ ...newEvent, categories: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })} />
-              )}
+              {(() => {
+                const createAcc = newEvent.accountId === PRIMARY_MS_ID ? { provider: "microsoft" } : linkedAccounts.find((a) => a.id === newEvent.accountId);
+                const isGoogleTarget = createAcc?.provider === "google";
+                if (isGoogleTarget) {
+                  return (
+                    <>
+                      <Label>Categoría</Label>
+                      <p className="text-xs text-muted-foreground">Las categorías nativas aplican a cuentas Microsoft. En Google, etiqueta el evento después de crearlo.</p>
+                    </>
+                  );
+                }
+                const cats = accountCategories.filter((c) => c.accountId === newEvent.accountId);
+                const addNew = () => {
+                  const name = inlineCatName.trim();
+                  if (!name) return;
+                  const existing = cats.find((c) => c.displayName.trim().toLowerCase() === name.toLowerCase());
+                  if (existing) {
+                    if (!newEvent.categories.includes(existing.displayName)) setNewEvent((p) => ({ ...p, categories: [...p.categories, existing.displayName] }));
+                    setInlineCatName("");
+                    return;
+                  }
+                  createAccountCategory.mutate({ accountId: newEvent.accountId, displayName: name }, {
+                    onSuccess: (created) => {
+                      const dn = created?.displayName || name;
+                      setNewEvent((p) => (p.categories.includes(dn) ? p : { ...p, categories: [...p.categories, dn] }));
+                      setInlineCatName("");
+                    },
+                  });
+                };
+                return (
+                  <>
+                    <Label>Categoría <span className="text-[10px] font-normal text-muted-foreground">· de esta cuenta · se sincroniza con Outlook</span></Label>
+                    {cats.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {cats.map((cat) => {
+                          const checked = newEvent.categories.includes(cat.displayName);
+                          const color = OUTLOOK_PRESET_HEX[cat.color || ""] || paletteColorFor(cat.displayName);
+                          return (
+                            <label key={cat.id} className={cn("flex items-center gap-1.5 text-sm cursor-pointer rounded-full border px-2.5 py-1 transition-colors", checked ? "border-transparent" : "border-border hover:bg-accent/50")} style={checked ? { backgroundColor: hexAlpha(color, 0.18), borderColor: hexAlpha(color, 0.5) } : undefined}>
+                              <Checkbox checked={checked} onCheckedChange={() => toggleNewEventCategory(cat.displayName)} className="h-3.5 w-3.5" />
+                              <span className="inline-flex items-center gap-1">
+                                <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />{cat.displayName}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                    <div className="flex items-center gap-1.5">
+                      <Input value={inlineCatName} onChange={(e) => setInlineCatName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addNew(); } }} placeholder="Nueva categoría (ej. Capacitación)" className="h-8 text-sm" />
+                      <Button type="button" size="sm" variant="outline" className="shrink-0 h-8" disabled={!inlineCatName.trim() || createAccountCategory.isPending} onClick={addNew}>
+                        {createAccountCategory.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><Plus className="mr-1 h-3.5 w-3.5" />Agregar</>}
+                      </Button>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           </div>
           <DialogFooter>
@@ -2710,41 +2682,70 @@ export function CalendarView({
                 <Label>Asunto</Label>
                 <Input value={editForm.subject} onChange={(e) => setEditForm({ ...editForm, subject: e.target.value })} />
               </div>
-              {/* Categoría/Etiqueta del evento — arriba y visible. Lista universal Kawiil:
-                  aplica a cualquier cuenta, colorea el evento y persiste. Se puede crear al vuelo. */}
-              {selectedEventId && (
-                <div className="space-y-2">
-                  <Label>Categoría <span className="text-[10px] font-normal text-muted-foreground">· identifica de qué es el evento (aplica a cualquier cuenta)</span></Label>
-                  {kawiilCategories.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {kawiilCategories.map((cat) => {
-                        const checked = (eventTags[selectedEventId] || []).includes(cat.id);
-                        return (
-                          <label key={cat.id} className={cn("flex items-center gap-1.5 text-sm cursor-pointer rounded-full border px-2.5 py-1 transition-colors", checked ? "border-transparent" : "border-border hover:bg-accent/50")} style={checked ? { backgroundColor: hexAlpha(cat.color, 0.18), borderColor: hexAlpha(cat.color, 0.5) } : undefined}>
-                            <Checkbox checked={checked} onCheckedChange={() => handleToggleEventTag(cachedEvent || eventDetail, cat, !checked)} className="h-3.5 w-3.5" />
-                            <span className="inline-flex items-center gap-1">
-                              <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />{cat.name}
-                            </span>
-                          </label>
-                        );
-                      })}
+              {/* Categoría del evento — nativa de la cuenta (Outlook), visible y creable al vuelo.
+                  Se sincroniza con la bandeja de esa cuenta. */}
+              {selectedEventId && (() => {
+                const ev = cachedEvent || eventDetail;
+                const evAccId = eventAccountIdOf(ev);
+                if (!evAccId) {
+                  return (
+                    <div className="space-y-1">
+                      <Label>Categoría</Label>
+                      <p className="text-xs text-muted-foreground">Las categorías nativas aplican a cuentas Microsoft (Outlook). Este evento es de Google.</p>
                     </div>
-                  )}
-                  {/* Crear y aplicar una categoría nueva al momento (ej. "Capacitación"). */}
-                  <div className="flex items-center gap-1.5">
-                    <Input
-                      value={inlineCatName}
-                      onChange={(e) => setInlineCatName(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); createAndApplyTag(); } }}
-                      placeholder={kawiilCategories.length > 0 ? "Nueva categoría (ej. Capacitación)" : "Escribe una categoría (ej. Capacitación) y agrégala"}
-                      className="h-8 text-sm"
-                    />
-                    <Button type="button" size="sm" variant="outline" className="shrink-0 h-8" disabled={!inlineCatName.trim() || createCategory.isPending} onClick={createAndApplyTag}>
-                      {createCategory.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><Plus className="mr-1 h-3.5 w-3.5" />Agregar</>}
-                    </Button>
+                  );
+                }
+                const cats = accountCategories.filter((c) => c.accountId === evAccId);
+                const toggleCat = (name: string) =>
+                  setEditForm((f) => ({ ...f, categories: f.categories.includes(name) ? f.categories.filter((x) => x !== name) : [...f.categories, name] }));
+                const applyNew = () => {
+                  const name = inlineCatName.trim();
+                  if (!name) return;
+                  const existing = cats.find((c) => c.displayName.trim().toLowerCase() === name.toLowerCase());
+                  if (existing) { toggleCat(existing.displayName); setInlineCatName(""); return; }
+                  createAccountCategory.mutate({ accountId: evAccId, displayName: name }, {
+                    onSuccess: (created) => {
+                      const dn = created?.displayName || name;
+                      setEditForm((f) => (f.categories.includes(dn) ? f : { ...f, categories: [...f.categories, dn] }));
+                      setInlineCatName("");
+                    },
+                  });
+                };
+                return (
+                  <div className="space-y-2">
+                    <Label>Categoría <span className="text-[10px] font-normal text-muted-foreground">· de esta cuenta · se sincroniza con Outlook</span></Label>
+                    {cats.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {cats.map((cat) => {
+                          const checked = editForm.categories.includes(cat.displayName);
+                          const color = OUTLOOK_PRESET_HEX[cat.color || ""] || paletteColorFor(cat.displayName);
+                          return (
+                            <label key={cat.id} className={cn("flex items-center gap-1.5 text-sm cursor-pointer rounded-full border px-2.5 py-1 transition-colors", checked ? "border-transparent" : "border-border hover:bg-accent/50")} style={checked ? { backgroundColor: hexAlpha(color, 0.18), borderColor: hexAlpha(color, 0.5) } : undefined}>
+                              <Checkbox checked={checked} onCheckedChange={() => toggleCat(cat.displayName)} className="h-3.5 w-3.5" />
+                              <span className="inline-flex items-center gap-1">
+                                <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />{cat.displayName}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                    <div className="flex items-center gap-1.5">
+                      <Input
+                        value={inlineCatName}
+                        onChange={(e) => setInlineCatName(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); applyNew(); } }}
+                        placeholder="Nueva categoría (ej. Capacitación)"
+                        className="h-8 text-sm"
+                      />
+                      <Button type="button" size="sm" variant="outline" className="shrink-0 h-8" disabled={!inlineCatName.trim() || createAccountCategory.isPending} onClick={applyNew}>
+                        {createAccountCategory.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><Plus className="mr-1 h-3.5 w-3.5" />Agregar</>}
+                      </Button>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">Se aplica al pulsar Guardar y aparece también en Outlook.</p>
                   </div>
-                </div>
-              )}
+                );
+              })()}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1 min-w-0"><Label>Fecha inicio</Label><Input type="date" value={editForm.startDate} onChange={(e) => {
                   const newStart = e.target.value;
