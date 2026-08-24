@@ -673,6 +673,88 @@ div[id*="lovable" i] {
 .kw-tb-weather-refresh:hover { background: hsl(var(--muted)); color: hsl(var(--foreground)); }
 .kw-tb-weather-refresh:disabled { cursor: wait; opacity: 0.6; }
 
+/* Tipo de cambio Banxico (mismo lenguaje visual que el clima, tono verde) */
+.kw-tb-fx {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 12px 6px 8px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, hsl(150 60% 45% / 0.10), hsl(190 65% 50% / 0.08));
+  border: 1px solid hsl(var(--border));
+  min-width: 150px;
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color .15s, background .15s;
+}
+.kw-tb-fx:hover { border-color: hsl(var(--ring) / 0.5); }
+.kw-tb-fx::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(120% 80% at 110% -20%, hsl(150 80% 55% / 0.10), transparent 55%);
+}
+.kw-tb-fx-ico {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  color: hsl(150 45% 38%);
+  position: relative;
+  z-index: 1;
+}
+[data-theme="dark"] .kw-tb-fx-ico { color: hsl(150 55% 62%); }
+.kw-tb-fx-body {
+  position: relative;
+  z-index: 1;
+  line-height: 1.15;
+  display: block;
+}
+.kw-tb-fx-value {
+  display: block;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: hsl(var(--foreground));
+}
+.kw-tb-fx-unit {
+  font-size: 9.5px;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+  margin-left: 3px;
+}
+.kw-tb-fx-label {
+  display: block;
+  font-size: 10.5px;
+  color: hsl(var(--muted-foreground));
+  margin-top: 1px;
+  max-width: 118px;
+}
+.kw-tb-fx-meta {
+  align-items: center;
+  gap: 6px;
+  margin-top: 1px;
+  font-size: 10px;
+}
+.kw-tb-fx-date { color: hsl(var(--muted-foreground)); opacity: .8; }
+.kw-tb-fx-trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.kw-tb-fx-up { color: hsl(150 55% 36%); }
+.kw-tb-fx-down { color: hsl(0 65% 50%); }
+.kw-tb-fx-flat { color: hsl(var(--muted-foreground)); }
+[data-theme="dark"] .kw-tb-fx-up { color: hsl(150 60% 62%); }
+[data-theme="dark"] .kw-tb-fx-down { color: hsl(0 70% 68%); }
+
 /* Clock */
 .kw-tb-clock {
   display: flex;
