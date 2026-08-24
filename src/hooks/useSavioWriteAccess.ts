@@ -8,9 +8,15 @@ export type SavioWriteAccessData = {
   rpcError?: string;
 };
 
-/** Permiso para crear cargos / registrar pagos (además de ver ingresos). */
-export function useSavioWriteAccess() {
+/**
+ * Permiso para crear cargos / registrar pagos (además de ver ingresos).
+ *
+ * `enabled` permite no consultar el RPC cuando la pantalla todavía no muestra
+ * nada de facturación (p. ej. un lead en seguimiento).
+ */
+export function useSavioWriteAccess(options?: { enabled?: boolean }) {
   const { user } = useAuth();
+  const enabled = options?.enabled ?? true;
   return useQuery({
     queryKey: ["savio-write-access", user?.id],
     queryFn: async (): Promise<SavioWriteAccessData> => {
@@ -22,7 +28,7 @@ export function useSavioWriteAccess() {
       }
       return { canWrite: data === true };
     },
-    enabled: !!user?.id,
+    enabled: enabled && !!user?.id,
     staleTime: 60_000,
   });
 }
