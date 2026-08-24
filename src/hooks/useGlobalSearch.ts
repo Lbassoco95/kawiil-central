@@ -11,9 +11,12 @@ import { useAuth } from "@/contexts/AuthContext";
  * imposible de encontrar. Aquí se consulta Supabase directamente por cada
  * entidad, de modo que el resultado no depende de qué haya cargado la sesión.
  *
- * Nota: `ilike` de Postgres es sensible a acentos ("jose" no encuentra "José").
- * Esa parte la cubre el filtrado local normalizado de `searchMatch`; ambos
- * conjuntos se fusionan en el buscador.
+ * La consulta preferente es el RPC `buscar_global`, que normaliza acentos en
+ * la base (unaccent + índices trigram) y resuelve las cinco entidades en un
+ * solo viaje. Si esa función todavía no existe —la migración se aplica por su
+ * propio pipeline y el frontend puede desplegarse antes— se cae al camino
+ * anterior: una consulta `ilike` por tabla. Ese camino no tolera acentos, pero
+ * el filtrado local de `searchMatch` lo cubre sobre lo ya cacheado.
  */
 
 export type GlobalSearchEntity = "client" | "project" | "task" | "document" | "lead";
@@ -50,6 +53,60 @@ const EMPTY_RESULT: GlobalSearchResult = {
   document: [],
   lead: [],
 };
+
+/** Una fila tal cual la devuelve el RPC `buscar_global`. */
+export type RpcRow = {
+  entidad: GlobalSearchEntity;
+  id: string;
+  titulo: string | null;
+  subtitulo: string | null;
+};
+
+/** Ruta a la que navega cada tipo de resultado. */
+const ROUTE_BY_ENTITY: Record<GlobalSearchEntity, (id: string) => string> = {
+  client: (id) => `/clientes/${id}`,
+  project: (id) => `/proyectos/${id}`,
+  task: (id) => `/tareas?id=${id}`,
+  document: (id) => `/documentos?id=${id}`,
+  lead: (id) => `/pipeline/leads/${id}`,
+};
+
+/**
+ * PostgREST responde PGRST202 cuando el RPC no está en su caché de esquema, y
+ * Postgres 42883 cuando la función no existe. En ambos casos la migración aún
+ * no llegó a este entorno y toca usar el camino anterior.
+ */
+function esFuncionAusente(error: { code?: string | null } | null): boolean {
+  return error?.code === "PGRST202" || error?.code === "42883";
+}
+
+/**
+ * Agrupa las filas planas del RPC por entidad y les pone su ruta. Descarta las
+ * que llegan sin título (no habría nada que mostrar) y las de una entidad
+ * desconocida, por si la función de la base gana tipos nuevos antes que el
+ * frontend.
+ */
+export function agruparFilasRpc(filas: RpcRow[]): GlobalSearchResult {
+  const resultado: GlobalSearchResult = {
+    client: [],
+    project: [],
+    task: [],
+    document: [],
+    lead: [],
+  };
+  for (const fila of filas) {
+    const grupo = resultado[fila.entidad];
+    if (!grupo || !fila.titulo) continue;
+    grupo.push({
+      id: fila.id,
+      entity: fila.entidad,
+      title: fila.titulo,
+      subtitle: fila.subtitulo,
+      to: ROUTE_BY_ENTITY[fila.entidad](fila.id),
+    });
+  }
+  return resultado;
+}
 
 /** Longitud mínima antes de pegarle a la base de datos. */
 export const GLOBAL_SEARCH_MIN_LENGTH = 2;
@@ -121,6 +178,18 @@ export function useGlobalSearch(
     staleTime: 30_000,
     placeholderData: (previous) => previous,
     queryFn: async () => {
+      // Camino preferente: una sola llamada, con acentos resueltos en la base.
+      const { data: rpcData, error: rpcError } = await supabase.rpc("buscar_global", {
+        termino: term,
+        limite: limit,
+        incluir_leads: includeLeads,
+      });
+
+      if (!rpcError) return agruparFilasRpc((rpcData ?? []) as RpcRow[]);
+
+      if (!esFuncionAusente(rpcError)) throw rpcError;
+
+      // La migración todavía no llegó a este entorno: consulta tabla por tabla.
       // Si tras escapar no queda nada buscable (p. ej. el usuario sólo escribió
       // "%%%"), el filtro degeneraría en `ilike.%%` y devolvería filas al azar.
       if (!escapeForOr(term)) return { ...EMPTY_RESULT };
