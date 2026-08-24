@@ -5,7 +5,7 @@ import {
   useDownloadLeadEmailAttachment,
   useLeadEmailAttachments,
   type LeadEmailAttachment,
-} from "@/hooks/usePipeline";
+} from "@/hooks/useLeadEmailAttachments";
 import { base64ToBlobUrl } from "@/lib/outlookEmailMedia";
 
 interface Props {

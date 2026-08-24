@@ -110,3 +110,83 @@ export function formatServices(current: readonly ServiceArea[]): string {
 export function activeBundles(current: readonly ServiceArea[]): ServiceBundle[] {
   return SERVICE_BUNDLES.filter((b) => isBundleSelected(current, b));
 }
+
+// ─── Modelo de cobro y proyección ─────────────────────────────────────
+
+/**
+ * Cómo se cobra cada servicio. Es lo que separa el pago único del ingreso
+ * recurrente en las proyecciones: un Soft Landing se cobra una vez, mientras
+ * el backoffice (legal + contabilidad) es mensualidad.
+ */
+export type BillingModel = "one_time" | "monthly";
+
+export const SERVICE_BILLING: Record<ServiceArea, BillingModel> = {
+  softlanding: "one_time",
+  constitucion_nacional: "one_time",
+  gestoria: "one_time",
+  juicios: "one_time",
+  contabilidad: "monthly",
+  legal: "monthly",
+  pld_ft: "monthly",
+  cumplimiento: "monthly",
+  representacion: "monthly",
+};
+
+/**
+ * Servicios que normalmente acompañan a otro. Un Soft Landing (o una
+ * constitución) casi siempre sigue con el backoffice de seguimiento mensual,
+ * así que la captura lo sugiere en vez de dejar el recurrente sin registrar.
+ */
+export const SERVICE_COMPANIONS: Partial<Record<ServiceArea, readonly ServiceArea[]>> = {
+  softlanding: ["legal", "contabilidad"],
+  constitucion_nacional: ["legal", "contabilidad"],
+};
+
+/** Meses de compromiso por defecto para proyectar el recurrente. */
+export const DEFAULT_CONTRACT_MONTHS = 12;
+
+export interface ValueBreakdown {
+  oneTime: number | null;
+  monthly: number | null;
+  months: number | null;
+}
+
+/** Separa los servicios elegidos según cómo se cobran. */
+export function splitByBilling(current: readonly ServiceArea[]): {
+  oneTime: ServiceArea[];
+  monthly: ServiceArea[];
+} {
+  const list = normalizeServices(current);
+  return {
+    oneTime: list.filter((s) => SERVICE_BILLING[s] === "one_time"),
+    monthly: list.filter((s) => SERVICE_BILLING[s] === "monthly"),
+  };
+}
+
+/** Servicios que suelen acompañar a la selección y todavía no están marcados. */
+export function suggestedCompanions(current: readonly ServiceArea[]): ServiceArea[] {
+  const selected = new Set(normalizeServices(current));
+  const out = new Set<ServiceArea>();
+  for (const s of selected) {
+    for (const companion of SERVICE_COMPANIONS[s] ?? []) {
+      if (!selected.has(companion)) out.add(companion);
+    }
+  }
+  return SERVICE_ORDER.filter((s) => out.has(s));
+}
+
+export function contractMonths(months: number | null | undefined): number {
+  if (months == null || !Number.isFinite(months)) return DEFAULT_CONTRACT_MONTHS;
+  return Math.max(1, Math.trunc(months));
+}
+
+/**
+ * Valor total del contrato: pago único + mensualidad × meses. Es lo que se
+ * guarda en `estimated_value` para que el tablero y Savio sigan cuadrando.
+ */
+export function computeTcv(breakdown: ValueBreakdown): number {
+  const oneTime = Number.isFinite(breakdown.oneTime as number) ? Number(breakdown.oneTime) : 0;
+  const monthly = Number.isFinite(breakdown.monthly as number) ? Number(breakdown.monthly) : 0;
+  const months = monthly > 0 ? contractMonths(breakdown.months) : 0;
+  return Math.round((oneTime + monthly * months) * 100) / 100;
+}
