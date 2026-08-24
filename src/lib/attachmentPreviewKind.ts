@@ -50,6 +50,22 @@ export function attachmentPreviewKind(name: string, contentType?: string | null)
   return "other";
 }
 
+/**
+ * Texto del adjunto en UTF-8, con respaldo a Windows-1252.
+ *
+ * `Blob.text()` asume UTF-8 y mete caracteres de reemplazo en los archivos que
+ * salen de Excel o del Bloc de notas en Windows (misma cura que el lector de
+ * correo aplica a los CSV).
+ */
+export async function decodeAttachmentText(blob: Blob): Promise<string> {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return new TextDecoder("windows-1252").decode(bytes);
+  }
+}
+
 /** Etiqueta corta para el encabezado de la vista previa. */
 export function attachmentPreviewKindLabel(kind: AttachmentPreviewKind): string {
   switch (kind) {

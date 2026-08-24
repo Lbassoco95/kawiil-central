@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   attachmentPreviewKind,
   attachmentPreviewKindLabel,
+  decodeAttachmentText,
   effectiveAttachmentMime,
 } from "./attachmentPreviewKind";
 
@@ -33,5 +34,23 @@ describe("attachmentPreviewKind", () => {
   it("etiqueta cada tipo en español", () => {
     expect(attachmentPreviewKindLabel("sheet")).toBe("Hoja de cálculo");
     expect(attachmentPreviewKindLabel("other")).toBe("Archivo");
+  });
+});
+
+/** El Blob de jsdom no trae `arrayBuffer()`; basta con los bytes. */
+function blobOf(bytes: Uint8Array): Blob {
+  return { arrayBuffer: async () => bytes.buffer } as unknown as Blob;
+}
+
+describe("decodeAttachmentText", () => {
+  it("lee UTF-8", async () => {
+    const bytes = new TextEncoder().encode("Presentación Softlanding");
+    await expect(decodeAttachmentText(blobOf(bytes))).resolves.toBe("Presentación Softlanding");
+  });
+
+  it("cae a Windows-1252 cuando el archivo no es UTF-8 válido", async () => {
+    // «Presentación» en Windows-1252 (0xF3 = ó): secuencia inválida en UTF-8.
+    const bytes = new Uint8Array([0x50, 0x72, 0x65, 0x73, 0x65, 0x6e, 0x74, 0x61, 0x63, 0x69, 0xf3, 0x6e]);
+    await expect(decodeAttachmentText(blobOf(bytes))).resolves.toBe("Presentación");
   });
 });

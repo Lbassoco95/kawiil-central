@@ -9,10 +9,11 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Download, FileText, Loader2 } from "lucide-react";
+import { Download, ExternalLink, FileText, Loader2 } from "lucide-react";
 import {
   attachmentPreviewKind,
   attachmentPreviewKindLabel,
+  decodeAttachmentText,
   type AttachmentPreviewKind,
 } from "@/lib/attachmentPreviewKind";
 import {
@@ -32,6 +33,9 @@ interface Props {
   attachment: PreviewableAttachment | null;
   onClose: () => void;
 }
+
+/** Tope del texto que se pinta de golpe; más allá el navegador se atora. */
+const TEXT_PREVIEW_MAX_CHARS = 400_000;
 
 function formatSize(bytes: number | null | undefined): string {
   if (bytes == null || !Number.isFinite(bytes)) return "";
@@ -54,41 +58,56 @@ function tooBigMessage(kind: AttachmentPreviewKind): string {
  * para descargar.
  */
 export function AttachmentPreviewDialog({ attachment, onClose }: Props) {
-  const name = attachment?.name || "adjunto";
+  // El diálogo sigue montado mientras se cierra; conservar el último adjunto
+  // evita que el contenido parpadee a «Vista previa no disponible» al salir.
+  const [shown, setShown] = useState<PreviewableAttachment | null>(attachment);
+  useEffect(() => {
+    if (attachment) setShown(attachment);
+  }, [attachment]);
+
+  const name = shown?.name || "adjunto";
   const kind = useMemo(
-    () => (attachment ? attachmentPreviewKind(name, attachment.contentType) : "other"),
-    [attachment, name],
+    () => (shown ? attachmentPreviewKind(name, shown.contentType) : "other"),
+    [shown, name],
   );
 
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const [docxHtml, setDocxHtml] = useState<string | null>(null);
   const [sheet, setSheet] = useState<EmailSheetPreviewData | null>(null);
   const [text, setText] = useState<string | null>(null);
+  const [textTruncated, setTextTruncated] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // URL de objeto para imagen y PDF; se libera al cerrar o cambiar de adjunto.
+  // URL de objeto para imagen y PDF; se libera al cambiar de adjunto o al salir.
   useEffect(() => {
-    if (!attachment || (kind !== "image" && kind !== "pdf")) {
+    if (!shown || (kind !== "image" && kind !== "pdf")) {
       setObjectUrl(null);
       return;
     }
-    const url = URL.createObjectURL(attachment.blob);
+    // El PDF se sirve con su tipo fijo: un archivo «.pdf» que en realidad trae
+    // HTML no debe poder ejecutarse en el origen de Kawiil.
+    const blob =
+      kind === "pdf" && shown.blob.type !== "application/pdf"
+        ? new Blob([shown.blob], { type: "application/pdf" })
+        : shown.blob;
+    const url = URL.createObjectURL(blob);
     setObjectUrl(url);
     return () => URL.revokeObjectURL(url);
-  }, [attachment, kind]);
+  }, [shown, kind]);
 
   useEffect(() => {
     setDocxHtml(null);
     setSheet(null);
     setText(null);
+    setTextTruncated(false);
     setError(null);
     setLoading(false);
 
-    if (!attachment) return;
+    if (!shown) return;
     if (kind !== "docx" && kind !== "sheet" && kind !== "text") return;
 
-    if (attachment.blob.size > EMAIL_ATTACHMENT_PREVIEW_MAX_BYTES) {
+    if (shown.blob.size > EMAIL_ATTACHMENT_PREVIEW_MAX_BYTES) {
       setError(tooBigMessage(kind));
       return;
     }
@@ -99,15 +118,18 @@ export function AttachmentPreviewDialog({ attachment, onClose }: Props) {
       try {
         if (kind === "docx") {
           const mammoth = await import("mammoth");
-          const arrayBuffer = await attachment.blob.arrayBuffer();
+          const arrayBuffer = await shown.blob.arrayBuffer();
           const { value } = await mammoth.convertToHtml({ arrayBuffer });
           if (!cancelled) setDocxHtml(DOMPurify.sanitize(value, { USE_PROFILES: { html: true } }));
         } else if (kind === "sheet") {
-          const data = await buildEmailSheetPreview(attachment.blob, name);
+          const data = await buildEmailSheetPreview(shown.blob, name);
           if (!cancelled) setSheet(data);
         } else {
-          const raw = await attachment.blob.text();
-          if (!cancelled) setText(raw);
+          const raw = await decodeAttachmentText(shown.blob);
+          if (!cancelled) {
+            setTextTruncated(raw.length > TEXT_PREVIEW_MAX_CHARS);
+            setText(raw.slice(0, TEXT_PREVIEW_MAX_CHARS));
+          }
         }
       } catch (e) {
         if (!cancelled) {
@@ -121,11 +143,11 @@ export function AttachmentPreviewDialog({ attachment, onClose }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [attachment, kind, name]);
+  }, [shown, kind, name]);
 
   const handleDownload = () => {
-    if (!attachment) return;
-    const url = URL.createObjectURL(attachment.blob);
+    if (!shown) return;
+    const url = URL.createObjectURL(shown.blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = name.trim() || "adjunto";
@@ -151,7 +173,7 @@ export function AttachmentPreviewDialog({ attachment, onClose }: Props) {
               size="sm"
               className="shrink-0 gap-1"
               onClick={handleDownload}
-              disabled={!attachment}
+              disabled={!shown}
             >
               <Download className="h-4 w-4" />
               Descargar
@@ -161,8 +183,8 @@ export function AttachmentPreviewDialog({ attachment, onClose }: Props) {
             <Badge variant="outline" className="text-[10px] font-semibold uppercase tracking-wide">
               {attachmentPreviewKindLabel(kind)}
             </Badge>
-            {attachment ? (
-              <span className="text-muted-foreground">{formatSize(attachment.blob.size)}</span>
+            {shown ? (
+              <span className="text-muted-foreground">{formatSize(shown.blob.size)}</span>
             ) : null}
           </DialogDescription>
         </DialogHeader>
@@ -193,11 +215,29 @@ export function AttachmentPreviewDialog({ attachment, onClose }: Props) {
           )}
 
           {!loading && !error && kind === "pdf" && objectUrl && (
-            <iframe
-              src={`${objectUrl}#toolbar=1&navpanes=0`}
-              title={name}
-              className="min-h-[70vh] w-full rounded-md border-0 bg-background"
-            />
+            <object
+              data={objectUrl}
+              type="application/pdf"
+              aria-label={name}
+              className="min-h-[70vh] w-full rounded-md bg-background"
+            >
+              {/* Safari/iOS no siempre pinta un PDF de blob: incrustado — ahí queda el respaldo. */}
+              <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
+                <FileText className="h-10 w-10 text-muted-foreground/50" />
+                <p className="text-sm text-muted-foreground">
+                  Este navegador no puede mostrar el PDF aquí.
+                </p>
+                <a
+                  href={objectUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-4 text-xs font-semibold text-primary-foreground"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Abrir en una pestaña nueva
+                </a>
+              </div>
+            </object>
           )}
 
           {!loading && !error && kind === "docx" && docxHtml && (
@@ -254,7 +294,15 @@ export function AttachmentPreviewDialog({ attachment, onClose }: Props) {
           )}
 
           {!loading && !error && kind === "text" && text != null && (
-            <pre className="whitespace-pre-wrap break-words p-4 font-mono text-xs text-foreground">{text}</pre>
+            <>
+              {textTruncated && (
+                <p className="border-b border-border/50 px-4 pb-2 pt-3 text-xs text-muted-foreground">
+                  Vista truncada (primeros {Math.round(TEXT_PREVIEW_MAX_CHARS / 1000)} mil caracteres).
+                  Descarga el archivo para ver todo.
+                </p>
+              )}
+              <pre className="whitespace-pre-wrap break-words p-4 font-mono text-xs text-foreground">{text}</pre>
+            </>
           )}
 
           {!loading && !error && kind === "other" && (
