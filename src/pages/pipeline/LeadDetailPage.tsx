@@ -127,6 +127,9 @@ const schema = z.object({
   stage_id: z.string().uuid(),
   priority: z.enum(["urgent", "high", "medium", "low"]),
   service_type: z.string().optional().nullable(),
+  // Tipo de persona (define cómo se etiquetan nombre y empresa)
+  person_type: z.string().optional().nullable(),
+  contact_role: z.string().optional().nullable(),
   // Atribución a partner / convenio
   partner_id: z.string().optional().nullable(),
   partner_notes: z.string().optional().nullable(),
@@ -173,6 +176,9 @@ type FormValues = z.infer<typeof schema>;
 /** Columnas que sólo existen tras aplicar la migración de partners. */
 const PARTNER_COLUMNS = ["partner_id", "partner_notes"] as const;
 
+/** Columnas que sólo existen tras aplicar la migración de tipo de persona. */
+const PERSON_COLUMNS = ["person_type", "contact_role"] as const;
+
 /** Columnas que sólo existen tras aplicar la migración de servicio/constitución. */
 const CONSTITUCION_COLUMNS = [
   "constitucion_denominacion_1",
@@ -192,10 +198,12 @@ const CONSTITUCION_COLUMNS = [
 ] as const;
 
 function isMissingColumnError(message: string): boolean {
-  return /service_type|constitucion_|partner_id|partner_notes|schema cache|column .* does not exist/i.test(message);
+  return /service_type|constitucion_|partner_id|partner_notes|person_type|contact_role|schema cache|column .* does not exist/i.test(
+    message,
+  );
 }
 
-// ─── Formularios por servicio ────────────────────────────────────────────────
+// ─── Formularios por servicio ──────────────────────────────────────────────
 
 function SoftlandingForm({ form }: { form: UseFormReturn<FormValues> }) {
   return (
@@ -494,6 +502,8 @@ export default function LeadDetailPage() {
       stage_id: lead.stage_id,
       priority: lead.priority as FormValues["priority"],
       service_type: (leadAny.service_type as string) || null,
+      person_type: (leadAny.person_type as string) || null,
+      contact_role: (leadAny.contact_role as string) || null,
       partner_id: (leadAny.partner_id as string) || null,
       partner_notes: (leadAny.partner_notes as string) || null,
       country_origin: (leadAny.country_origin as string) || null,
@@ -527,6 +537,8 @@ export default function LeadDetailPage() {
   const { data: partners = [] } = usePipelinePartners();
   const serviceType = form.watch("service_type");
   const partnerId = form.watch("partner_id");
+  const personType = form.watch("person_type");
+  const isMoral = personType === "moral";
   const selectedPartner = useMemo(
     () => partners.find((p) => p.id === partnerId) || null,
     [partners, partnerId],
@@ -560,6 +572,8 @@ export default function LeadDetailPage() {
     // Columnas que pueden no existir todavía en la base (migraciones pendientes).
     const extras: Record<string, unknown> = {
       service_type: vals.service_type || null,
+      person_type: vals.person_type || null,
+      contact_role: vals.contact_role || null,
       partner_id: vals.partner_id || null,
       partner_notes: vals.partner_notes || null,
       country_origin: vals.country_origin || null,
@@ -600,6 +614,7 @@ export default function LeadDetailPage() {
       delete fallback.service_type;
       for (const c of CONSTITUCION_COLUMNS) delete fallback[c];
       for (const c of PARTNER_COLUMNS) delete fallback[c];
+      for (const c of PERSON_COLUMNS) delete fallback[c];
       try {
         await updateLead.mutateAsync({ ...base, ...(fallback as Record<string, never>) });
         toast.warning(
@@ -719,6 +734,11 @@ export default function LeadDetailPage() {
               {lead.email ? ` · ${lead.email}` : ""}
             </p>
           </div>
+          {personType ? (
+            <Badge className="bg-white/15 text-white border-white/20 hover:bg-white/20">
+              {isMoral ? "Persona moral" : "Persona física"}
+            </Badge>
+          ) : null}
           {serviceType ? (
             <Badge className="bg-white/15 text-white border-white/20 hover:bg-white/20">
               {SERVICE_LABELS[serviceType as keyof typeof SERVICE_LABELS] || serviceType}
@@ -815,12 +835,47 @@ export default function LeadDetailPage() {
                     </TabsTrigger>
                   </TabsList>
 
-                  {/* ── Contacto ─────────────────────────────────────────── */}
+                  {/* ── Contacto ─────────────────────────────────── */}
                   <TabsContent value="contacto" className="mt-4 space-y-3">
                     <div>
-                      <Label>Nombre</Label>
-                      <Input {...form.register("full_name")} />
+                      <Label>Tipo de persona</Label>
+                      <Select
+                        value={personType || "__none__"}
+                        onValueChange={(v) =>
+                          form.setValue("person_type", v === "__none__" ? null : v, {
+                            shouldDirty: true,
+                          })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Sin definir" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">Sin definir</SelectItem>
+                          <SelectItem value="fisica">Persona física</SelectItem>
+                          <SelectItem value="moral">Persona moral (empresa)</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
+                    <div>
+                      <Label>{isMoral ? "Nombre del contacto" : "Nombre completo"}</Label>
+                      <Input {...form.register("full_name")} />
+                      {isMoral ? (
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          Es lo que se muestra en el tablero. Si todavía no hay contacto, deja aquí
+                          la razón social.
+                        </p>
+                      ) : null}
+                    </div>
+                    {isMoral ? (
+                      <div>
+                        <Label>Puesto del contacto</Label>
+                        <Input
+                          {...form.register("contact_role")}
+                          placeholder="Director, contador, socio…"
+                        />
+                      </div>
+                    ) : null}
                     <div>
                       <Label>Email</Label>
                       <Input type="email" {...form.register("email")} />
@@ -837,7 +892,7 @@ export default function LeadDetailPage() {
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <Label>Empresa</Label>
+                        <Label>{isMoral ? "Razón social" : "Empresa"}</Label>
                         <Input {...form.register("company_name")} />
                       </div>
                       <div>
@@ -1000,7 +1055,7 @@ export default function LeadDetailPage() {
                     </div>
                   </TabsContent>
 
-                  {/* ── Servicio ─────────────────────────────────────────── */}
+                  {/* ── Servicio ─────────────────────────────────── */}
                   <TabsContent value="servicio" className="mt-4 space-y-4">
                     <div>
                       <Label>Tipo de servicio</Label>
@@ -1083,7 +1138,7 @@ export default function LeadDetailPage() {
                     ) : null}
                   </TabsContent>
 
-                  {/* ── Notas ────────────────────────────────────────────── */}
+                  {/* ── Notas ────────────────────────────────────── */}
                   <TabsContent value="notas" className="mt-4 space-y-3">
                     <div>
                       <Label>Resumen del lead</Label>
