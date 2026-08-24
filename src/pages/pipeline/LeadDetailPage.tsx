@@ -48,6 +48,17 @@ import { LeadFollowUpNotes } from "@/components/pipeline/LeadFollowUpNotes";
 import { LeadSavioPromotionCard } from "@/components/pipeline/LeadSavioPromotionCard";
 import { formatMxnShort } from "@/lib/pipelineFormat";
 import { SERVICE_LABELS } from "@/lib/serviceLabels";
+import { LeadServicesPicker } from "@/components/pipeline/LeadServicesPicker";
+import { LeadValueFields } from "@/components/pipeline/LeadValueFields";
+import {
+  computeTcv,
+  contractMonths,
+  formatServices,
+  normalizeServices,
+  primaryService,
+  type ServiceArea,
+  type ValueBreakdown,
+} from "@/lib/leadServices";
 import { usePipelinePartners } from "@/hooks/usePartners";
 import { estimateCommission, formatArrangement } from "@/lib/partnerArrangement";
 
@@ -56,23 +67,6 @@ const priorityOptions = [
   { value: "high", label: "Alta" },
   { value: "medium", label: "Media" },
   { value: "low", label: "Baja" },
-] as const;
-
-/**
- * Servicios que puede solicitar un prospecto. Define qué formulario de datos
- * se muestra en la pestaña "Servicio" (Soft Landing, Constitución, etc.)
- * en lugar de apilar todos los campos en una sola columna.
- */
-const serviceTypeOptions = [
-  "softlanding",
-  "constitucion_nacional",
-  "contabilidad",
-  "legal",
-  "gestoria",
-  "pld_ft",
-  "cumplimiento",
-  "representacion",
-  "juicios",
 ] as const;
 
 const countryOriginOptions = [
@@ -127,6 +121,8 @@ const schema = z.object({
   stage_id: z.string().uuid(),
   priority: z.enum(["urgent", "high", "medium", "low"]),
   service_type: z.string().optional().nullable(),
+  /** Fuente de verdad: un lead puede contratar varios servicios. */
+  service_types: z.array(z.string()).optional().default([]),
   // Tipo de persona (define cómo se etiquetan nombre y empresa)
   person_type: z.string().optional().nullable(),
   contact_role: z.string().optional().nullable(),
@@ -169,6 +165,10 @@ const schema = z.object({
     const n = typeof val === "number" ? val : Number(val);
     return Number.isFinite(n) && n >= 0 ? n : null;
   }, z.number().nullable().optional()),
+  // Desglose para proyecciones: pago único vs mensualidad recurrente.
+  estimated_value_one_time: z.number().nullable().optional(),
+  estimated_value_monthly: z.number().nullable().optional(),
+  estimated_months: z.number().nullable().optional(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -178,6 +178,16 @@ const PARTNER_COLUMNS = ["partner_id", "partner_notes"] as const;
 
 /** Columnas que sólo existen tras aplicar la migración de tipo de persona. */
 const PERSON_COLUMNS = ["person_type", "contact_role"] as const;
+
+/** Columna que sólo existe tras aplicar la migración de multi-servicio. */
+const SERVICE_LIST_COLUMNS = ["service_types"] as const;
+
+/** Columnas del desglose de valor (migración de proyecciones). */
+const VALUE_COLUMNS = [
+  "estimated_value_one_time",
+  "estimated_value_monthly",
+  "estimated_months",
+] as const;
 
 /** Columnas que sólo existen tras aplicar la migración de servicio/constitución. */
 const CONSTITUCION_COLUMNS = [
@@ -198,12 +208,12 @@ const CONSTITUCION_COLUMNS = [
 ] as const;
 
 function isMissingColumnError(message: string): boolean {
-  return /service_type|constitucion_|partner_id|partner_notes|person_type|contact_role|schema cache|column .* does not exist/i.test(
+  return /service_type|service_types|constitucion_|partner_id|partner_notes|person_type|contact_role|estimated_value_|estimated_months|schema cache|column .* does not exist/i.test(
     message,
   );
 }
 
-// ─── Formularios por servicio ──────────────────────────────────────────────
+// ─── Formularios por servicio ───────────────────────────────────────────────
 
 function SoftlandingForm({ form }: { form: UseFormReturn<FormValues> }) {
   return (
@@ -502,6 +512,9 @@ export default function LeadDetailPage() {
       stage_id: lead.stage_id,
       priority: lead.priority as FormValues["priority"],
       service_type: (leadAny.service_type as string) || null,
+      service_types: normalizeServices(
+        leadAny.service_types ?? (leadAny.service_type ? [leadAny.service_type] : []),
+      ),
       person_type: (leadAny.person_type as string) || null,
       contact_role: (leadAny.contact_role as string) || null,
       partner_id: (leadAny.partner_id as string) || null,
@@ -531,11 +544,14 @@ export default function LeadDetailPage() {
         typeof lead.estimated_value === "number" && Number.isFinite(lead.estimated_value)
           ? lead.estimated_value
           : null,
+      estimated_value_one_time: numOrNull(leadAny.estimated_value_one_time),
+      estimated_value_monthly: numOrNull(leadAny.estimated_value_monthly),
+      estimated_months: numOrNull(leadAny.estimated_months),
     });
   }, [lead, form]);
 
   const { data: partners = [] } = usePipelinePartners();
-  const serviceType = form.watch("service_type");
+  const serviceTypes = normalizeServices(form.watch("service_types"));
   const partnerId = form.watch("partner_id");
   const personType = form.watch("person_type");
   const isMoral = personType === "moral";
@@ -549,9 +565,35 @@ export default function LeadDetailPage() {
     const value = form.getValues("estimated_value");
     return estimateCommission(selectedPartner, typeof value === "number" ? value : null);
   }, [selectedPartner, form]);
-  const showSoftlanding = serviceType === "softlanding";
-  const showConstitucion =
-    serviceType === "constitucion_nacional" || serviceType === "softlanding";
+  const showSoftlanding = serviceTypes.includes("softlanding");
+  // Un Soft Landing casi siempre termina en una constitución.
+  const showConstitucion = showSoftlanding || serviceTypes.includes("constitucion_nacional");
+  /** Servicios sin formulario propio en el pipeline. */
+  const servicesWithoutForm = serviceTypes.filter(
+    (s) => s !== "softlanding" && s !== "constitucion_nacional",
+  );
+
+  const valueBreakdown: ValueBreakdown = {
+    oneTime: form.watch("estimated_value_one_time") ?? null,
+    monthly: form.watch("estimated_value_monthly") ?? null,
+    months: form.watch("estimated_months") ?? null,
+  };
+
+  /** El TCV vive en `estimated_value` (tablero, lista y Savio lo leen). */
+  const setValueBreakdown = (next: ValueBreakdown) => {
+    form.setValue("estimated_value_one_time", next.oneTime, { shouldDirty: true });
+    form.setValue("estimated_value_monthly", next.monthly, { shouldDirty: true });
+    form.setValue("estimated_months", next.monthly ? contractMonths(next.months) : null, {
+      shouldDirty: true,
+    });
+    form.setValue("estimated_value", computeTcv(next) || null, { shouldDirty: true });
+  };
+
+  const setServiceTypes = (next: ServiceArea[]) => {
+    form.setValue("service_types", next, { shouldDirty: true });
+    // `service_type` (singular) se conserva sincronizado con el principal.
+    form.setValue("service_type", primaryService(next), { shouldDirty: true });
+  };
 
   const onSave = form.handleSubmit(async (vals) => {
     if (!id) return;
@@ -564,18 +606,29 @@ export default function LeadDetailPage() {
       company_name: vals.company_name || null,
       notes: vals.notes || null,
       campaign_name: vals.campaign_name || null,
+      // Si hay desglose, `estimated_value` es el TCV derivado; si no, el monto suelto.
       estimated_value:
-        vals.estimated_value !== null && vals.estimated_value !== undefined
-          ? vals.estimated_value
-          : null,
+        vals.estimated_value_one_time != null || vals.estimated_value_monthly != null
+          ? computeTcv({
+              oneTime: vals.estimated_value_one_time ?? null,
+              monthly: vals.estimated_value_monthly ?? null,
+              months: vals.estimated_months ?? null,
+            }) || null
+          : vals.estimated_value ?? null,
     };
     // Columnas que pueden no existir todavía en la base (migraciones pendientes).
     const extras: Record<string, unknown> = {
-      service_type: vals.service_type || null,
+      service_types: normalizeServices(vals.service_types),
+      service_type: primaryService(normalizeServices(vals.service_types)),
       person_type: vals.person_type || null,
       contact_role: vals.contact_role || null,
       partner_id: vals.partner_id || null,
       partner_notes: vals.partner_notes || null,
+      estimated_value_one_time: vals.estimated_value_one_time ?? null,
+      estimated_value_monthly: vals.estimated_value_monthly ?? null,
+      estimated_months: vals.estimated_value_monthly
+        ? contractMonths(vals.estimated_months ?? null)
+        : null,
       country_origin: vals.country_origin || null,
       entity_type: vals.entity_type || null,
       industry: vals.industry || null,
@@ -615,6 +668,8 @@ export default function LeadDetailPage() {
       for (const c of CONSTITUCION_COLUMNS) delete fallback[c];
       for (const c of PARTNER_COLUMNS) delete fallback[c];
       for (const c of PERSON_COLUMNS) delete fallback[c];
+      for (const c of SERVICE_LIST_COLUMNS) delete fallback[c];
+      for (const c of VALUE_COLUMNS) delete fallback[c];
       try {
         await updateLead.mutateAsync({ ...base, ...(fallback as Record<string, never>) });
         toast.warning(
@@ -739,11 +794,11 @@ export default function LeadDetailPage() {
               {isMoral ? "Persona moral" : "Persona física"}
             </Badge>
           ) : null}
-          {serviceType ? (
-            <Badge className="bg-white/15 text-white border-white/20 hover:bg-white/20">
-              {SERVICE_LABELS[serviceType as keyof typeof SERVICE_LABELS] || serviceType}
+          {serviceTypes.map((s) => (
+            <Badge key={s} className="bg-white/15 text-white border-white/20 hover:bg-white/20">
+              {SERVICE_LABELS[s]}
             </Badge>
-          ) : null}
+          ))}
           <Badge className="bg-white/15 text-white border-white/20 hover:bg-white/20">
             {lead.priority}
           </Badge>
@@ -835,7 +890,7 @@ export default function LeadDetailPage() {
                     </TabsTrigger>
                   </TabsList>
 
-                  {/* ── Contacto ─────────────────────────────────── */}
+                  {/* ── Contacto ─────────────────────────────────────────── */}
                   <TabsContent value="contacto" className="mt-4 space-y-3">
                     <div>
                       <Label>Tipo de persona</Label>
@@ -966,24 +1021,20 @@ export default function LeadDetailPage() {
                       )}
                     </div>
                     <div>
-                      <Label>Valor estimado al cierre (MXN)</Label>
-                      <Input
-                        type="number"
-                        inputMode="decimal"
-                        min={0}
-                        step="0.01"
-                        placeholder="Ej. 45000"
-                        {...form.register("estimated_value", {
-                          setValueAs: (v) =>
-                            v === "" || v === null || v === undefined
-                              ? null
-                              : typeof v === "number"
-                                ? v
-                                : Number(v),
-                        })}
-                      />
+                      <Label>Valor estimado al cierre</Label>
+                      <div className="mt-1.5">
+                        <LeadValueFields
+                          value={valueBreakdown}
+                          onChange={setValueBreakdown}
+                          services={serviceTypes}
+                          onAddServices={(extra) =>
+                            setServiceTypes(normalizeServices([...serviceTypes, ...extra]))
+                          }
+                        />
+                      </div>
                       <p className="mt-1 text-[11px] text-muted-foreground">
-                        Sirve para el tablero (sumatoria por etapa), la lista del pipeline y el alta en Savio.
+                        El pago único y la mensualidad se guardan por separado para las proyecciones;
+                        el total del contrato es lo que suma el tablero, la lista y el alta en Savio.
                       </p>
                     </div>
                     <div className="grid gap-2 sm:grid-cols-2">
@@ -1055,40 +1106,23 @@ export default function LeadDetailPage() {
                     </div>
                   </TabsContent>
 
-                  {/* ── Servicio ─────────────────────────────────── */}
+                  {/* ── Servicio ─────────────────────────────────────────── */}
                   <TabsContent value="servicio" className="mt-4 space-y-4">
                     <div>
-                      <Label>Tipo de servicio</Label>
-                      <Select
-                        value={serviceType || "__none__"}
-                        onValueChange={(v) =>
-                          form.setValue("service_type", v === "__none__" ? null : v, {
-                            shouldDirty: true,
-                          })
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Seleccionar servicio…" />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-72">
-                          <SelectItem value="__none__">Sin definir</SelectItem>
-                          {serviceTypeOptions.map((s) => (
-                            <SelectItem key={s} value={s}>
-                              {SERVICE_LABELS[s]}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Label>Servicios que busca</Label>
+                      <div className="mt-1.5">
+                        <LeadServicesPicker value={serviceTypes} onChange={setServiceTypes} />
+                      </div>
                       <p className="mt-1 text-[11px] text-muted-foreground">
-                        Al elegir el servicio aparece únicamente el formulario que corresponde.
+                        Puede contratar varios. Aparecen sólo los formularios que correspondan.
                       </p>
                     </div>
 
-                    {!serviceType ? (
+                    {serviceTypes.length === 0 ? (
                       <div className="flex items-start gap-2 rounded-lg border border-dashed border-border/70 px-3 py-4 text-[12px] text-muted-foreground">
                         <Info className="mt-0.5 h-4 w-4 shrink-0" />
                         <span>
-                          Selecciona el tipo de servicio para capturar sus datos (Soft Landing,
+                          Selecciona los servicios para capturar sus datos (Soft Landing,
                           Constitución, etc.).
                         </span>
                       </div>
@@ -1126,19 +1160,19 @@ export default function LeadDetailPage() {
                     {!showSoftlanding && showConstitucion ? <ConstitucionForm form={form} /> : null}
 
 
-                    {serviceType && !showSoftlanding && !showConstitucion ? (
+                    {servicesWithoutForm.length > 0 ? (
                       <div className="flex items-start gap-2 rounded-lg border border-border/60 bg-muted/20 px-3 py-3 text-[12px] text-muted-foreground">
                         <Info className="mt-0.5 h-4 w-4 shrink-0" />
                         <span>
-                          {SERVICE_LABELS[serviceType as keyof typeof SERVICE_LABELS]} no requiere
-                          datos adicionales en el pipeline. Usa los comentarios de seguimiento para
-                          el detalle del caso.
+                          {formatServices(servicesWithoutForm)} no requiere
+                          {servicesWithoutForm.length === 1 ? "" : "n"} datos adicionales en el
+                          pipeline. Usa los comentarios de seguimiento para el detalle del caso.
                         </span>
                       </div>
                     ) : null}
                   </TabsContent>
 
-                  {/* ── Notas ────────────────────────────────────── */}
+                  {/* ── Notas ─────────────────────────────────────────────── */}
                   <TabsContent value="notas" className="mt-4 space-y-3">
                     <div>
                       <Label>Resumen del lead</Label>
