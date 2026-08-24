@@ -40,12 +40,15 @@ export function useCreateCalendarCategory() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   return useMutation({
-    mutationFn: async ({ name, color }: { name: string; color: string }) => {
+    mutationFn: async ({ name, color }: { name: string; color: string }): Promise<CalendarCategory | null> => {
       const organization_id = await currentOrgId(user!.id);
-      const { error } = await (supabase as any)
+      const { data, error } = await (supabase as any)
         .from("calendar_categories")
-        .insert({ name: name.trim(), color, organization_id, created_by: user!.id });
+        .insert({ name: name.trim(), color, organization_id, created_by: user!.id })
+        .select("id, organization_id, name, color, created_by, created_at")
+        .single();
       if (error) throw error;
+      return (data ?? null) as CalendarCategory | null;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["calendar-categories"] });
