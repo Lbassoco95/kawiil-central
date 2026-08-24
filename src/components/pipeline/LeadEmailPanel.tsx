@@ -22,8 +22,10 @@ import {
   RefreshCw,
   Clock,
   MailSearch,
+  Paperclip,
 } from "lucide-react";
 import { SendEmailModal, type ReplyToEmail } from "@/components/pipeline/modals/SendEmailModal";
+import { LeadEmailAttachments } from "@/components/pipeline/LeadEmailAttachments";
 
 type EmailRow = Tables<"email_log">;
 
@@ -134,6 +136,12 @@ function EmailCard({
               Recibido
             </Badge>
           )}
+          {email.has_attachments && (
+            <Badge variant="outline" className="text-[10px] text-muted-foreground">
+              <Paperclip className="mr-0.5 h-3 w-3" />
+              Adjuntos
+            </Badge>
+          )}
           {email.opened_at && email.status !== "opened" && (
             <Badge variant="outline" className="text-purple-600 text-[10px]">
               <Eye className="h-3 w-3 mr-0.5" />
@@ -184,6 +192,9 @@ function EmailCard({
               __html: sanitize(email.body_html) || sanitize(email.body_text) || "<p class='text-muted-foreground'>Sin contenido</p>",
             }}
           />
+          {email.has_attachments && email.graph_message_id ? (
+            <LeadEmailAttachments emailLogId={email.id} enabled={expanded} />
+          ) : null}
         </CollapsibleContent>
       </Collapsible>
     </div>

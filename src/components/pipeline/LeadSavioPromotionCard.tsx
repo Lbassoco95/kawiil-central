@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,7 +15,7 @@ import {
   extractSavioIdFromWriteData,
   extractSavioInvoiceIdFromWriteData,
 } from "@/lib/clientSavioLink";
-import { canSendLeadToSavio, isLeadPipelineLost } from "@/lib/pipelineSavioGate";
+import { savioBillingVisibility } from "@/lib/pipelineSavioGate";
 
 const SAVIO_APP_URL =
   typeof import.meta !== "undefined"
@@ -52,7 +52,12 @@ export function LeadSavioPromotionCard({
   estimatedCloseMxn,
 }: LeadSavioPromotionCardProps) {
   const qc = useQueryClient();
-  const { data: access, isLoading: accessLoading } = useSavioWriteAccess();
+  const visibility = savioBillingVisibility(stageSlug);
+  // Comprobar permisos sólo importa con el trato ganado; antes del cierre no se
+  // muestra formulario alguno.
+  const { data: access, isLoading: accessLoading } = useSavioWriteAccess({
+    enabled: visibility === "full",
+  });
   const writeMut = useSavioFinanceWriteMutation();
   const updateLead = useUpdateLead();
 
@@ -60,9 +65,6 @@ export function LeadSavioPromotionCard({
   const [rfc, setRfc] = useState("");
   const [serviceDescription, setServiceDescription] = useState("");
   const [amountStr, setAmountStr] = useState("");
-
-  const allowSavio = canSendLeadToSavio(stageSlug);
-  const isLost = isLeadPipelineLost(stageSlug);
 
   useEffect(() => {
     const defaultLegal =
@@ -112,18 +114,17 @@ export function LeadSavioPromotionCard({
         billing_rfc: rfc.trim() || null,
         billing_service_description: serviceDescription.trim() || null,
       });
-      toast.success("Datos fiscales guardados en el lead. Sigue el seguimiento; Savio será al cerrar el trato.");
+      toast.success("Datos fiscales guardados en el lead.");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "No se pudieron guardar los datos.");
     }
   }
 
   async function promoteToSavio() {
-    if (!allowSavio) {
+    if (visibility !== "full") {
       toast.error("Primero marca el lead como ganado (etapa «Cerrado») antes de enviarlo a Savio.");
       return;
     }
-    if (isLost) return;
 
     const legal = legalName.trim();
     const amtRaw = parseFloat(amountStr.replace(/,/g, ""));
@@ -216,6 +217,23 @@ export function LeadSavioPromotionCard({
     );
   }
 
+  // Lead perdido: no hay nada que facturar.
+  if (visibility === "hidden") return null;
+
+  // Seguimiento: sólo un aviso; los datos fiscales se piden al cerrar el cliente.
+  if (visibility === "hint") {
+    return (
+      <div className="flex items-start gap-2 rounded-xl border border-dashed border-border/70 bg-muted/20 px-3 py-2 text-[12px] text-muted-foreground">
+        <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        <p className="min-w-0">
+          <strong className="font-medium text-foreground">Facturación y Savio</strong> se habilita cuando muevas el lead a{" "}
+          <strong className="font-medium text-foreground">Cerrado</strong> (trato ganado). Ahí pediremos razón social, RFC y
+          monto; durante el seguimiento no hacen falta.
+        </p>
+      </div>
+    );
+  }
+
   if (accessLoading) {
     return (
       <Card className="border-dashed">
@@ -266,20 +284,8 @@ export function LeadSavioPromotionCard({
           ) : null}
         </div>
         <p className="text-xs text-muted-foreground font-normal">
-          {isLost ? (
-            <>Lead marcado como perdido: no puedes darlo de alta en Savio desde aquí. Puedes guardar borrador por si el caso revive.</>
-          ) : allowSavio ? (
-            <>
-              El trato está en <strong className="text-foreground font-medium">cerrado ganado</strong>. Revisa datos y RFC
-              (requeridos para SAT) y crea cliente y cargo en Savio cuando estés listo.
-            </>
-          ) : (
-            <>
-              Durante el seguimiento, <strong className="text-foreground font-medium">solo guardamos</strong> razón social, RFC,
-              servicio y monto en el lead. El envío a Savio está disponible cuando muevas este lead a la etapa{" "}
-              <strong className="text-foreground font-medium">«Cerrado»</strong> (trato ganado).
-            </>
-          )}
+          El trato está en <strong className="text-foreground font-medium">cerrado ganado</strong>. Revisa datos y RFC
+          (requeridos para SAT) y crea cliente y cargo en Savio cuando estés listo.
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -293,7 +299,7 @@ export function LeadSavioPromotionCard({
           <Input value={legalName} onChange={(e) => setLegalName(e.target.value)} placeholder="Empresa o nombre fiscal" />
         </div>
         <div>
-          <Label>RFC {allowSavio ? "(obligatorio para SAT)" : "(guárdalo aquí antes del cierre)"}</Label>
+          <Label>RFC (obligatorio para SAT)</Label>
           <Input value={rfc} onChange={(e) => setRfc(e.target.value)} placeholder="Ej. XAXX010101000" />
         </div>
         <div>
@@ -336,21 +342,13 @@ export function LeadSavioPromotionCard({
           </Button>
           <Button
             type="button"
-            disabled={writeMut.isPending || !allowSavio || isLost}
+            disabled={writeMut.isPending}
             onClick={() => void promoteToSavio()}
             className="w-full sm:w-auto"
-            title={
-              !allowSavio ? "Primero marca el lead como ganado en la etapa Cerrado" : isLost ? "Lead perdido" : undefined
-            }
           >
             {writeMut.isPending ? "Enviando a Savio…" : "Crear cliente y cargo en Savio"}
           </Button>
         </div>
-        {!allowSavio && !isLost ? (
-          <p className="text-[11px] text-muted-foreground">
-            Usa <strong className="text-foreground">Registrar actividad</strong> y correos/notas para el seguimiento. Savio espera hasta el cierre ganado.
-          </p>
-        ) : null}
       </CardContent>
     </Card>
   );

@@ -312,12 +312,15 @@ export function inferMimeFromFileName(name: string): string | null {
   return null;
 }
 
-export function base64ToBlobUrl(contentBytes: string, contentType: string): string {
+export function base64ToBlob(contentBytes: string, contentType: string): Blob {
   const byteChars = atob(contentBytes);
   const byteNums = new Uint8Array(byteChars.length);
   for (let i = 0; i < byteChars.length; i++) byteNums[i] = byteChars.charCodeAt(i);
-  const blob = new Blob([byteNums], { type: contentType || "application/octet-stream" });
-  return URL.createObjectURL(blob);
+  return new Blob([byteNums], { type: contentType || "application/octet-stream" });
+}
+
+export function base64ToBlobUrl(contentBytes: string, contentType: string): string {
+  return URL.createObjectURL(base64ToBlob(contentBytes, contentType));
 }
 
 /**
