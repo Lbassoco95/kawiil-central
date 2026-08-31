@@ -24,6 +24,7 @@ import UnderlineExtension from "@tiptap/extension-underline";
 import Placeholder from "@tiptap/extension-placeholder";
 import TextAlign from "@tiptap/extension-text-align";
 import { TextStyle } from "@tiptap/extension-text-style";
+import { TableKit } from "@tiptap/extension-table";
 
 const FontSizeExtension = Extension.create({
   name: "fontSize",
@@ -80,6 +81,8 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, Props>(function R
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       Link.configure({ openOnClick: false, autolink: true, linkOnPaste: true }),
       Placeholder.configure({ placeholder: placeholder || "Escribe aquí..." }),
+      // Conserva las tablas al pegarlas (StarterKit no incluye tablas).
+      TableKit.configure({ table: { resizable: false } }),
     ],
     content: stripBidiControlChars(initialHtml || "") || "<p></p>",
     editorProps: {

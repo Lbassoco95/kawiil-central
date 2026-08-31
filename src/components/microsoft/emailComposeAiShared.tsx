@@ -46,8 +46,25 @@ export function plainTextToEmailHtml(text: string): string {
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;");
+  // Convierte Markdown básico (negritas/cursivas/enlaces) que suele devolver la IA a HTML real,
+  // para que no aparezcan **asteriscos** literales en el cuerpo del correo.
+  const inline = (s: string) =>
+    esc(s)
+      .replace(/\*\*([^*]+?)\*\*/g, "<strong>$1</strong>")
+      .replace(/(^|[^*])\*([^*\s][^*]*?)\*(?!\*)/g, "$1<em>$2</em>")
+      .replace(/\[([^\]]+?)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2">$1</a>');
   const t = text.trim();
   if (!t) return "<p></p>";
   const blocks = t.split(/\n\n+/);
-  return blocks.map((b) => `<p>${esc(b).replace(/\n/g, "<br/>")}</p>`).join("");
+  return blocks
+    .map((b) => {
+      const lines = b.split(/\n/);
+      // Bloque de lista (todas las líneas empiezan con "-", "*" o "• ").
+      if (lines.length > 0 && lines.every((l) => /^\s*([-*•])\s+/.test(l))) {
+        const items = lines.map((l) => `<li>${inline(l.replace(/^\s*[-*•]\s+/, ""))}</li>`).join("");
+        return `<ul>${items}</ul>`;
+      }
+      return `<p>${inline(b).replace(/\n/g, "<br/>")}</p>`;
+    })
+    .join("");
 }

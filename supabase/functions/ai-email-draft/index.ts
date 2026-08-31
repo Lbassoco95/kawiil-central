@@ -145,10 +145,17 @@ Deno.serve(async (req) => {
       }
       const tone = (body.tone || "formal").trim() || "formal";
       const contextBlock = formatContext(body.context);
+      // Si es una respuesta, incluimos el correo recibido para que la IA entienda el contexto y
+      // redacte una respuesta bien elaborada sobre ese correo.
+      const originalBody = (body.emailBody || "").trim();
+      const originalSubject = (body.emailSubject || "").trim();
+      const emailContext = originalBody
+        ? `\n\nCorreo recibido al que se responde${originalSubject ? ` (asunto: ${originalSubject})` : ""}:\n"""\n${originalBody.slice(0, 6000)}\n"""\nRedacta la respuesta atendiendo puntualmente lo que pide/dice ESTE correo.`
+        : "";
       const userMessage = `Tono: ${tone}
 
 Contexto del borrador:
-${contextBlock}
+${contextBlock}${emailContext}
 
 Instrucción del usuario:
 ${instruction}`;

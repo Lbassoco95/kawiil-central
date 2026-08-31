@@ -3,9 +3,13 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "workspaces": ["services/slack-socket-bridge"],
+  "workspaces": [
+    "services/slack-socket-bridge"
+  ],
   "trustedDependencies": [],
-  "engines": { "node": "20" },
+  "engines": {
+    "node": "20"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -66,6 +70,7 @@
     "@tiptap/extension-ordered-list": "^3.22.2",
     "@tiptap/extension-paragraph": "^3.22.2",
     "@tiptap/extension-placeholder": "^3.22.2",
+    "@tiptap/extension-table": "^3.22.2",
     "@tiptap/extension-text": "^3.22.2",
     "@tiptap/extension-text-align": "^3.22.2",
     "@tiptap/extension-text-style": "^3.22.2",
