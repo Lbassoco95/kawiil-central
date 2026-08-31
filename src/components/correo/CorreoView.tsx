@@ -370,6 +370,16 @@ ${detail.body?.contentType === "html" ? origBody : `<pre style="font-family:inhe
         initialSubject={forwardState?.subject}
         initialBodyHtml={forwardState?.bodyHtml}
         replyContext={forwardState?.replyMessageId ? { messageId: forwardState.replyMessageId, replyAll: forwardState.replyAll } : null}
+        aiReplyContext={forwardState && selectedEmailDetail ? {
+          subject: (selectedEmailDetail as any).subject || undefined,
+          body: ((selectedEmailDetail as any).body?.content || (selectedEmailDetail as any).bodyPreview || "")
+            .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, " ")
+            .replace(/<[^>]+>/g, " ")
+            .replace(/&nbsp;/gi, " ")
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, 6000) || undefined,
+        } : null}
         showAccountingTemplates
         onAfterSend={(info) => void syncAccountingStep(info)}
       />

@@ -100,6 +100,8 @@ interface ComposeEmailDialogProps {
   replyContext?: { messageId: string; replyAll?: boolean } | null;
   /** Archivos precargados (p. ej. adjuntos del correo reenviado). */
   initialFiles?: File[];
+  /** Correo recibido al que se responde: da contexto a la IA para redactar una mejor respuesta. */
+  aiReplyContext?: { body?: string; subject?: string } | null;
   /** Valores precargados para el selector de plantillas contables. */
   defaultTemplateContext?: ComposeDefaultTemplateContext;
   /** Muestra el selector de plantillas del área contable. Por defecto true. */
@@ -135,6 +137,7 @@ export function ComposeEmailDialog({
   initialBodyHtml,
   replyContext,
   initialFiles,
+  aiReplyContext,
   defaultTemplateContext,
   showAccountingTemplates = true,
   onAfterSend,
@@ -332,6 +335,8 @@ export function ComposeEmailDialog({
           action: "draft",
           instruction: trimmed,
           context: { subject: subject.trim() || "(sin asunto)", to: to.trim() || "(no indicado)" },
+          emailBody: aiReplyContext?.body || undefined,
+          emailSubject: aiReplyContext?.subject || undefined,
           tone: "formal",
         },
       });
@@ -357,7 +362,7 @@ export function ComposeEmailDialog({
     } finally {
       setAiLoading(false);
     }
-  }, [subject, to]);
+  }, [subject, to, aiReplyContext]);
 
   /**
    * Aviso de "se envió un correo con plantilla contable" → cierra el paso del
