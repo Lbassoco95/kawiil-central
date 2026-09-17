@@ -1,0 +1,74 @@
+# Múuch' — módulo de Juntas (`mtg_*`)
+
+Múuch' ordena la vida de las juntas con un cliente: la serie recurrente (cadencia, agenda base, aviso de transcripción), cada reunión con su máquina de estados, los temas persistentes que viven entre juntas, los acuerdos y decisiones, y las versiones de la minuta. En este Bloque 1 está el esquema completo, el bucket privado `mtg`, la pestaña "Juntas" en la ficha del cliente y la bitácora append-only.
+
+## Modelo de datos
+
+| Tabla | Qué guarda |
+|---|---|
+| `mtg_series` | Serie de juntas anclada a un cliente o a un grupo (cadencia, duración, asistentes, agenda base, aviso de transcripción, datos de Outlook/Teams). |
+| `mtg_meetings` | Cada junta: instancia de una serie o ad hoc (`series_id NULL`), con horario, estado, facilitador y datos de transcripción. |
+| `mtg_topics` | Temas persistentes de la serie: viven entre juntas hasta `resolved` o `dropped`. |
+| `mtg_topic_updates` | Movimiento de un tema en una junta concreta (uno por tema por junta). |
+| `mtg_agenda_items` | Bloques de la agenda de una junta (sección, tema, decisión, punto libre). |
+| `mtg_decisions` | Decisiones levantadas en la junta; pueden apuntar al acuerdo que generan. |
+| `mtg_expected_next` | Compromisos "esperados para la próxima" anotados al cierre. |
+| `mtg_agreements` | Compromisos capturados en la junta; los del modelo nacen `proposed` y se confirman en revisión; al confirmarse pueden dar tarea. |
+| `mtg_minutes` | Versiones de la minuta; a lo más una `approved` por junta. El PDF va al bucket `mtg`, no a `documents`. |
+| `mtg_graph_subscriptions` | Suscripciones de Microsoft Graph para transcripciones de Teams. Solo `service_role`. |
+| `mtg_audit_log` | Bitácora append-only del módulo (ver abajo). |
+
+## Máquina de estados de `mtg_meetings.status`
+
+```
+planned → in_progress → ended → minutes_draft → minutes_review → minutes_approved → closed
+```
+
+Salidas laterales: `cancelled`, `no_show`.
+
+## Tenancy
+
+El tenant es la **organización** (`organization_id` + RLS con `get_user_org_id`), como el resto del repo. La serie se ancla a:
+
+- `anchor_type='client'` → `public.clients` (y `client_id` duplica el ancla; CHECK `anchor_id = client_id`), o
+- `anchor_type='group'` → `public.client_groups` (CHECK `client_id IS NULL`).
+
+El trigger `mtg_series_validate_anchor` exige que el ancla exista y sea de la misma organización. Las series de grupo se muestran en la ficha de cada cliente miembro, en solo lectura.
+
+## Bucket `mtg` y convención de ruta
+
+Bucket privado, con policies por primer segmento de ruta (`= organization_id`):
+
+```
+{organization_id}/mtg/{anchor_type}/{anchor_id}/{yyyy}/{mm}/{tipo}/{timestamp}_{nombre}.{ext}
+```
+
+`tipo` ∈ `transcripts | recordings | minutes | evidence`. Lectura solo por signed URL de vida corta (300 s). **La minuta aprobada va aquí** (`mtg_minutes.document_path`), NO en `documents`. Las lecturas de `documents` ya soportan `metadata.bucket` para apuntar a otro bucket (`src/lib/documentBucket.ts`).
+
+## Bitácora append-only
+
+`mtg_audit_log`: INSERT lo hace el usuario autenticado (`actor_user_id = auth.uid()`, org por RLS); SELECT por org. No hay policies de UPDATE/DELETE, los permisos están revocados para `authenticated`, `anon` y `service_role`, y el trigger `mtg_audit_log_immutable` aborta cualquier UPDATE/DELETE. El front escribe vía `logMtgAudit` (`src/lib/mtg/audit.ts`), que además deja una línea resumen en `activity_log` con `entity_type = 'mtg_<entidad>'`.
+
+## Cómo probar el Bloque 1
+
+1. Migración local: `tools/mtg/local-db/verify.sh` levanta un Postgres temporal (puerto 54329), aplica stub + ambas migraciones, corre `checks.sql` (RLS, generación de instancias, trigger de ancla, CHECKs, bitácora, storage) y prueba los rollbacks e idempotencia.
+2. Front: `npm run dev`, abrir la ficha de un cliente → pestaña **Juntas**. Crear una serie con cadencia (genera 8 juntas vía `mtg_generate_series_meetings`) y una junta ad hoc.
+
+## Diff propuesto para el compose de la VM (no aplicado)
+
+Para que `kawiil-agents` (en `nexo-louis/cloud/hetzner/docker-compose.yml`) alcance `openclaw-gateway`, que corre como systemd nativo en el host escuchando en `127.0.0.1:3000` — por eso `localhost` dentro del contenedor no sirve y se usa `host.docker.internal`:
+
+```yaml
+  kawiil-agents:
+    # ...existente...
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      # ...existente...
+      OPENCLAW_GATEWAY_URL:   ${OPENCLAW_GATEWAY_URL:-http://host.docker.internal:3000}
+      OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN}
+```
+
+## Roadmap / fuera de v1
+
+_Pendiente: transcripción automática, minutas generadas por modelo, envío al cliente, seed de modo demo (`VITE_MTG_DEMO`)._
