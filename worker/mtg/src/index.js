@@ -34,7 +34,7 @@ El cliente confirma la fecha de entrega de evidencias.
 
 async function claim() {
   const { data, error } = await sb.rpc("claim_jobs", {
-    p_kinds: ["mtg.fetch_transcript", "mtg.generate_minutes"],
+    p_kinds: ["mtg.fetch_transcript", "mtg.generate_minutes", "mtg.remind"],
     p_limit: 3,
     p_worker_id: WORKER_ID,
     p_lease_seconds: 600,
@@ -199,6 +199,8 @@ async function handleGenerateMinutes(job) {
       origin: "proposed_by_model",
       status: "proposed",
       owner_side: p.owner_side,
+      owner_name: p.owner_hint,
+      due_date: p.due_hint,
       transcript_ref: p.transcript_ref,
       confidence: p.confidence,
       project_hint: p.project_hint,
@@ -210,6 +212,68 @@ async function handleGenerateMinutes(job) {
   await sb.rpc("complete_job", { p_job_id: job.id, p_result: { minutes_id: minutes.id } });
 }
 
+async function handleRemind(job) {
+  const meetingId = job.payload?.meeting_id;
+  const remindKind = job.payload?.remind_kind || "t1d";
+  if (!meetingId) throw new Error("meeting_id required");
+
+  const { data: meeting } = await sb.from("mtg_meetings").select("*").eq("id", meetingId).single();
+  if (!meeting || meeting.status === "cancelled" || meeting.status === "closed") {
+    await sb.rpc("complete_job", { p_job_id: job.id, p_result: { skipped: true, reason: "inactive" } });
+    return;
+  }
+
+  const title = job.payload?.title || "Junta";
+  const when = remindKind === "t1d" ? "mañana" : "en una hora";
+  const link = `/juntas/${meetingId}`;
+  const notifTitle = `Recordatorio de junta (${when})`;
+  const notifBody = `${title} — abre ${link}`;
+
+  const recipients = new Set();
+  if (job.payload?.owner_user_id) recipients.add(job.payload.owner_user_id);
+  for (const u of job.payload?.attendees_internal || []) {
+    if (u) recipients.add(u);
+  }
+  // Si el payload no trae destinatarios, intenta desde la serie
+  if (recipients.size === 0 && meeting.series_id) {
+    const { data: series } = await sb.from("mtg_series").select("owner_user_id, attendees_internal").eq("id", meeting.series_id).single();
+    if (series?.owner_user_id) recipients.add(series.owner_user_id);
+    for (const u of series?.attendees_internal || []) if (u) recipients.add(u);
+  }
+
+  const rows = [...recipients].map((userId) => ({
+    organization_id: job.organization_id,
+    user_id: userId,
+    type: "mtg_remind",
+    title: notifTitle,
+    body: notifBody,
+    entity_type: "mtg_meeting",
+    entity_id: meetingId,
+    entity_ref: link,
+  }));
+
+  if (rows.length > 0) {
+    await sb.from("notifications").insert(rows);
+  }
+
+  // Web push vía Edge (mismo patrón que otras notificaciones); best-effort.
+  try {
+    const fnUrl = `${url}/functions/v1/push-subscribe`;
+    // El worker no envía push directo; deja entity_ref para el cliente.
+    // Correo Graph modo aplicación: stub — requiere secretos en VM ([ALTO Polo]).
+    if (!MOCK_GRAPH && process.env.MTG_GRAPH_SEND_REMIND === "1") {
+      console.log(`[remind] Graph mail pending for ${meetingId} (${remindKind})`);
+    }
+  } catch (e) {
+    console.warn("[remind] push/mail", e);
+  }
+
+  await sb.rpc("complete_job", {
+    p_job_id: job.id,
+    p_result: { notified: rows.length, remind_kind: remindKind },
+  });
+}
+
 async function loop() {
   console.log(`[${WORKER_ID}] starting mock_gw=${MOCK_GW} mock_graph=${MOCK_GRAPH}`);
   for (;;) {
@@ -219,6 +283,7 @@ async function loop() {
         try {
           if (job.kind === "mtg.fetch_transcript") await handleFetchTranscript(job);
           else if (job.kind === "mtg.generate_minutes") await handleGenerateMinutes(job);
+          else if (job.kind === "mtg.remind") await handleRemind(job);
           else await sb.rpc("fail_job", { p_job_id: job.id, p_error: `unknown kind ${job.kind}` });
         } catch (e) {
           console.error(job.id, e);

@@ -14,7 +14,8 @@ interface NotificationPayload {
     | "task_updated"
     | "comment_mention"
     | "project_status_changed"
-    | "deadline_created";
+    | "deadline_created"
+    | "mtg_minutes_approved";
   data: Record<string, any>;
 }
 
@@ -181,12 +182,67 @@ serve(async (req) => {
         ];
         break;
 
+      case "mtg_minutes_approved": {
+        // Nunca incluir minuta completa ni transcripción.
+        const counts = data.movement_counts || {};
+        const countLine = Object.entries(counts)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join(", ") || "—";
+        const agreements: Array<{ text?: string; owner?: string; due_date?: string }> =
+          data.confirmed_agreements || [];
+        const agrLines =
+          agreements.length === 0
+            ? "_Sin acuerdos confirmados_"
+            : agreements
+                .slice(0, 12)
+                .map(
+                  (a) =>
+                    `• ${a.text || "—"} — ${a.owner || "—"} — ${a.due_date || "sin fecha"}`,
+                )
+                .join("\n");
+        message = `✅ Minuta aprobada: ${data.title || "Junta"}`;
+        blocks = [
+          {
+            type: "header",
+            text: { type: "plain_text", text: "✅ Minuta aprobada (Múuch')" },
+          },
+          {
+            type: "section",
+            fields: [
+              { type: "mrkdwn", text: `*Serie:*\n${data.title || "—"}` },
+              { type: "mrkdwn", text: `*Ancla:*\n${data.anchor_label || "—"}` },
+              {
+                type: "mrkdwn",
+                text: `*Fecha:*\n${(data.scheduled_at || "").slice(0, 10) || "—"}`,
+              },
+              { type: "mrkdwn", text: `*Movimientos:*\n${countLine}` },
+            ],
+          },
+          {
+            type: "section",
+            text: { type: "mrkdwn", text: `*Acuerdos confirmados:*\n${agrLines}` },
+          },
+          {
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: data.link ? `<${data.link}|Abrir minuta>` : "—",
+            },
+          },
+        ];
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: "Unknown event type" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
     }
+
+    // Canal del payload (p. ej. mtg_series.slack_channel_id) o default del secret.
+    const targetChannel =
+      (typeof data.channel === "string" && data.channel.trim()) || SLACK_CHANNEL;
 
     // Send to Slack
     const slackRes = await fetch("https://slack.com/api/chat.postMessage", {
@@ -196,7 +252,7 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        channel: SLACK_CHANNEL,
+        channel: targetChannel,
         text: message,
         blocks,
       }),
