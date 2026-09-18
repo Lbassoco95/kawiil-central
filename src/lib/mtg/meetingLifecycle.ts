@@ -1,10 +1,11 @@
 /**
- * Ciclo de vida de la junta: iniciar / terminar.
+ * Ciclo de vida de la junta: iniciar / terminar / cancelar.
  */
 
 import { mtgDb, type MtgMeetingRow, type MtgTopicUpdateRow } from "@/lib/mtg/db";
 import { logMtgAudit, MTG_AUDIT_ACTION } from "@/lib/mtg/audit";
 import type { MtgMeetingStatus } from "@/lib/mtg/constants";
+import { cancelRemindersForMeeting } from "@/lib/mtg/remind";
 
 export function assertCanStart(status: MtgMeetingStatus): void {
   if (status !== "planned") throw new Error(`No se puede iniciar desde estado ${status}`);
@@ -13,6 +14,12 @@ export function assertCanStart(status: MtgMeetingStatus): void {
 export function assertCanEnd(status: MtgMeetingStatus): void {
   if (status !== "in_progress" && status !== "planned") {
     throw new Error(`No se puede terminar desde estado ${status}`);
+  }
+}
+
+export function assertCanCancel(status: MtgMeetingStatus): void {
+  if (status !== "planned" && status !== "in_progress") {
+    throw new Error(`No se puede cancelar desde estado ${status}`);
   }
 }
 
@@ -121,6 +128,32 @@ export async function endMeeting(opts: EndMeetingOptions): Promise<MtgMeetingRow
     }
   }
 
+  return data as MtgMeetingRow;
+}
+
+export async function cancelMeeting(opts: {
+  organizationId: string;
+  actorUserId: string;
+  meeting: MtgMeetingRow;
+}): Promise<MtgMeetingRow> {
+  assertCanCancel(opts.meeting.status);
+  const { data, error } = await mtgDb
+    .from("mtg_meetings")
+    .update({ status: "cancelled" })
+    .eq("id", opts.meeting.id)
+    .select("*")
+    .single();
+  if (error) throw error;
+
+  await cancelRemindersForMeeting(opts.meeting.id);
+
+  await logMtgAudit({
+    organizationId: opts.organizationId,
+    actorUserId: opts.actorUserId,
+    entityType: "meeting",
+    entityId: opts.meeting.id,
+    action: MTG_AUDIT_ACTION.MEETING_CANCELLED,
+  });
   return data as MtgMeetingRow;
 }
 
