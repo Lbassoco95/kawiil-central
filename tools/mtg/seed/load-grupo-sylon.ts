@@ -41,6 +41,8 @@ const MOVEMENT_MAP: Record<string, string> = {
 };
 
 const ORG = "a0000000-0000-0000-0000-000000000001";
+/** Override: OWNER_EMAIL=otro@kawiil.mx npx tsx … */
+const OWNER_EMAIL = process.env.OWNER_EMAIL || "leo.bassoco@kawiil.mx";
 const ENTITIES = [
   {
     key: "vizum",
@@ -64,22 +66,33 @@ const sb = createClient(url, key, { auth: { persistSession: false } });
 type SeedJson = {
   agenda_items?: Array<Record<string, unknown>>;
   decisions_requested?: Array<Record<string, unknown>>;
-  next_meeting_expected?: Array<Record<string, unknown>>;
+  next_meeting_expected?:
+    | Array<Record<string, unknown>>
+    | { items?: Array<Record<string, unknown>> };
 };
+
+function asItemList(
+  value: SeedJson["next_meeting_expected"] | Array<Record<string, unknown>> | undefined,
+): Array<Record<string, unknown>> {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  if (Array.isArray(value.items)) return value.items;
+  return [];
+}
 
 async function main() {
   const raw = JSON.parse(readFileSync(jsonPath, "utf8")) as SeedJson;
   const agenda = raw.agenda_items ?? [];
   const decisions = raw.decisions_requested ?? [];
-  const expected = raw.next_meeting_expected ?? [];
+  const expected = asItemList(raw.next_meeting_expected);
 
   const { data: owner } = await sb
     .from("profiles")
     .select("user_id")
-    .eq("email", "leo.bassoco@kawiil.mx")
+    .eq("email", OWNER_EMAIL)
     .maybeSingle();
   const ownerId = owner?.user_id;
-  if (!ownerId) throw new Error("Owner leo.bassoco@kawiil.mx no encontrado");
+  if (!ownerId) throw new Error(`Owner ${OWNER_EMAIL} no encontrado`);
 
   // 1) Grupo
   let groupId: string;

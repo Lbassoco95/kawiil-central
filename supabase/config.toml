@@ -158,3 +158,5 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = false
   [functions.mtg-graph-webhook]
     verify_jwt = false
+  [functions.mtg-minutes-draft]
+    verify_jwt = true

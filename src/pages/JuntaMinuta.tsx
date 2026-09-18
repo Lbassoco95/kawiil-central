@@ -40,8 +40,10 @@ import {
   rejectProposedAgreement,
 } from "@/lib/mtg/approveMinutes";
 import { assignProjectAndCreateTask } from "@/lib/mtg/captureAgreement";
+import { MtgUploadTranscriptButton } from "@/components/mtg/MtgUploadTranscriptButton";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+
 export default function JuntaMinuta() {
   const { meetingId } = useParams<{ meetingId: string }>();
   const { user } = useAuth();
@@ -57,6 +59,7 @@ export default function JuntaMinuta() {
   >({});
   const [sendOpen, setSendOpen] = useState(false);
   const [sendRecipients, setSendRecipients] = useState("");
+  const [draftBusy, setDraftBusy] = useState(false);
 
   const q = useQuery({
     queryKey: ["mtg-minutes-full", meetingId],
@@ -194,6 +197,40 @@ export default function JuntaMinuta() {
             </Link>
           </Button>
           <div className="flex flex-wrap gap-2">
+            {user && (
+              <MtgUploadTranscriptButton
+                organizationId={orgId}
+                actorUserId={user.id}
+                meeting={meeting}
+                series={series}
+                onDone={() => invalidate()}
+              />
+            )}
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={draftBusy || current?.status === "approved"}
+              onClick={async () => {
+                setDraftBusy(true);
+                try {
+                  const { data, error } = await supabase.functions.invoke("mtg-minutes-draft", {
+                    body: { meeting_id: meeting.id },
+                  });
+                  if (error) throw error;
+                  if (data?.error) throw new Error(data.error);
+                  toast.success("Borrador generado (sin modelo)");
+                  setDraftMd(null);
+                  invalidate();
+                } catch (e) {
+                  toast.error(e instanceof Error ? e.message : "Error al generar borrador");
+                } finally {
+                  setDraftBusy(false);
+                }
+              }}
+            >
+              {draftBusy ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : null}
+              Generar borrador de minuta
+            </Button>
             <Button
               size="sm"
               disabled={!approval.ok || !current || current.status === "approved"}

@@ -36,6 +36,7 @@ import {
 import { unreviewedCount } from "@/lib/mtg/meetingLifecycle";
 import { ArrowLeft, ExternalLink, Loader2, Projector } from "lucide-react";
 import { toast } from "sonner";
+import { MtgUploadTranscriptButton } from "@/components/mtg/MtgUploadTranscriptButton";
 
 const PROJECTION_KEY = "mtg-projection-mode";
 
@@ -247,6 +248,15 @@ export default function JuntaDetalle() {
                 <Button size="sm" variant="secondary" onClick={handleEnd} disabled={board.doEnd.isPending}>
                   Terminar junta
                 </Button>
+              )}
+              {user && (
+                <MtgUploadTranscriptButton
+                  organizationId={orgId}
+                  actorUserId={user.id}
+                  meeting={meeting}
+                  series={series}
+                  onDone={() => board.invalidate()}
+                />
               )}
               {(meeting.status === "ended" ||
                 meeting.status === "minutes_draft" ||

@@ -42,6 +42,7 @@ Fecha inicio: 2026-09-18 · Agente: Cursor Cloud · Base: `feat/mtg-juntas-b1` @
 - `approveMinutes.ts`: confirmar→tarea, rechazar, aprobar PDF/`documents`, Slack, cerrar+propagar temas
 - `JuntaMinuta.tsx`: columna derecha completa (proyecto sugerido + reason, owner_hint, VTT signed URL, incompletos, enviar con preview)
 - Test integración mock: `minutesFlow.integration.test.ts` (MTG_GATEWAY_MOCK)
+- **2026-09-18 follow-up:** subida manual de transcripción (.vtt/.txt/.docx) en tablero y minuta; Edge `mtg-minutes-draft` (borrador sin modelo); enlaces `/grupos/{id}` en lista Clientes; seed `OWNER_EMAIL` + `expected_next.items[]`
 
 ## B5 — Avisos (cierre 2026-09-18)
 
