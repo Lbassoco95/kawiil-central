@@ -19,3 +19,7 @@ Convención:
 | 2026-08-24 | `2026-08-24_juun_fis_schema.rollback.sql` | **Rollback** de `supabase/migrations/20260825034512_juun_fis_schema.sql` (Ju'un, Bloque 1): borra las seis tablas `fis_*`, sus triggers y sus funciones. Destructivo. No toca los archivos del bucket `juun`. |
 | 2026-08-24 | `2026-08-24_juun_storage_bucket.rollback.sql` | **Rollback** de `supabase/migrations/20260825034520_juun_storage_bucket.sql`: quita las policies del bucket `juun` y lo elimina **solo si está vacío**; si conserva archivos avisa y no borra nada. |
 | 2026-08-24 | `2026-08-24_juun_merchants_seed.rollback.sql` | **Rollback** de `supabase/migrations/20260825034528_juun_merchants_seed.sql`: quita los 15 comercios sembrados (los tickets ya cargados quedan con `merchant_id` en NULL, no se pierden). Innecesario si se corre el rollback del esquema. |
+| 2026-09-18 | `2026-09-18_async_worker_jobs.rollback.sql` | Rollback de `20260918120000_async_worker_jobs.sql` (cola genérica VM). |
+| 2026-09-18 | `2026-09-18_mtg_schema.rollback.sql` | Rollback del esquema Múuch' (`mtg_*`, audit, columna en `tasks`). |
+| 2026-09-18 | `2026-09-18_mtg_storage_bucket.rollback.sql` | Rollback bucket `mtg` (solo si vacío). |
+| 2026-09-18 | `2026-09-18_mtg_seed_grupo_sylon.rollback.sql` | Quita semilla Grupo Sylon / series fijas. |
