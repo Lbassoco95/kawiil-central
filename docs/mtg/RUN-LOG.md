@@ -36,19 +36,41 @@ Fecha inicio: 2026-09-18 · Agente: Cursor Cloud · Base: `feat/mtg-juntas-b1` @
 - Worker mock Graph/VTT
 - Lista ALTO Polo en README
 
-## B4 — Minuta
+## B4 — Minuta (cierre 2026-09-18)
 
-- `generateMinutes.ts` + prompt `minutes-v1` + mock gateway
-- `documents.client_group_id`
-- UI minuta stub + worker generate_minutes
-- Pantalla confirmación completa de proposed queda parcial (listado + flujo worker); confirmar/rechazar UI detallada = deuda menor documentada
+- `minutesReview.ts` + tests: no aprobar con `proposed`/incompletos; `confirmRequires`; parse temas; remindKinds
+- `approveMinutes.ts`: confirmar→tarea, rechazar, aprobar PDF/`documents`, Slack, cerrar+propagar temas
+- `JuntaMinuta.tsx`: columna derecha completa (proyecto sugerido + reason, owner_hint, VTT signed URL, incompletos, enviar con preview)
+- Test integración mock: `minutesFlow.integration.test.ts` (MTG_GATEWAY_MOCK)
 
-## B5 — Avisos
+## B5 — Avisos (cierre 2026-09-18)
 
-- `mtg_series.slack_channel_id`
-- README roadmap + contrato Donna propuesto (sin implementar)
-- Recordatorios T-1: parcialmente documentados; hook a `notifications` pendiente de cable fino (anotado)
+- `remind.ts`: encolar T-1d/T-1h idempotente; cancelar al cancelar junta
+- `useMtgSeries`: tras `mtg_generate_series_meetings` encola reminds; campo `slack_channel_id`
+- `MtgSeriesDialog`: input canal Slack
+- Worker: kind `mtg.remind` → `notifications`
+- `slack-notify`: `mtg_minutes_approved` (canal del payload; sin minuta/VTT)
+- README: contrato Donna + roadmap
+
+## Ops / harness
+
+- `verify.sh` ampliado a 5 migraciones + `checks-b345.sql` (claim concurrente, lease, dead, FK group, slack)
+- Log → `tools/mtg/local-db/last-run.log` (*.log ignorado)
+- **Cloud Cursor 2026-09-18:** sin Postgres brew, sin `supabase` CLI autenticado, sin JSON Sylon en Downloads → harness/db push/seed/aceptación **bloqueados** (lista ALTO abajo)
 
 ## Prod apply
 
-**No** se corrió `supabase db push` desde Cursor en esta corrida.
+**No** se corrió `supabase db push` desde Cursor Cloud en esta corrida.
+Pendiente en Mac Polo tras harness verde: `20260918140000`, `20260918140100`, `20260918140200`.
+
+## [ALTO — requiere a Polo]
+
+1. Entra / admin consent Graph (tenant kawiil.mx) + Application Access Policy Teams (PowerShell).
+2. Secrets Supabase: `MTG_GRAPH_CLIENT_STATE`, `MTG_WEBHOOK_PUBLIC_URL`; opcional Graph mail de reminds.
+3. VM: `OPENCLAW_GATEWAY_URL` + token; compose `host.docker.internal`; correr `worker/mtg`.
+4. Mac: `brew` Postgres + `tools/mtg/local-db/verify.sh`; luego `supabase db push` de las 3 migraciones; seed Sylon desde `~/Downloads/mtg-seed-grupo-sylon-2026-09-17.json`; recorrido §6 con capturas en `docs/mtg/acceptance/` (gitignored).
+
+## Conteos Sylon (esperados; no verificados en cloud)
+
+total 31 · vizum 13 / sylon 10 / rivium 8 · resolved 9 / advanced 9 / unchanged 7 / new 3 / blocked_third_party 2 / waiting_authority 1 / decision_needed 0 · decisiones 6 · expected_next 16
+

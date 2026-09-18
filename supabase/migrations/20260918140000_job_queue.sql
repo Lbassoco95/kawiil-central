@@ -147,12 +147,28 @@ CREATE POLICY "job_queue_select_org"
   ON public.job_queue FOR SELECT TO authenticated
   USING (organization_id = public.get_user_org_id(auth.uid()));
 
+-- El front encola mtg.generate_minutes / mtg.remind para su org.
+DROP POLICY IF EXISTS "job_queue_insert_org" ON public.job_queue;
+CREATE POLICY "job_queue_insert_org"
+  ON public.job_queue FOR INSERT TO authenticated
+  WITH CHECK (organization_id = public.get_user_org_id(auth.uid()));
+
+-- Cancelar recordatorios (pending/leased) desde el cliente.
+DROP POLICY IF EXISTS "job_queue_update_org_pending" ON public.job_queue;
+CREATE POLICY "job_queue_update_org_pending"
+  ON public.job_queue FOR UPDATE TO authenticated
+  USING (
+    organization_id = public.get_user_org_id(auth.uid())
+    AND status IN ('pending', 'leased')
+  )
+  WITH CHECK (organization_id = public.get_user_org_id(auth.uid()));
+
 DROP POLICY IF EXISTS "job_queue_service_all" ON public.job_queue;
 CREATE POLICY "job_queue_service_all"
   ON public.job_queue FOR ALL TO service_role
   USING (true) WITH CHECK (true);
 
-GRANT SELECT ON public.job_queue TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.job_queue TO authenticated;
 GRANT ALL ON public.job_queue TO service_role;
 
 -- Cron cada 2 min → Edge job-queue-dispatch (mismo patrón process-scheduled-mail)

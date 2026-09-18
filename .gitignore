@@ -45,3 +45,6 @@ deno.lock
 tools/mtg/seed/**
 !tools/mtg/seed/*.ts
 !tools/mtg/seed/README.md
+
+# Capturas de aceptación con datos reales (Sylon, etc.)
+docs/mtg/acceptance/
