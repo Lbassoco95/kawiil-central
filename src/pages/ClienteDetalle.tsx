@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import {
   ArrowLeft, Mail, Phone, MapPin, User, FileText,
   CheckSquare, FolderOpen, Pencil, Shield, Building2, ChevronRight, Landmark, DoorOpen,
+  CalendarDays,
 } from "lucide-react";
 import { ClientProjectsTab } from "@/components/clients/ClientProjectsTab";
 import { ClientOffboardingSection } from "@/components/clients/ClientOffboardingSection";
@@ -50,6 +51,8 @@ import { useSavioIncomeAccess } from "@/hooks/useSavioIncomeAccess";
 import { useSavioFinanceApiData } from "@/hooks/useSavioFinanceApi";
 import { ClientSavioFinanceSection } from "@/components/clients/ClientSavioFinanceSection";
 import { clientSavioLinkStatus } from "@/lib/clientSavioLink";
+import { isMtgJuntasEnabled } from "@/lib/mtg/enabled";
+import { ClientMeetingsTab } from "@/components/clients/ClientMeetingsTab";
 
 const STATUS_STYLES: Record<ClientStatus, string> = Object.fromEntries(
   Object.entries(CLIENT_STATUS_CONFIG).map(([k, v]) => [k, v.color])
@@ -178,9 +181,15 @@ const ClienteDetalle = () => {
     );
   }
 
+  const mtgTab = isMtgJuntasEnabled()
+    ? [{ key: "juntas", label: "Juntas", icon: CalendarDays as typeof Shield }]
+    : [];
+
+  const tabsWithMtg = [...baseTabs.slice(0, 4), ...mtgTab, ...baseTabs.slice(4)];
+
   const tabsToShow = showSavioTab
-    ? [...baseTabs, { key: "cobranza", label: "Cobranza (Savio)", icon: Landmark }]
-    : baseTabs;
+    ? [...tabsWithMtg, { key: "cobranza", label: "Cobranza (Savio)", icon: Landmark }]
+    : tabsWithMtg;
 
   // Equipo explícito del cliente (responsable + colaboradores de la ficha) y si
   // incluye un G4 (Transformador). Solo es un indicador; no bloquea nada.
@@ -495,6 +504,8 @@ const ClienteDetalle = () => {
             )}
           </div>
         )}
+
+        {tab === "juntas" && id && <ClientMeetingsTab clientId={id} />}
 
         {/* Documents */}
         {tab === "documentos" && (

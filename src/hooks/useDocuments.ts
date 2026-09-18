@@ -5,6 +5,7 @@ import type { Json, Tables } from "@/integrations/supabase/types";
 import { toast } from "sonner";
 import { sanitizeStorageFileName } from "@/lib/storageFilename";
 import { mimeTypeForFile } from "@/lib/mimeFromFilename";
+import { documentStorageBucket } from "@/lib/documentStorageBucket";
 
 export type Document = Tables<"documents"> & {
   clients?: { name: string } | null;
@@ -163,10 +164,16 @@ export function useDeleteDocument() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (doc: { id: string; source: string; file_path: string | null }) => {
+    mutationFn: async (doc: {
+      id: string;
+      source: string;
+      file_path: string | null;
+      metadata?: Json | null;
+    }) => {
       // Delete file from storage if it's a supabase file
       if (doc.source === "supabase" && doc.file_path) {
-        await supabase.storage.from("documents").remove([doc.file_path]);
+        const bucket = documentStorageBucket({ source: doc.source, metadata: doc.metadata });
+        await supabase.storage.from(bucket).remove([doc.file_path]);
       }
       const { error } = await supabase.from("documents").delete().eq("id", doc.id);
       if (error) throw error;

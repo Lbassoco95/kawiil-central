@@ -11,6 +11,7 @@ import { Download, ExternalLink, FileText, Image, FileSpreadsheet, Code, Loader2
 import { ACTIVE_SUPABASE_URL, supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { DocumentAiInsightsPanel } from "@/components/documents/DocumentAiInsightsPanel";
+import { documentStorageBucket } from "@/lib/documentStorageBucket";
 
 interface DocumentPreviewDialogProps {
   open: boolean;
@@ -25,6 +26,7 @@ interface DocumentPreviewDialogProps {
     file_size?: number | null;
     document_type?: string | null;
     tags?: string[] | null;
+    metadata?: Record<string, unknown> | null;
     clients?: { name: string } | null;
     projects?: { name: string } | null;
   } | null;
@@ -74,6 +76,9 @@ export function DocumentPreviewDialog({ open, onOpenChange, document }: Document
   const [textContent, setTextContent] = useState<string | null>(null);
 
   const fileType = document ? getFileType(document.name, document.mime_type) : "unknown";
+  const storageBucket = document
+    ? documentStorageBucket({ source: document.source, metadata: document.metadata ?? null })
+    : "documents";
 
   const loadPreview = async () => {
     if (!document?.file_path || document.source !== "supabase") return;
@@ -84,7 +89,7 @@ export function DocumentPreviewDialog({ open, onOpenChange, document }: Document
     try {
       if (fileType === "xml" || fileType === "text") {
         const { data, error } = await supabase.storage
-          .from("documents")
+          .from(storageBucket)
           .createSignedUrl(document.file_path, 3600);
         if (error) throw error;
         const signedUrl = buildAbsoluteSignedUrl(data.signedUrl);
@@ -94,7 +99,7 @@ export function DocumentPreviewDialog({ open, onOpenChange, document }: Document
         if (fileType === "xml") setPreviewUrl(signedUrl);
       } else {
         const { data, error } = await supabase.storage
-          .from("documents")
+          .from(storageBucket)
           .download(document.file_path);
         if (error) throw error;
         const blobUrl = URL.createObjectURL(data);
@@ -132,7 +137,7 @@ export function DocumentPreviewDialog({ open, onOpenChange, document }: Document
 
     try {
       const { data, error } = await supabase.storage
-        .from("documents")
+        .from(storageBucket)
         .createSignedUrl(document.file_path, 60, { download: true });
       if (error) throw error;
 
