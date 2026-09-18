@@ -176,11 +176,10 @@ export function ClientMeetingsTab({ client }: { client: Client }) {
                   </span>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  {m.agreementsTotal > 0 && (
-                    <span className="text-[11px] text-muted-foreground">
-                      Acuerdos {m.agreementsConfirmed}/{m.agreementsTotal}
-                    </span>
-                  )}
+                  <span className="text-[11px] text-muted-foreground">
+                    Acuerdos {m.agreementsConfirmed}
+                    {m.openTasksCount > 0 ? ` · tareas abiertas ${m.openTasksCount}` : ""}
+                  </span>
                   {m.approvedMinutesId && (
                     <span className="text-[11px] text-green-700 dark:text-green-400">
                       Minuta aprobada

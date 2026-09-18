@@ -41,8 +41,9 @@ const MOVEMENT_MAP: Record<string, string> = {
 };
 
 const ORG = "a0000000-0000-0000-0000-000000000001";
-/** Override: OWNER_EMAIL=otro@kawiil.mx npx tsx … */
+/** Override: OWNER_EMAIL=… o OWNER_USER_ID=uuid */
 const OWNER_EMAIL = process.env.OWNER_EMAIL || "leo.bassoco@kawiil.mx";
+const OWNER_USER_ID = process.env.OWNER_USER_ID || null;
 const ENTITIES = [
   {
     key: "vizum",
@@ -91,8 +92,8 @@ async function main() {
     .select("user_id")
     .eq("email", OWNER_EMAIL)
     .maybeSingle();
-  const ownerId = owner?.user_id;
-  if (!ownerId) throw new Error(`Owner ${OWNER_EMAIL} no encontrado`);
+  const ownerId = OWNER_USER_ID || owner?.user_id;
+  if (!ownerId) throw new Error(`Owner ${OWNER_USER_ID || OWNER_EMAIL} no encontrado`);
 
   // 1) Grupo
   let groupId: string;

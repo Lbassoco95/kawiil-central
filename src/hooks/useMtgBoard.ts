@@ -133,6 +133,16 @@ export function useMtgBoard(meetingId: string | undefined) {
         openTasks = (tasks ?? []) as typeof openTasks;
       }
 
+      let seriesMeetings: Pick<MtgMeetingRow, "id" | "scheduled_at" | "status">[] = [];
+      if (series) {
+        const { data: sm } = await mtgDb
+          .from("mtg_meetings")
+          .select("id, scheduled_at, status")
+          .eq("series_id", series.id)
+          .order("scheduled_at", { ascending: true });
+        seriesMeetings = (sm ?? []) as typeof seriesMeetings;
+      }
+
       return {
         meeting: meeting as MtgMeetingRow,
         series,
@@ -144,6 +154,7 @@ export function useMtgBoard(meetingId: string | undefined) {
         openTasks,
         deadlines: openTasks.filter((t) => !!t.compliance_template_id),
         plainTasks: openTasks.filter((t) => !t.compliance_template_id),
+        seriesMeetings,
       };
     },
   });

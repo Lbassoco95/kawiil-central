@@ -27,6 +27,7 @@ Fecha inicio: 2026-09-18 · Agente: Cursor Cloud · Base: `feat/mtg-juntas-b1` @
 - `prepareBoard` / `prepareMeetingBoard`, captura acuerdos→tareas, start/end
 - Seeds `load-demo.ts` + `load-grupo-sylon.ts`
 - Tests prepareBoard, lifecycle, noClientDataLeak, noDirectModelCalls
+- **2026-09-18:** vista compacta + Archivo + historial por tema + reabrir; selector de junta (lectura en pasadas); `load-sesion.ts`; contadores acuerdos/tareas en ficha cliente/grupo
 
 ## B3 — Graph + cola
 

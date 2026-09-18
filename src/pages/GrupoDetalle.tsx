@@ -42,7 +42,14 @@ export default function GrupoDetalle() {
         .eq("active", true);
 
       const seriesIds = (series ?? []).map((s) => s.id);
-      let meetings: { id: string; scheduled_at: string; status: string; series_id: string | null }[] = [];
+      let meetings: {
+        id: string;
+        scheduled_at: string;
+        status: string;
+        series_id: string | null;
+        agreementsConfirmed: number;
+        openTasksCount: number;
+      }[] = [];
       if (seriesIds.length > 0) {
         const { data: m } = await mtgDb
           .from("mtg_meetings")
@@ -50,7 +57,34 @@ export default function GrupoDetalle() {
           .in("series_id", seriesIds)
           .order("scheduled_at", { ascending: false })
           .limit(40);
-        meetings = m ?? [];
+        const list = m ?? [];
+        const meetingIds = list.map((x) => x.id);
+        const stats = new Map<string, number>();
+        const openTasks = new Map<string, number>();
+        if (meetingIds.length > 0) {
+          const { data: agreements } = await mtgDb
+            .from("mtg_agreements")
+            .select("meeting_id, status")
+            .in("meeting_id", meetingIds)
+            .eq("status", "confirmed");
+          for (const a of agreements ?? []) {
+            stats.set(a.meeting_id, (stats.get(a.meeting_id) ?? 0) + 1);
+          }
+          const { data: tasks } = await supabase
+            .from("tasks")
+            .select("mtg_meeting_id, status")
+            .in("mtg_meeting_id", meetingIds)
+            .not("status", "in", '("completada","cancelada")');
+          for (const t of tasks ?? []) {
+            if (!t.mtg_meeting_id) continue;
+            openTasks.set(t.mtg_meeting_id, (openTasks.get(t.mtg_meeting_id) ?? 0) + 1);
+          }
+        }
+        meetings = list.map((x) => ({
+          ...x,
+          agreementsConfirmed: stats.get(x.id) ?? 0,
+          openTasksCount: openTasks.get(x.id) ?? 0,
+        }));
       }
 
       const { data: docs } = await supabase
@@ -139,13 +173,19 @@ export default function GrupoDetalle() {
             {meetings.map((m) => {
               const st = MEETING_STATUS[m.status as keyof typeof MEETING_STATUS];
               return (
-                <li key={m.id} className="flex items-center justify-between border rounded-md p-3 text-sm">
+                <li key={m.id} className="flex items-center justify-between border rounded-md p-3 text-sm gap-2">
                   <Link to={`/juntas/${m.id}`} className="font-medium hover:underline">
                     {formatDateMX(m.scheduled_at)}
                   </Link>
-                  <Badge variant="outline" className={st?.color}>
-                    {st?.label ?? m.status}
-                  </Badge>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-[11px] text-muted-foreground">
+                      Acuerdos {m.agreementsConfirmed}
+                      {m.openTasksCount > 0 ? ` · tareas abiertas ${m.openTasksCount}` : ""}
+                    </span>
+                    <Badge variant="outline" className={st?.color}>
+                      {st?.label ?? m.status}
+                    </Badge>
+                  </div>
                 </li>
               );
             })}

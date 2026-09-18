@@ -3,7 +3,7 @@
  */
 
 import { useEffect, useMemo, useState, useRef } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -33,15 +33,23 @@ import {
   entitiesForFilter,
   sortOpenUpdatesByMovement,
 } from "@/lib/mtg/prepareBoard";
+import {
+  compactVisibleTopics,
+  isMeetingLiveEditable,
+  resolvedThisMeeting,
+} from "@/lib/mtg/boardArchive";
 import { unreviewedCount } from "@/lib/mtg/meetingLifecycle";
-import { ArrowLeft, ExternalLink, Loader2, Projector } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, Loader2, Projector } from "lucide-react";
 import { toast } from "sonner";
 import { MtgUploadTranscriptButton } from "@/components/mtg/MtgUploadTranscriptButton";
+import { MtgTopicHistoryDrawer } from "@/components/mtg/MtgTopicHistoryDrawer";
+import { MtgArchiveSection } from "@/components/mtg/MtgArchiveSection";
 
 const PROJECTION_KEY = "mtg-projection-mode";
 
 export default function JuntaDetalle() {
   const { meetingId } = useParams<{ meetingId: string }>();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const { data: profiles = [] } = useProfiles();
   const board = useMtgBoard(meetingId);
@@ -54,6 +62,7 @@ export default function JuntaDetalle() {
     }
   });
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [historyTopic, setHistoryTopic] = useState<{ id: string; title: string } | null>(null);
   const [agreementDraft, setAgreementDraft] = useState({
     text: "",
     entityKey: "",
@@ -84,16 +93,17 @@ export default function JuntaDetalle() {
     return list.filter((t) => t.entity_key === entityFilter);
   }, [board.data, entityFilter]);
 
+  const compactTopics = useMemo(() => compactVisibleTopics(topicsFiltered), [topicsFiltered]);
   const updatesForCount = topicsFiltered
     .map((t) => t.update)
     .filter(Boolean)
     .map((u) => ({ movement: u!.movement as MtgMovement }));
   const counters = countByMovement(updatesForCount);
 
-  const resolved = topicsFiltered.filter((t) => t.update && bucketForMovement(t.update.movement) === "resolved");
-  const news = topicsFiltered.filter((t) => t.update && bucketForMovement(t.update.movement) === "new");
+  const resolved = resolvedThisMeeting(topicsFiltered);
+  const news = compactTopics.filter((t) => t.update && bucketForMovement(t.update.movement) === "new");
   const openSorted = sortOpenUpdatesByMovement(
-    topicsFiltered
+    compactTopics
       .filter((t) => t.update && bucketForMovement(t.update.movement) === "open")
       .map((t) => ({ topic: t, movement: t.update!.movement as MtgMovement })),
   ).map((x) => x.topic);
@@ -134,11 +144,20 @@ export default function JuntaDetalle() {
     );
   }
 
-  const { meeting, series, agreements, decisions, expectedNext, projects } = board.data;
+  const { meeting, series, agreements, decisions, expectedNext, projects, seriesMeetings } = board.data;
   const statusCfg = MEETING_STATUS[meeting.status];
   const orgId = meeting.organization_id;
+  const liveEditable = isMeetingLiveEditable(meeting.status);
+  const meetingIdx = seriesMeetings.findIndex((m) => m.id === meeting.id);
+  const prevMeeting = meetingIdx > 0 ? seriesMeetings[meetingIdx - 1] : null;
+  const nextMeeting =
+    meetingIdx >= 0 && meetingIdx < seriesMeetings.length - 1 ? seriesMeetings[meetingIdx + 1] : null;
 
   const onCaptureAgreement = () => {
+    if (!liveEditable) {
+      toast.error("Junta en solo lectura");
+      return;
+    }
     if (!user || !agreementDraft.text.trim() || !agreementDraft.clientId) {
       toast.error("Texto y entidad/cliente son obligatorios");
       return;
@@ -212,8 +231,52 @@ export default function JuntaDetalle() {
                   <Badge variant="outline" className={cn("text-[10px] border-0", statusCfg.color)}>
                     {statusCfg.label}
                   </Badge>
+                  {!liveEditable && (
+                    <Badge variant="secondary" className="ml-2 text-[10px]">
+                      Solo lectura
+                    </Badge>
+                  )}
                   {savedAt && <span className="ml-2 text-xs">guardado {savedAt}</span>}
                 </p>
+                {seriesMeetings.length > 1 && (
+                  <div className="flex flex-wrap items-center gap-1 mt-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2"
+                      disabled={!prevMeeting}
+                      onClick={() => prevMeeting && navigate(`/juntas/${prevMeeting.id}`)}
+                    >
+                      <ChevronLeft className="h-3.5 w-3.5" /> Anterior
+                    </Button>
+                    <Select
+                      value={meeting.id}
+                      onValueChange={(id) => navigate(`/juntas/${id}`)}
+                    >
+                      <SelectTrigger className="h-7 w-[200px] text-xs">
+                        <SelectValue placeholder="Junta" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {seriesMeetings.map((m) => (
+                          <SelectItem key={m.id} value={m.id}>
+                            {formatDateMX(m.scheduled_at)} · {MEETING_STATUS[m.status]?.label ?? m.status}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2"
+                      disabled={!nextMeeting}
+                      onClick={() => nextMeeting && navigate(`/juntas/${nextMeeting.id}`)}
+                    >
+                      Siguiente <ChevronRight className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -231,7 +294,7 @@ export default function JuntaDetalle() {
                   </a>
                 </Button>
               )}
-              {meeting.status === "planned" && (
+              {liveEditable && meeting.status === "planned" && (
                 <Button
                   size="sm"
                   onClick={() =>
@@ -244,7 +307,7 @@ export default function JuntaDetalle() {
                   Iniciar junta
                 </Button>
               )}
-              {(meeting.status === "in_progress" || meeting.status === "planned") && (
+              {liveEditable && (meeting.status === "in_progress" || meeting.status === "planned") && (
                 <Button size="sm" variant="secondary" onClick={handleEnd} disabled={board.doEnd.isPending}>
                   Terminar junta
                 </Button>
@@ -260,7 +323,9 @@ export default function JuntaDetalle() {
               )}
               {(meeting.status === "ended" ||
                 meeting.status === "minutes_draft" ||
-                meeting.status === "minutes_review") && (
+                meeting.status === "minutes_review" ||
+                meeting.status === "minutes_approved" ||
+                meeting.status === "closed") && (
                 <Button asChild size="sm" variant="outline">
                   <Link to={`/juntas/${meeting.id}/minuta`}>Minuta</Link>
                 </Button>
@@ -303,6 +368,8 @@ export default function JuntaDetalle() {
         {/* Acuerdos de hoy */}
         <section className="space-y-3">
           <h2 className="font-semibold">Acuerdos de hoy</h2>
+          {liveEditable && (
+            <>
           <div className="grid gap-2 md:grid-cols-6">
             <Input
               className="md:col-span-2"
@@ -374,6 +441,8 @@ export default function JuntaDetalle() {
           <Button size="sm" onClick={onCaptureAgreement} disabled={board.addAgreement.isPending}>
             Guardar acuerdo (Enter)
           </Button>
+            </>
+          )}
           <ul className="space-y-2">
             {agreements.map((a) => (
               <li
@@ -388,7 +457,7 @@ export default function JuntaDetalle() {
                   {a.status} · {a.project_id ? "con proyecto" : "ámbar (sin proyecto)"} ·{" "}
                   {a.task_id ? `tarea ${a.task_id.slice(0, 8)}…` : "sin tarea"}
                 </div>
-                {a.status === "confirmed" && !a.task_id && user && (
+                {liveEditable && a.status === "confirmed" && !a.task_id && user && (
                   <Select
                     onValueChange={(pid) =>
                       board.setProject.mutate({
@@ -423,7 +492,14 @@ export default function JuntaDetalle() {
           <section>
             <h2 className="font-semibold mb-2">Se resolvió desde la sesión pasada</h2>
             {resolved.map((t) => (
-              <TopicRow key={t.id} topic={t} projection={projection} onPatch={schedulePatch} />
+              <TopicRow
+                key={t.id}
+                topic={t}
+                projection={projection}
+                readOnly={!liveEditable}
+                onPatch={schedulePatch}
+                onOpenHistory={() => setHistoryTopic({ id: t.id, title: t.title })}
+              />
             ))}
           </section>
         )}
@@ -431,7 +507,14 @@ export default function JuntaDetalle() {
           <section>
             <h2 className="font-semibold mb-2">Nuevo desde la sesión pasada</h2>
             {news.map((t) => (
-              <TopicRow key={t.id} topic={t} projection={projection} onPatch={schedulePatch} />
+              <TopicRow
+                key={t.id}
+                topic={t}
+                projection={projection}
+                readOnly={!liveEditable}
+                onPatch={schedulePatch}
+                onOpenHistory={() => setHistoryTopic({ id: t.id, title: t.title })}
+              />
             ))}
           </section>
         )}
@@ -443,7 +526,14 @@ export default function JuntaDetalle() {
             <p className="text-sm text-muted-foreground">Sin temas abiertos en este filtro.</p>
           ) : (
             openSorted.map((t) => (
-              <TopicRow key={t.id} topic={t} projection={projection} onPatch={schedulePatch} />
+              <TopicRow
+                key={t.id}
+                topic={t}
+                projection={projection}
+                readOnly={!liveEditable}
+                onPatch={schedulePatch}
+                onOpenHistory={() => setHistoryTopic({ id: t.id, title: t.title })}
+              />
             ))
           )}
         </section>
@@ -460,7 +550,7 @@ export default function JuntaDetalle() {
                   {i + 1}. {d.text}{" "}
                   <Badge variant="outline">{d.status}</Badge>
                 </div>
-                {d.status === "pending" && user && (
+                {liveEditable && d.status === "pending" && user && (
                   <div className="flex gap-2">
                     <Input
                       placeholder="Qué se decidió"
@@ -521,7 +611,29 @@ export default function JuntaDetalle() {
             </ul>
           </div>
         </section>
+
+        {series && user && (
+          <MtgArchiveSection
+            seriesId={series.id}
+            organizationId={orgId}
+            actorUserId={user.id}
+            meeting={meeting}
+            entities={entities}
+            liveEditable={liveEditable}
+            onOpenHistory={(t) => setHistoryTopic(t)}
+            onReopened={() => board.invalidate()}
+          />
+        )}
       </div>
+
+      <MtgTopicHistoryDrawer
+        topicId={historyTopic?.id ?? null}
+        topicTitle={historyTopic?.title}
+        open={!!historyTopic}
+        onOpenChange={(o) => {
+          if (!o) setHistoryTopic(null);
+        }}
+      />
     </AppLayout>
   );
 }
@@ -529,11 +641,15 @@ export default function JuntaDetalle() {
 function TopicRow({
   topic,
   projection,
+  readOnly,
   onPatch,
+  onOpenHistory,
 }: {
   topic: import("@/hooks/useMtgBoard").BoardTopicRow;
   projection: boolean;
+  readOnly: boolean;
   onPatch: (updateId: string, patch: Record<string, unknown>) => void;
+  onOpenHistory: () => void;
 }) {
   const [openCtx, setOpenCtx] = useState(false);
   const u = topic.update;
@@ -546,35 +662,49 @@ function TopicRow({
   return (
     <div className={cn("border rounded-md p-3 mb-2 space-y-2", MOVEMENT[u.movement].color.replace(/text-\S+/g, ""))}>
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="font-medium text-sm">{topic.title}</div>
+        <button
+          type="button"
+          className="font-medium text-sm text-left hover:underline"
+          onClick={onOpenHistory}
+        >
+          {topic.title}
+        </button>
         <div className="flex items-center gap-2">
-          <Select
-            value={u.movement}
-            onValueChange={(v) => onPatch(u.id, { movement: v, origin: "edited_live" })}
-          >
-            <SelectTrigger className="w-[180px] h-8">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {(Object.keys(MOVEMENT) as MtgMovement[]).map((m) => (
-                <SelectItem key={m} value={m}>
-                  {MOVEMENT[m].label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <label className="flex items-center gap-1 text-xs">
-            <Checkbox
-              checked={u.reviewed}
-              onCheckedChange={(c) =>
-                onPatch(u.id, {
-                  reviewed: !!c,
-                  reviewed_at: c ? new Date().toISOString() : null,
-                })
-              }
-            />
-            Revisado
-          </label>
+          {readOnly ? (
+            <Badge variant="outline" className={MOVEMENT[u.movement].color}>
+              {MOVEMENT[u.movement].label}
+            </Badge>
+          ) : (
+            <Select
+              value={u.movement}
+              onValueChange={(v) => onPatch(u.id, { movement: v, origin: "edited_live" })}
+            >
+              <SelectTrigger className="w-[180px] h-8">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(MOVEMENT) as MtgMovement[]).map((m) => (
+                  <SelectItem key={m} value={m}>
+                    {MOVEMENT[m].label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          {!readOnly && (
+            <label className="flex items-center gap-1 text-xs">
+              <Checkbox
+                checked={u.reviewed}
+                onCheckedChange={(c) =>
+                  onPatch(u.id, {
+                    reviewed: !!c,
+                    reviewed_at: c ? new Date().toISOString() : null,
+                  })
+                }
+              />
+              Revisado
+            </label>
+          )}
         </div>
       </div>
       <div className={cn("grid gap-2", projection ? "grid-cols-1" : "md:grid-cols-2")}>
@@ -582,13 +712,21 @@ function TopicRow({
           className="text-sm min-h-[60px]"
           placeholder="Avance"
           defaultValue={u.progress_since_last ?? ""}
-          onChange={(e) => onPatch(u.id, { progress_since_last: e.target.value, origin: "edited_live" })}
+          readOnly={readOnly}
+          onChange={(e) => {
+            if (readOnly) return;
+            onPatch(u.id, { progress_since_last: e.target.value, origin: "edited_live" });
+          }}
         />
         <Textarea
           className="text-sm min-h-[60px]"
           placeholder="Sigue"
           defaultValue={u.next_step ?? ""}
-          onChange={(e) => onPatch(u.id, { next_step: e.target.value, origin: "edited_live" })}
+          readOnly={readOnly}
+          onChange={(e) => {
+            if (readOnly) return;
+            onPatch(u.id, { next_step: e.target.value, origin: "edited_live" });
+          }}
         />
       </div>
       <div className="text-xs text-muted-foreground flex flex-wrap gap-3">
@@ -607,9 +745,11 @@ function TopicRow({
           {topic.source && <p><strong>Fuente:</strong> {topic.source}</p>}
           <Textarea
             className="text-xs mt-1"
-            placeholder="Notas de sesión"
+            placeholder={readOnly ? "Notas posteriores" : "Notas de sesión"}
             defaultValue={u.session_notes ?? ""}
-            onChange={(e) => onPatch(u.id, { session_notes: e.target.value, origin: "edited_live" })}
+            onChange={(e) =>
+              onPatch(u.id, { session_notes: e.target.value, origin: "edited_live" })
+            }
           />
         </div>
       )}
