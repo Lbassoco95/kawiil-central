@@ -16,17 +16,22 @@ export const MTG_AUDIT_ACTION = {
   MEETING_CREATED: "meeting_created",
   MEETING_STARTED: "meeting_started",
   MEETING_ENDED: "meeting_ended",
+  MEETING_CANCELLED: "meeting_cancelled",
   TOPIC_CREATED: "topic_created",
   TOPIC_DROPPED: "topic_dropped",
+  TOPIC_REOPENED: "topic_reopened",
+  SESSION_NOTES_IMPORTED: "session_notes_imported",
   AGREEMENT_CAPTURED: "agreement_captured",
   AGREEMENT_CONFIRMED: "agreement_confirmed",
   AGREEMENT_REJECTED: "agreement_rejected",
   DECISION_DECIDED: "decision_decided",
+  MINUTES_GENERATED: "minutes_generated",
   MINUTES_APPROVED: "minutes_approved",
   MINUTES_SENT: "minutes_sent",
   TRANSCRIPT_NOTICE_CONFIRMED: "transcript_notice_confirmed",
   TRANSCRIPT_RECEIVED: "transcript_received",
   TRANSCRIPT_UNAVAILABLE: "transcript_unavailable",
+  SEED_LOADED: "seed_loaded",
 } as const;
 
 export type MtgAuditAction = (typeof MTG_AUDIT_ACTION)[keyof typeof MTG_AUDIT_ACTION];

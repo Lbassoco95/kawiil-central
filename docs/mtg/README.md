@@ -71,4 +71,71 @@ Para que `kawiil-agents` (en `nexo-louis/cloud/hetzner/docker-compose.yml`) alca
 
 ## Roadmap / fuera de v1
 
-_Pendiente: transcripción automática, minutas generadas por modelo, envío al cliente, seed de modo demo (`VITE_MTG_DEMO`)._
+- Side panel de Teams
+- Portal del cliente
+- Recall.ai (grabación/transcripción alternativa)
+- Propuesta de avance desde Slack o correo
+- Webhook saliente Donna/Cerebro (contrato abajo; **no implementado**)
+
+## Contrato webhook saliente (Donna / Cerebro) — no implementado
+
+Cuando exista un consumidor externo, Múuch' podría emitir (vía cola o Edge) eventos firmados:
+
+```json
+{
+  "event": "mtg.minutes_approved" | "mtg.meeting_closed" | "mtg.agreement_confirmed",
+  "occurred_at": "ISO-8601",
+  "organization_id": "uuid",
+  "meeting_id": "uuid",
+  "series_id": "uuid|null",
+  "payload": {
+    "title": "string",
+    "scheduled_at": "ISO-8601",
+    "confirmed_agreements": [{ "text": "...", "owner": "...", "due_date": "YYYY-MM-DD|null" }],
+    "movement_counts": { "advanced": 1 },
+    "link": "/juntas/{id}/minuta"
+  }
+}
+```
+
+Reglas: **nunca** incluir minuta completa, VTT ni PII del cliente más allá de lo ya visible en Slack interno. Auth: HMAC compartido + allowlist de IPs. Este contrato es documentación; no hay endpoint ni secretos aún.
+
+## Bloques 2–5 (esta corrida)
+
+### Rutas
+- `/juntas/{meeting_id}` — Tablero
+- `/juntas/{meeting_id}/minuta` — Minuta (B4): confirmar/rechazar proposed, incompletos, aprobar PDF, enviar/cerrar
+- `/grupos/{group_id}` — Ficha mínima de grupo
+
+### Cola `job_queue`
+Migración `20260918140000_job_queue.sql`. Claim: `claim_jobs`. Kinds: `mtg.fetch_transcript`, `mtg.generate_minutes`, `mtg.remind`. Cron → Edge `job-queue-dispatch` → worker `worker/mtg`.
+
+### Recordatorios (B5)
+Al crear/sincronizar instancias: jobs `mtg.remind` con `run_after = scheduled_at - 24h` y `- 1h`, idempotentes por `(meeting_id, remind_kind)`. Cancelar junta → jobs a `dead`. Worker inserta `notifications` (+ web push / Graph mail cuando secretos existan).
+
+### Slack al aprobar minuta
+Si `mtg_series.slack_channel_id` (editable en el diálogo de serie): `slack-notify` con `event_type=mtg_minutes_approved` (conteos, acuerdos confirmados, link). Sin minuta ni transcripción.
+
+### Graph / Teams — [ALTO — requiere a Polo]
+1. Entra (tenant **kawiil.mx**), app kawiil-central: permisos de aplicación `OnlineMeetings.Read.All`, `OnlineMeetingTranscript.Read.All`, `OnlineMeetingRecording.Read.All` + **admin consent**.
+2. PowerShell Teams:
+   ```powershell
+   New-CsApplicationAccessPolicy -Identity Kawiil-Mtg -AppIds "<MICROSOFT_CLIENT_ID>"
+   Grant-CsApplicationAccessPolicy -PolicyName Kawiil-Mtg -Identity <upn-organizador>
+   ```
+3. Secrets Supabase: `MTG_GRAPH_CLIENT_STATE`, `MTG_WEBHOOK_PUBLIC_URL`.
+4. Confirmar `MICROSOFT_TENANT_ID` = tenant kawiil.mx (solo id, no secret).
+5. Facturación Azure opcional (>600 min/mes evaluación).
+6. VM: `OPENCLAW_GATEWAY_URL` + token; compose `extra_hosts: host.docker.internal:host-gateway`.
+
+Mocks: `MTG_GRAPH_MOCK=1`, `MTG_GATEWAY_MOCK=1`.
+
+### Seed
+- Demo: `npx tsx tools/mtg/seed/load-demo.ts`
+- Grupo real: JSON fuera del repo + `load-grupo-sylon.ts` (ver `tools/mtg/seed/README.md`)
+
+### Costos Graph
+Cuota evaluación ~600 min/mes/app; luego ≈ USD 0.0022/min transcripción, 0.003/min grabación. Sin facturación → 402. Copilot AI insights **no** se usan.
+
+### Harness local
+`tools/mtg/local-db/verify.sh` — B1 + job_queue + unmatched + documents/slack; log en `last-run.log` (ignorado).

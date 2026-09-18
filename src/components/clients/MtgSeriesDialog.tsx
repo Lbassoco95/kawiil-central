@@ -63,6 +63,7 @@ const seriesSchema = z.object({
   starts_at: z.string().optional(),
   owner_user_id: z.string().nullable().optional(),
   send_minutes_to_client: z.boolean(),
+  slack_channel_id: z.string().optional(),
   transcript_notice_confirmed: z.boolean(),
   auto_transcript: z.boolean(),
 });
@@ -105,6 +106,7 @@ export function MtgSeriesDialog({ open, onOpenChange, client, series }: MtgSerie
       starts_at: "",
       owner_user_id: client.responsible_user_id ?? null,
       send_minutes_to_client: false,
+      slack_channel_id: "",
       transcript_notice_confirmed: false,
       auto_transcript: false,
     },
@@ -123,6 +125,7 @@ export function MtgSeriesDialog({ open, onOpenChange, client, series }: MtgSerie
         starts_at: toDatetimeLocal(series.starts_at),
         owner_user_id: series.owner_user_id,
         send_minutes_to_client: series.send_minutes_to_client,
+        slack_channel_id: series.slack_channel_id ?? "",
         transcript_notice_confirmed: !!series.transcript_notice_confirmed_at,
         auto_transcript: series.auto_transcript,
       });
@@ -142,6 +145,7 @@ export function MtgSeriesDialog({ open, onOpenChange, client, series }: MtgSerie
         starts_at: "",
         owner_user_id: client.responsible_user_id ?? null,
         send_minutes_to_client: false,
+        slack_channel_id: "",
         transcript_notice_confirmed: false,
         auto_transcript: false,
       });
@@ -168,6 +172,7 @@ export function MtgSeriesDialog({ open, onOpenChange, client, series }: MtgSerie
       entities,
       agenda_template: agendaBlocks.filter((b) => b.title.trim()),
       send_minutes_to_client: v.send_minutes_to_client,
+      slack_channel_id: v.slack_channel_id?.trim() || null,
       transcript_notice_confirmed: v.transcript_notice_confirmed,
       auto_transcript: v.auto_transcript,
     };
@@ -444,6 +449,27 @@ export function MtgSeriesDialog({ open, onOpenChange, client, series }: MtgSerie
                   <FormControl>
                     <Switch checked={field.value} onCheckedChange={field.onChange} />
                   </FormControl>
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="slack_channel_id"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Canal Slack (aviso al aprobar minuta)</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="C0123456789 o #canal"
+                      {...field}
+                      value={field.value ?? ""}
+                    />
+                  </FormControl>
+                  <p className="text-xs text-muted-foreground">
+                    Opcional. Nunca se publica la minuta completa ni la transcripción.
+                  </p>
+                  <FormMessage />
                 </FormItem>
               )}
             />

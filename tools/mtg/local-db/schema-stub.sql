@@ -150,7 +150,11 @@ CREATE TABLE IF NOT EXISTS public.documents (
   organization_id uuid,
   client_id uuid,
   name text,
+  source text,
   file_path text,
+  mime_type text,
+  document_type text,
+  uploaded_by uuid,
   metadata jsonb DEFAULT '{}'
 );
 

@@ -20,6 +20,8 @@ export type MtgMeeting = MtgMeetingRow & {
   /** Acuerdos confirmados / total de la junta. */
   agreementsConfirmed: number;
   agreementsTotal: number;
+  /** Tareas abiertas ligadas a la junta (`tasks.mtg_meeting_id`). */
+  openTasksCount: number;
   /** Minuta aprobada (si existe). */
   approvedMinutesId: string | null;
 };
@@ -99,10 +101,26 @@ export function useMtgMeetingsForClient(clientId: string | undefined) {
       if (mErr) throw mErr;
       const approvedByMeeting = new Map((minutes ?? []).map((m) => [m.meeting_id, m.id]));
 
+      // Tareas abiertas por junta.
+      const { data: tasks } = await supabase
+        .from("tasks")
+        .select("id, mtg_meeting_id, status")
+        .in("mtg_meeting_id", meetingIds)
+        .not("status", "in", '("completada","cancelada")');
+      const openTasksByMeeting = new Map<string, number>();
+      for (const t of tasks ?? []) {
+        if (!t.mtg_meeting_id) continue;
+        openTasksByMeeting.set(
+          t.mtg_meeting_id,
+          (openTasksByMeeting.get(t.mtg_meeting_id) ?? 0) + 1,
+        );
+      }
+
       return meetings.map((m) => ({
         ...m,
         agreementsConfirmed: statsByMeeting.get(m.id)?.confirmed ?? 0,
         agreementsTotal: statsByMeeting.get(m.id)?.total ?? 0,
+        openTasksCount: openTasksByMeeting.get(m.id) ?? 0,
         approvedMinutesId: approvedByMeeting.get(m.id) ?? null,
       }));
     },

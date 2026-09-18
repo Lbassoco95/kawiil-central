@@ -21,6 +21,7 @@ import {
 } from "@/lib/mtg/db";
 import { DEFAULT_AGENDA_TEMPLATE, type MtgCadence } from "@/lib/mtg/constants";
 import { logMtgAudit, MTG_AUDIT_ACTION } from "@/lib/mtg/audit";
+import { enqueueRemindersForMeeting } from "@/lib/mtg/remind";
 
 export type MtgSeries = MtgSeriesRow & {
   /** true si la serie está anclada a un grupo del cliente (solo lectura en la ficha). */
@@ -42,6 +43,8 @@ export interface MtgSeriesFormValues {
   entities: MtgEntity[];
   agenda_template: MtgAgendaBlock[];
   send_minutes_to_client: boolean;
+  /** Canal Slack (ID C… o nombre) para aviso al aprobar minuta. */
+  slack_channel_id: string | null;
   /** El usuario confirmó que el cliente fue informado de la transcripción. */
   transcript_notice_confirmed: boolean;
   auto_transcript: boolean;
@@ -133,6 +136,24 @@ async function generateInstancesIfNeeded(series: MtgSeriesRow) {
     _count: 8,
   });
   if (error) throw error;
+
+  // Encolar T-1d / T-1h por cada instancia planned (idempotente).
+  const { data: meetings } = await mtgDb
+    .from("mtg_meetings")
+    .select("id, scheduled_at, status")
+    .eq("series_id", series.id)
+    .eq("status", "planned");
+  for (const m of meetings ?? []) {
+    try {
+      await enqueueRemindersForMeeting({
+        organizationId: series.organization_id,
+        meeting: m,
+        series,
+      });
+    } catch (e) {
+      console.warn("[mtg] enqueue remind", e);
+    }
+  }
 }
 
 function transcriptNoticeFields(
@@ -192,6 +213,7 @@ export function useCreateMtgSeries(clientId: string) {
         agenda_template:
           values.agenda_template.length > 0 ? values.agenda_template : DEFAULT_AGENDA_TEMPLATE,
         send_minutes_to_client: values.send_minutes_to_client,
+        slack_channel_id: values.slack_channel_id?.trim() || null,
         auto_transcript: values.auto_transcript && !!notice.transcript_notice_confirmed_at,
         transcript_notice_confirmed_at: notice.transcript_notice_confirmed_at,
         transcript_notice_confirmed_by: notice.transcript_notice_confirmed_by ?? null,
@@ -264,6 +286,7 @@ export function useUpdateMtgSeries(clientId: string) {
           entities: values.entities,
           agenda_template: values.agenda_template,
           send_minutes_to_client: values.send_minutes_to_client,
+          slack_channel_id: values.slack_channel_id?.trim() || null,
           auto_transcript: values.auto_transcript && !!notice.transcript_notice_confirmed_at,
           transcript_notice_confirmed_at: notice.transcript_notice_confirmed_at,
           ...(notice.transcript_notice_confirmed_by

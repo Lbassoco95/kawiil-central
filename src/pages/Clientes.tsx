@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { matchesSearch } from "@/lib/searchMatch";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -542,15 +542,31 @@ const Clientes = () => {
               const isCollapsed = collapsedGroups.has(group.key);
               return (
                 <Collapsible key={group.key} open={!isCollapsed} onOpenChange={() => toggleGroup(group.key)}>
-                  <CollapsibleTrigger className="flex items-center gap-2 w-full text-left py-1.5 group">
-                    {isCollapsed ? (
-                      <ChevronRight className="h-3.5 w-3.5 text-muted-foreground transition-transform" />
-                    ) : (
-                      <ChevronDown className="h-3.5 w-3.5 text-muted-foreground transition-transform" />
+                  <div className="flex items-center gap-2 w-full py-1.5">
+                    <CollapsibleTrigger className="flex items-center gap-2 text-left group min-w-0">
+                      {isCollapsed ? (
+                        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform" />
+                      ) : (
+                        <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform" />
+                      )}
+                      {!(groupMode === "grupo" && group.key !== "sin_grupo") && (
+                        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider truncate">
+                          {group.label}
+                        </h2>
+                      )}
+                    </CollapsibleTrigger>
+                    {groupMode === "grupo" && group.key !== "sin_grupo" && (
+                      <Link
+                        to={`/grupos/${group.key}`}
+                        className="text-xs font-semibold text-muted-foreground uppercase tracking-wider hover:text-primary hover:underline truncate"
+                      >
+                        {group.label}
+                      </Link>
                     )}
-                    <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{group.label}</h2>
-                    <span className="text-[10px] bg-secondary/60 text-muted-foreground px-1.5 py-0.5 rounded-full">{group.clients.length}</span>
-                  </CollapsibleTrigger>
+                    <span className="text-[10px] bg-secondary/60 text-muted-foreground px-1.5 py-0.5 rounded-full shrink-0">
+                      {group.clients.length}
+                    </span>
+                  </div>
                   <CollapsibleContent>
                     <div className="mt-2 space-y-2">
                       {group.clients.map((client, i) => {

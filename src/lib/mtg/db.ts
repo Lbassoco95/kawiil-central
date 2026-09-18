@@ -44,6 +44,7 @@ export type MtgSeriesRow = {
   organizer_tenant_id: string | null;
   outlook_event_id: string | null;
   teams_join_url: string | null;
+  slack_channel_id?: string | null;
   active: boolean;
   created_by: string | null;
   created_at: string;
