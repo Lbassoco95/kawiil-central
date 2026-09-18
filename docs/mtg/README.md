@@ -72,3 +72,37 @@ Para que `kawiil-agents` (en `nexo-louis/cloud/hetzner/docker-compose.yml`) alca
 ## Roadmap / fuera de v1
 
 _Pendiente: transcripción automática, minutas generadas por modelo, envío al cliente, seed de modo demo (`VITE_MTG_DEMO`)._
+
+## Bloques 2–5 (esta corrida)
+
+### Rutas
+- `/juntas/{meeting_id}` — Tablero
+- `/juntas/{meeting_id}/minuta` — Minuta (B4)
+- `/grupos/{group_id}` — Ficha mínima de grupo
+
+### Cola `job_queue`
+Migración `20260918140000_job_queue.sql`. Claim: `claim_jobs`. Cron → Edge `job-queue-dispatch` → worker `worker/mtg`.
+
+### Graph / Teams — [ALTO — requiere a Polo]
+1. Entra (tenant **kawiil.mx**), app kawiil-central: permisos de aplicación `OnlineMeetings.Read.All`, `OnlineMeetingTranscript.Read.All`, `OnlineMeetingRecording.Read.All` + **admin consent**.
+2. PowerShell Teams:
+   ```powershell
+   New-CsApplicationAccessPolicy -Identity Kawiil-Mtg -AppIds "<MICROSOFT_CLIENT_ID>"
+   Grant-CsApplicationAccessPolicy -PolicyName Kawiil-Mtg -Identity <upn-organizador>
+   ```
+3. Secrets Supabase: `MTG_GRAPH_CLIENT_STATE`, `MTG_WEBHOOK_PUBLIC_URL`.
+4. Confirmar `MICROSOFT_TENANT_ID` = tenant kawiil.mx (solo id, no secret).
+5. Facturación Azure opcional (>600 min/mes evaluación).
+6. VM: `OPENCLAW_GATEWAY_URL` + token; compose `extra_hosts: host.docker.internal:host-gateway`.
+
+Mocks: `MTG_GRAPH_MOCK=1`, `MTG_GATEWAY_MOCK=1`.
+
+### Seed
+- Demo: `npx tsx tools/mtg/seed/load-demo.ts`
+- Grupo real: JSON fuera del repo + `load-grupo-sylon.ts` (ver `tools/mtg/seed/README.md`)
+
+### Costos Graph
+Cuota evaluación ~600 min/mes/app; luego ≈ USD 0.0022/min transcripción, 0.003/min grabación. Sin facturación → 402. Copilot AI insights **no** se usan.
+
+### Roadmap
+Side panel Teams, portal cliente, Recall.ai, propuesta de avance desde Slack — no en v1.

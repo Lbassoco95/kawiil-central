@@ -22,11 +22,13 @@ export const MTG_AUDIT_ACTION = {
   AGREEMENT_CONFIRMED: "agreement_confirmed",
   AGREEMENT_REJECTED: "agreement_rejected",
   DECISION_DECIDED: "decision_decided",
+  MINUTES_GENERATED: "minutes_generated",
   MINUTES_APPROVED: "minutes_approved",
   MINUTES_SENT: "minutes_sent",
   TRANSCRIPT_NOTICE_CONFIRMED: "transcript_notice_confirmed",
   TRANSCRIPT_RECEIVED: "transcript_received",
   TRANSCRIPT_UNAVAILABLE: "transcript_unavailable",
+  SEED_LOADED: "seed_loaded",
 } as const;
 
 export type MtgAuditAction = (typeof MTG_AUDIT_ACTION)[keyof typeof MTG_AUDIT_ACTION];

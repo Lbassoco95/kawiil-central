@@ -40,5 +40,8 @@ deno.lock
 .env.*.local
 .vercel
 
-# Múuch': cargas con datos reales de clientes, nunca se versionan
-tools/mtg/seed/
+# Múuch': JSON/datos reales de clientes — nunca se versionan.
+# Los scripts .ts del loader sí se versionan (sin pegar el JSON).
+tools/mtg/seed/**
+!tools/mtg/seed/*.ts
+!tools/mtg/seed/README.md

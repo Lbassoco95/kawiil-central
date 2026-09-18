@@ -11,6 +11,7 @@ import { useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Link } from "react-router-dom";
 import { CalendarClock, Plus, Repeat, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDateMX } from "@/lib/dateUtils";
@@ -159,9 +160,12 @@ export function ClientMeetingsTab({ client }: { client: Client }) {
             return (
               <div key={m.id} className="flex items-center justify-between gap-3 py-3 px-4">
                 <div className="min-w-0">
-                  <span className="text-[13px] font-medium text-foreground">
+                  <Link
+                    to={`/juntas/${m.id}`}
+                    className="text-[13px] font-medium text-foreground hover:underline"
+                  >
                     {formatDateMX(m.scheduled_at.slice(0, 10))}
-                  </span>
+                  </Link>
                   <span className="text-[11px] text-muted-foreground ml-2">
                     {new Date(m.scheduled_at).toLocaleTimeString("es-MX", {
                       hour: "2-digit",
