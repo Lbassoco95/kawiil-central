@@ -212,7 +212,7 @@ BEGIN
     PERFORM cron.schedule(
       'mtg-job-queue-dispatch',
       '*/2 * * * *',
-      $$SELECT public.invoke_job_queue_cron()$$
+      $job$SELECT public.invoke_job_queue_cron()$job$
     );
   END IF;
 EXCEPTION WHEN OTHERS THEN
