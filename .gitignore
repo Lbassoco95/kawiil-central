@@ -39,3 +39,6 @@ deno.lock
 .env.local
 .env.*.local
 .vercel
+
+# Múuch': cargas con datos reales de clientes, nunca se versionan
+tools/mtg/seed/
