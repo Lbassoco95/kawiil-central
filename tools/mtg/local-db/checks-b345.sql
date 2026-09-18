@@ -27,8 +27,8 @@ INSERT INTO public.client_groups (id, organization_id, name) VALUES
 RESET ROLE;
 INSERT INTO public.job_queue (id, organization_id, kind, payload, status, run_after)
 VALUES
-  ('j0000000-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-0000000000aa', 'mtg.remind', '{"meeting_id":"m1","remind_kind":"t1d"}'::jsonb, 'pending', now() - interval '1 minute'),
-  ('j0000000-0000-0000-0000-000000000002', 'aaaaaaaa-0000-0000-0000-0000000000aa', 'mtg.remind', '{"meeting_id":"m1","remind_kind":"t1h"}'::jsonb, 'pending', now() - interval '1 minute');
+  ('d0000000-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-0000000000aa', 'mtg.remind', '{"meeting_id":"m1","remind_kind":"t1d"}'::jsonb, 'pending', now() - interval '1 minute'),
+  ('d0000000-0000-0000-0000-000000000002', 'aaaaaaaa-0000-0000-0000-0000000000aa', 'mtg.remind', '{"meeting_id":"m1","remind_kind":"t1h"}'::jsonb, 'pending', now() - interval '1 minute');
 
 DO $$
 DECLARE
@@ -54,14 +54,14 @@ END $$;
 
 UPDATE public.job_queue
 SET status = 'leased', lease_until = now() - interval '1 minute', leased_by = 'stale', attempts = 1
-WHERE id = 'j0000000-0000-0000-0000-000000000001';
+WHERE id = 'd0000000-0000-0000-0000-000000000001';
 
 DO $$
 DECLARE
   n int;
 BEGIN
   SELECT count(*) INTO n FROM public.claim_jobs(ARRAY['mtg.remind'], 5, 'w-recover', 600)
-    WHERE id = 'j0000000-0000-0000-0000-000000000001';
+    WHERE id = 'd0000000-0000-0000-0000-000000000001';
   IF n <> 1 THEN
     RAISE EXCEPTION 'h) lease expirado no se reclamó de nuevo';
   END IF;
@@ -71,13 +71,13 @@ END $$;
 
 UPDATE public.job_queue
 SET attempts = 3, max_attempts = 3, status = 'leased', lease_until = now() + interval '10 minutes'
-WHERE id = 'j0000000-0000-0000-0000-000000000002';
+WHERE id = 'd0000000-0000-0000-0000-000000000002';
 
-SELECT public.fail_job('j0000000-0000-0000-0000-000000000002', 'boom');
+SELECT public.fail_job('d0000000-0000-0000-0000-000000000002', 'boom');
 
 DO $$
 BEGIN
-  IF (SELECT status FROM public.job_queue WHERE id = 'j0000000-0000-0000-0000-000000000002') <> 'dead' THEN
+  IF (SELECT status FROM public.job_queue WHERE id = 'd0000000-0000-0000-0000-000000000002') <> 'dead' THEN
     RAISE EXCEPTION 'i) fail_job no marcó dead al agotar intentos';
   END IF;
 END $$;
@@ -87,7 +87,7 @@ END $$;
 INSERT INTO public.documents (
   id, organization_id, name, source, file_path, mime_type, document_type, client_group_id
 ) VALUES (
-  'd0000000-0000-0000-0000-000000000001',
+  'e0000000-0000-0000-0000-000000000001',
   'aaaaaaaa-0000-0000-0000-0000000000aa',
   'Minuta grupo',
   'supabase',
@@ -95,7 +95,7 @@ INSERT INTO public.documents (
   'application/pdf',
   'minuta',
   '99999999-0000-0000-0000-0000000000a1'
-);
+) ON CONFLICT (id) DO UPDATE SET client_group_id = EXCLUDED.client_group_id;
 
 DO $$
 DECLARE
