@@ -6,6 +6,7 @@ import {
   executeMoneyCalc,
   extractAmountsFromText,
   extractClaimedTotal,
+  formatCalcForUser,
   formatCents,
   formatMxn,
   parseMoneyToCents,
@@ -180,6 +181,58 @@ describe("userLastMessageRequestedArithmetic", () => {
   it("no dispara en 'tareas en total' sin montos", () => {
     expect(userLastMessageRequestedArithmetic("¿cuántas tareas tengo en total esta semana?")).toBe(false);
   });
+
+  it("detecta búsqueda de combinación en columna", () => {
+    expect(
+      userLastMessageRequestedArithmetic("dentro de la columna busca cuales cantidades sumadas dan 95,452.84"),
+    ).toBe(true);
+  });
+});
+
+describe("find_combination", () => {
+  it("encuentra partidas que suman el objetivo", () => {
+    const r = executeMoneyCalc({
+      operation: "find_combination",
+      amounts: ["10.00", "20.00", "30.00", "40.00"],
+      labels: ["A", "B", "C", "D"],
+      claimed_total: "50.00",
+    });
+    expect(r.ok).toBe(true);
+    expect(r.matches).toBe(true);
+    expect(r.combinations?.length).toBeGreaterThanOrEqual(1);
+    const first = r.combinations![0];
+    expect(first.sum).toBe("50.00");
+    const cents = first.amounts.reduce((a, x) => a + Number(parseMoneyToCents(x)), 0);
+    expect(cents).toBe(5000);
+  });
+
+  it("si no hay exacta, reporta la más cercana", () => {
+    const r = executeMoneyCalc({
+      operation: "find_combination",
+      amounts: ["10.00", "20.00"],
+      labels: ["A", "B"],
+      claimed_total: "35.00",
+    });
+    expect(r.ok).toBe(true);
+    expect(r.matches).toBe(false);
+    expect(r.closest?.sum).toBe("30.00");
+    expect(r.closest?.difference).toBe("5.00");
+  });
+
+  it("resuelve el caso 95,452.84 con partidas reales", () => {
+    const r = executeMoneyCalc({
+      operation: "find_combination",
+      amounts: ["35989.64", "35989.65", "13920.00", "23473.55", "100.00"],
+      labels: ["BASSOCO 163", "BASSOCO 162", "CASTILLO 489", "RESTO", "RUIDO"],
+      claimed_total: "95,452.84",
+    });
+    expect(r.ok).toBe(true);
+    expect(r.matches).toBe(true);
+    expect(r.claimed_formatted).toBe("$95,452.84");
+    const text = formatCalcForUser(r);
+    expect(text).toMatch(/95,452\.84/);
+    expect(text).not.toMatch(/no devolvió texto/i);
+  });
 });
 
 describe("autoVerifyUserAmounts", () => {
@@ -208,6 +261,10 @@ describe("autoVerifyUserAmounts", () => {
 
   it("extractClaimedTotal lee «da $463,071.49»", () => {
     expect(extractClaimedTotal("mi suma de esos montos da $463,071.49")).toBe("463,071.49");
+  });
+
+  it("extractClaimedTotal lee «sumadas dan 95,452.84»", () => {
+    expect(extractClaimedTotal("busca cuales cantidades sumadas dan 95,452.84")).toBe("95,452.84");
   });
 });
 

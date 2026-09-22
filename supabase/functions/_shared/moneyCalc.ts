@@ -26,7 +26,8 @@ export type CalcOperation =
   | "percentage"
   | "iva"
   | "compare"
-  | "expression";
+  | "expression"
+  | "find_combination";
 
 export const CALC_OPERATIONS: readonly CalcOperation[] = [
   "sum",
@@ -39,6 +40,7 @@ export const CALC_OPERATIONS: readonly CalcOperation[] = [
   "iva",
   "compare",
   "expression",
+  "find_combination",
 ] as const;
 
 export interface CalcItem {
@@ -87,6 +89,18 @@ export interface CalcResult {
   error?: string;
   note?: string;
   steps?: string[];
+  combinations?: CombinationHit[];
+  closest?: CombinationHit;
+}
+
+export interface CombinationHit {
+  indices: number[];
+  labels: string[];
+  amounts: string[];
+  sum: string;
+  sum_formatted: string;
+  difference?: string;
+  difference_formatted?: string;
 }
 
 export interface ParsedAmount {
@@ -478,9 +492,9 @@ export function userLastMessageRequestedArithmetic(text: string): boolean {
     /[\d.,]+\s*[+\-×x*]\s*[\d.,]+/.test(t);
 
   const hasArith =
-    /\b(suma|súma|sumar|sume|súmale|sumale|sumatoria|total(?:es)?|resta(?:r)?|reste|diferencia|promedio|media\b|iva\b|porcentaje|por\s+ciento|multiplica(?:r)?|divide|dividir|calcul[aeoó]|c[aá]lculo|verificar|verifica|cuadr(?:ar|e)|cu[aá]nto\s+(es|da|suma|resta)|desglose|recuento)\b/i
+    /\b(suma|súma|sumar|sume|súmale|sumale|sumatoria|sumadas?|total(?:es)?|resta(?:r)?|reste|diferencia|promedio|media\b|iva\b|porcentaje|por\s+ciento|multiplica(?:r)?|divide|dividir|calcul[aeoó]|c[aá]lculo|verificar|verifica|cuadr(?:ar|e)|cu[aá]nto\s+(es|da|suma|resta)|desglose|recuento|combinaci[oó]n|partidas?)\b/i
       .test(t) ||
-    /\b(es\s+correct[oa]|me\s+da|me\s+sale|no\s+me\s+cuadra)\b/i.test(t);
+    /\b(es\s+correct[oa]|me\s+da|me\s+sale|no\s+me\s+cuadra|cu[aá]les?\s+cantidades)\b/i.test(t);
 
   return hasArith && hasMoney;
 }
@@ -510,6 +524,147 @@ export function collectRecentUserTexts(
     if (t) users.push(t);
   }
   return users.reverse().join("\n\n");
+}
+
+const DP_TARGET_MAX_CENTS = 20_000_000; // $200,000 — tope de memoria del DP
+const FIND_COMBO_MAX_ITEMS = 220;
+
+function hitFromIndices(
+  parsed: ParsedAmount[],
+  labels: string[] | undefined,
+  indices: number[],
+  target: bigint,
+): CombinationHit {
+  let sum = 0n;
+  const labs: string[] = [];
+  const amts: string[] = [];
+  const idx1: number[] = [];
+  for (const i of indices) {
+    sum += parsed[i].cents;
+    idx1.push(i + 1);
+    labs.push(labels?.[i] || `Partida ${i + 1}`);
+    amts.push(formatCents(parsed[i].cents));
+  }
+  const diff = target - sum;
+  return {
+    indices: idx1,
+    labels: labs,
+    amounts: amts,
+    sum: formatCents(sum),
+    sum_formatted: formatMxn(sum),
+    difference: formatCents(diff),
+    difference_formatted: formatMxn(diff),
+  };
+}
+
+function reconstructDp(
+  used: Uint16Array,
+  vals: number[],
+  origIdx: number[],
+  target: number,
+): number[] | null {
+  if (target <= 0) return [];
+  const out: number[] = [];
+  let t = target;
+  const guard = vals.length + 2;
+  let steps = 0;
+  while (t > 0 && steps++ < guard) {
+    const u = used[t];
+    if (!u) return null;
+    const vi = u - 1;
+    out.push(origIdx[vi]);
+    t -= vals[vi];
+  }
+  return t === 0 ? out.sort((a, b) => a - b) : null;
+}
+
+function dpExactAndClosest(
+  parsed: ParsedAmount[],
+  labels: string[] | undefined,
+  targetCents: bigint,
+  maxExact: number,
+): { exact: CombinationHit[]; closest?: CombinationHit } {
+  const target = Number(targetCents);
+  const origIdx: number[] = [];
+  const vals: number[] = [];
+  for (let i = 0; i < parsed.length; i++) {
+    const c = Number(parsed[i].cents);
+    if (c > 0 && c <= target) {
+      origIdx.push(i);
+      vals.push(c);
+    }
+  }
+  const exact: CombinationHit[] = [];
+  if (vals.length === 0 || target <= 0) return { exact };
+
+  const runDp = (skip: Set<number>): { used: Uint16Array; can: Uint8Array } => {
+    const can = new Uint8Array(target + 1);
+    const used = new Uint16Array(target + 1);
+    can[0] = 1;
+    for (let i = 0; i < vals.length; i++) {
+      if (skip.has(origIdx[i])) continue;
+      const a = vals[i];
+      for (let t = target; t >= a; t--) {
+        if (can[t - a] && !can[t]) {
+          can[t] = 1;
+          used[t] = i + 1;
+        }
+      }
+    }
+    return { used, can };
+  };
+
+  const first = runDp(new Set());
+  if (first.can[target]) {
+    const idxs = reconstructDp(first.used, vals, origIdx, target);
+    if (idxs) exact.push(hitFromIndices(parsed, labels, idxs, targetCents));
+    for (const drop of idxs || []) {
+      if (exact.length >= maxExact) break;
+      const alt = runDp(new Set([drop]));
+      if (!alt.can[target]) continue;
+      const altIdx = reconstructDp(alt.used, vals, origIdx, target);
+      if (!altIdx) continue;
+      const key = altIdx.join(",");
+      if (exact.some((h) => h.indices.map((n) => n - 1).join(",") === key)) continue;
+      exact.push(hitFromIndices(parsed, labels, altIdx, targetCents));
+    }
+  }
+
+  let closest: CombinationHit | undefined;
+  if (exact.length === 0) {
+    let bestT = -1;
+    let bestDist = Infinity;
+    for (let t = 0; t <= target; t++) {
+      if (!first.can[t]) continue;
+      const d = target - t;
+      if (d < bestDist) {
+        bestDist = d;
+        bestT = t;
+      }
+    }
+    // También un paso por encima no existe (0/1 no supera target si items > target se filtraron).
+    // Buscar undershoot es suficiente; si todo cabe y suma < target, bestT = suma total reachable.
+    if (bestT > 0) {
+      const idxs = reconstructDp(first.used, vals, origIdx, bestT);
+      if (idxs) closest = hitFromIndices(parsed, labels, idxs, targetCents);
+    }
+  }
+
+  return { exact, closest };
+}
+
+function findAmountCombinations(
+  parsed: ParsedAmount[],
+  labels: string[] | undefined,
+  targetCents: bigint,
+  maxExact: number,
+): { exact: CombinationHit[]; closest?: CombinationHit } {
+  const n = Math.min(parsed.length, FIND_COMBO_MAX_ITEMS);
+  const slice = parsed.slice(0, n);
+  if (targetCents > BigInt(DP_TARGET_MAX_CENTS)) {
+    return { exact: [], closest: undefined };
+  }
+  return dpExactAndClosest(slice, labels, targetCents, maxExact);
 }
 
 export function executeMoneyCalc(raw: CalcInput): CalcResult {
@@ -697,6 +852,59 @@ export function executeMoneyCalc(raw: CalcInput): CalcResult {
       };
     }
 
+    if (operation === "find_combination") {
+      if (parsed.length === 0) {
+        return {
+          ok: false,
+          operation,
+          currency,
+          error: "find_combination requiere los montos reales (amounts/text) y `claimed_total` (objetivo).",
+        };
+      }
+      if (raw.claimed_total === undefined || raw.claimed_total === null || raw.claimed_total === "") {
+        return { ok: false, operation, currency, error: "find_combination requiere `claimed_total` (el total objetivo)." };
+      }
+      const targetCents = parseMoneyToCents(raw.claimed_total);
+      if (targetCents <= 0n) {
+        return { ok: false, operation, currency, error: "el total objetivo debe ser mayor que cero." };
+      }
+      const found = findAmountCombinations(parsed, raw.labels, targetCents, 3);
+      const exact = found.exact;
+      const closest = found.closest;
+      const matches = exact.length > 0;
+      const primary = matches ? exact[0] : closest;
+      const primarySum = primary ? parseMoneyToCents(primary.sum) : 0n;
+      return {
+        ok: true,
+        operation,
+        currency,
+        count: parsed.length,
+        claimed: formatCents(targetCents),
+        claimed_formatted: formatMxn(targetCents),
+        matches,
+        combinations: exact,
+        closest: !matches ? closest : undefined,
+        ...packMoney(matches ? targetCents : primarySum, currency),
+        difference: closest && !matches ? closest.difference : matches ? "0.00" : undefined,
+        difference_formatted: closest && !matches ? closest.difference_formatted : matches ? formatMxn(0n) : undefined,
+        steps: matches
+          ? [
+              `Objetivo: ${formatMxn(targetCents)}`,
+              `Encontré ${exact.length} combinación(es) exacta(s) entre ${parsed.length} partida(s).`,
+            ]
+          : [
+              `Objetivo: ${formatMxn(targetCents)}`,
+              `Ningún subconjunto suma exactamente ${formatMxn(targetCents)}.`,
+              closest
+                ? `Lo más cercano: ${closest.sum_formatted} (dif. ${closest.difference_formatted})`
+                : "No hay partidas positivas para buscar.",
+            ],
+        note: matches
+          ? "Combinación exacta en centavos. Cita estas partidas; no inventes otras."
+          : "No hay combinación exacta. Reporta la más cercana y la diferencia; no fabriques partidas.",
+      };
+    }
+
     if (operation === "compare") {
       if (parsed.length === 0) {
         return {
@@ -832,7 +1040,7 @@ export function reconcileDocumentMoney(
 /** Extrae un total afirmado tipo «mi suma da $463,071.49». */
 export function extractClaimedTotal(text: string): string | null {
   const m = text.match(
-    /(?:da|sale|es|queda(?:n)?|resulta|suma|total(?:es)?|importe)\s*(?:en\s*)?(?:de\s*)?\$?\s*([\d.,]+)/i,
+    /(?:dan?|sale|es|queda(?:n)?|resulta|suma(?:n|das)?|total(?:es)?|importe|objetivo)\s*(?:en\s*)?(?:de\s*)?\$?\s*([\d.,]+)/i,
   );
   return m?.[1] ? m[1] : null;
 }
@@ -890,6 +1098,50 @@ export function autoVerifyUserAmounts(userText: string): CalcResult | null {
 export function responseMentionsCents(text: string, cents: bigint): boolean {
   const found = extractAmountsFromText(text || "");
   return found.some((f) => f.cents === cents);
+}
+
+/** Texto listo para el usuario si el modelo cierra el turno sin redactar. */
+export function formatCalcForUser(calc: CalcResult): string {
+  if (!calc.ok) {
+    return `No pude completar el cálculo exacto${calc.error ? `: ${calc.error}` : "."} Pega las partidas (o el Excel) y lo intento de nuevo.`;
+  }
+
+  if (calc.operation === "find_combination") {
+    const goal = calc.claimed_formatted || calc.claimed || "";
+    if (calc.matches && calc.combinations && calc.combinations.length > 0) {
+      const parts = calc.combinations.map((c, i) => {
+        const rows = c.labels
+          .map((lab, j) => `${lab} (${c.amounts[j] ? formatMxn(parseMoneyToCents(c.amounts[j])) : ""})`)
+          .join(", ");
+        return i === 0
+          ? `La combinación que suma exactamente **${c.sum_formatted}** es: ${rows}.`
+          : `Otra combinación válida: ${rows} (${c.sum_formatted}).`;
+      });
+      return `Revisé las ${calc.count ?? ""} partidas contra el objetivo ${goal}. ${parts.join(" ")} Esas cifras salen de un cálculo en centavos; no hay que re-sumarlas de cabeza.`;
+    }
+    const near = calc.closest;
+    if (near) {
+      const rows = near.labels
+        .map((lab, j) => `${lab} (${near.amounts[j] ? formatMxn(parseMoneyToCents(near.amounts[j])) : ""})`)
+        .join(", ");
+      return `Ningún subconjunto de las ${calc.count ?? ""} partidas suma exactamente **${goal}**. Lo más cercano es **${near.sum_formatted}** (diferencia ${near.difference_formatted}) con: ${rows}.`;
+    }
+    return `No encontré una combinación de partidas que sume **${goal}**. Si me pegas de nuevo la columna, lo vuelvo a intentar.`;
+  }
+
+  if (calc.operation === "compare") {
+    if (calc.matches) {
+      return `La suma de ${calc.count} partida(s) es **${calc.result_formatted}** y coincide con la cifra afirmada.`;
+    }
+    return `La suma exacta de ${calc.count} partida(s) es **${calc.result_formatted}**, no ${calc.claimed_formatted}. Diferencia (afirmada − real): **${calc.difference_formatted}**.`;
+  }
+
+  if (calc.operation === "iva" && calc.total_formatted) {
+    return `Sobre una base de ${calc.subtotal_formatted}, el IVA ${calc.iva_rate ?? 16}% es ${calc.iva_formatted} y el total queda en **${calc.total_formatted}**.`;
+  }
+
+  const n = calc.count != null ? ` de ${calc.count} partida(s)` : "";
+  return `El resultado exacto${n} es **${calc.result_formatted || calc.result}**.`;
 }
 
 export function buildArithmeticCorrectionFooter(calc: CalcResult): string {
