@@ -12,7 +12,7 @@ import {
   responseMentionsCents,
   userLastMessageRequestedArithmetic,
   type CalcResult,
-} from "../_shared/moneyCalc.ts";
+} from "../_shared/moneyCalc.ts"; // find_combination debe ir en este bundle al cambiar _shared
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": '*',
