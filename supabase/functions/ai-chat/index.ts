@@ -2,6 +2,14 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import * as XLSX from "https://esm.sh/xlsx@0.18.5";
 import { DB } from "https://deno.land/x/sqlite@v3.7.1/mod.ts";
+import {
+  autoVerifyUserAmounts,
+  buildArithmeticCorrectionFooter,
+  collectRecentUserTexts,
+  executeMoneyCalc,
+  responseMentionsCents,
+  userLastMessageRequestedArithmetic,
+} from "../_shared/moneyCalc.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": '*',
@@ -1271,6 +1279,65 @@ const anthropicTools = [
       required: ["task_id", "content"],
     },
   },
+  {
+    name: "calculate_amounts",
+    description:
+      "OBLIGATORIA para cualquier suma, resta, total, diferencia, promedio, IVA, porcentaje o para decir si una cifra es correcta. " +
+      "Calcula en centavos (sin errores de punto flotante). Acepta formato mexicano: $463,071.49 o 1,234.56. " +
+      "NUNCA inventes partidas: pasa SOLO montos que el usuario, un adjunto o una herramienta hayan dado. " +
+      "Si el usuario dice «mi suma da X», usa operation=compare con los montos reales y claimed_total. " +
+      "Si no tienes la lista, no llames la herramienta con cifras inventadas: pide las partidas.",
+    input_schema: {
+      type: "object",
+      properties: {
+        operation: {
+          type: "string",
+          enum: [
+            "sum",
+            "subtract",
+            "multiply",
+            "divide",
+            "difference",
+            "average",
+            "percentage",
+            "iva",
+            "compare",
+            "expression",
+          ],
+          description:
+            "sum=total; subtract/difference=primera menos el resto; compare=suma real vs claimed_total; iva=base+IVA (default 16%); expression=fórmula + − × ÷ ( ) %",
+        },
+        amounts: {
+          type: "array",
+          items: { type: ["string", "number"] },
+          description: "Montos reales. Prefiere string exacto ('463,071.49') para no perder centavos.",
+        },
+        labels: {
+          type: "array",
+          items: { type: "string" },
+          description: "Etiqueta opcional por monto (mismo orden que amounts).",
+        },
+        text: {
+          type: "string",
+          description: "Texto/tabla/lista pegada del usuario o adjunto; se extraen los montos automáticamente.",
+        },
+        claimed_total: {
+          type: ["string", "number"],
+          description: "Cifra a verificar (obligatoria en compare), p. ej. la suma que afirma el usuario.",
+        },
+        rate: {
+          type: "number",
+          description: "Porcentaje para percentage o iva (IVA default 16).",
+        },
+        expression: {
+          type: "string",
+          description: "Solo para operation=expression. Números y + - * / ( ) % $. Ejemplo: (1234.56 + 100) * 16%",
+        },
+        currency: { type: "string", description: "Código ISO (default MXN)." },
+      },
+      required: ["operation"],
+    },
+  },
 ];
 
 const TASK_STATUS_AI = ["pendiente", "en_progreso", "en_revision", "completada", "cancelada"] as const;
@@ -2444,6 +2511,19 @@ async function executeTool(
       };
     }
 
+    case "calculate_amounts": {
+      return executeMoneyCalc({
+        operation: args.operation,
+        amounts: args.amounts,
+        labels: args.labels,
+        text: args.text,
+        claimed_total: args.claimed_total,
+        rate: args.rate,
+        expression: args.expression,
+        currency: args.currency,
+      });
+    }
+
     default:
       return { error: `Herramienta desconocida: ${name}` };
   }
@@ -2645,9 +2725,21 @@ Los artifacts aparecen en un panel lateral: vista de texto, descarga de DOCX, y 
 - Para dudas de procesos internos, SIEMPRE busca primero en el Hub con get_hub_procedures.
 - Consulta comunicados recientes con get_hub_comunicados.
 
+## ARITMÉTICA Y TOTALES (obligatorio — no negociable)
+Los modelos de lenguaje **se equivocan** al sumar, restar, calcular IVA o verificar totales. Está prohibido hacer cuentas de cabeza o inventar un desglose «que cuadre».
+
+- **USA \`calculate_amounts\` SIEMPRE** antes de afirmar un total, una diferencia, un IVA, un porcentaje, un promedio o de decir si una suma es correcta.
+- Pasa los montos **exactos** que el usuario, un adjunto o una herramienta te dieron (formato MX: \`$463,071.49\`, \`1,234.56\`). Si pegó una lista o tabla, usa \`text\` o \`amounts\`.
+- Si dice «mi suma da X» / «verifica este total», usa \`operation: "compare"\` con las partidas reales y \`claimed_total\`.
+- **PROHIBIDO** inventar partidas, redondeos o tablas de montos que no existan en el contexto para hacer cuadrar un total. Eso es información incorrecta.
+- Si no tienes la lista de montos (p. ej. «esos montos» y no están en el hilo), **pídela**. No fabriques un desglose.
+- En \`create_ai_document\`, los \`subtotal\` / \`taxes\` / \`total\` y las celdas numéricas deben coincidir con un resultado previo de \`calculate_amounts\`.
+- Reporta el resultado de la herramienta tal cual. No «ajustes» el número después.
+
 ## REGLAS DE SEGURIDAD
 - Solo los Kawiilers tienen acceso. NUNCA compartas información con personas externas.
 - No inventes datos: si no puedes obtener la información con las herramientas, dilo.
+- No inventes cifras ni totales: si no puedes calcularlos con \`calculate_amounts\`, dilo y pide las partidas.
 
 ## CONTEXTO DEL USUARIO
 - **Nombre**: ${profile?.full_name || "Kawiiler"}
@@ -4387,6 +4479,11 @@ function progressMessageForTool(name: string, input: Record<string, unknown> | u
     const short = q.length > 80 ? q.slice(0, 77) + "…" : q;
     return `Buscando en la plataforma: «${short}»`;
   }
+  if (name === "calculate_amounts") {
+    const op = typeof input?.operation === "string" ? input.operation : "cálculo";
+    const n = Array.isArray(input?.amounts) ? input.amounts.length : 0;
+    return n > 0 ? `Calculando ${op} de ${n} monto(s)…` : `Calculando ${op} exacto…`;
+  }
   return `Ejecutando herramienta: ${name}…`;
 }
 
@@ -4400,7 +4497,8 @@ async function handleClaudeChat(
 ): Promise<void> {
   const lastUserPlainText = getLastUserPlainTextFromOpenAiMessages(userMessages);
   const deliverableIntent = userLastMessageRequestedFileDeliverable(lastUserPlainText);
-  const systemWithDeliverable = deliverableIntent
+  const arithmeticIntent = userLastMessageRequestedArithmetic(lastUserPlainText);
+  let systemWithDeliverable = deliverableIntent
     ? systemPrompt +
       "\n\n## ENTREGABLES (obligatorio en esta petición)\n" +
       "El **último mensaje del usuario** pide un documento o archivo (Excel, Word, PDF, etc.). " +
@@ -4409,6 +4507,13 @@ async function handleClaudeChat(
       "No describas un archivo como “ya creado” o “listo” sin haber ejecutado y completado la herramienta.\n" +
       "Tras reunir contexto (búsquedas, memoria), el siguiente paso debe ser **invocar** `create_ai_document`, no resumir en prosa en su lugar."
     : systemPrompt;
+  if (arithmeticIntent) {
+    systemWithDeliverable +=
+      "\n\n## CÁLCULO (obligatorio en esta petición)\n" +
+      "El último mensaje pide una suma, total, diferencia, IVA o verificar cifras. " +
+      "Debes invocar `calculate_amounts` con los montos **reales** del hilo o adjuntos ANTES de afirmar cualquier total. " +
+      "Si faltan las partidas, pregunta. **Prohibido** inventar una tabla de montos para «cuadrar» un número.";
+  }
   let anthropicMsgs = pruneClaudeMessages(
     toAnthropicMessages(userMessages),
     MAX_CLAUDE_MESSAGES_ESTIMATED_TOKENS,
@@ -4421,6 +4526,7 @@ async function handleClaudeChat(
   /** Intentos de generate Kawiil (create_ai_document / auto-upgrade) que devolvieron error sin artifact_id. */
   const documentPipelineFailures: { error: string; code?: string }[] = [];
   let repairDocumentAttempted = false;
+  let usedCalculateTool = false;
 
   // Build tools array: custom tools + memory tool (as custom tool definition for compatibility)
   const memoryToolDef = {
@@ -4737,6 +4843,7 @@ async function handleClaudeChat(
             progressMessageForTool(tu.name, (tu.input || {}) as Record<string, unknown>),
           );
           result = await executeTool(tu.name, tu.input || {}, supabase, userId, orgId, conversationId);
+          if (tu.name === "calculate_amounts") usedCalculateTool = true;
           if (result && typeof result === "object" && !Array.isArray(result)) {
             tallyTaskMutationTool(tu.name, result as Record<string, unknown>, taskMutationTally);
           }
@@ -5014,6 +5121,28 @@ async function handleClaudeChat(
         "\n\n---\n\n**Nota:** Esta respuesta se cortó al alcanzar el límite de salida del modelo en un solo turno. " +
         "Puedes pedir la **continuación** en un mensaje corto, dividir la tarea (p. ej. solo el hallazgo o solo el anexo), " +
         "o abrir un chat nuevo si el historial es muy largo.";
+    }
+
+    if (arithmeticIntent && lastUserPlainText) {
+      const moneyContext = collectRecentUserTexts(userMessages, 3);
+      const autoCalc = autoVerifyUserAmounts(moneyContext);
+      if (autoCalc?.ok && typeof autoCalc.result_cents === "number") {
+        const correctCents = BigInt(autoCalc.result_cents);
+        const mentionsCorrect = responseMentionsCents(textContent, correctCents);
+        const needsCorrection =
+          !mentionsCorrect || (autoCalc.operation === "compare" && autoCalc.matches === false);
+        if (needsCorrection) {
+          textContent += buildArithmeticCorrectionFooter(autoCalc);
+        }
+      } else if (
+        !usedCalculateTool &&
+        !autoCalc &&
+        (/\$\s*[\d.,]+/.test(textContent) || /\b(total|suma es|es correcta)\b/i.test(textContent))
+      ) {
+        textContent +=
+          "\n\n---\n\n**Nota:** No pude verificar esta cifra con una suma exacta porque no hay una lista de montos en los últimos mensajes. " +
+          "Pega las partidas (o el Excel) y las sumo al centavo; no invento desgloses.";
+      }
     }
 
     sseWriter.writeProgress("response", "Generando la respuesta final…");
