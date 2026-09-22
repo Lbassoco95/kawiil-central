@@ -490,6 +490,73 @@ async function pdfBytesToGatewayText(bytes: Uint8Array, name: string): Promise<s
   }
 }
 
+/** Decodifica entidades XML frecuentes en OOXML (`w:t`, etc.). */
+function decodeXmlTextEntities(s: string): string {
+  return s
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => {
+      const cp = parseInt(h, 16);
+      return Number.isFinite(cp) ? String.fromCodePoint(cp) : "";
+    })
+    .replace(/&#(\d+);/g, (_, n) => {
+      const cp = Number(n);
+      return Number.isFinite(cp) ? String.fromCodePoint(cp) : "";
+    })
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
+/**
+ * Extrae texto de un .docx (ZIP OOXML) vía JSZip — mismo patrón que PPTX.
+ * Incluye cuerpo, encabezados, pies, notas al pie y notas finales cuando existan.
+ */
+async function docxBytesToText(bytes: Uint8Array, _name: string): Promise<string> {
+  if (bytes.length > XLSX_PROCESS_MAX_BYTES) {
+    const mb = Math.round(bytes.length / (1024 * 1024));
+    return `[Word ~${mb} MB: demasiado grande para procesar en el servidor. Exporta PDF o reduce el archivo.]`;
+  }
+  try {
+    const JSZip = (await import("npm:jszip@3.10.1")).default;
+    const zip = await JSZip.loadAsync(bytes);
+    const xmlPaths = Object.keys(zip.files).filter((n) =>
+      /^word\/(document|header\d*|footer\d*|footnotes|endnotes)\.xml$/i.test(n)
+    );
+    xmlPaths.sort((a, b) => {
+      if (/document\.xml$/i.test(a)) return -1;
+      if (/document\.xml$/i.test(b)) return 1;
+      return a.localeCompare(b, undefined, { numeric: true });
+    });
+    const parts: string[] = [];
+    for (const path of xmlPaths.slice(0, 40)) {
+      const xml = await zip.file(path)?.async("string");
+      if (!xml) continue;
+      const text = decodeXmlTextEntities(
+        xml
+          .replace(/<\/w:p>/gi, "\n")
+          .replace(/<w:tab[^>]*\/>/gi, "\t")
+          .replace(/<w:br[^>]*\/?>/gi, "\n")
+          .replace(/<[^>]+>/g, "")
+          .replace(/^[ \t]+/gm, "")
+          .replace(/[ \t]+\n/g, "\n")
+          .replace(/\n{3,}/g, "\n\n")
+          .trim(),
+      );
+      if (!text.length) continue;
+      if (/document\.xml$/i.test(path)) parts.push(text);
+      else parts.push(`## ${path}\n${text}`);
+    }
+    if (parts.length === 0) {
+      return "[No se extrajo texto legible del Word. Si es un escaneo o está protegido, exporta a PDF o pega el texto.]";
+    }
+    return truncateText(parts.join("\n\n"), CHAT_TEXT_EXTRACT_MAX);
+  } catch (e) {
+    console.warn("docx parse error", e);
+    return "[No se pudo leer el Word (.docx). Prueba re-guardar como .docx, exportar PDF o pegar el texto en el chat.]";
+  }
+}
+
 async function pptxBytesToText(bytes: Uint8Array, _name: string): Promise<string> {
   if (bytes.length > XLSX_PROCESS_MAX_BYTES) {
     const mb = Math.round(bytes.length / (1024 * 1024));
@@ -630,6 +697,40 @@ async function processAttachmentFile(
         ),
       }],
       gatewayText,
+    };
+  }
+  if (
+    mt === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+    lower.endsWith(".docx")
+  ) {
+    if (bytes.length > XLSX_PROCESS_MAX_BYTES) {
+      const mb = Math.round(bytes.length / (1024 * 1024));
+      return {
+        claude: [{
+          type: "text",
+          text: `[Word ~${mb} MB: demasiado grande para procesar en el servidor. Exporta PDF o reduce el archivo.]`,
+        }],
+        gatewayText: `[Word omitido por tamaño: ${name}]`,
+      };
+    }
+    const t = await docxBytesToText(bytes, name);
+    return {
+      claude: [{ type: "text", text: `Contenido extraído de ${name}:\n${t}` }],
+      gatewayText: `### ${name}\n${t}`,
+    };
+  }
+  if (
+    mt === "application/msword" ||
+    (lower.endsWith(".doc") && !lower.endsWith(".docx"))
+  ) {
+    return {
+      claude: [{
+        type: "text",
+        text:
+          `[Word legado «${name}» (.doc): el servidor solo extrae texto de .docx. ` +
+          `Guárdalo como .docx en Word/Google Docs o exporta a PDF y vuelve a adjuntarlo.]`,
+      }],
+      gatewayText: `[Word legado no soportado: ${name}]`,
     };
   }
   if (
