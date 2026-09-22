@@ -7,8 +7,11 @@ import {
   buildArithmeticCorrectionFooter,
   collectRecentUserTexts,
   executeMoneyCalc,
+  extractClaimedTotal,
+  formatCalcForUser,
   responseMentionsCents,
   userLastMessageRequestedArithmetic,
+  type CalcResult,
 } from "../_shared/moneyCalc.ts";
 
 const corsHeaders = {
@@ -1387,6 +1390,8 @@ const anthropicTools = [
       "Calcula en centavos (sin errores de punto flotante). Acepta formato mexicano: $463,071.49 o 1,234.56. " +
       "NUNCA inventes partidas: pasa SOLO montos que el usuario, un adjunto o una herramienta hayan dado. " +
       "Si el usuario dice «mi suma da X», usa operation=compare con los montos reales y claimed_total. " +
+      "Si pide qué partidas/cantidades de una columna suman un total (p. ej. $95,452.84), usa operation=find_combination UNA vez con TODA la lista y claimed_total. " +
+      "NO adivines combinaciones a mano con varias sumas. " +
       "Si no tienes la lista, no llames la herramienta con cifras inventadas: pide las partidas.",
     input_schema: {
       type: "object",
@@ -1404,14 +1409,15 @@ const anthropicTools = [
             "iva",
             "compare",
             "expression",
+            "find_combination",
           ],
           description:
-            "sum=total; subtract/difference=primera menos el resto; compare=suma real vs claimed_total; iva=base+IVA (default 16%); expression=fórmula + − × ÷ ( ) %",
+            "sum=total; find_combination=qué partidas suman claimed_total (una sola llamada con la lista completa); compare=suma real vs claimed_total; iva=base+IVA (default 16%); expression=fórmula + − × ÷ ( ) %",
         },
         amounts: {
           type: "array",
-          items: { type: ["string", "number"] },
-          description: "Montos reales. Prefiere string exacto ('463,071.49') para no perder centavos.",
+          items: { type: "string" },
+          description: "Montos reales como texto exacto ('463,071.49') para no perder centavos.",
         },
         labels: {
           type: "array",
@@ -1423,8 +1429,8 @@ const anthropicTools = [
           description: "Texto/tabla/lista pegada del usuario o adjunto; se extraen los montos automáticamente.",
         },
         claimed_total: {
-          type: ["string", "number"],
-          description: "Cifra a verificar (obligatoria en compare), p. ej. la suma que afirma el usuario.",
+          type: "string",
+          description: "Cifra objetivo (obligatoria en compare y find_combination).",
         },
         rate: {
           type: "number",
@@ -4613,7 +4619,8 @@ async function handleClaudeChat(
       "\n\n## CÁLCULO (obligatorio en esta petición)\n" +
       "El último mensaje pide una suma, total, diferencia, IVA o verificar cifras. " +
       "Debes invocar `calculate_amounts` con los montos **reales** del hilo o adjuntos ANTES de afirmar cualquier total. " +
-      "Si faltan las partidas, pregunta. **Prohibido** inventar una tabla de montos para «cuadrar» un número.";
+      "Si pide qué cantidades de una lista/columna suman un objetivo, usa `find_combination` **una sola vez** con la lista completa y `claimed_total`. " +
+      "No gastes rondas adivinando subconjuntos. Si faltan las partidas, pregunta. **Prohibido** inventar una tabla de montos para «cuadrar» un número.";
   }
   let anthropicMsgs = pruneClaudeMessages(
     toAnthropicMessages(userMessages),
@@ -4628,6 +4635,8 @@ async function handleClaudeChat(
   const documentPipelineFailures: { error: string; code?: string }[] = [];
   let repairDocumentAttempted = false;
   let usedCalculateTool = false;
+  let lastCalcResult: CalcResult | null = null;
+  let lastAmountPool: { amounts?: Array<string | number>; text?: string; labels?: string[] } | null = null;
 
   // Build tools array: custom tools + memory tool (as custom tool definition for compatibility)
   const memoryToolDef = {
@@ -4944,7 +4953,20 @@ async function handleClaudeChat(
             progressMessageForTool(tu.name, (tu.input || {}) as Record<string, unknown>),
           );
           result = await executeTool(tu.name, tu.input || {}, supabase, userId, orgId, conversationId);
-          if (tu.name === "calculate_amounts") usedCalculateTool = true;
+          if (tu.name === "calculate_amounts") {
+            usedCalculateTool = true;
+            if (result && typeof result === "object" && !Array.isArray(result)) {
+              lastCalcResult = result as CalcResult;
+            }
+            const inAmounts = Array.isArray(tu.input?.amounts) ? tu.input.amounts : [];
+            const inText = typeof tu.input?.text === "string" ? tu.input.text : "";
+            const inLabels = Array.isArray(tu.input?.labels) ? tu.input.labels : undefined;
+            if (inAmounts.length >= 5) {
+              lastAmountPool = { amounts: inAmounts, labels: inLabels };
+            } else if (inText.length > 40) {
+              lastAmountPool = { text: inText, labels: inLabels };
+            }
+          }
           if (result && typeof result === "object" && !Array.isArray(result)) {
             tallyTaskMutationTool(tu.name, result as Record<string, unknown>, taskMutationTally);
           }
@@ -5205,6 +5227,45 @@ async function handleClaudeChat(
           );
           return;
         }
+
+        // Claude a veces cierra end_turn sin bloques de texto tras varias tools
+        // (típico al buscar combinaciones a mano). Entregamos el cálculo igual.
+        const claimed = extractClaimedTotal(lastUserPlainText || "");
+        let fallbackCalc = lastCalcResult;
+        const needCombo =
+          Boolean(claimed) &&
+          lastAmountPool &&
+          (!lastCalcResult || lastCalcResult.operation !== "find_combination");
+        if (needCombo && lastAmountPool) {
+          const combo = executeMoneyCalc({
+            operation: "find_combination",
+            amounts: lastAmountPool.amounts,
+            text: lastAmountPool.text,
+            labels: lastAmountPool.labels,
+            claimed_total: claimed || undefined,
+          });
+          if (combo.ok) fallbackCalc = combo;
+        }
+        if (!fallbackCalc && lastUserPlainText) {
+          fallbackCalc = autoVerifyUserAmounts(collectRecentUserTexts(userMessages, 3));
+        }
+        if (fallbackCalc) {
+          console.warn("Claude end_turn sin texto; emitiendo resultado de calculate_amounts.");
+          sseWriter.writeProgress("response", "Resultado del cálculo…");
+          sseWriter.writeTextChunks(formatCalcForUser(fallbackCalc));
+          sseWriter.close();
+          return;
+        }
+        if (usedCalculateTool || arithmeticIntent) {
+          sseWriter.writeProgress("response", "Cálculo…");
+          sseWriter.writeTextChunks(
+            "Revisé los montos con la calculadora interna pero no quedó texto del modelo. " +
+              "Pega de nuevo la columna de cantidades y el total objetivo (por ejemplo $95,452.84) en un mensaje corto.",
+          );
+          sseWriter.close();
+          return;
+        }
+
         sseWriter.fail(
           `**La IA no devolvió texto en esta respuesta** (stop_reason: ${stopReason ?? "desconocido"}). ` +
             "Puede ser un fallo temporal del proveedor o que el mensaje excedió el contexto. " +
@@ -5252,7 +5313,12 @@ async function handleClaudeChat(
     return;
   }
 
-  // Se agotaron los rounds sin texto final: responde algo legible.
+  if (lastCalcResult) {
+    sseWriter.writeProgress("response", "Resultado del cálculo…");
+    sseWriter.writeTextChunks(formatCalcForUser(lastCalcResult));
+    sseWriter.close();
+    return;
+  }
   sseWriter.fail(
     "La IA usó demasiadas herramientas sin cerrar la respuesta. Prueba con una instrucción más directa o reintenta.",
   );
