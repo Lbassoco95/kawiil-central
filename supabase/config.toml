@@ -103,6 +103,9 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = false
   [functions.analyze-improvement-suggestions]
     verify_jwt = true
+  [functions.ai-chat]
+    # Auth en código (getUser + Authorization); gateway sin JWT igual que microsoft-api.
+    verify_jwt = false
   [functions.ai-finance-insights]
     verify_jwt = true
   [functions.extract-ai-memories]

@@ -22,6 +22,7 @@ import {
   formatMb,
 } from "@/lib/chatAttachmentLimits";
 import { extractPdfPagesClient } from "@/lib/extractPdfTextClient";
+import { extractDocxTextClient, isDocxChatAttachment } from "@/lib/extractDocxTextClient";
 import { mimeTypeForFile } from "@/lib/mimeFromFilename";
 
 export interface ChatAttachmentMeta {
@@ -987,7 +988,41 @@ function useChatState() {
         }
       }
 
-      const refsForAiChat: ChatAttachmentMeta[] = [...savedMeta];
+      const refsForAiChat: ChatAttachmentMeta[] = [];
+      /** Texto extraído en cliente (DOCX) inyectado en el mensaje enviado a ai-chat. */
+      const clientDocxBlocks: string[] = [];
+      const DOCX_CLIENT_EXTRACT_MAX = 80_000;
+
+      if (savedMeta.length > 0) {
+        pushProgress("prep", "Leyendo documentos Word adjuntos…", "replace_same_phase");
+      }
+
+      for (const meta of savedMeta) {
+        const localFile = pathToFile.get(meta.path);
+        if (localFile && isDocxChatAttachment(meta.name, meta.mime_type)) {
+          try {
+            const extracted = await extractDocxTextClient(localFile);
+            if (extracted) {
+              const clipped =
+                extracted.length > DOCX_CLIENT_EXTRACT_MAX
+                  ? extracted.slice(0, DOCX_CLIENT_EXTRACT_MAX) +
+                    "\n\n[…contenido truncado por tamaño…]"
+                  : extracted;
+              clientDocxBlocks.push(`### Contenido de ${meta.name}\n${clipped}`);
+              // No reenviar el binario al Edge: el texto ya va en el mensaje.
+              continue;
+            }
+          } catch (ex) {
+            console.warn("docx client extract failed; se enviará al Edge", meta.name, ex);
+          }
+        }
+        refsForAiChat.push(meta);
+      }
+
+      const textForAiChat =
+        clientDocxBlocks.length > 0
+          ? [text.trim(), ...clientDocxBlocks].filter(Boolean).join("\n\n")
+          : text;
 
       pushProgress("prep", "Conectando con Kawiil AI y procesando contexto…", "replace_same_phase");
 
@@ -1059,8 +1094,14 @@ function useChatState() {
         }
         const token = accessToken;
 
+        const messagesForRequest = allMessages.map((m, idx) =>
+          idx === allMessages.length - 1 && m.role === "user"
+            ? { ...m, content: textForAiChat }
+            : m,
+        );
+
         const chatBody = JSON.stringify({
-          messages: messagesForAiChatRequest(allMessages),
+          messages: messagesForAiChatRequest(messagesForRequest),
           conversationId: convId,
           ai_project_id: aiProjectIdAtSend || undefined,
           attachmentRefs: refsForAiChat.length ? refsForAiChat : undefined,
