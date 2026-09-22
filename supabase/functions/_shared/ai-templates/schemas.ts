@@ -17,6 +17,7 @@ import type {
   MeetingMinutesData,
   ProposalData,
 } from "./types.ts";
+import { reconcileDocumentMoney } from "../moneyCalc.ts";
 
 // ─── Building blocks reutilizables ───
 
@@ -288,6 +289,11 @@ export function normalizeTemplateData(
         validity: ensureString(raw.validity),
       };
       if (!data.line_items.length) throw new Error("propuesta_cotizacion.line_items no puede estar vacío.");
+      const money = reconcileDocumentMoney(data.line_items, data.taxes);
+      data.line_items = money.line_items as ProposalData["line_items"];
+      data.subtotal = money.subtotal;
+      if (money.taxes !== undefined) data.taxes = money.taxes;
+      data.total = money.total;
       return data;
     }
     case "factura_remision": {
@@ -307,6 +313,11 @@ export function normalizeTemplateData(
       if (!data.emisor.length || !data.receptor.length || !data.line_items.length) {
         throw new Error("factura_remision requiere emisor, receptor y line_items.");
       }
+      const money = reconcileDocumentMoney(data.line_items, data.taxes);
+      data.line_items = money.line_items as InvoiceData["line_items"];
+      data.subtotal = money.subtotal;
+      if (money.taxes !== undefined) data.taxes = money.taxes;
+      data.total = money.total;
       return data;
     }
     case "reporte_financiero": {
