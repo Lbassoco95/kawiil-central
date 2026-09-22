@@ -219,6 +219,21 @@ describe("find_combination", () => {
     expect(r.closest?.difference).toBe("5.00");
   });
 
+  it("no se cuelga con ~150 partidas y objetivo grande (regresión timeout Edge)", () => {
+    const filler = Array.from({ length: 140 }, (_, i) => ((i * 137 + 13) % 8000) + 0.11);
+    const amounts = ["35989.64", "35989.65", "23473.55", ...filler.map((n) => n.toFixed(2))];
+    const t0 = Date.now();
+    const r = executeMoneyCalc({
+      operation: "find_combination",
+      amounts,
+      claimed_total: "95,452.84",
+    });
+    expect(Date.now() - t0).toBeLessThan(200);
+    expect(r.ok).toBe(true);
+    expect(r.matches).toBe(true);
+    expect(r.combinations?.[0].sum).toBe("95452.84");
+  });
+
   it("resuelve el caso 95,452.84 con partidas reales", () => {
     const r = executeMoneyCalc({
       operation: "find_combination",

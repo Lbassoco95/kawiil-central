@@ -526,8 +526,10 @@ export function collectRecentUserTexts(
   return users.reverse().join("\n\n");
 }
 
-const DP_TARGET_MAX_CENTS = 20_000_000; // $200,000 — tope de memoria del DP
-const FIND_COMBO_MAX_ITEMS = 220;
+const FIND_COMBO_MAX_ITEMS = 180;
+const FIND_COMBO_MAX_DEPTH = 10;
+const FIND_COMBO_MAX_ITERS = 80_000;
+const FIND_COMBO_TIME_MS = 70;
 
 function hitFromIndices(
   parsed: ParsedAmount[],
@@ -557,114 +559,115 @@ function hitFromIndices(
   };
 }
 
-function reconstructDp(
-  used: Uint16Array,
-  vals: number[],
-  origIdx: number[],
-  target: number,
-): number[] | null {
-  if (target <= 0) return [];
-  const out: number[] = [];
-  let t = target;
-  const guard = vals.length + 2;
-  let steps = 0;
-  while (t > 0 && steps++ < guard) {
-    const u = used[t];
-    if (!u) return null;
-    const vi = u - 1;
-    out.push(origIdx[vi]);
-    t -= vals[vi];
-  }
-  return t === 0 ? out.sort((a, b) => a - b) : null;
-}
-
-function dpExactAndClosest(
-  parsed: ParsedAmount[],
-  labels: string[] | undefined,
-  targetCents: bigint,
-  maxExact: number,
-): { exact: CombinationHit[]; closest?: CombinationHit } {
-  const target = Number(targetCents);
-  const origIdx: number[] = [];
-  const vals: number[] = [];
-  for (let i = 0; i < parsed.length; i++) {
-    const c = Number(parsed[i].cents);
-    if (c > 0 && c <= target) {
-      origIdx.push(i);
-      vals.push(c);
-    }
-  }
-  const exact: CombinationHit[] = [];
-  if (vals.length === 0 || target <= 0) return { exact };
-
-  const runDp = (skip: Set<number>): { used: Uint16Array; can: Uint8Array } => {
-    const can = new Uint8Array(target + 1);
-    const used = new Uint16Array(target + 1);
-    can[0] = 1;
-    for (let i = 0; i < vals.length; i++) {
-      if (skip.has(origIdx[i])) continue;
-      const a = vals[i];
-      for (let t = target; t >= a; t--) {
-        if (can[t - a] && !can[t]) {
-          can[t] = 1;
-          used[t] = i + 1;
-        }
-      }
-    }
-    return { used, can };
-  };
-
-  const first = runDp(new Set());
-  if (first.can[target]) {
-    const idxs = reconstructDp(first.used, vals, origIdx, target);
-    if (idxs) exact.push(hitFromIndices(parsed, labels, idxs, targetCents));
-    for (const drop of idxs || []) {
-      if (exact.length >= maxExact) break;
-      const alt = runDp(new Set([drop]));
-      if (!alt.can[target]) continue;
-      const altIdx = reconstructDp(alt.used, vals, origIdx, target);
-      if (!altIdx) continue;
-      const key = altIdx.join(",");
-      if (exact.some((h) => h.indices.map((n) => n - 1).join(",") === key)) continue;
-      exact.push(hitFromIndices(parsed, labels, altIdx, targetCents));
-    }
-  }
-
-  let closest: CombinationHit | undefined;
-  if (exact.length === 0) {
-    let bestT = -1;
-    let bestDist = Infinity;
-    for (let t = 0; t <= target; t++) {
-      if (!first.can[t]) continue;
-      const d = target - t;
-      if (d < bestDist) {
-        bestDist = d;
-        bestT = t;
-      }
-    }
-    // También un paso por encima no existe (0/1 no supera target si items > target se filtraron).
-    // Buscar undershoot es suficiente; si todo cabe y suma < target, bestT = suma total reachable.
-    if (bestT > 0) {
-      const idxs = reconstructDp(first.used, vals, origIdx, bestT);
-      if (idxs) closest = hitFromIndices(parsed, labels, idxs, targetCents);
-    }
-  }
-
-  return { exact, closest };
-}
-
+/**
+ * Búsqueda de subconjunto rápida (no DP O(n·objetivo)).
+ * El DP clásico con objetivo $95,452.84 (~9.5M de centavos) bloqueaba el
+ * event loop del Edge y Warp mataba el worker: el cliente veía
+ * «No se recibió respuesta del modelo».
+ */
 function findAmountCombinations(
   parsed: ParsedAmount[],
   labels: string[] | undefined,
   targetCents: bigint,
   maxExact: number,
 ): { exact: CombinationHit[]; closest?: CombinationHit } {
-  const n = Math.min(parsed.length, FIND_COMBO_MAX_ITEMS);
-  const slice = parsed.slice(0, n);
-  if (targetCents > BigInt(DP_TARGET_MAX_CENTS)) {
-    return { exact: [], closest: undefined };
+  const target = Number(targetCents);
+  if (!Number.isFinite(target) || target <= 0) return { exact: [] };
+
+  const pool: { orig: number; cents: number }[] = [];
+  for (let i = 0; i < parsed.length && pool.length < FIND_COMBO_MAX_ITEMS; i++) {
+    const c = Number(parsed[i].cents);
+    if (Number.isFinite(c) && c > 0 && c <= target) pool.push({ orig: i, cents: c });
   }
-  return dpExactAndClosest(slice, labels, targetCents, maxExact);
+  if (pool.length === 0) return { exact: [] };
+
+  pool.sort((a, b) => b.cents - a.cents);
+
+  const exactKeys = new Set<string>();
+  const exact: CombinationHit[] = [];
+  let bestPath: number[] = [];
+  let bestSum = 0;
+  const deadline = Date.now() + FIND_COMBO_TIME_MS;
+  let iters = 0;
+
+  const recordExact = (origs: number[]) => {
+    const key = [...origs].sort((a, b) => a - b).join(",");
+    if (exactKeys.has(key)) return;
+    exactKeys.add(key);
+    exact.push(hitFromIndices(parsed, labels, origs, targetCents));
+  };
+
+  const considerClosest = (origs: number[], sum: number) => {
+    if (sum <= 0 || sum > target) return;
+    if (sum > bestSum) {
+      bestSum = sum;
+      bestPath = origs.slice();
+    }
+  };
+
+  for (const p of pool) {
+    if (p.cents === target) recordExact([p.orig]);
+  }
+
+  const needMap = new Map<number, number>();
+  for (const p of pool) {
+    if (exact.length >= maxExact) break;
+    const partner = needMap.get(target - p.cents);
+    if (partner !== undefined && partner !== p.orig) recordExact([partner, p.orig]);
+    if (!needMap.has(p.cents)) needMap.set(p.cents, p.orig);
+  }
+
+  if (exact.length < maxExact) {
+    const byCents = new Map<number, number[]>();
+    for (const p of pool) {
+      const arr = byCents.get(p.cents) || [];
+      arr.push(p.orig);
+      byCents.set(p.cents, arr);
+    }
+    outer: for (let i = 0; i < pool.length; i++) {
+      for (let j = i + 1; j < pool.length; j++) {
+        if (Date.now() > deadline) break outer;
+        const need = target - pool[i].cents - pool[j].cents;
+        if (need <= 0) continue;
+        const hits = byCents.get(need);
+        if (!hits) continue;
+        const third = hits.find((o) => o !== pool[i].orig && o !== pool[j].orig);
+        if (third !== undefined) {
+          recordExact([pool[i].orig, pool[j].orig, third]);
+          if (exact.length >= maxExact) break outer;
+        }
+      }
+    }
+  }
+
+  const dfs = (start: number, remaining: number, path: number[], sum: number) => {
+    if (exact.length >= maxExact) return;
+    if (iters++ > FIND_COMBO_MAX_ITERS || Date.now() > deadline) return;
+    if (remaining === 0) {
+      recordExact(path.slice());
+      return;
+    }
+    if (path.length >= FIND_COMBO_MAX_DEPTH) return;
+    considerClosest(path, sum);
+    for (let i = start; i < pool.length; i++) {
+      const c = pool[i].cents;
+      if (c > remaining) continue;
+      path.push(pool[i].orig);
+      dfs(i + 1, remaining - c, path, sum + c);
+      path.pop();
+      if (exact.length >= maxExact) return;
+      if (iters > FIND_COMBO_MAX_ITERS || Date.now() > deadline) return;
+    }
+  };
+
+  if (exact.length < maxExact) {
+    dfs(0, target, [], 0);
+  }
+
+  if (exact.length === 0 && bestPath.length) {
+    return { exact, closest: hitFromIndices(parsed, labels, bestPath, targetCents) };
+  }
+  return { exact, closest: undefined };
 }
 
 export function executeMoneyCalc(raw: CalcInput): CalcResult {
