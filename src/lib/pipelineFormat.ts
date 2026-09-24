@@ -218,6 +218,10 @@ export function avatarBgFromName(name: string | null | undefined): string {
 
 // ─── CTA contextual por etapa (tablero) ──────────────────────────────────────
 
+/**
+ * CTA contextual por etapa (tablero / ficha).
+ * En `convertido` apunta al onboarding de contrato (D1).
+ */
 export function stageCta(slug: string | null | undefined): string {
   switch (slug) {
     case "registrado":
@@ -239,4 +243,14 @@ export function stageCta(slug: string | null | undefined): string {
     default:
       return "Siguiente acción";
   }
+}
+
+/** Ruta de la CTA de etapa cuando aplica (null = solo copy). */
+export function stageCtaHref(
+  slug: string | null | undefined,
+  leadId: string | null | undefined,
+): string | null {
+  if (!leadId) return null;
+  if (slug === "convertido") return `/pipeline/leads/${leadId}/contrato`;
+  return null;
 }

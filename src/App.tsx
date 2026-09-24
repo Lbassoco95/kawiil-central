@@ -39,12 +39,14 @@ import PipelineBoard from "./pages/pipeline/PipelineBoard";
 import PipelineDashboard from "./pages/pipeline/PipelineDashboard";
 import PipelineList from "./pages/pipeline/PipelineList";
 import LeadDetailPage from "./pages/pipeline/LeadDetailPage";
+import LeadContractPage from "./pages/pipeline/LeadContractPage";
 import EmailTemplates from "./pages/pipeline/EmailTemplates";
 import EmailSequences from "./pages/pipeline/EmailSequences";
 import PipelineSettings from "./pages/pipeline/PipelineSettings";
 import PipelinePartners from "./pages/pipeline/PipelinePartners";
 import PipelineActivities from "./pages/pipeline/PipelineActivities";
 import EmailTemplatesContabilidad from "./pages/contabilidad/EmailTemplatesContabilidad";
+import ContratoPublico from "./pages/ContratoPublico";
 
 const queryClient = new QueryClient();
 
@@ -69,6 +71,7 @@ const App = () => (
               <Route path="/login" element={<Login />} />
               <Route path="/cambiar-contrasena" element={<CambiarContrasena />} />
               <Route path="/postular/:token" element={<PostularVacante />} />
+              <Route path="/contrato/:token" element={<ContratoPublico />} />
               <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
               <Route path="/dashboard" element={<ProtectedRoute><Navigate to="/" replace /></ProtectedRoute>} />
               <Route path="/clientes" element={<ProtectedRoute><Clientes /></ProtectedRoute>} />
@@ -127,6 +130,7 @@ const App = () => (
                 <Route path="dashboard" element={<PipelineDashboard />} />
                 <Route path="list" element={<PipelineList />} />
                 <Route path="leads/:id" element={<LeadDetailPage />} />
+                <Route path="leads/:id/contrato" element={<LeadContractPage />} />
                 <Route path="activities" element={<PipelineActivities />} />
                 <Route path="templates" element={<EmailTemplates />} />
                 <Route path="sequences" element={<EmailSequences />} />
