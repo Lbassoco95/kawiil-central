@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowLeft, CheckCircle2, Download, FileText, Loader2, Printer } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Download, FileText, Loader2, Play, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,8 +15,9 @@ import {
   useStaffPatchAnswers,
   publicContractUrl,
   useRotateAccessToken,
+  useStartContractEngagement,
 } from "@/hooks/useContractEngagements";
-import type { ContractAnswers } from "@/types/contracts";
+import type { ContractAnswers, ContractPackageKind } from "@/types/contracts";
 import {
   ENGAGEMENT_STATUS_LABEL,
   PACKAGE_KIND_LABEL,
@@ -25,15 +26,52 @@ import {
   downloadHtmlDocument,
   openPrintPreview,
 } from "@/lib/contractMerge";
-import { useLeadDetail } from "@/hooks/usePipeline";
+import { useLeadDetail, usePipelineStages } from "@/hooks/usePipeline";
+import { normalizeServices, activeBundles } from "@/lib/leadServices";
+import {
+  isWonPipelineStage,
+  wonStageDisplayLabel,
+} from "@/lib/pipelineWonStage";
+
+function suggestKinds(serviceTypes: unknown): ContractPackageKind[] {
+  const services = normalizeServices(serviceTypes);
+  const kinds: ContractPackageKind[] = [];
+  if (services.includes("softlanding")) kinds.push("softlanding");
+  const bundles = activeBundles(services);
+  if (
+    bundles.some((b) => b.key === "backoffice") ||
+    (services.includes("legal") && services.includes("contabilidad"))
+  ) {
+    kinds.push("backoffice_pm");
+  }
+  if (kinds.length === 0) kinds.push("backoffice_pm");
+  return kinds;
+}
 
 export default function LeadContractPage() {
   const { id: leadId } = useParams<{ id: string }>();
   const [search] = useSearchParams();
   const { data: lead } = useLeadDetail(leadId);
+  const { data: stages = [] } = usePipelineStages();
   const { data: engagements = [], isLoading, refetch } = useLeadContractEngagements(leadId);
   const engagementId = search.get("e") || engagements[0]?.id;
   const engagement = engagements.find((e) => e.id === engagementId) || engagements[0];
+  const startMut = useStartContractEngagement();
+
+  const currentStage = useMemo(
+    () => (lead ? stages.find((s) => s.id === lead.stage_id) : undefined),
+    [stages, lead],
+  );
+  const isWon = isWonPipelineStage({
+    slug: currentStage?.slug,
+    name: currentStage?.name,
+    is_terminal: currentStage?.is_terminal,
+  });
+  const wonLabel = wonStageDisplayLabel(currentStage?.name, currentStage?.slug);
+  const suggested = useMemo(
+    () => suggestKinds(lead?.service_types ?? (lead as { service_type?: unknown } | undefined)?.service_type),
+    [lead],
+  );
 
   const { data: tplBundle } = useActiveContractTemplate(engagement?.id);
   const { data: items = [] } = useContractPackageItems(engagement?.id);
@@ -55,6 +93,23 @@ export default function LeadContractPage() {
     [items],
   );
 
+  const startKind = async (kind: ContractPackageKind) => {
+    if (!leadId) return;
+    try {
+      const res = await startMut.mutateAsync({ leadId, packageKind: kind });
+      toast.success(`Onboarding iniciado (${PACKAGE_KIND_LABEL[kind]})`);
+      void refetch();
+      window.location.replace(`/pipeline/leads/${leadId}/contrato?e=${res.engagement_id}`);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes("lead_not_converted")) {
+        toast.error(`El lead debe estar en etapa ganada (${wonLabel}).`);
+      } else {
+        toast.error(msg || "No se pudo iniciar");
+      }
+    }
+  };
+
   if (isLoading || !leadId) {
     return (
       <div className="flex items-center gap-2 p-8 text-muted-foreground">
@@ -71,9 +126,41 @@ export default function LeadContractPage() {
             <ArrowLeft className="h-4 w-4 mr-1" /> Volver al lead
           </Link>
         </Button>
-        <p className="text-sm text-muted-foreground">
-          No hay engagement activo. Inicia el onboarding desde la ficha del lead (solo en etapa convertido).
-        </p>
+        {isWon ? (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Iniciar onboarding</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                El trato está en <strong>{wonLabel}</strong>. Aún no hay engagement: elige Softlanding o
+                Backoffice para generar el link (RFC no es obligatorio en Softlanding).
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {suggested.map((kind) => (
+                  <Button
+                    key={kind}
+                    size="sm"
+                    disabled={startMut.isPending}
+                    onClick={() => void startKind(kind)}
+                  >
+                    {startMut.isPending ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+                    ) : (
+                      <Play className="h-3.5 w-3.5 mr-1" />
+                    )}
+                    Iniciar {PACKAGE_KIND_LABEL[kind]}
+                  </Button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            No hay engagement activo. Mueve el lead a la etapa ganada del pipeline (
+            <strong>Cerrado</strong> en el tablero) e inicia Softlanding o Backoffice desde la ficha.
+          </p>
+        )}
       </div>
     );
   }
@@ -192,7 +279,10 @@ export default function LeadContractPage() {
           Onboarding · contrato
         </h1>
         <p className="text-sm text-muted-foreground">
-          Dual fill con el cliente. Genera, descarga y confirma la firma hecha fuera de Kawiil.
+          Dual fill con el cliente. Genera, descarga y confirma la firma hecha fuera de Kawiil
+          {engagement.package_kind === "softlanding"
+            ? ". En Softlanding el RFC es opcional hasta que exista la sociedad."
+            : "."}
         </p>
       </header>
 

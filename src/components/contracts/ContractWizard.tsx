@@ -78,7 +78,10 @@ export function ContractWizard({
   };
 
   const renderField = (key: string) => {
-    const label = FIELD_LABELS[key] || key;
+    const label =
+      key === "client.rfc" && packageKind === "softlanding"
+        ? "RFC (opcional — se captura después si aún no hay)"
+        : FIELD_LABELS[key] || key;
     const val = answers[key] ?? "";
 
     if (key === "plan_id") {

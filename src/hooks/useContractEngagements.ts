@@ -186,7 +186,18 @@ export function useStartContractEngagement() {
       } as never);
       if (error) throw error;
       const j = data as RpcJson;
-      if (!j?.ok) throw new Error(String(j?.error || "No se pudo iniciar el onboarding"));
+      if (!j?.ok) {
+        const err = String(j?.error || "No se pudo iniciar el onboarding");
+        if (err === "lead_not_converted") {
+          const stageName = j.stage_name ? String(j.stage_name) : j.stage ? String(j.stage) : null;
+          throw new Error(
+            stageName
+              ? `lead_not_converted: el lead está en «${stageName}»; muévelo a Cerrado (etapa ganada).`
+              : "lead_not_converted",
+          );
+        }
+        throw new Error(err);
+      }
       return j as {
         ok: true;
         engagement_id: string;

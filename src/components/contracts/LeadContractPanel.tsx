@@ -24,10 +24,17 @@ import {
   useStartContractEngagement,
 } from "@/hooks/useContractEngagements";
 import { normalizeServices, activeBundles } from "@/lib/leadServices";
+import {
+  isWonPipelineStage,
+  wonStageDisplayLabel,
+} from "@/lib/pipelineWonStage";
 
 interface Props {
   leadId: string;
   stageSlug?: string | null;
+  /** Nombre visible en el tablero (p. ej. «Cerrado»). */
+  stageName?: string | null;
+  stageIsTerminal?: boolean | null;
   serviceTypes?: unknown;
 }
 
@@ -44,8 +51,19 @@ function suggestKinds(serviceTypes: unknown): ContractPackageKind[] {
   return kinds;
 }
 
-export function LeadContractPanel({ leadId, stageSlug, serviceTypes }: Props) {
-  const isConverted = stageSlug === "convertido";
+export function LeadContractPanel({
+  leadId,
+  stageSlug,
+  stageName,
+  stageIsTerminal,
+  serviceTypes,
+}: Props) {
+  const isWon = isWonPipelineStage({
+    slug: stageSlug,
+    name: stageName,
+    is_terminal: stageIsTerminal,
+  });
+  const wonLabel = wonStageDisplayLabel(stageName, stageSlug);
   const { data: engagements = [], isLoading, isError, error, refetch } = useLeadContractEngagements(leadId);
   const startMut = useStartContractEngagement();
   const rotateMut = useRotateAccessToken();
@@ -54,15 +72,16 @@ export function LeadContractPanel({ leadId, stageSlug, serviceTypes }: Props) {
   const suggested = useMemo(() => suggestKinds(serviceTypes), [serviceTypes]);
   const existingKinds = new Set(engagements.map((e) => e.package_kind));
 
-  if (!isConverted) {
+  if (!isWon) {
     return (
-      <Card>
+      <Card id="contrato">
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Onboarding de contrato</CardTitle>
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground">
-          El onboarding de contrato solo se habilita cuando el lead está en etapa{" "}
-          <strong>convertido</strong> (D1).
+          El onboarding de contrato se habilita cuando el lead está en etapa ganada del
+          pipeline (en este tablero: <strong>Cerrado</strong>). Mueve el trato a esa etapa
+          para iniciar Softlanding o Backoffice.
         </CardContent>
       </Card>
     );
@@ -86,7 +105,11 @@ export function LeadContractPanel({ leadId, stageSlug, serviceTypes }: Props) {
       void refetch();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      if (msg.includes("Could not find") || msg.includes("schema cache") || msg.includes("does not exist")) {
+      if (msg.includes("lead_not_converted")) {
+        toast.error(
+          `El lead debe estar en etapa ganada (${wonLabel}) para iniciar el contrato.`,
+        );
+      } else if (msg.includes("Could not find") || msg.includes("schema cache") || msg.includes("does not exist")) {
         toast.error("Falta aplicar la migración de contratos en Supabase.");
       } else {
         toast.error(msg || "No se pudo iniciar");
@@ -116,7 +139,7 @@ export function LeadContractPanel({ leadId, stageSlug, serviceTypes }: Props) {
   };
 
   return (
-    <Card>
+    <Card id="contrato">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between gap-2">
           <CardTitle className="text-base flex items-center gap-2">
@@ -127,6 +150,10 @@ export function LeadContractPanel({ leadId, stageSlug, serviceTypes }: Props) {
             Firma externa
           </Badge>
         </div>
+        <p className="text-xs text-muted-foreground font-normal">
+          Trato en <strong className="text-foreground font-medium">{wonLabel}</strong>. Softlanding y
+          Backoffice son procesos separados; no dependen de Savio ni del RFC de facturación.
+        </p>
       </CardHeader>
       <CardContent className="space-y-4">
         {isLoading ? (

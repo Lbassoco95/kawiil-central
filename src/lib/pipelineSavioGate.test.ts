@@ -6,8 +6,9 @@ import {
 } from "./pipelineSavioGate";
 
 describe("canSendLeadToSavio", () => {
-  it("sólo con el trato ganado", () => {
+  it("sólo con el trato ganado (convertido / cerrado)", () => {
     expect(canSendLeadToSavio("convertido")).toBe(true);
+    expect(canSendLeadToSavio("cerrado")).toBe(true);
     expect(canSendLeadToSavio("propuesta")).toBe(false);
     expect(canSendLeadToSavio(null)).toBe(false);
   });
@@ -16,6 +17,7 @@ describe("canSendLeadToSavio", () => {
 describe("savioBillingVisibility", () => {
   it("muestra el bloque completo cuando ya cerramos el cliente", () => {
     expect(savioBillingVisibility("convertido")).toBe("full");
+    expect(savioBillingVisibility("cerrado")).toBe("full");
   });
 
   it("en seguimiento sólo avisa, no pide datos fiscales", () => {

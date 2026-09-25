@@ -48,6 +48,7 @@ import { LeadFollowUpNotes } from "@/components/pipeline/LeadFollowUpNotes";
 import { LeadSavioPromotionCard } from "@/components/pipeline/LeadSavioPromotionCard";
 import { LeadContractPanel } from "@/components/contracts/LeadContractPanel";
 import { formatMxnShort, stageCta, stageCtaHref } from "@/lib/pipelineFormat";
+import { isWonPipelineStage } from "@/lib/pipelineWonStage";
 import { SERVICE_LABELS } from "@/lib/serviceLabels";
 import { LeadServicesPicker } from "@/components/pipeline/LeadServicesPicker";
 import { LeadValueFields } from "@/components/pipeline/LeadValueFields";
@@ -496,6 +497,16 @@ export default function LeadDetailPage() {
 
   useEffect(() => {
     if (!lead) return;
+    // Scroll al panel de contrato cuando la CTA usa #contrato
+    if (typeof window !== "undefined" && window.location.hash === "#contrato") {
+      requestAnimationFrame(() => {
+        document.getElementById("contrato")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
+  }, [lead?.id]);
+
+  useEffect(() => {
+    if (!lead) return;
     const leadAny = lead as Record<string, unknown>;
     const numOrNull = (v: unknown) => {
       if (v === null || v === undefined || v === "") return null;
@@ -731,10 +742,17 @@ export default function LeadDetailPage() {
     }
   };
 
-  const currentStageSlug = useMemo(() => {
+  const currentStage = useMemo(() => {
     if (!lead) return undefined;
-    return stages.find((s) => s.id === lead.stage_id)?.slug;
+    return stages.find((s) => s.id === lead.stage_id);
   }, [stages, lead]);
+
+  const currentStageSlug = currentStage?.slug;
+  const isWonStage = isWonPipelineStage({
+    slug: currentStage?.slug,
+    name: currentStage?.name,
+    is_terminal: currentStage?.is_terminal,
+  });
 
   const ownerName = useMemo(() => {
     if (!lead?.owner_id) return null;
@@ -811,14 +829,19 @@ export default function LeadDetailPage() {
               {formatMxnShort(estimatedCloseMxn)} MXN estim.
             </Badge>
           ) : null}
-          {currentStageSlug === "convertido" ? (
+          {isWonStage ? (
             <Button
               size="sm"
               asChild
               className="h-8 bg-white text-slate-900 hover:bg-white/90"
             >
-              <Link to={stageCtaHref("convertido", lead.id) || `/pipeline/leads/${lead.id}/contrato`}>
-                {stageCta("convertido")}
+              <Link
+                to={
+                  stageCtaHref(currentStageSlug, lead.id) ||
+                  `/pipeline/leads/${lead.id}#contrato`
+                }
+              >
+                {stageCta(currentStageSlug)}
               </Link>
             </Button>
           ) : null}
@@ -848,6 +871,15 @@ export default function LeadDetailPage() {
         </div>
       </div>
 
+      {/* Contrato primero: no depende de Savio/RFC (D13 / D14). */}
+      <LeadContractPanel
+        leadId={lead.id}
+        stageSlug={currentStageSlug}
+        stageName={currentStage?.name}
+        stageIsTerminal={currentStage?.is_terminal}
+        serviceTypes={serviceTypes}
+      />
+
       <LeadSavioPromotionCard
         leadId={lead.id}
         organizationId={lead.organization_id}
@@ -860,12 +892,6 @@ export default function LeadDetailPage() {
         billingRfc={lead.billing_rfc}
         billingServiceDescription={lead.billing_service_description}
         estimatedCloseMxn={estimatedCloseMxn}
-      />
-
-      <LeadContractPanel
-        leadId={lead.id}
-        stageSlug={currentStageSlug}
-        serviceTypes={serviceTypes}
       />
 
       {/* Activity action buttons */}

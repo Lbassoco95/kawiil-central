@@ -67,6 +67,8 @@ export function wizardStepsFor(kind: ContractPackageKind): WizardStep[] {
     {
       id: "identity",
       title: "Contacto",
+      description:
+        "Datos de contacto. El RFC es opcional en Softlanding (muchas sociedades aún se están constituyendo).",
       fields: ["client.legal_name", "client.representante", "client.email", "client.rfc"],
     },
     {
