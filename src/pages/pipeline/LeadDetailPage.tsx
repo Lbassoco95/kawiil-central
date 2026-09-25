@@ -46,7 +46,8 @@ import { LeadActivityPanel } from "@/components/pipeline/LeadActivityPanel";
 import { LeadActivityTimeline } from "@/components/pipeline/LeadActivityTimeline";
 import { LeadFollowUpNotes } from "@/components/pipeline/LeadFollowUpNotes";
 import { LeadSavioPromotionCard } from "@/components/pipeline/LeadSavioPromotionCard";
-import { formatMxnShort } from "@/lib/pipelineFormat";
+import { LeadContractPanel } from "@/components/contracts/LeadContractPanel";
+import { formatMxnShort, stageCta, stageCtaHref } from "@/lib/pipelineFormat";
 import { SERVICE_LABELS } from "@/lib/serviceLabels";
 import { LeadServicesPicker } from "@/components/pipeline/LeadServicesPicker";
 import { LeadValueFields } from "@/components/pipeline/LeadValueFields";
@@ -810,6 +811,17 @@ export default function LeadDetailPage() {
               {formatMxnShort(estimatedCloseMxn)} MXN estim.
             </Badge>
           ) : null}
+          {currentStageSlug === "convertido" ? (
+            <Button
+              size="sm"
+              asChild
+              className="h-8 bg-white text-slate-900 hover:bg-white/90"
+            >
+              <Link to={stageCtaHref("convertido", lead.id) || `/pipeline/leads/${lead.id}/contrato`}>
+                {stageCta("convertido")}
+              </Link>
+            </Button>
+          ) : null}
         </div>
       </header>
 
@@ -848,6 +860,12 @@ export default function LeadDetailPage() {
         billingRfc={lead.billing_rfc}
         billingServiceDescription={lead.billing_service_description}
         estimatedCloseMxn={estimatedCloseMxn}
+      />
+
+      <LeadContractPanel
+        leadId={lead.id}
+        stageSlug={currentStageSlug}
+        serviceTypes={serviceTypes}
       />
 
       {/* Activity action buttons */}
