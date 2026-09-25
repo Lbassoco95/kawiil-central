@@ -115,8 +115,14 @@ export function useMicrosoftConnection() {
       });
       // If we get the NOT_CONNECTED code, return null (not an error)
       if (data?.code === "NOT_CONNECTED") return null;
-      if (error) throw error;
-      if (data?.error && data?.code !== "NOT_CONNECTED") throw new Error(data.error);
+      if (error) {
+        const errBody = await readSupabaseFunctionErrorBody(error);
+        // API caída / secret Azure: no tratarlo como "sin conectar"
+        throw new Error(formatMicrosoftIntegrationError(error, errBody));
+      }
+      if (data?.error && data?.code !== "NOT_CONNECTED") {
+        throw new Error(formatMicrosoftIntegrationError(new Error(String(data.error))));
+      }
       return data;
     },
     enabled: !!user,
@@ -126,44 +132,22 @@ export function useMicrosoftConnection() {
 
   const connectMutation = useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke("microsoft-auth");
+      const returnTo = `${window.location.pathname}${window.location.search}` || "/microsoft365/calendario";
+      const { data, error } = await supabase.functions.invoke("microsoft-auth", {
+        body: { returnTo, mode: "redirect" },
+      });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      if (data?.url) {
-        window.open(data.url, "microsoft-auth", "width=600,height=700");
-        return new Promise<void>((resolve, reject) => {
-          const handler = (event: MessageEvent) => {
-            if (event.data?.type === "microsoft-auth-success") {
-              window.removeEventListener("message", handler);
-              resolve();
-            } else if (event.data?.type === "microsoft-auth-error") {
-              window.removeEventListener("message", handler);
-              reject(new Error(event.data.error));
-            }
-          };
-          window.addEventListener("message", handler);
-          setTimeout(() => {
-            window.removeEventListener("message", handler);
-            reject(new Error("Timeout - cierra la ventana e intenta de nuevo"));
-          }, 300000);
-        });
-      }
-    },
-    onSuccess: async () => {
-      queryClient.invalidateQueries({ queryKey: ["microsoft-connection"] });
-      toast.success("Microsoft 365 conectado exitosamente");
-      // Sync silenciosa de la foto de perfil al conectar.
-      try {
-        await supabase.functions.invoke("microsoft-api", {
-          body: { action: "sync-profile-photo" },
-        });
-        queryClient.invalidateQueries({ queryKey: ["current-profile"] });
-      } catch {
-        /* silencioso: no bloquear el flujo de conexion si Graph no devuelve foto */
-      }
+      if (!data?.url) throw new Error("No se recibió URL de autorización de Microsoft");
+
+      // Redirect de página completa (no popup): evita AADSTS165000 por cookies
+      // de sesión rotas en ventanas emergentes / bloqueo de third-party cookies.
+      window.location.assign(data.url as string);
+      // La navegación no resuelve; mantener pending hasta unload.
+      await new Promise<void>(() => {});
     },
     onError: (err: Error) => {
-      toast.error("Error al conectar: " + err.message);
+      toast.error("Error al conectar: " + formatMicrosoftIntegrationError(err), { duration: 10000 });
     },
   });
 
@@ -171,8 +155,11 @@ export function useMicrosoftConnection() {
     isConnected: !!connectionQuery.data?.displayName || !!connectionQuery.data?.mail,
     profile: connectionQuery.data,
     isLoading: connectionQuery.isLoading,
+    /** Fallo de Edge/Graph distinto de «no conectado» (p. ej. API caída o secret Azure). */
+    connectionError: connectionQuery.error instanceof Error ? connectionQuery.error : null,
     connect: connectMutation.mutate,
     isConnecting: connectMutation.isPending,
+    refetchConnection: () => connectionQuery.refetch(),
   };
 }
 

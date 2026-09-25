@@ -1,1 +1,2408 @@
-import { createClient as J } from "https://esm.sh/@supabase/supabase-js@2";import{throwMicrosoftOAuthError as Z}from"../_shared/microsoftOAuthErrors.ts";const N={"Access-Control-Allow-Origin":"*","Access-Control-Allow-Headers":"authorization, x-client-info, apikey, content-type"},V="https://graph.microsoft.com/v1.0";function B(i){let l="";for(let p=0;p<i.length;p+=8192)l+=String.fromCharCode(...i.subarray(p,p+8192));return btoa(l)}function F(i){if(!i||typeof i!="string")return"";let e=i.trim();if(!e)return"";for(let l=0;l<2&&/%[0-9A-Fa-f]{2}/.test(e);l++)try{const p=decodeURIComponent(e);if(p===e)break;e=p}catch{break}return e}const _={Prefer:'IdType="ImmutableId"'},q={..._,ConsistencyLevel:"eventual"},G=6;function ee(i){return new Promise(e=>setTimeout(e,i))}function te(i,e){const l=i.get("Retry-After");if(l){const m=parseInt(l,10);if(!Number.isNaN(m)&&m>=0)return Math.min(Math.max(m*1e3,500),12e4);const R=Date.parse(l);if(!Number.isNaN(R))return Math.min(Math.max(R-Date.now(),500),12e4)}const p=Math.min(1500*Math.pow(2,e-1),45e3),S=Math.floor(Math.random()*400);return p+S}function X(i){if(!i||typeof i!="object")return null;const e=i.emailAddress;if(!e?.address||typeof e.address!="string")return null;const l=e.address.trim().toLowerCase();if(!l||!l.includes("@"))return null;const S=(typeof e.name=="string"?e.name.trim():"")||l;return{email:l,displayName:S}}function ne(i,e){const l=m=>{const R=e.get(m.email);if(!R){e.set(m.email,m);return}const b=!R.displayName||R.displayName===R.email,T=!m.displayName||m.displayName===m.email;if(b&&!T)e.set(m.email,m);else{if(!b&&T)return;(m.displayName?.length??0)>(R.displayName?.length??0)&&e.set(m.email,m)}},p=X(i.from);p&&l(p);const S=[i.toRecipients,i.ccRecipients,i.bccRecipients];for(const m of S)if(Array.isArray(m))for(const R of m){const b=X(R);b&&l(b)}}function re(i,e){if(i===429||i===503||i===504)return!0;const l=e.toLowerCase();return l.includes("applicationthrottled")||l.includes("mailboxconcurrency")||l.includes("toomanyrequests")||l.includes('"code":"applicationthrottled"')||l.includes('"code":"throttled"')}async function I(i,e,l){const p=e.startsWith("/")?e:`/${e}`,S=`${V}${p}`;let m=null;for(let R=1;R<=G;R++){const b=await fetch(S,{...l,headers:{Authorization:`Bearer ${i}`,...l?.headers||{}}});if(b.ok)return b;const T=await b.text(),C=T.toLowerCase();if(b.status===403||C.includes("insufficient")||C.includes("permission"))throw new Error(`MICROSOFT_PERMISSION_REQUIRED:${T}`);if(re(b.status,T)&&R<G){await ee(te(b.headers,R)),m=new Error(`Microsoft Graph error [${b.status}]: ${T}`);continue}throw new Error(`Microsoft Graph error [${b.status}]: ${T}`)}throw m??new Error("Microsoft Graph: reintentos agotados")}async function A(i,e,l){const p=await I(i,e,l);if(p.status===204)return{success:!0};const S=await p.text();if(!S)return{success:!0};try{return JSON.parse(S)}catch(m){const R=S.slice(0,280),b=m instanceof Error?m.message:String(m);throw new Error(`Microsoft Graph respuesta no JSON (${e.slice(0,180)}\u2026): ${b}; body=${R}`)}}function K(i){return i.trim().toLowerCase().normalize("NFC").replace(/\s+/g," ").replace(/[\u00b7\u2219\u2022\u30fb\u318d\ufe52]/g,"\xB7")}const D="id,displayName,parentFolderId,wellKnownFolderName,unreadItemCount,totalItemCount,childFolderCount",se=`?$select=${D}&$top=1000&includeHiddenFolders=true`,ae=`?$select=${D}&$top=1000&includeHiddenFolders=true`,oe=`?$select=${D}&$top=1000`,ie=`?$select=${D}&$top=1000`;async function ce(i){const e=[],l=[`/me/mailFolders?$select=${D}&$top=1000`,"/me/mailFolders?$top=1000"];for(const p of l){e.length=0;let S=p;const m=25;let R=!0;try{for(let b=0;b<m&&S;b++){const T=await A(i,S);if(Array.isArray(T?.value))for(const r of T.value)e.push(r);const C=T?.["@odata.nextLink"];S=typeof C=="string"&&C?z(C):null}}catch(b){console.warn("[microsoft-api] listMailFoldersRootOnlyLegacy strategy failed",String(b).slice(0,200)),R=!1}if(R&&e.length>0)break}return e}function z(i){return i.match(/graph\.microsoft\.com\/v1\.0(\/.+)/i)?.[1]??""}function le(i){const e=i.childFolderCount;return typeof e=="number"&&e>0||typeof e!="number"||e===0&&String(i.wellKnownFolderName||"").toLowerCase()==="inbox"}async function de(i){let p=0,S=0;const m=[],R=new Set,b=new Set,T=[],C=new Set,r=async s=>p>=900?null:(p+=1,await A(i,s)),x=(s,f)=>{const d=s.id;typeof d!="string"||!d||R.has(d)||(R.add(d),m.push(s),f&&b.add(d),le(s)&&m.length<5e3&&p<900&&(C.has(d)||(C.add(d),T.push(d))))},M=async(s,f)=>{let d=s;for(let g=0;g<25&&m.length<5e3&&d;g++){const h=await r(d);if(!h)break;if(Array.isArray(h.value)){for(const n of h.value)if(!(!n||typeof n!="object")&&(x(n,f),m.length>=5e3))break}const y=h["@odata.nextLink"];d=typeof y=="string"&&y?z(y):null}},c=async s=>{const d=`/me/mailFolders/${encodeURIComponent(s)}/childFolders`;try{await M(`${d}${ae}`,!1)}catch(g){const h=g instanceof Error?g.message:String(g);try{await M(`${d}${ie}`,!1),/\[400\]/.test(h)||console.warn("[microsoft-api] listAllMailFoldersRecursive: childFolders primera petici\xF3n fall\xF3, plain funcion\xF3",{parentId:s,firstErr:h.slice(0,380)})}catch(y){S+=1,console.warn("[microsoft-api] listAllMailFoldersRecursive: childFolders con/sin hidden fallaron, se omite sub\xE1rbol",{parentId:s,first:h.slice(0,380),second:y instanceof Error?y.message.slice(0,380):String(y)})}}},u=[{path:`/me/mailFolders${se}`,label:"root_with_includeHiddenFolders"},{path:`/me/mailFolders${oe}`,label:"root_plain_select"},{path:"/me/mailFolders?$top=100",label:"root_minimal"}];let t=!1;for(let s=0;s<u.length;s++){const{path:f,label:d}=u[s];try{await M(f,!0),t=!0,s>0&&console.warn("[microsoft-api] listAllMailFoldersRecursive: ra\xEDz con estrategia alternativa",{strategy:d});break}catch(g){const h=g instanceof Error?g.message:String(g);if(s===u.length-1)throw console.error("[microsoft-api] listAllMailFoldersRecursive: todas las estrategias de ra\xEDz fallaron",{lastStrategy:d,err:h.slice(0,800)}),g;console.warn("[microsoft-api] listAllMailFoldersRecursive: estrategia de ra\xEDz fall\xF3, siguiente",{failedStrategy:d,err:h.slice(0,400)})}}if(!t)throw new Error("listAllMailFoldersRecursive: ra\xEDz no listada (estado inconsistente)");for(;T.length>0&&m.length<5e3&&p<900;){const s=T.shift();if(!s)break;await c(s)}const a=m.length>=5e3||p>=900;return a?console.warn("[microsoft-api] listAllMailFoldersRecursive: listado truncado por l\xEDmites",{folderCount:m.length,listCalls:p,partialChildErrors:S}):S>0&&console.warn("[microsoft-api] listAllMailFoldersRecursive: resumen (sin truncar global)",{folderCount:m.length,listCalls:p,partialChildErrors:S}),{folders:m,rootFolderIds:b,meta:{truncated:a,partialChildErrors:S}}}async function W(i,e){const l=K(e),{folders:p,rootFolderIds:S}=await de(i);for(const m of p){if(!m||typeof m!="object")continue;const R=m;if(!(typeof R.id!="string"||typeof R.displayName!="string")&&S.has(R.id)&&K(R.displayName)===l)return m}return null}function me(i){return i.match(/"code"\s*:\s*"([^"]+)"/)?.[1]}async function Q(i,e,l){if(new Date(l.expires_at).getTime()-Date.now()>300*1e3)return l.access_token;const S=Deno.env.get("MICROSOFT_CLIENT_ID").trim(),m=Deno.env.get("MICROSOFT_CLIENT_SECRET").trim(),R=Deno.env.get("MICROSOFT_TENANT_ID").trim(),b=await fetch(`https://login.microsoftonline.com/${R}/oauth2/v2.0/token`,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({client_id:S,client_secret:m,refresh_token:l.refresh_token,grant_type:"refresh_token"})}),T=await b.json();b.ok||Z(T,"Token refresh failed");const C=new Date(Date.now()+T.expires_in*1e3).toISOString();return await i.from("microsoft_tokens").update({access_token:T.access_token,refresh_token:T.refresh_token||l.refresh_token,expires_at:C}).eq("user_id",e),T.access_token}async function pe(i,e,l){const p=F(e),S=F(l);if(!p||!S)throw new Error("messageId y attachmentId son requeridos");const m=`/me/messages/${p}/attachments/${S}?$select=id,name,contentType,size,isInline`,R=await A(i,m,{headers:_}),b=R["@odata.type"];if(b&&String(b).includes("itemAttachment"))throw new Error("Este tipo de adjunto no se puede previsualizar");if(b&&String(b).includes("referenceAttachment"))throw new Error("Este tipo de adjunto no se puede previsualizar");let T=String(R.contentType||"application/octet-stream");const C=`/me/messages/${p}/attachments/${S}/$value`,r=await I(i,C,{headers:{Accept:"application/octet-stream",..._}}),x=new Uint8Array(await r.arrayBuffer()),M=r.headers.get("content-type");if(M){const c=M.split(";")[0].trim().toLowerCase();c&&c!=="application/octet-stream"&&(T=M.split(";")[0].trim())}return{body:x,contentType:T,name:String(R.name??"adjunto"),size:R.size,isInline:R.isInline,contentId:R.contentId}}async function ue(i,e){const l=i.getReader(),p=[];let S=0;try{for(;S<e;){const{value:b,done:T}=await l.read();if(T)break;const C=b;if(S+C.length<=e)p.push(C),S+=C.length;else{p.push(C.subarray(0,e-S)),S=e;break}}}finally{try{await l.cancel()}catch{}}const m=new Uint8Array(S);let R=0;for(const b of p)m.set(b,R),R+=b.length;return m}async function Y(i,e,l){let p;try{p=await I(l,"/me/photo/$value",{headers:{Accept:"image/*"}})}catch(M){const c=M instanceof Error?M.message:String(M),u=c.toLowerCase();if(/\[404\]/.test(c)||u.includes("imagenotfound")||u.includes("resourcenotfound")||u.includes("itemnotfound"))return{code:"NO_PHOTO"};throw M}const S=p.headers.get("content-type")||"image/jpeg",m=new Uint8Array(await p.arrayBuffer());if(m.length===0)return{code:"NO_PHOTO"};const R=S.toLowerCase().includes("png")?"png":S.toLowerCase().includes("gif")?"gif":"jpg",b=`${e}/microsoft.${R}`,{error:T}=await i.storage.from("avatars").upload(b,m,{contentType:S,upsert:!0,cacheControl:"3600"});if(T)throw new Error(`Avatar upload failed: ${T.message||String(T)}`);const{data:C}=i.storage.from("avatars").getPublicUrl(b),r=`${C.publicUrl}?v=${Date.now()}`,{error:x}=await i.from("profiles").update({avatar_url:r}).eq("user_id",e);if(x)throw new Error(`Profile update failed: ${x.message||String(x)}`);return{url:r,source:"microsoft",contentType:S}}function fe(i){if(!i||i.length<24)return i;const e=i.toLowerCase(),l=['id="divrplyfwdmsg"',"id='divrplyfwdmsg'",'id="divrplyfwdmsg"',"-----original message-----","-----mensaje original-----",'class="gmail_quote"',"class='gmail_quote'"];let p=i.length;for(const S of l){const m=e.indexOf(S);m>=0&&m<p&&(p=m)}return p<i.length&&p>12?i.slice(0,p):i}function ge(i){if(!i)return"";let e=i;if(e=e.replace(/<\?xml[^>]*\?>/gi,""),e=e.replace(/<!DOCTYPE[^>]*>/gi,""),e=e.replace(/<!--\[if[^\]]*\]>[\s\S]*?<!\[endif\]-->/gi,""),e=e.replace(/<!--[\s\S]*?-->/g,""),e=e.replace(/<style[^>]*>[\s\S]*?<\/style>/gi,""),e=e.replace(/<script[^>]*>[\s\S]*?<\/script>/gi,""),e=e.replace(/<title[^>]*>[\s\S]*?<\/title>/gi,""),e=e.replace(/<xml[^>]*>[\s\S]*?<\/xml>/gi,""),e=e.replace(/<[a-z]+:[a-z][^>]*\/>/gi,""),e=e.replace(/<([a-z]+:[a-z][^>]*)>([\s\S]*?)<\/[a-z]+:[a-z]+>/gi,"$2"),e=e.replace(/<\/?[a-z]+:[^>]*>/gi,""),e=e.replace(/<\/?html[^>]*>/gi,""),e=e.replace(/<head[^>]*>[\s\S]*?<\/head>/gi,""),e=e.replace(/<\/?body[^>]*>/gi,""),e=e.replace(/<meta[^>]*\/?>/gi,""),e=e.replace(/<link[^>]*\/?>/gi,""),e=e.replace(/<base[^>]*\/?>/gi,""),e=e.replace(/<br\s*\/?>/gi,"<br>"),e=e.trim(),e&&!e.startsWith("<")){const l=e.indexOf("<");if(l!==-1)e=e.slice(l);else return""}return e.trim()}function we(i){if(i.length<2)return null;const l=i.map(fe).map(p=>p.slice(-Math.min(5e3,Math.max(0,p.length))));for(let p=2e3;p>=120;p-=40)for(const S of l){if(S.length<p)continue;const m=S.slice(-p);if(m.replace(/<[^>]+>/g," ").replace(/&nbsp;/g," ").trim().length<28)continue;if(l.filter(b=>b.endsWith(m)).length>=2){const b=/mailto:|@[a-z0-9.\-]+\.[a-z]{2,}/i.test(m),T=m.trim().startsWith("<")?m.trim():`<p>${m.trim()}</p>`,C=ge(T);if(!C)continue;return{html:C,confidence:b?"high":"low"}}}return null}async function be(i,e){const l=`/me/mailFolders/sentitems/messages?$top=${e}&$orderby=createdDateTime%20desc&$select=body,subject`;let p;try{p=await A(i,l,{headers:_})}catch{return[]}const S=[];for(const m of p.value||[]){const R=String(m?.body?.contentType||"").toLowerCase(),b=m?.body?.content;typeof b!="string"||b.length<40||R.includes("text")&&!R.includes("html")||S.push(b)}return S}Deno.serve(async i=>{if(i.method==="OPTIONS")return new Response(null,{headers:N});try{const e=i.headers.get("Authorization");if(!e?.startsWith("Bearer "))return new Response(JSON.stringify({error:"Unauthorized"}),{status:401,headers:N});const l=J(Deno.env.get("SUPABASE_URL"),Deno.env.get("SUPABASE_ANON_KEY"),{global:{headers:{Authorization:e}}}),p=e.replace("Bearer ",""),{data:S,error:m}=await l.auth.getClaims(p);if(m||!S?.claims)return new Response(JSON.stringify({error:"Unauthorized"}),{status:401,headers:N});const R=S.claims.sub,b=J(Deno.env.get("SUPABASE_URL"),Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")),T=await i.json(),{action:C,params:r}=T;if(C==="backfill-org-photos"){const{data:t}=await b.rpc("is_admin_or_manager",{_user_id:R});if(!t)return new Response(JSON.stringify({error:"Forbidden"}),{status:403,headers:{...N,"Content-Type":"application/json"}});const{data:a}=await b.rpc("get_user_org_id",{_user_id:R});if(!a)return new Response(JSON.stringify({error:"Organizaci\xF3n no encontrada"}),{status:400,headers:{...N,"Content-Type":"application/json"}});const{data:s,error:f}=await b.from("profiles").select("user_id").eq("organization_id",a);if(f)throw new Error(`No se pudieron listar perfiles: ${f.message}`);const d=new Set((s??[]).map(o=>o.user_id)),{data:g,error:h}=await b.from("microsoft_tokens").select("*");if(h)throw new Error(`No se pudieron listar tokens: ${h.message}`);const y=(g??[]).filter(o=>d.has(o.user_id)),n={total:y.length,synced:0,no_photo:0,failed:0,errors:[]};for(const o of y)try{const w=await Q(b,o.user_id,o),v=await Y(b,o.user_id,w);"code"in v&&v.code==="NO_PHOTO"?n.no_photo+=1:n.synced+=1}catch(w){n.failed+=1,n.errors.push({user_id:o.user_id,error:w instanceof Error?w.message:String(w)})}return new Response(JSON.stringify(n),{headers:{...N,"Content-Type":"application/json"}})}const{data:x,error:M}=await b.from("microsoft_tokens").select("*").eq("user_id",R).single();if(M||!x)return new Response(JSON.stringify({error:"Microsoft not connected",code:"NOT_CONNECTED"}),{status:200,headers:{...N,"Content-Type":"application/json"}});const c=await Q(b,R,x);let u;switch(C){case"calendars":{u=await(await I(c,"/me/calendars?$select=id,name,color,hexColor,isDefaultCalendar,canEdit,owner&$top=100",{})).json();break}case"calendar-events":{const t=r?.start||new Date().toISOString(),a=r?.end||new Date(Date.now()+10080*60*1e3).toISOString(),s=`startDateTime=${t}&endDateTime=${a}&$orderby=start/dateTime&$top=100`,f={headers:{Prefer:'outlook.timezone="America/Mexico_City"'}},d=Array.isArray(r?.calendarIds)?r.calendarIds.filter(h=>typeof h=="string"&&h.length>0):[];if(d.length>0){const y=(await Promise.all(d.map(async n=>{try{const w=await(await I(c,`/me/calendars/${encodeURIComponent(n)}/calendarView?${s}`,f)).json();return(Array.isArray(w?.value)?w.value:[]).map(k=>({...k,calendarId:n}))}catch{return[]}}))).flat();y.sort((n,o)=>{const w=n?.start?.dateTime||n?.start?.date||"",v=o?.start?.dateTime||o?.start?.date||"";return String(w).localeCompare(String(v))}),u={value:y};break}u=await(await I(c,`/me/calendarview?${s}`,f)).json();break}case"create-event":{const t=r?.event??{},s=(y=>{const n={...y};if(n.body&&typeof n.body=="object"){const o=String(n.body.contentType||"").toLowerCase();n.body={...n.body,contentType:o==="html"?"html":"text"},(!n.body.content||String(n.body.content).trim()==="")&&delete n.body}if(n.subject!=null&&(n.subject=String(n.subject)),Array.isArray(n.attendees)&&(n.attendees=n.attendees.map(o=>{const w=String(o?.emailAddress?.address||"").trim();return w?{emailAddress:{address:w,...o?.emailAddress?.name?{name:String(o.emailAddress.name)}:{}},type:o?.type||"required"}:null}).filter(Boolean),n.attendees.length===0&&delete n.attendees),Array.isArray(n.categories)&&(n.categories=n.categories.map(o=>typeof o=="string"?o.trim():"").filter(Boolean),n.categories.length===0&&delete n.categories),n.location&&typeof n.location=="object"){const o=String(n.location.displayName||"").trim();o?n.location={displayName:o}:delete n.location}return n.isOnlineMeeting||(delete n.onlineMeetingProvider,delete n.onlineMeeting,delete n.isOnlineMeeting),n.start&&typeof n.start=="object"&&!n.start.timeZone&&(n.start={...n.start,timeZone:"UTC"}),n.end&&typeof n.end=="object"&&!n.end.timeZone&&(n.end={...n.end,timeZone:"UTC"}),n})(t),f=!!s?.isOnlineMeeting,d=s.start?.dateTime,g=s.end?.dateTime;if(d&&g&&g<=d){u={error:`La hora de fin (${g.slice(11,16)}) debe ser despu\xE9s de la hora de inicio (${d.slice(11,16)}). Si pusiste "12:00 a.m." aseg\xFArate de seleccionar "p.m." para mediod\xEDa.`};break}const h=async y=>I(c,"/me/events",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(y)});try{u=await(await h(s)).json()}catch(y){const n=y instanceof Error?y.message:String(y),o=/\[400\]/.test(n)&&(n.includes("ErrorPropertyValidationFailure")||n.toLowerCase().includes("at least one property failed validation")||n.toLowerCase().includes("onlinemeeting"));if(console.error("[microsoft-api] create-event failed",{graphError:n,payloadKeys:Object.keys(s),payload:s}),!o)throw y;const w=[];if(f){const E={...s};delete E.isOnlineMeeting,delete E.onlineMeetingProvider,delete E.onlineMeeting,w.push({label:"without-online-meeting",payload:E})}{const E={...s};delete E.isOnlineMeeting,delete E.onlineMeetingProvider,delete E.onlineMeeting,delete E.attendees,w.push({label:"without-attendees-and-online",payload:E})}{const E={...s};delete E.isOnlineMeeting,delete E.onlineMeetingProvider,delete E.onlineMeeting,delete E.attendees,delete E.categories,w.push({label:"without-attendees-categories-online",payload:E})}{const E={subject:s.subject||"(sin t\xEDtulo)",start:s.start,end:s.end};s.isAllDay&&(E.isAllDay=!0),w.push({label:"minimal",payload:E})}let v=null,k=null,$=n;for(const E of w)try{console.warn(`[microsoft-api] retrying create-event with fallback: ${E.label}`,{payloadKeys:Object.keys(E.payload)}),v=await(await h(E.payload)).json(),k=E.label;break}catch(O){$=O instanceof Error?O.message:String(O),console.warn(`[microsoft-api] fallback ${E.label} also failed`,{error:$})}if(!v)throw new Error(`Microsoft rechaz\xF3 el evento. Error de Graph: ${n}. \xDAltimo intento (${w[w.length-1]?.label}): ${$}`);u={...v,fallbackApplied:k,originalGraphError:n,...k?.includes("online")?{onlineMeetingFallback:!0,onlineMeetingFallbackReason:n}:{}}}break}case"delete-event":{await I(c,`/me/events/${r.eventId}`,{method:"DELETE",headers:{}}),u={success:!0};break}case"event-detail":{u=await(await I(c,`/me/events/${r.eventId}`,{headers:{Prefer:'outlook.timezone="America/Mexico_City"'}})).json();break}case "update-event":{const t=encodeURIComponent(r.eventId);let a=null;try{a=await(await I(c,`/me/events/${t}`,{headers:{}})).json()}catch(k){const $=k instanceof Error?k.message:String(k);if(!/\[404\]/.test($)&&!$.toLowerCase().includes("erroritemnotfound"))throw k}const f=await(await I(c,`/me/events/${t}`,{method:"PATCH",headers:{"Content-Type":"application/json",Prefer:'outlook.timezone="America/Mexico_City", return=representation'},body:JSON.stringify(r.payload)})).text(),d=f?JSON.parse(f):null;let g=null;try{g=await(await I(c,`/me/events/${t}`,{headers:{}})).json()}catch(k){const $=k instanceof Error?k.message:String(k);if(!/\[404\]/.test($)&&!$.toLowerCase().includes("erroritemnotfound"))throw k}const h=g!=null,y=r?.payload?.start?.dateTime,n=r?.payload?.end?.dateTime,o=g?.start?.dateTime,w=g?.end?.dateTime;if(!(h?(!y||o&&o.startsWith(y))&&(!n||w&&w.startsWith(n)):!0)&&a?.type==="occurrence"){const k={subject:a.subject,start:r?.payload?.start||a.start,end:r?.payload?.end||a.end,body:a.body,attendees:a.attendees,categories:a.categories,isOnlineMeeting:!!a.isOnlineMeeting,onlineMeetingProvider:a.isOnlineMeeting?"teamsForBusiness":void 0,location:a?.location?.displayName?{displayName:a.location.displayName}:void 0},E=await(await I(c,"/me/events",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(k)})).json();try{await I(c,`/me/events/${t}`,{method:"DELETE",headers:{}})}catch{}u={...E,migratedFromOccurrence:!0,previousEventId:r.eventId}}else u=g||d||{success:!0};break}case"respond-event":{const t=encodeURIComponent(r.eventId),a=String(r?.response||"").trim(),f={accept:"accept",decline:"decline",tentative:"tentativelyAccept",tentativelyAccept:"tentativelyAccept"}[a];if(!f)throw new Error("response must be accept, decline or tentative");const d={sendResponse:r?.sendResponse!==!1};typeof r?.comment=="string"&&r.comment.trim()&&(d.comment=r.comment.trim()),await I(c,`/me/events/${t}/${f}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(d)});let g=null;try{g=await(await I(c,`/me/events/${t}`,{headers:{Prefer:'outlook.timezone="America/Mexico_City"'}})).json()}catch(h){const y=h instanceof Error?h.message:String(h);if(!/\[404\]/.test(y)&&!y.toLowerCase().includes("erroritemnotfound"))throw h}u=g||{success:!0,responseStatus:{response:f==="tentativelyAccept"?"tentativelyAccepted":`${f}ed`}};break}case"outlook-categories":{u=(await(await I(c,"/me/outlook/masterCategories",{headers:{}})).json()).value||[];break}case"create-outlook-category":{const t=String(r?.displayName||"").trim();if(!t)throw new Error("displayName required");let a=0;for(let d=0;d<t.length;d++)a=a*31+t.charCodeAt(d)>>>0;const s=typeof r?.color=="string"&&r.color.startsWith("preset")?r.color:`preset${a%25}`;u=await(await I(c,"/me/outlook/masterCategories",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({displayName:t,color:s})})).json();break}case"delete-outlook-category":{const t=String(r?.id||"").trim();if(!t)throw new Error("id required");await I(c,`/me/outlook/masterCategories/${encodeURIComponent(t)}`,{method:"DELETE",headers:{}}),u={success:!0};break}case"emails":{if(r?.nextLink&&typeof r.nextLink=="string"){const n=r.nextLink.trim();if(!n.startsWith("https://graph.microsoft.com/v1.0/"))throw new Error("nextLink no permitido");const o=new URL(n),w=o.pathname.slice(5)+o.search,v=o.search.toLowerCase(),k=v.includes("$search")||v.includes("%24search");u=await A(c,w,{headers:k?q:_});break}const t=r?.top||25,a=r?.skip||0,s=r?.folder||"inbox",f="$select=id,subject,bodyPreview,from,toRecipients,receivedDateTime,sentDateTime,createdDateTime,isRead,hasAttachments,importance,conversationId",d=typeof r?.search=="string"?r.search.replace(/\s+/g," ").trim():"";if(d){const n=d.replace(/[\u0000-\u001f\u007f]/g," ").replace(/"/g," ").replace(/\s+/g," ").trim();if(!n){u={value:[]};break}const o=n.split(" ").filter(Boolean),w=async k=>await A(c,`/me/messages?${f}&$top=${t}&$search=${encodeURIComponent(`"${k}"`)}`,{headers:q});u=await w(o.join(" ")),(!Array.isArray(u?.value)||u.value.length===0)&&o.length>1&&(u=await w(o.join(" OR ")));break}const g=a>0?`&$skip=${a}`:"",y=r?.filterUnread===!0?"&$filter=receivedDateTime ge 1900-01-01T00:00:00Z and isRead eq false":"";u=await A(c,`/me/mailFolders/${s}/messages?${f}&$top=${t}&$orderby=receivedDateTime desc&$count=true${g}${y}`,{headers:_});break}case"mail-directory-sync":{const t=await A(c,"/me",{}),a=typeof t.mail=="string"&&t.mail.trim()?t.mail.trim().toLowerCase():typeof t.userPrincipalName=="string"&&t.userPrincipalName.includes("@")?t.userPrincipalName.trim().toLowerCase():"",s=r?.top,f=typeof s=="number"&&Number.isFinite(s)?Math.min(Math.max(Math.floor(s),1),200):180,g=await A(c,`/me/messages?$select=from,toRecipients,ccRecipients,bccRecipients,receivedDateTime&$top=${f}&$orderby=receivedDateTime desc`,{headers:_}),h=new Map;for(const y of g.value||[])y&&typeof y=="object"&&ne(y,h);a&&h.delete(a),u={contacts:Array.from(h.values())};break}case"mark-unread":{await I(c,`/me/messages/${r.messageId}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({isRead:!1})}),u={success:!0};break}case"archive-email":{u=await(await I(c,`/me/messages/${r.messageId}/move`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({destinationId:"archive"})})).json();break}case"email-detail":{const t=F(r?.messageId);if(!t)throw new Error("messageId required");u=await A(c,`/me/messages/${t}`,{headers:_});break}case"send-email":{await I(c,"/me/sendMail",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:r.message})}),u={success:!0};break}case"check-connection":{u=await A(c,"/me");break}case"reply":{await I(c,`/me/messages/${r.messageId}/reply`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({comment:r.comment})}),u={success:!0};break}case"reply-all":{await I(c,`/me/messages/${r.messageId}/replyAll`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({comment:r.comment})}),u={success:!0};break}case"mark-read":{await A(c,`/me/messages/${r.messageId}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({isRead:!0})}),u={success:!0};break}case"create-onedrive-doc":{const t=r.docType||"docx",a=r.fileName||`Documento.${t}`,s=r.folderPath||"Kawiil",f=async o=>{try{return await(await I(c,`/me/drive/root:/${encodeURI(o)}`,{headers:{}})).json()}catch(w){const v=w instanceof Error?w.message:String(w);if(/\[404\]/.test(v))return null;throw w}};await(async o=>{const w=o.split("/").filter(Boolean);let v="";for(const k of w){if(v=v?`${v}/${k}`:k,await f(v))continue;const E=v.includes("/")?v.slice(0,v.lastIndexOf("/")):"",O=E?`/me/drive/root:/${encodeURI(E)}:/children`:"/me/drive/root/children";try{await(await I(c,O,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:k,folder:{},"@microsoft.graph.conflictBehavior":"fail"})})).text()}catch(U){const P=U instanceof Error?U.message:String(U);if(!/\[409\]/.test(P))throw U}}})(s);const h={"Content-Type":{docx:"application/vnd.openxmlformats-officedocument.wordprocessingml.document",xlsx:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",pptx:"application/vnd.openxmlformats-officedocument.presentationml.presentation"}[t]||"application/octet-stream"};let y;try{y=await I(c,`/me/drive/root:/${encodeURI(s)}/${encodeURIComponent(a)}:/content`,{method:"PUT",headers:h,body:new Uint8Array(0)})}catch(o){const w=o instanceof Error?o.message:String(o);if(!/\[404\]/.test(w))throw o;y=await I(c,`/me/drive/root:/${encodeURIComponent(a)}:/content`,{method:"PUT",headers:h,body:new Uint8Array(0)})}const n=await y.json();u={success:!0,id:n.id,name:n.name,webUrl:n.webUrl,parentPath:n.parentReference?.path};break}case"forward":{await I(c,`/me/messages/${r.messageId}/forward`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({comment:r.comment,toRecipients:r.toRecipients})}),u={success:!0};break}case"inbox-folder-meta":{u=await A(c,"/me/mailFolders/inbox?$select=id,unreadItemCount,totalItemCount");break}case"mail-folders":{const t=await ce(c);console.log(`[microsoft-api] mail-folders: root=${t.length}`);const a=new Map;async function s(n){const o=[`/me/mailFolders/${encodeURIComponent(n)}/childFolders?$select=${D}&$top=1000&includeHiddenFolders=true`,`/me/mailFolders/${encodeURIComponent(n)}/childFolders?$select=${D}&$top=1000`];for(const w of o)try{const v=[];let k=w;for(let $=0;$<10&&k;$++){const E=await A(c,k);if(Array.isArray(E?.value))for(const U of E.value)v.push(U);const O=E?.["@odata.nextLink"];k=typeof O=="string"&&O?z(O):null}return v}catch(v){console.warn(`[microsoft-api] mail-folders: childFolders(${n}) strategy failed`,String(v).slice(0,200))}return[]}const f=new Set(["deleteditems","sentitems","junkemail","outbox","drafts","archive","msgfolderroot","recoverableitemsdeletions","conversationhistory","scheduled"]),d=t.find(n=>String(n.wellKnownFolderName||"").toLowerCase()==="inbox"),g=new Set;d?.id&&typeof d.id=="string"?g.add(d.id):g.add("__inbox_alias__");for(const n of t){const o=typeof n.id=="string"?n.id:null;if(!o)continue;const w=String(n.wellKnownFolderName||"").toLowerCase();if(w&&f.has(w))continue;(typeof n.childFolderCount=="number"?n.childFolderCount:-1)!==0&&g.add(o)}let h=0;for(const n of g){if(h>=20)break;h++;const o=n==="__inbox_alias__"?"inbox":n,w=await s(o);w.length>0&&(a.set(o,w),console.log(`[microsoft-api] mail-folders: children(${o})=${w.length}`))}const y=Array.from(a.values()).flat();console.log(`[microsoft-api] mail-folders: total children=${y.length}`),u={folders:[...t,...y]};break}case"child-folders":{const t=r?.parentId;if(!t||typeof t!="string")return new Response(JSON.stringify({error:"parentId is required"}),{status:400,headers:{...N,"Content-Type":"application/json"}});const a=[];let s=`/me/mailFolders/${encodeURIComponent(t)}/childFolders?$select=${D}&$top=1000`;const f=10;for(let d=0;d<f;d++){const g=await A(c,s);if(Array.isArray(g?.value))for(const n of g.value)a.push(n);const h=g?.["@odata.nextLink"];if(typeof h!="string"||!h)break;const y=z(h);if(!y)break;s=y}u={folders:a};break}case"email-conversation":{const t=r?.conversationId;if(!t)throw new Error("conversationId required");const a=String(t).replace(/'/g,"''"),s="$select=id,conversationId,subject,bodyPreview,body,from,receivedDateTime,sentDateTime,createdDateTime,isRead,hasAttachments",f=encodeURIComponent(`conversationId eq '${a}'`);u=(await A(c,`/me/messages?${s}&$filter=${f}&$orderby=receivedDateTime asc&$top=50`,{headers:_}))?.value||[];break}case"create-reply-draft":{const t=F(r?.messageId);if(!t)throw new Error("messageId required");const s=r?.replyAll||!1?"createReplyAll":"createReply";try{u=await(await I(c,`/me/messages/${t}/${s}`,{method:"POST",headers:{"Content-Type":"application/json",..._},body:JSON.stringify({comment:""})})).json()}catch(f){const g=(f instanceof Error?f.message:String(f)).replace(/^Microsoft Graph error \[\d+\]: /,"");let h;try{h=JSON.parse(g)?.error?.code}catch{}const y=g.toLowerCase();if(h==="ErrorInvalidReferenceItem"||h==="ErrorItemNotFound"||y.includes("errorinvalidreferenceitem")||y.includes("erroritemnotfound")){u={code:"REFERENCE_NOT_SUPPORTED",error:"Este mensaje no admite respuesta con borrador. Puedes escribir y enviar; se usar\xE1 env\xEDo simple."};break}throw f}break}case"create-forward-draft":{const t=F(r?.messageId);if(!t)throw new Error("messageId required");u=await(await I(c,`/me/messages/${t}/createForward`,{method:"POST",headers:{"Content-Type":"application/json",..._},body:JSON.stringify({comment:""})})).json();break}case"get-email-signature-html":{const t=w=>w.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"),{data:a,error:s}=await b.from("profiles").select("outlook_signature_html").eq("user_id",R).maybeSingle();if(!s&&a){const w=String(a.outlook_signature_html||"").trim();if(w){u={html:w,source:"kawiil_profile"};break}}const f=await A(c,"/me?$select=displayName,mail,userPrincipalName,jobTitle,mobilePhone,officeLocation"),d=String(f?.displayName||"").trim(),g=String(f?.mail||f?.userPrincipalName||"").trim(),h=String(f?.jobTitle||"").trim(),y=String(f?.mobilePhone||"").trim(),n=String(f?.officeLocation||"").trim();let o='<p><br></p><p style="font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#333;">';d&&(o+=`<strong>${t(d)}</strong><br/>`),h&&(o+=`${t(h)}<br/>`),n&&(o+=`${t(n)}<br/>`),g&&(o+=`<a href="mailto:${t(g)}">${t(g)}</a>`),y&&(o+=`<br/>${t(y)}`),o+="</p>",u={html:o,source:"microsoft_profile",displayName:d,mail:g};break}case"update-draft":{const t=F(r?.draftId);if(!t)throw new Error("draftId required");const a=r?.payload;await A(c,`/me/messages/${t}`,{method:"PATCH",headers:{"Content-Type":"application/json",..._},body:JSON.stringify(a)}),u={success:!0};break}case"send-draft":{const t=F(r?.draftId);if(!t)throw new Error("draftId required");await I(c,`/me/messages/${t}/send`,{method:"POST",headers:{..._}}),u={success:!0};break}case"add-draft-attachment":{const t=F(r?.draftId),a=r?.attachment;if(!t||!a?.name||!a?.contentBytes)throw new Error("draftId y attachment son requeridos");await A(c,`/me/messages/${t}/attachments`,{method:"POST",headers:{"Content-Type":"application/json",..._},body:JSON.stringify({"@odata.type":"#microsoft.graph.fileAttachment",name:a.name,contentType:a.contentType||"application/octet-stream",contentBytes:a.contentBytes})}),u={success:!0};break}case"move-email":{const t=F(r?.messageId),a=r?.destinationId;if(!t||!a)throw new Error("messageId and destinationId required");u=await A(c,`/me/messages/${t}/move`,{method:"POST",headers:{"Content-Type":"application/json",..._},body:JSON.stringify({destinationId:a})});break}case"flag-email":{const t=F(r?.messageId),a=r?.flagStatus??"flagged";if(!t)throw new Error("messageId required");u=await A(c,`/me/messages/${t}`,{method:"PATCH",headers:{"Content-Type":"application/json",..._},body:JSON.stringify({flag:{flagStatus:a}})});break}case"delete-email":{const t=r?.messageId;if(!t)throw new Error("messageId required");await I(c,`/me/messages/${t}`,{method:"DELETE",headers:{}}),u={success:!0};break}case"message-attachment-content":{const t=await pe(c,r?.messageId,r?.attachmentId);u={name:t.name,contentType:t.contentType,contentBytes:B(t.body),size:t.size,isInline:t.isInline,contentId:t.contentId};break}case"message-attachment-binary":{const t=F(r?.messageId),a=F(r?.attachmentId);if(!t||!a)throw new Error("messageId y attachmentId son requeridos");const s=`/me/messages/${t}/attachments/${a}?$select=id,name,contentType,size,isInline`,f=await A(c,s,{headers:_}),d=f["@odata.type"];if(d&&String(d).includes("itemAttachment"))throw new Error("Este tipo de adjunto no se puede previsualizar");if(d&&String(d).includes("referenceAttachment"))throw new Error("Este tipo de adjunto no se puede previsualizar");let g=String(f.contentType||"application/octet-stream");const h=String(f.name??"adjunto"),y=`/me/messages/${t}/attachments/${a}/$value`,n=await I(c,y,{headers:{Accept:"application/octet-stream",..._}}),o=n.headers.get("content-type");if(o){const v=o.split(";")[0].trim().toLowerCase();v&&v!=="application/octet-stream"&&(g=o.split(";")[0].trim())}const w=n.body;if(!w){const v=new Uint8Array(await n.arrayBuffer());return new Response(v,{status:200,headers:{...N,"Content-Type":g||"application/octet-stream","X-Kawiil-Attachment-Name":encodeURIComponent(h),"Access-Control-Expose-Headers":"Content-Type, X-Kawiil-Attachment-Name"}})}return new Response(w,{status:200,headers:{...N,"Content-Type":g||"application/octet-stream","X-Kawiil-Attachment-Name":encodeURIComponent(h),"Access-Control-Expose-Headers":"Content-Type, X-Kawiil-Attachment-Name"}})}case"message-attachment-chunk":{const t=F(r?.messageId),a=F(r?.attachmentId),s=Math.max(0,Math.floor(Number(r?.byteStart??0))),f=Math.min(Math.max(1,Math.floor(Number(r?.maxLength??196608))),262144);if(!t||!a)throw new Error("messageId y attachmentId son requeridos");const d=`/me/messages/${t}/attachments/${a}?$select=id,name,contentType,size`,g=await A(c,d,{headers:_}),h=g["@odata.type"];if(h&&String(h).includes("itemAttachment"))throw new Error("Este tipo de adjunto no se puede previsualizar");if(h&&String(h).includes("referenceAttachment"))throw new Error("Este tipo de adjunto no se puede previsualizar");let y=String(g.contentType||"application/octet-stream");const n=String(g.name??"adjunto"),o=typeof g.size=="number"?Number(g.size):null,w=`/me/messages/${t}/attachments/${a}/$value`,v=s+f-1,k={Accept:"application/octet-stream",..._};s>0&&(k.Range=`bytes=${s}-${v}`);const $=await I(c,w,{headers:k});let E,O=o;if($.status===206){E=new Uint8Array(await $.arrayBuffer());const P=$.headers.get("content-range");if(P){const L=P.match(/\/(\d+)\s*$/);L&&(O=parseInt(L[1],10))}const j=$.headers.get("content-type");if(j){const L=j.split(";")[0].trim().toLowerCase();L&&L!=="application/octet-stream"&&(y=j.split(";")[0].trim())}}else if($.status===200&&s===0){const P=$.body;P?E=await ue(P,f):E=new Uint8Array(await $.arrayBuffer());const j=$.headers.get("content-type");if(j){const L=j.split(";")[0].trim().toLowerCase();L&&L!=="application/octet-stream"&&(y=j.split(";")[0].trim())}if(O==null){const L=$.headers.get("content-length"),H=L?parseInt(L,10):NaN;Number.isFinite(H)&&(O=H)}}else if($.status===200&&s>0)if(o!=null&&o<=6*1024*1024){const P=new Uint8Array(await $.arrayBuffer());s>=P.length?E=new Uint8Array(0):E=P.subarray(s,Math.min(s+f,P.length)),O=o;const j=$.headers.get("content-type");if(j){const L=j.split(";")[0].trim().toLowerCase();L&&L!=="application/octet-stream"&&(y=j.split(";")[0].trim())}}else{const P=await $.text();throw new Error(`Graph no devolvi\xF3 206 en offset ${s} (Range). ${P.slice(0,120)}`)}else{const P=await $.text();throw new Error(`Adjunto chunk [${$.status}]: ${P}`)}const U=E.length===0||O!=null&&s+E.length>=O||O==null&&E.length<f;u={name:n,contentType:y,byteStart:s,length:E.length,totalSize:O,partBase64:B(E),done:U};break}case"email-attachments":{const t=F(r?.messageId);if(!t)throw new Error("messageId required");u=await A(c,`/me/messages/${t}/attachments?$top=100`,{headers:_});break}case"sync-profile-photo":{u=await Y(b,R,c);break}case"create-mail-folder":{const t=r?.displayName;if(!t)throw new Error("displayName required");const a=await W(c,t);if(a){u=a;break}try{u=await(await I(c,"/me/mailFolders",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({displayName:t})})).json()}catch(s){const f=s instanceof Error?s.message:String(s);if(me(f)==="ErrorFolderExists"||f.includes("[409]")){const g=await W(c,t);if(g){u=g;break}}throw s}break}case"create-mail-rule":{const{displayName:t,senderEmail:a,moveToFolderId:s,markAsRead:f}=r||{};if(!a)throw new Error("senderEmail required");const d={displayName:t||`Regla: ${a}`,sequence:1,isEnabled:!0,conditions:{fromAddresses:[{emailAddress:{address:a}}]},actions:{...s?{moveToFolder:s}:{},...f?{markAsRead:!0}:{}}};u=await A(c,"/me/mailFolders/inbox/messageRules",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(d)});break}case"list-mail-rules":{u=await A(c,"/me/mailFolders/inbox/messageRules");break}case"apply-mail-rule":{const t=String(r?.senderEmail||"").trim().toLowerCase(),a=r?.moveToFolderId,s=r?.markAsRead===!0;if(!t)throw new Error("senderEmail required");const f=encodeURIComponent(`from/emailAddress/address eq '${t.replace(/'/g,"''")}'`);let d=0,g=0;const h=500;for(let y=0;y<20;y++){const o=(await A(c,`/me/mailFolders/inbox/messages?$filter=${f}&$select=id,isRead&$top=50`,{headers:_})).value??[];if(o.length===0)break;g+=o.length;for(const w of o){if(d>=h)break;try{s&&w.isRead===!1&&await A(c,`/me/messages/${w.id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({isRead:!0})}),a&&await A(c,`/me/messages/${w.id}/move`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({destinationId:a})}),d++}catch{}}if(!a||d>=h)break}u={moved:d,total:g};break}}return u===void 0?new Response(JSON.stringify({error:"Acci\xF3n no reconocida o microsoft-api desactualizada. Despliega: supabase functions deploy microsoft-api --no-verify-jwt",code:"UNKNOWN_ACTION",action:C??null}),{status:400,headers:{...N,"Content-Type":"application/json"}}):new Response(JSON.stringify(u),{headers:{...N,"Content-Type":"application/json"}})}catch(e){console.error("Microsoft API error:",e);const l=e.message||"Unknown error",p=l.toLowerCase();return p.includes("createreplydraft")&&p.includes("errorinvalidreferenceitem")?new Response(JSON.stringify({code:"REFERENCE_NOT_SUPPORTED",error:"Este mensaje no admite respuesta con borrador. Puedes escribir y enviar; se usar\xE1 env\xEDo simple."}),{status:200,headers:{...N,"Content-Type":"application/json"}}):l.startsWith("MICROSOFT_PERMISSION_REQUIRED:")?new Response(JSON.stringify({error:"Tu conexi\xF3n de Microsoft no tiene los permisos necesarios. Reconecta Microsoft para aplicar los permisos nuevos.",code:"PERMISSION_REQUIRED",details:l.replace("MICROSOFT_PERMISSION_REQUIRED:","")}),{status:403,headers:{...N,"Content-Type":"application/json"}}):l.startsWith("MICROSOFT_AUTH_CONFIG_EXPIRED:")?new Response(JSON.stringify({error:l.replace("MICROSOFT_AUTH_CONFIG_EXPIRED:",""),code:"AUTH_CONFIG_EXPIRED"}),{status:503,headers:{...N,"Content-Type":"application/json"}}):l.startsWith("MICROSOFT_RECONNECT_REQUIRED:")?new Response(JSON.stringify({error:l.replace("MICROSOFT_RECONNECT_REQUIRED:",""),code:"RECONNECT_REQUIRED"}),{status:401,headers:{...N,"Content-Type":"application/json"}}):l.includes("[404]")||l.includes("ErrorItemNotFound")?new Response(JSON.stringify({error:"El elemento no fue encontrado. Es posible que haya sido eliminado o modificado. Recarga la vista para actualizar.",code:"ITEM_NOT_FOUND"}),{status:200,headers:{...N,"Content-Type":"application/json"}}):p.includes("applicationthrottled")||p.includes("mailboxconcurrency")||l.includes("[429]")?new Response(JSON.stringify({error:"Microsoft limit\xF3 temporalmente las peticiones al buz\xF3n. Espera unos segundos y vuelve a intentar.",code:"GRAPH_THROTTLED"}),{status:503,headers:{...N,"Content-Type":"application/json"}}):new Response(JSON.stringify({error:l}),{status:500,headers:{...N,"Content-Type":"application/json"}})}});
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { throwMicrosoftOAuthError } from "../_shared/microsoftOAuthErrors.ts";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": '*',
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
+
+/** Base64 para cuerpos binarios grandes (Graph suele omitir contentBytes en JSON y usar /$value). */
+function uint8ArrayToBase64(bytes: Uint8Array): string {
+  const CHUNK = 0x2000;
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
+}
+
+/** Igual que en email-detail: evita doble codificación (%252F) y alinea rutas con /me/messages/{id} sin encodeURIComponent. */
+function normalizeGraphMessageOrAttachmentId(raw: string | undefined): string {
+  if (!raw || typeof raw !== "string") return "";
+  let s = raw.trim();
+  if (!s) return "";
+  for (let i = 0; i < 2; i++) {
+    if (!/%[0-9A-Fa-f]{2}/.test(s)) break;
+    try {
+      const d = decodeURIComponent(s);
+      if (d === s) break;
+      s = d;
+    } catch {
+      break;
+    }
+  }
+  return s;
+}
+
+const GRAPH_MAIL_PREFER_IMMUTABLE = { Prefer: 'IdType="ImmutableId"' };
+/** Graph exige ConsistencyLevel eventual en búsquedas ($search) sobre mensajes. */
+const GRAPH_MAIL_SEARCH_HEADERS = {
+  ...GRAPH_MAIL_PREFER_IMMUTABLE,
+  ConsistencyLevel: "eventual",
+};
+
+const GRAPH_MAX_RETRIES = 6;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function graphRetryDelayMs(headers: Headers, attempt: number): number {
+  const ra = headers.get("Retry-After");
+  if (ra) {
+    const sec = parseInt(ra, 10);
+    if (!Number.isNaN(sec) && sec >= 0) {
+      return Math.min(Math.max(sec * 1000, 500), 120_000);
+    }
+    const when = Date.parse(ra);
+    if (!Number.isNaN(when)) {
+      return Math.min(Math.max(when - Date.now(), 500), 120_000);
+    }
+  }
+  const exp = Math.min(1_500 * Math.pow(2, attempt - 1), 45_000);
+  const jitter = Math.floor(Math.random() * 400);
+  return exp + jitter;
+}
+
+/** Extrae email/nombre de un recipient Graph (from / toRecipients / ccRecipients). */
+function graphRecipientEntry(
+  raw: unknown,
+): { email: string; displayName: string } | null {
+  if (!raw || typeof raw !== "object") return null;
+  const ea = (raw as { emailAddress?: { address?: string; name?: string } }).emailAddress;
+  if (!ea?.address || typeof ea.address !== "string") return null;
+  const email = ea.address.trim().toLowerCase();
+  if (!email || !email.includes("@")) return null;
+  const name = typeof ea.name === "string" ? ea.name.trim() : "";
+  const displayName = name || email;
+  return { email, displayName };
+}
+
+function collectRecipientsFromMessage(
+  msg: Record<string, unknown>,
+  into: Map<string, { email: string; displayName: string }>,
+): void {
+  const push = (e: { email: string; displayName: string }) => {
+    const prev = into.get(e.email);
+    if (!prev) {
+      into.set(e.email, e);
+      return;
+    }
+    const prevBare = !prev.displayName || prev.displayName === prev.email;
+    const nextBare = !e.displayName || e.displayName === e.email;
+    if (prevBare && !nextBare) into.set(e.email, e);
+    else if (!prevBare && nextBare) return;
+    else if ((e.displayName?.length ?? 0) > (prev.displayName?.length ?? 0)) into.set(e.email, e);
+  };
+  const from = graphRecipientEntry(msg.from);
+  if (from) push(from);
+  const lists = [msg.toRecipients, msg.ccRecipients, msg.bccRecipients];
+  for (const list of lists) {
+    if (!Array.isArray(list)) continue;
+    for (const r of list) {
+      const e = graphRecipientEntry(r);
+      if (e) push(e);
+    }
+  }
+}
+
+function isGraphRetryable(status: number, errorBody: string): boolean {
+  if (status === 429 || status === 503 || status === 504) return true;
+  const lower = errorBody.toLowerCase();
+  return (
+    lower.includes("applicationthrottled") ||
+    lower.includes("mailboxconcurrency") ||
+    lower.includes("toomanyrequests") ||
+    lower.includes('"code":"applicationthrottled"') ||
+    lower.includes('"code":"throttled"')
+  );
+}
+
+/**
+ * Petición a Microsoft Graph con reintentos ante 429 (p. ej. MailboxConcurrency / ApplicationThrottled) y 503.
+ */
+async function graphMailFetchWithRetry(
+  accessToken: string,
+  path: string,
+  init?: RequestInit,
+): Promise<Response> {
+  const pathPart = path.startsWith("/") ? path : `/${path}`;
+  const url = `${GRAPH_BASE}${pathPart}`;
+  let lastError: Error | null = null;
+
+  for (let attempt = 1; attempt <= GRAPH_MAX_RETRIES; attempt++) {
+    const res = await fetch(url, {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        ...(init?.headers || {}),
+      },
+    });
+
+    if (res.ok) return res;
+
+    const errorBody = await res.text();
+    const lower = errorBody.toLowerCase();
+
+    if (res.status === 403 || lower.includes("insufficient") || lower.includes("permission")) {
+      throw new Error(`MICROSOFT_PERMISSION_REQUIRED:${errorBody}`);
+    }
+
+    if (isGraphRetryable(res.status, errorBody) && attempt < GRAPH_MAX_RETRIES) {
+      await sleep(graphRetryDelayMs(res.headers, attempt));
+      lastError = new Error(`Microsoft Graph error [${res.status}]: ${errorBody}`);
+      continue;
+    }
+
+    throw new Error(`Microsoft Graph error [${res.status}]: ${errorBody}`);
+  }
+
+  throw lastError ?? new Error("Microsoft Graph: reintentos agotados");
+}
+
+async function graphRequest(accessToken: string, path: string, init?: RequestInit): Promise<unknown> {
+  const res = await graphMailFetchWithRetry(accessToken, path, init);
+  if (res.status === 204) return { success: true };
+  const text = await res.text();
+  if (!text) return { success: true };
+  try {
+    return JSON.parse(text);
+  } catch (parseErr) {
+    const snippet = text.slice(0, 280);
+    const pe = parseErr instanceof Error ? parseErr.message : String(parseErr);
+    throw new Error(
+      `Microsoft Graph respuesta no JSON (${path.slice(0, 180)}…): ${pe}; body=${snippet}`,
+    );
+  }
+}
+
+/** Comparación robusta de nombres de carpeta (middots unicode, espacios). */
+function normalizeMailFolderDisplayName(s: string): string {
+  return s
+    .trim()
+    .toLowerCase()
+    .normalize("NFC")
+    .replace(/\s+/g, " ")
+    .replace(/[\u00b7\u2219\u2022\u30fb\u318d\ufe52]/g, "\u00b7");
+}
+
+const MAIL_FOLDER_LIST_SELECT =
+  "id,displayName,parentFolderId,wellKnownFolderName,unreadItemCount,totalItemCount,childFolderCount";
+/** Raíz: incluye carpetas ocultas (paridad con Outlook). Graph soporta $top=1000 en mailFolders. */
+const MAIL_FOLDER_ROOT_LIST_QUERY =
+  `?$select=${MAIL_FOLDER_LIST_SELECT}&$top=1000&includeHiddenFolders=true`;
+/** Hijos: mismo flag que la raíz; sin él Graph puede omitir subcarpetas que el usuario sí ve en Outlook. */
+const MAIL_FOLDER_CHILD_LIST_QUERY =
+  `?$select=${MAIL_FOLDER_LIST_SELECT}&$top=1000&includeHiddenFolders=true`;
+/** Algunos tenants devuelven 400 al combinar $select + includeHiddenFolders en raíz o en `childFolders`; se reintenta sin el flag. */
+const MAIL_FOLDER_ROOT_LIST_QUERY_PLAIN = `?$select=${MAIL_FOLDER_LIST_SELECT}&$top=1000`;
+const MAIL_FOLDER_CHILD_LIST_QUERY_PLAIN = `?$select=${MAIL_FOLDER_LIST_SELECT}&$top=1000`;
+
+/** Listado plano solo nivel raíz, con $select para obtener wellKnownFolderName y childFolderCount. */
+async function listMailFoldersRootOnlyLegacy(accessToken: string): Promise<unknown[]> {
+  const all: unknown[] = [];
+  // Try with $select first (needed to get wellKnownFolderName and childFolderCount).
+  // Some tenants reject includeHiddenFolders, so we don't add it here.
+  const strategies = [
+    `/me/mailFolders?$select=${MAIL_FOLDER_LIST_SELECT}&$top=1000`,
+    `/me/mailFolders?$top=1000`,
+  ];
+  for (const startPath of strategies) {
+    all.length = 0;
+    let path: string | null = startPath;
+    const maxPages = 25;
+    let ok = true;
+    try {
+      for (let page = 0; page < maxPages && path; page++) {
+        const data = (await graphRequest(accessToken, path)) as {
+          value?: unknown[];
+          "@odata.nextLink"?: string;
+        };
+        if (Array.isArray(data?.value)) {
+          for (const v of data.value) all.push(v);
+        }
+        const nl = data?.["@odata.nextLink"];
+        path = typeof nl === "string" && nl ? nextLinkToPath(nl) : null;
+      }
+    } catch (e) {
+      console.warn("[microsoft-api] listMailFoldersRootOnlyLegacy strategy failed", String(e).slice(0, 200));
+      ok = false;
+    }
+    if (ok && all.length > 0) break;
+  }
+  return all;
+}
+
+function nextLinkToPath(nextLink: string): string {
+  const m = nextLink.match(/graph\.microsoft\.com\/v1\.0(\/.+)/i);
+  return m?.[1] ?? "";
+}
+
+/** Si conviene encolar /childFolders: hijos anunciados, contador ausente, o Inbox con `childFolderCount: 0` (Graph a veces desincroniza). */
+function rowSuggestsChildFolderProbe(row: Record<string, unknown>): boolean {
+  const cc = row.childFolderCount;
+  if (typeof cc === "number" && cc > 0) return true;
+  if (typeof cc !== "number") return true;
+  if (cc === 0) {
+    const wk = String(row.wellKnownFolderName || "").toLowerCase();
+    if (wk === "inbox") return true;
+  }
+  return false;
+}
+
+type ListAllMailFoldersMeta = {
+  /** Se alcanzó MAX_FOLDERS o MAX_GRAPH_LIST_CALLS. */
+  truncated: boolean;
+  /** Fallos al listar /childFolders de un padre (se siguió con el resto del buzón). */
+  partialChildErrors: number;
+};
+
+/**
+ * Todas las carpetas del buzón (raíz + subcarpetas vía childFolders), aplanadas.
+ * Incluye carpetas ocultas (paridad Outlook). Límites para evitar timeouts en buzones enormes.
+ * Un error en un solo `childFolders` no aborta todo el listado.
+ */
+async function listAllMailFoldersRecursive(accessToken: string): Promise<{
+  folders: unknown[];
+  rootFolderIds: Set<string>;
+  meta: ListAllMailFoldersMeta;
+}> {
+  const MAX_FOLDERS = 5000;
+  const MAX_GRAPH_LIST_CALLS = 900;
+  let listCalls = 0;
+  let partialChildErrors = 0;
+
+  const all: unknown[] = [];
+  const seenIds = new Set<string>();
+  const rootFolderIds = new Set<string>();
+  /** Cola BFS: ids de carpeta cuyos hijos faltan por listar. */
+  const childQueue: string[] = [];
+  const enqueuedChildren = new Set<string>();
+
+  const graphList = async (path: string): Promise<{
+    value?: unknown[];
+    "@odata.nextLink"?: string;
+  } | null> => {
+    if (listCalls >= MAX_GRAPH_LIST_CALLS) return null;
+    listCalls += 1;
+    return (await graphRequest(accessToken, path)) as {
+      value?: unknown[];
+      "@odata.nextLink"?: string;
+    };
+  };
+
+  const ingestFolderRow = (row: Record<string, unknown>, isRootLevel: boolean) => {
+    const id = row.id;
+    if (typeof id !== "string" || !id || seenIds.has(id)) return;
+    seenIds.add(id);
+    all.push(row);
+    if (isRootLevel) rootFolderIds.add(id);
+
+    if (
+      rowSuggestsChildFolderProbe(row) &&
+      all.length < MAX_FOLDERS &&
+      listCalls < MAX_GRAPH_LIST_CALLS
+    ) {
+      if (!enqueuedChildren.has(id)) {
+        enqueuedChildren.add(id);
+        childQueue.push(id);
+      }
+    }
+  };
+
+  const paginateInto = async (firstPath: string, isRootLevel: boolean) => {
+    let path: string | null = firstPath;
+    for (let page = 0; page < 25 && all.length < MAX_FOLDERS && path; page++) {
+      const data = await graphList(path);
+      if (!data) break;
+      if (Array.isArray(data.value)) {
+        for (const v of data.value) {
+          if (!v || typeof v !== "object") continue;
+          ingestFolderRow(v as Record<string, unknown>, isRootLevel);
+          if (all.length >= MAX_FOLDERS) break;
+        }
+      }
+      const nl = data["@odata.nextLink"];
+      path = typeof nl === "string" && nl ? nextLinkToPath(nl) : null;
+    }
+  };
+
+  const listChildFolderPages = async (parentId: string) => {
+    const enc = encodeURIComponent(parentId);
+    const childBase = `/me/mailFolders/${enc}/childFolders`;
+    try {
+      await paginateInto(`${childBase}${MAIL_FOLDER_CHILD_LIST_QUERY}`, false);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      try {
+        await paginateInto(`${childBase}${MAIL_FOLDER_CHILD_LIST_QUERY_PLAIN}`, false);
+        if (!/\[400\]/.test(msg)) {
+          console.warn(
+            "[microsoft-api] listAllMailFoldersRecursive: childFolders primera petición falló, plain funcionó",
+            { parentId, firstErr: msg.slice(0, 380) },
+          );
+        }
+      } catch (e2) {
+        partialChildErrors += 1;
+        console.warn(
+          "[microsoft-api] listAllMailFoldersRecursive: childFolders con/sin hidden fallaron, se omite subárbol",
+          {
+            parentId,
+            first: msg.slice(0, 380),
+            second: e2 instanceof Error ? e2.message.slice(0, 380) : String(e2),
+          },
+        );
+      }
+    }
+  };
+
+  const rootPaths = [
+    { path: `/me/mailFolders${MAIL_FOLDER_ROOT_LIST_QUERY}`, label: "root_with_includeHiddenFolders" },
+    { path: `/me/mailFolders${MAIL_FOLDER_ROOT_LIST_QUERY_PLAIN}`, label: "root_plain_select" },
+    { path: `/me/mailFolders?$top=100`, label: "root_minimal" },
+  ];
+  let rootListed = false;
+  for (let ri = 0; ri < rootPaths.length; ri++) {
+    const { path: rootPath, label } = rootPaths[ri];
+    try {
+      await paginateInto(rootPath, true);
+      rootListed = true;
+      if (ri > 0) {
+        console.warn("[microsoft-api] listAllMailFoldersRecursive: raíz con estrategia alternativa", {
+          strategy: label,
+        });
+      }
+      break;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const isLast = ri === rootPaths.length - 1;
+      if (isLast) {
+        console.error("[microsoft-api] listAllMailFoldersRecursive: todas las estrategias de raíz fallaron", {
+          lastStrategy: label,
+          err: msg.slice(0, 800),
+        });
+        throw e;
+      }
+      console.warn("[microsoft-api] listAllMailFoldersRecursive: estrategia de raíz falló, siguiente", {
+        failedStrategy: label,
+        err: msg.slice(0, 400),
+      });
+    }
+  }
+  if (!rootListed) {
+    throw new Error("listAllMailFoldersRecursive: raíz no listada (estado inconsistente)");
+  }
+
+  while (
+    childQueue.length > 0 &&
+    all.length < MAX_FOLDERS &&
+    listCalls < MAX_GRAPH_LIST_CALLS
+  ) {
+    const parentId = childQueue.shift();
+    if (!parentId) break;
+    await listChildFolderPages(parentId);
+  }
+
+  const truncated = all.length >= MAX_FOLDERS || listCalls >= MAX_GRAPH_LIST_CALLS;
+  if (truncated) {
+    console.warn("[microsoft-api] listAllMailFoldersRecursive: listado truncado por límites", {
+      folderCount: all.length,
+      listCalls,
+      partialChildErrors,
+    });
+  } else if (partialChildErrors > 0) {
+    console.warn("[microsoft-api] listAllMailFoldersRecursive: resumen (sin truncar global)", {
+      folderCount: all.length,
+      listCalls,
+      partialChildErrors,
+    });
+  }
+
+  return {
+    folders: all,
+    rootFolderIds,
+    meta: { truncated, partialChildErrors },
+  };
+}
+
+async function findRootMailFolderByDisplayName(
+  accessToken: string,
+  wanted: string,
+): Promise<Record<string, unknown> | null> {
+  const target = normalizeMailFolderDisplayName(wanted);
+  const { folders, rootFolderIds } = await listAllMailFoldersRecursive(
+    accessToken,
+  );
+  for (const f of folders) {
+    if (!f || typeof f !== "object") continue;
+    const row = f as { id?: string; displayName?: string };
+    if (typeof row.id !== "string" || typeof row.displayName !== "string") continue;
+    if (!rootFolderIds.has(row.id)) continue;
+    if (normalizeMailFolderDisplayName(row.displayName) === target) return f as Record<string, unknown>;
+  }
+  return null;
+}
+
+function graphErrorCodeFromThrownMessage(msg: string): string | undefined {
+  const m = msg.match(/"code"\s*:\s*"([^"]+)"/);
+  return m?.[1];
+}
+
+async function refreshTokenIfNeeded(supabaseAdmin: any, userId: string, tokenRow: any) {
+  const expiresAt = new Date(tokenRow.expires_at);
+  // Refresh 5 min before expiry
+  if (expiresAt.getTime() - Date.now() > 5 * 60 * 1000) {
+    return tokenRow.access_token;
+  }
+
+  const clientId = Deno.env.get("MICROSOFT_CLIENT_ID")!.trim();
+  const clientSecret = Deno.env.get("MICROSOFT_CLIENT_SECRET")!.trim();
+  const tenantId = Deno.env.get("MICROSOFT_TENANT_ID")!.trim();
+
+  const res = await fetch(
+    `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: tokenRow.refresh_token,
+        grant_type: "refresh_token",
+      }),
+    }
+  );
+
+  const data = await res.json();
+  if (!res.ok) throwMicrosoftOAuthError(data, "Token refresh failed");
+
+  const newExpiresAt = new Date(Date.now() + data.expires_in * 1000).toISOString();
+
+  await supabaseAdmin
+    .from("microsoft_tokens")
+    .update({
+      access_token: data.access_token,
+      refresh_token: data.refresh_token || tokenRow.refresh_token,
+      expires_at: newExpiresAt,
+    })
+    .eq("user_id", userId);
+
+  return data.access_token;
+}
+
+/** Descarga metadatos + bytes del adjunto (fileAttachment) vía Graph /$value. */
+async function loadMessageFileAttachmentFromGraph(
+  accessToken: string,
+  rawMessageId: string | undefined,
+  rawAttachmentId: string | undefined,
+): Promise<{
+  body: Uint8Array;
+  contentType: string;
+  name: string;
+  size?: unknown;
+  isInline?: unknown;
+  contentId?: unknown;
+}> {
+  const messageId = normalizeGraphMessageOrAttachmentId(rawMessageId);
+  const attachmentId = normalizeGraphMessageOrAttachmentId(rawAttachmentId);
+  if (!messageId || !attachmentId) {
+    throw new Error("messageId y attachmentId son requeridos");
+  }
+  // No incluir contentId ni @odata.type en $select: Graph devuelve 400 (OData).
+  const metaPath =
+    `/me/messages/${messageId}/attachments/${attachmentId}?$select=id,name,contentType,size,isInline`;
+  const att = await graphRequest(accessToken, metaPath, {
+    headers: GRAPH_MAIL_PREFER_IMMUTABLE,
+  });
+  const odataType = (att as Record<string, unknown>)["@odata.type"] as string | undefined;
+  if (odataType && String(odataType).includes("itemAttachment")) {
+    throw new Error("Este tipo de adjunto no se puede previsualizar");
+  }
+  if (odataType && String(odataType).includes("referenceAttachment")) {
+    throw new Error("Este tipo de adjunto no se puede previsualizar");
+  }
+
+  let contentType = String((att as Record<string, unknown>).contentType || "application/octet-stream");
+
+  const valuePath = `/me/messages/${messageId}/attachments/${attachmentId}/$value`;
+  const valueRes = await graphMailFetchWithRetry(accessToken, valuePath, {
+    headers: {
+      Accept: "application/octet-stream",
+      ...GRAPH_MAIL_PREFER_IMMUTABLE,
+    },
+  });
+  const buf = new Uint8Array(await valueRes.arrayBuffer());
+  const hdr = valueRes.headers.get("content-type");
+  if (hdr) {
+    const main = hdr.split(";")[0].trim().toLowerCase();
+    if (main && main !== "application/octet-stream") {
+      contentType = hdr.split(";")[0].trim();
+    }
+  }
+
+  return {
+    body: buf,
+    contentType,
+    name: String((att as Record<string, unknown>).name ?? "adjunto"),
+    size: (att as Record<string, unknown>).size,
+    isInline: (att as Record<string, unknown>).isInline,
+    contentId: (att as Record<string, unknown>).contentId,
+  };
+}
+
+/** Lee como máximo `max` bytes y cancela el stream (evita bajar el PDF entero en el primer trozo). */
+async function readFirstBytesFromStream(body: ReadableStream<Uint8Array>, max: number): Promise<Uint8Array> {
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let got = 0;
+  try {
+    while (got < max) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      const v = value;
+      if (got + v.length <= max) {
+        chunks.push(v);
+        got += v.length;
+      } else {
+        chunks.push(v.subarray(0, max - got));
+        got = max;
+        break;
+      }
+    }
+  } finally {
+    try {
+      await reader.cancel();
+    } catch {
+      /* ignore */
+    }
+  }
+  const out = new Uint8Array(got);
+  let o = 0;
+  for (const c of chunks) {
+    out.set(c, o);
+    o += c.length;
+  }
+  return out;
+}
+
+/**
+ * Sincroniza la foto de Microsoft para `targetUserId` usando un access token ya válido.
+ * Retorna el mismo shape que la acción sync-profile-photo. Usado tanto por la acción
+ * individual como por el backfill masivo de una organización.
+ */
+async function syncProfilePhotoFor(
+  supabaseAdmin: any,
+  targetUserId: string,
+  accessToken: string,
+): Promise<
+  | { code: "NO_PHOTO" }
+  | { url: string; source: "microsoft"; contentType: string }
+> {
+  let photoRes: Response;
+  try {
+    photoRes = await graphMailFetchWithRetry(accessToken, "/me/photo/$value", {
+      headers: { Accept: "image/*" },
+    });
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    const lower = m.toLowerCase();
+    if (
+      /\[404\]/.test(m) ||
+      lower.includes("imagenotfound") ||
+      lower.includes("resourcenotfound") ||
+      lower.includes("itemnotfound")
+    ) {
+      return { code: "NO_PHOTO" };
+    }
+    throw e;
+  }
+
+  const contentType = photoRes.headers.get("content-type") || "image/jpeg";
+  const bytes = new Uint8Array(await photoRes.arrayBuffer());
+  if (bytes.length === 0) return { code: "NO_PHOTO" };
+
+  const ext = contentType.toLowerCase().includes("png")
+    ? "png"
+    : contentType.toLowerCase().includes("gif")
+      ? "gif"
+      : "jpg";
+  const path = `${targetUserId}/microsoft.${ext}`;
+
+  const { error: upErr } = await supabaseAdmin.storage
+    .from("avatars")
+    .upload(path, bytes, {
+      contentType,
+      upsert: true,
+      cacheControl: "3600",
+    });
+  if (upErr) {
+    throw new Error(`Avatar upload failed: ${upErr.message || String(upErr)}`);
+  }
+
+  const { data: pub } = supabaseAdmin.storage.from("avatars").getPublicUrl(path);
+  const url = `${pub.publicUrl}?v=${Date.now()}`;
+
+  const { error: profileErr } = await supabaseAdmin
+    .from("profiles")
+    .update({ avatar_url: url })
+    .eq("user_id", targetUserId);
+  if (profileErr) {
+    throw new Error(`Profile update failed: ${profileErr.message || String(profileErr)}`);
+  }
+
+  return { url, source: "microsoft", contentType };
+}
+
+/**
+ * Firma en “Nuevo correo”: Microsoft Graph no expone el HTML de firma de Outlook/OWA de forma oficial.
+ * Orden aplicado en get-email-signature-html: 1) columna Kawiil (profiles) 2) inferencia Enviados 3) /me
+ */
+function stripQuotedThreadFromBodyHtml(html: string): string {
+  if (!html || html.length < 24) return html;
+  const lower = html.toLowerCase();
+  const markers = [
+    'id="divrplyfwdmsg"',
+    "id='divrplyfwdmsg'",
+    "id=\"divrplyfwdmsg\"",
+    "-----original message-----",
+    "-----mensaje original-----",
+    'class="gmail_quote"',
+    "class='gmail_quote'",
+  ];
+  let cut = html.length;
+  for (const m of markers) {
+    const idx = lower.indexOf(m);
+    if (idx >= 0 && idx < cut) cut = idx;
+  }
+  return cut < html.length && cut > 12 ? html.slice(0, cut) : html;
+}
+
+/** Limpia un fragmento de HTML de firma para que sea seguro para TipTap. */
+function sanitizeSignatureFragment(raw: string): string {
+  if (!raw) return "";
+  let s = raw;
+  s = s.replace(/<\?xml[^>]*\?>/gi, "");
+  s = s.replace(/<!DOCTYPE[^>]*>/gi, "");
+  s = s.replace(/<!--\[if[^\]]*\]>[\s\S]*?<!\[endif\]-->/gi, "");
+  s = s.replace(/<!--[\s\S]*?-->/g, "");
+  s = s.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "");
+  s = s.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "");
+  s = s.replace(/<title[^>]*>[\s\S]*?<\/title>/gi, "");
+  s = s.replace(/<xml[^>]*>[\s\S]*?<\/xml>/gi, "");
+  s = s.replace(/<[a-z]+:[a-z][^>]*\/>/gi, "");
+  s = s.replace(/<([a-z]+:[a-z][^>]*)>([\s\S]*?)<\/[a-z]+:[a-z]+>/gi, "$2");
+  s = s.replace(/<\/?[a-z]+:[^>]*>/gi, "");
+  s = s.replace(/<\/?html[^>]*>/gi, "");
+  s = s.replace(/<head[^>]*>[\s\S]*?<\/head>/gi, "");
+  s = s.replace(/<\/?body[^>]*>/gi, "");
+  s = s.replace(/<meta[^>]*\/?>/gi, "");
+  s = s.replace(/<link[^>]*\/?>/gi, "");
+  s = s.replace(/<base[^>]*\/?>/gi, "");
+  s = s.replace(/<br\s*\/?>/gi, "<br>");
+  s = s.trim();
+  // If the slice starts mid-attribute (e.g. "rection:ltr;...>"), skip to the first valid tag.
+  if (s && !s.startsWith("<")) {
+    const firstTag = s.indexOf("<");
+    if (firstTag !== -1) s = s.slice(firstTag);
+    else return "";
+  }
+  return s.trim();
+}
+
+function inferSignatureFromSentBodies(
+  contents: string[],
+): { html: string; confidence: "high" | "low" } | null {
+  if (contents.length < 2) return null;
+  const stripped = contents.map(stripQuotedThreadFromBodyHtml);
+  const tails = stripped.map((s) => s.slice(-Math.min(5000, Math.max(0, s.length))));
+  for (let len = 2000; len >= 120; len -= 40) {
+    for (const t of tails) {
+      if (t.length < len) continue;
+      const end = t.slice(-len);
+      if (end.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").trim().length < 28) continue;
+      const n = tails.filter((x) => x.endsWith(end)).length;
+      if (n >= 2) {
+        const hasContact = /mailto:|@[a-z0-9.\-]+\.[a-z]{2,}/i.test(end);
+        const rawHtml = end.trim().startsWith("<") ? end.trim() : `<p>${end.trim()}</p>`;
+        const html = sanitizeSignatureFragment(rawHtml);
+        if (!html) continue; // skip if sanitation removed everything
+        return { html, confidence: hasContact ? "high" : "low" };
+      }
+    }
+  }
+  return null;
+}
+
+async function fetchRecentSentMessageBodies(
+  accessToken: string,
+  max: number,
+): Promise<string[]> {
+  const path =
+    `/me/mailFolders/sentitems/messages?` +
+    `$top=${max}` +
+    `&$orderby=createdDateTime%20desc` +
+    `&$select=body,subject`;
+  let data: { value?: Array<{ body?: { content?: string; contentType?: string } }> };
+  try {
+    data = (await graphRequest(accessToken, path, {
+      headers: GRAPH_MAIL_PREFER_IMMUTABLE,
+    })) as { value?: Array<{ body?: { content?: string; contentType?: string } }> };
+  } catch {
+    return [];
+  }
+  const out: string[] = [];
+  for (const m of data.value || []) {
+    const ct = String(m?.body?.contentType || "").toLowerCase();
+    const c = m?.body?.content;
+    if (typeof c !== "string" || c.length < 40) continue;
+    if (ct.includes("text") && !ct.includes("html")) continue;
+    out.push(c);
+  }
+  return out;
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    // Auth check
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
+    }
+
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    const token = authHeader.replace("Bearer ", "");
+    const { data: claims, error: claimsError } = await supabase.auth.getClaims(token);
+    if (claimsError || !claims?.claims) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
+    }
+    const userId = claims.claims.sub;
+
+    // Get tokens using service role
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    const body = await req.json();
+    const { action, params } = body;
+
+    /**
+     * Backfill masivo de fotos de la organización del invocador. No requiere
+     * que el admin tenga Microsoft conectado: sólo permisos admin/manager.
+     * Recorre todos los usuarios de la org con `microsoft_tokens` y sincroniza
+     * su foto (refresca token si hace falta). No aborta ante errores puntuales.
+     */
+    if (action === "backfill-org-photos") {
+      const { data: isAdmin } = await supabaseAdmin.rpc("is_admin_or_manager", { _user_id: userId });
+      if (!isAdmin) {
+        return new Response(JSON.stringify({ error: "Forbidden" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { data: orgId } = await supabaseAdmin.rpc("get_user_org_id", { _user_id: userId });
+      if (!orgId) {
+        return new Response(JSON.stringify({ error: "Organización no encontrada" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { data: orgProfiles, error: profErr } = await supabaseAdmin
+        .from("profiles")
+        .select("user_id")
+        .eq("organization_id", orgId);
+      if (profErr) {
+        throw new Error(`No se pudieron listar perfiles: ${profErr.message}`);
+      }
+      const orgUserIds = new Set((orgProfiles ?? []).map((p: any) => p.user_id));
+
+      const { data: tokenRows, error: tokensErr } = await supabaseAdmin
+        .from("microsoft_tokens")
+        .select("*");
+      if (tokensErr) {
+        throw new Error(`No se pudieron listar tokens: ${tokensErr.message}`);
+      }
+      const targets = (tokenRows ?? []).filter((r: any) => orgUserIds.has(r.user_id));
+
+      const report = {
+        total: targets.length,
+        synced: 0,
+        no_photo: 0,
+        failed: 0,
+        errors: [] as { user_id: string; error: string }[],
+      };
+
+      for (const row of targets) {
+        try {
+          const at = await refreshTokenIfNeeded(supabaseAdmin, row.user_id, row);
+          const res = await syncProfilePhotoFor(supabaseAdmin, row.user_id, at);
+          if ("code" in res && res.code === "NO_PHOTO") report.no_photo += 1;
+          else report.synced += 1;
+        } catch (e) {
+          report.failed += 1;
+          report.errors.push({
+            user_id: row.user_id,
+            error: e instanceof Error ? e.message : String(e),
+          });
+        }
+      }
+
+      return new Response(JSON.stringify(report), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const { data: tokenRow, error: tokenError } = await supabaseAdmin
+      .from("microsoft_tokens")
+      .select("*")
+      .eq("user_id", userId)
+      .single();
+
+    if (tokenError || !tokenRow) {
+      return new Response(JSON.stringify({ error: "Microsoft not connected", code: "NOT_CONNECTED" }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const accessToken = await refreshTokenIfNeeded(supabaseAdmin, userId, tokenRow);
+
+    let result;
+
+    switch (action) {
+      case "calendars": {
+        // Lista los calendarios disponibles dentro de la cuenta M365 conectada
+        // (calendario principal, calendarios adicionales y compartidos).
+        const res = await graphMailFetchWithRetry(
+          accessToken,
+          `/me/calendars?$select=id,name,color,hexColor,isDefaultCalendar,canEdit,owner&$top=100`,
+          {},
+        );
+        result = await res.json();
+        break;
+      }
+
+      case "calendar-events": {
+        const start = params?.start || new Date().toISOString();
+        const end = params?.end || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+        const qs = `startDateTime=${start}&endDateTime=${end}&$orderby=start/dateTime&$top=100`;
+        const prefHeaders = { headers: { Prefer: 'outlook.timezone="America/Mexico_City"' } };
+
+        // Si el frontend pide calendarios específicos, consultamos cada uno y
+        // fusionamos, etiquetando cada evento con su calendario de origen.
+        const calendarIds: string[] = Array.isArray(params?.calendarIds)
+          ? params.calendarIds.filter((id: unknown) => typeof id === "string" && id.length > 0)
+          : [];
+
+        if (calendarIds.length > 0) {
+          const perCalendar = await Promise.all(
+            calendarIds.map(async (calId: string) => {
+              try {
+                const r = await graphMailFetchWithRetry(
+                  accessToken,
+                  `/me/calendars/${encodeURIComponent(calId)}/calendarView?${qs}`,
+                  prefHeaders,
+                );
+                const json = await r.json();
+                const items = Array.isArray(json?.value) ? json.value : [];
+                return items.map((ev: Record<string, unknown>) => ({ ...ev, calendarId: calId }));
+              } catch (_) {
+                return [];
+              }
+            }),
+          );
+          const merged = perCalendar.flat();
+          merged.sort((a: any, b: any) => {
+            const sa = a?.start?.dateTime || a?.start?.date || "";
+            const sb = b?.start?.dateTime || b?.start?.date || "";
+            return String(sa).localeCompare(String(sb));
+          });
+          result = { value: merged };
+          break;
+        }
+
+        const res = await graphMailFetchWithRetry(
+          accessToken,
+          `/me/calendarview?${qs}`,
+          prefHeaders,
+        );
+        result = await res.json();
+        break;
+      }
+
+      case "create-event": {
+        const rawEventPayload = params?.event ?? {};
+
+        // Normalización defensiva contra ErrorPropertyValidationFailure
+        const normalizeEventPayload = (ev: Record<string, any>): Record<string, any> => {
+          const out: Record<string, any> = { ...ev };
+
+          // 1. body.contentType: Graph espera "text" | "html" (normalizamos a minúsculas)
+          if (out.body && typeof out.body === "object") {
+            const ct = String(out.body.contentType || "").toLowerCase();
+            out.body = {
+              ...out.body,
+              contentType: ct === "html" ? "html" : "text",
+            };
+            if (!out.body.content || String(out.body.content).trim() === "") {
+              delete out.body;
+            }
+          }
+
+          // 2. subject debe ser string
+          if (out.subject != null) out.subject = String(out.subject);
+
+          // 3. attendees: filtrar entradas vacías/mal formadas
+          if (Array.isArray(out.attendees)) {
+            out.attendees = out.attendees
+              .map((a: any) => {
+                const address = String(a?.emailAddress?.address || "").trim();
+                if (!address) return null;
+                return {
+                  emailAddress: {
+                    address,
+                    ...(a?.emailAddress?.name ? { name: String(a.emailAddress.name) } : {}),
+                  },
+                  type: a?.type || "required",
+                };
+              })
+              .filter(Boolean);
+            if (out.attendees.length === 0) delete out.attendees;
+          }
+
+          // 4. categories: solo strings no vacíos
+          if (Array.isArray(out.categories)) {
+            out.categories = out.categories
+              .map((c: any) => (typeof c === "string" ? c.trim() : ""))
+              .filter(Boolean);
+            if (out.categories.length === 0) delete out.categories;
+          }
+
+          // 5. location: asegurar que sólo lleve displayName si es objeto
+          if (out.location && typeof out.location === "object") {
+            const dn = String(out.location.displayName || "").trim();
+            if (!dn) {
+              delete out.location;
+            } else {
+              out.location = { displayName: dn };
+            }
+          }
+
+          // 6. onlineMeetingProvider sólo si isOnlineMeeting
+          if (!out.isOnlineMeeting) {
+            delete out.onlineMeetingProvider;
+            delete out.onlineMeeting;
+            delete out.isOnlineMeeting;
+          }
+
+          // 7. Asegurar que start/end tengan timeZone (si no, defaulteamos a UTC)
+          if (out.start && typeof out.start === "object" && !out.start.timeZone) {
+            out.start = { ...out.start, timeZone: "UTC" };
+          }
+          if (out.end && typeof out.end === "object" && !out.end.timeZone) {
+            out.end = { ...out.end, timeZone: "UTC" };
+          }
+
+          return out;
+        };
+
+        const eventPayload = normalizeEventPayload(rawEventPayload);
+        const hasOnlineMeeting = !!eventPayload?.isOnlineMeeting;
+
+        // Validate start < end before hitting Graph (saves a round-trip and gives a clearer error)
+        const startDt = eventPayload.start?.dateTime as string | undefined;
+        const endDt = eventPayload.end?.dateTime as string | undefined;
+        if (startDt && endDt && endDt <= startDt) {
+          result = {
+            error: `La hora de fin (${endDt.slice(11, 16)}) debe ser después de la hora de inicio (${startDt.slice(11, 16)}). Si pusiste "12:00 a.m." asegúrate de seleccionar "p.m." para mediodía.`,
+          };
+          break;
+        }
+
+        const tryCreate = async (payload: Record<string, any>): Promise<Response> =>
+          graphMailFetchWithRetry(accessToken, `/me/events`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+
+        try {
+          const res = await tryCreate(eventPayload);
+          result = await res.json();
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          const isValidationFailure =
+            /\[400\]/.test(msg) &&
+            (msg.includes("ErrorPropertyValidationFailure") ||
+              msg.toLowerCase().includes("at least one property failed validation") ||
+              msg.toLowerCase().includes("onlinemeeting"));
+
+          console.error("[microsoft-api] create-event failed", {
+            graphError: msg,
+            payloadKeys: Object.keys(eventPayload),
+            payload: eventPayload,
+          });
+
+          if (!isValidationFailure) throw err;
+
+          // Fallback progresivo: eliminar campos uno por uno para aislar el problema.
+          // Orden: primero online meeting (si existía), luego campos opcionales,
+          // finalmente dejar sólo lo esencial (subject, start, end).
+          const attempts: Array<{ label: string; payload: Record<string, any> }> = [];
+
+          if (hasOnlineMeeting) {
+            const p = { ...eventPayload };
+            delete p.isOnlineMeeting;
+            delete p.onlineMeetingProvider;
+            delete p.onlineMeeting;
+            attempts.push({ label: "without-online-meeting", payload: p });
+          }
+          {
+            const p = { ...eventPayload };
+            delete p.isOnlineMeeting;
+            delete p.onlineMeetingProvider;
+            delete p.onlineMeeting;
+            delete p.attendees;
+            attempts.push({ label: "without-attendees-and-online", payload: p });
+          }
+          {
+            const p = { ...eventPayload };
+            delete p.isOnlineMeeting;
+            delete p.onlineMeetingProvider;
+            delete p.onlineMeeting;
+            delete p.attendees;
+            delete p.categories;
+            attempts.push({ label: "without-attendees-categories-online", payload: p });
+          }
+          {
+            const p: Record<string, any> = {
+              subject: eventPayload.subject || "(sin título)",
+              start: eventPayload.start,
+              end: eventPayload.end,
+            };
+            if (eventPayload.isAllDay) p.isAllDay = true;
+            attempts.push({ label: "minimal", payload: p });
+          }
+
+          let recovered: any = null;
+          let recoveredLabel: string | null = null;
+          let lastFallbackError = msg;
+          for (const attempt of attempts) {
+            try {
+              console.warn(
+                `[microsoft-api] retrying create-event with fallback: ${attempt.label}`,
+                { payloadKeys: Object.keys(attempt.payload) },
+              );
+              const retryRes = await tryCreate(attempt.payload);
+              recovered = await retryRes.json();
+              recoveredLabel = attempt.label;
+              break;
+            } catch (e) {
+              lastFallbackError = e instanceof Error ? e.message : String(e);
+              console.warn(
+                `[microsoft-api] fallback ${attempt.label} also failed`,
+                { error: lastFallbackError },
+              );
+            }
+          }
+
+          if (!recovered) {
+            // Ningún fallback funcionó: lanzamos error con diagnóstico útil.
+            throw new Error(
+              `Microsoft rechazó el evento. Error de Graph: ${msg}. Último intento (${attempts[attempts.length - 1]?.label}): ${lastFallbackError}`,
+            );
+          }
+
+          result = {
+            ...recovered,
+            fallbackApplied: recoveredLabel,
+            originalGraphError: msg,
+            ...(recoveredLabel?.includes("online") ? { onlineMeetingFallback: true, onlineMeetingFallbackReason: msg } : {}),
+          };
+        }
+        break;
+      }
+
+      case "delete-event": {
+        await graphMailFetchWithRetry(accessToken, `/me/events/${params.eventId}`, {
+          method: "DELETE",
+          headers: {},
+        });
+        result = { success: true };
+        break;
+      }
+
+      case "event-detail": {
+        const res = await graphMailFetchWithRetry(accessToken, `/me/events/${params.eventId}`, {
+          headers: {
+            Prefer: 'outlook.timezone="America/Mexico_City"',
+          },
+        });
+        result = await res.json();
+        break;
+      }
+
+      case "update-event": {
+        const encodedEventId = encodeURIComponent(params.eventId);
+
+        // Snapshot previo para fallback en ocurrencias recurrentes
+        let beforeEvent: any = null;
+        try {
+          const beforeRes = await graphMailFetchWithRetry(accessToken, `/me/events/${encodedEventId}`, {
+            headers: {},
+          });
+          beforeEvent = await beforeRes.json();
+        } catch (be) {
+          const bm = be instanceof Error ? be.message : String(be);
+          if (!/\[404\]/.test(bm) && !bm.toLowerCase().includes("erroritemnotfound")) throw be;
+        }
+
+        const res = await graphMailFetchWithRetry(accessToken, `/me/events/${encodedEventId}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Prefer: 'outlook.timezone="America/Mexico_City", return=representation',
+          },
+          body: JSON.stringify(params.payload),
+        });
+
+        const patchText = await res.text();
+        const patchEvent: any = patchText ? JSON.parse(patchText) : null;
+
+        // Verifica estado persistido (no confiar solo en respuesta del PATCH)
+        let persistedEvent: any = null;
+        try {
+          const verifyRes = await graphMailFetchWithRetry(accessToken, `/me/events/${encodedEventId}`, {
+            headers: {},
+          });
+          persistedEvent = await verifyRes.json();
+        } catch (ve) {
+          const vm = ve instanceof Error ? ve.message : String(ve);
+          if (!/\[404\]/.test(vm) && !vm.toLowerCase().includes("erroritemnotfound")) throw ve;
+        }
+        const verifyOk = persistedEvent != null;
+
+        const desiredStart = params?.payload?.start?.dateTime as string | undefined;
+        const desiredEnd = params?.payload?.end?.dateTime as string | undefined;
+        const appliedStart = persistedEvent?.start?.dateTime as string | undefined;
+        const appliedEnd = persistedEvent?.end?.dateTime as string | undefined;
+
+        // Si el evento ya no existe por ese ID, asumimos que Graph lo convirtió/reidentificó y sí aplicó
+        const updateApplied = !verifyOk
+          ? true
+          : (!desiredStart || (appliedStart && appliedStart.startsWith(desiredStart))) &&
+            (!desiredEnd || (appliedEnd && appliedEnd.startsWith(desiredEnd)));
+
+        // Fallback para ocurrencias que no aceptan PATCH directo: clonar en nuevo horario y eliminar ocurrencia original
+        if (!updateApplied && beforeEvent?.type === "occurrence") {
+          const clonePayload: Record<string, any> = {
+            subject: beforeEvent.subject,
+            start: params?.payload?.start || beforeEvent.start,
+            end: params?.payload?.end || beforeEvent.end,
+            body: beforeEvent.body,
+            attendees: beforeEvent.attendees,
+            categories: beforeEvent.categories,
+            isOnlineMeeting: !!beforeEvent.isOnlineMeeting,
+            onlineMeetingProvider: beforeEvent.isOnlineMeeting ? "teamsForBusiness" : undefined,
+            location: beforeEvent?.location?.displayName
+              ? { displayName: beforeEvent.location.displayName }
+              : undefined,
+          };
+
+          const createRes = await graphMailFetchWithRetry(accessToken, `/me/events`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(clonePayload),
+          });
+
+          const createdEvent = await createRes.json();
+
+          try {
+            await graphMailFetchWithRetry(accessToken, `/me/events/${encodedEventId}`, {
+              method: "DELETE",
+              headers: {},
+            });
+          } catch {
+            /* ignorar si la ocurrencia ya no existe */
+          }
+
+          result = {
+            ...createdEvent,
+            migratedFromOccurrence: true,
+            previousEventId: params.eventId,
+          };
+        } else {
+          result = persistedEvent || patchEvent || { success: true };
+        }
+
+        break;
+      }
+
+      case "respond-event": {
+        // RSVP a una invitación: aceptar / rechazar / tentativo desde el calendario.
+        const encodedEventId = encodeURIComponent(params.eventId);
+        const responseType = String(params?.response || "").trim();
+        const allowed: Record<string, string> = {
+          accept: "accept",
+          decline: "decline",
+          tentative: "tentativelyAccept",
+          tentativelyAccept: "tentativelyAccept",
+        };
+        const action = allowed[responseType];
+        if (!action) throw new Error("response must be accept, decline or tentative");
+
+        const body: Record<string, any> = {
+          sendResponse: params?.sendResponse !== false,
+        };
+        if (typeof params?.comment === "string" && params.comment.trim()) {
+          body.comment = params.comment.trim();
+        }
+
+        await graphMailFetchWithRetry(accessToken, `/me/events/${encodedEventId}/${action}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+
+        // Graph responde 202 sin cuerpo; devolvemos el estado ya persistido.
+        let persistedEvent: any = null;
+        try {
+          const verifyRes = await graphMailFetchWithRetry(accessToken, `/me/events/${encodedEventId}`, {
+            headers: { Prefer: 'outlook.timezone="America/Mexico_City"' },
+          });
+          persistedEvent = await verifyRes.json();
+        } catch (ve) {
+          const vm = ve instanceof Error ? ve.message : String(ve);
+          if (!/\[404\]/.test(vm) && !vm.toLowerCase().includes("erroritemnotfound")) throw ve;
+        }
+
+        result = persistedEvent || {
+          success: true,
+          responseStatus: { response: action === "tentativelyAccept" ? "tentativelyAccepted" : `${action}ed` },
+        };
+        break;
+      }
+
+      case "outlook-categories": {
+        const res = await graphMailFetchWithRetry(accessToken, `/me/outlook/masterCategories`, {
+          headers: {},
+        });
+        const json = await res.json();
+        result = json.value || [];
+        break;
+      }
+
+      case "create-outlook-category": {
+        const displayName = String(params?.displayName || "").trim();
+        if (!displayName) throw new Error("displayName required");
+        // Graph exige un color preset (preset0..preset24). Si el cliente no manda uno
+        // válido, derivamos uno estable del nombre.
+        let h = 0;
+        for (let i = 0; i < displayName.length; i++) h = (h * 31 + displayName.charCodeAt(i)) >>> 0;
+        const color = typeof params?.color === "string" && params.color.startsWith("preset")
+          ? params.color
+          : `preset${h % 25}`;
+        const res = await graphMailFetchWithRetry(accessToken, `/me/outlook/masterCategories`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ displayName, color }),
+        });
+        result = await res.json();
+        break;
+      }
+
+      case "delete-outlook-category": {
+        const id = String(params?.id || "").trim();
+        if (!id) throw new Error("id required");
+        await graphMailFetchWithRetry(accessToken, `/me/outlook/masterCategories/${encodeURIComponent(id)}`, {
+          method: "DELETE",
+          headers: {},
+        });
+        result = { success: true };
+        break;
+      }
+
+      case "emails": {
+        /** Continuación oficial de Graph; con $search no se admite $skip en la misma petición. */
+        if (params?.nextLink && typeof params.nextLink === "string") {
+          const link = params.nextLink.trim();
+          if (!link.startsWith("https://graph.microsoft.com/v1.0/")) {
+            throw new Error("nextLink no permitido");
+          }
+          const u = new URL(link);
+          const path = u.pathname.slice("/v1.0".length) + u.search;
+          const q = u.search.toLowerCase();
+          const needsSearchHeader = q.includes("$search") || q.includes("%24search");
+          result = await graphRequest(accessToken, path, {
+            headers: needsSearchHeader ? GRAPH_MAIL_SEARCH_HEADERS : GRAPH_MAIL_PREFER_IMMUTABLE,
+          });
+          break;
+        }
+        const top = params?.top || 25;
+        const skip = params?.skip || 0;
+        const folder = params?.folder || "inbox";
+        // Sin `sensitivity`: el parser de Graph (RequestBroker--ParseUri) la rechaza de forma
+        // intermitente en listados ("Could not find a property named 'sensitivity'"), incluso
+        // sin $filter. El detalle del mensaje sí la trae (esa ruta no falla).
+        const select =
+          "$select=id,subject,bodyPreview,from,toRecipients,receivedDateTime,sentDateTime,createdDateTime,isRead,hasAttachments,importance,conversationId";
+
+        const rawSearch =
+          typeof params?.search === "string" ? params.search.replace(/\s+/g, " ").trim() : "";
+        if (rawSearch) {
+          const forSearch = rawSearch
+            .replace(/[\u0000-\u001f\u007f]/g, " ")
+            .replace(/"/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+          if (!forSearch) {
+            result = { value: [] };
+            break;
+          }
+          // Búsqueda en todo el buzón: los correos (p. ej. Microsoft Forms) a veces no están en la carpeta
+          // visible, y con $search Graph no admite $orderby; combinarlo suele provocar 400.
+          const terms = forSearch.split(" ").filter(Boolean);
+          const runSearch = async (expr: string) =>
+            (await graphRequest(
+              accessToken,
+              `/me/messages?${select}&$top=${top}&$search=${encodeURIComponent(`"${expr}"`)}`,
+              { headers: GRAPH_MAIL_SEARCH_HEADERS },
+            )) as { value?: unknown[]; [k: string]: unknown };
+          // 1) Todos los términos (espacio = AND implícito en KQL): resultado preciso.
+          result = await runSearch(terms.join(" "));
+          // 2) Si no hubo coincidencias y hay varias palabras, ampliamos con OR para no dejar al
+          //    usuario sin resultados cuando un término está escrito distinto (p. ej. el nombre del
+          //    remitente) pero otro sí coincide (el asunto). Graph ordena por relevancia.
+          const andEmpty = !Array.isArray(result?.value) || result.value.length === 0;
+          if (andEmpty && terms.length > 1) {
+            result = await runSearch(terms.join(" OR "));
+          }
+          break;
+        }
+
+        const skipParam = skip > 0 ? `&$skip=${skip}` : "";
+        const filterUnread = params?.filterUnread === true;
+        // Graph exige que la propiedad del $orderby aparezca PRIMERO en el $filter
+        // (si no, responde 400 InefficientFilter). De ahí el receivedDateTime ge trivial.
+        const filterParam = filterUnread
+          ? "&$filter=receivedDateTime ge 1900-01-01T00:00:00Z and isRead eq false"
+          : "";
+        result = await graphRequest(
+          accessToken,
+          `/me/mailFolders/${folder}/messages?${select}&$top=${top}&$orderby=receivedDateTime desc&$count=true${skipParam}${filterParam}`,
+          { headers: GRAPH_MAIL_PREFER_IMMUTABLE },
+        );
+        break;
+      }
+
+      case "mail-directory-sync": {
+        const me = (await graphRequest(accessToken, "/me", {})) as Record<string, unknown>;
+        const selfMail =
+          typeof me.mail === "string" && me.mail.trim()
+            ? me.mail.trim().toLowerCase()
+            : typeof me.userPrincipalName === "string" && me.userPrincipalName.includes("@")
+              ? me.userPrincipalName.trim().toLowerCase()
+              : "";
+        const rawTop = params?.top;
+        const top =
+          typeof rawTop === "number" && Number.isFinite(rawTop)
+            ? Math.min(Math.max(Math.floor(rawTop), 1), 200)
+            : 180;
+        const select =
+          "$select=from,toRecipients,ccRecipients,bccRecipients,receivedDateTime";
+        const page = (await graphRequest(
+          accessToken,
+          `/me/messages?${select}&$top=${top}&$orderby=receivedDateTime desc`,
+          { headers: GRAPH_MAIL_PREFER_IMMUTABLE },
+        )) as { value?: unknown[] };
+        const map = new Map<string, { email: string; displayName: string }>();
+        for (const m of page.value || []) {
+          if (m && typeof m === "object") collectRecipientsFromMessage(m as Record<string, unknown>, map);
+        }
+        if (selfMail) map.delete(selfMail);
+        result = { contacts: Array.from(map.values()) };
+        break;
+      }
+
+      case "mark-unread": {
+        await graphMailFetchWithRetry(accessToken, `/me/messages/${params.messageId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ isRead: false }),
+        });
+        result = { success: true };
+        break;
+      }
+
+      case "archive-email": {
+        const res = await graphMailFetchWithRetry(accessToken, `/me/messages/${params.messageId}/move`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ destinationId: "archive" }),
+        });
+        result = await res.json();
+        break;
+      }
+
+      case "email-detail": {
+        const mid = normalizeGraphMessageOrAttachmentId(params?.messageId);
+        if (!mid) throw new Error("messageId required");
+        result = await graphRequest(accessToken, `/me/messages/${mid}`, {
+          headers: GRAPH_MAIL_PREFER_IMMUTABLE,
+        });
+        break;
+      }
+
+      case "send-email": {
+        await graphMailFetchWithRetry(accessToken, `/me/sendMail`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: params.message }),
+        });
+        result = { success: true };
+        break;
+      }
+
+      case "check-connection": {
+        result = await graphRequest(accessToken, "/me");
+        break;
+      }
+
+      case "reply": {
+        await graphMailFetchWithRetry(accessToken, `/me/messages/${params.messageId}/reply`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ comment: params.comment }),
+        });
+        result = { success: true };
+        break;
+      }
+
+      case "reply-all": {
+        await graphMailFetchWithRetry(accessToken, `/me/messages/${params.messageId}/replyAll`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ comment: params.comment }),
+        });
+        result = { success: true };
+        break;
+      }
+
+      case "mark-read": {
+        await graphRequest(
+          accessToken,
+          `/me/messages/${params.messageId}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ isRead: true }),
+          }
+        );
+        result = { success: true };
+        break;
+      }
+
+      case "create-onedrive-doc": {
+        const docType = params.docType || "docx";
+        const fileName = params.fileName || `Documento.${docType}`;
+        const folderPath = params.folderPath || "Kawiil";
+
+        const getItemByPath = async (path: string) => {
+          try {
+            const res = await graphMailFetchWithRetry(accessToken, `/me/drive/root:/${encodeURI(path)}`, {
+              headers: {},
+            });
+            return await res.json();
+          } catch (e) {
+            const m = e instanceof Error ? e.message : String(e);
+            if (/\[404\]/.test(m)) return null;
+            throw e;
+          }
+        };
+
+        const ensureFolderPathExists = async (path: string) => {
+          const segments = path.split("/").filter(Boolean);
+          let currentPath = "";
+
+          for (const segment of segments) {
+            currentPath = currentPath ? `${currentPath}/${segment}` : segment;
+            const existing = await getItemByPath(currentPath);
+            if (existing) continue;
+
+            const parentPath = currentPath.includes("/")
+              ? currentPath.slice(0, currentPath.lastIndexOf("/"))
+              : "";
+
+            const createPath = parentPath
+              ? `/me/drive/root:/${encodeURI(parentPath)}:/children`
+              : `/me/drive/root/children`;
+
+            try {
+              const createRes = await graphMailFetchWithRetry(accessToken, createPath, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  name: segment,
+                  folder: {},
+                  "@microsoft.graph.conflictBehavior": "fail",
+                }),
+              });
+              await createRes.text();
+            } catch (e) {
+              const m = e instanceof Error ? e.message : String(e);
+              if (!/\[409\]/.test(m)) throw e;
+            }
+          }
+        };
+
+        await ensureFolderPathExists(folderPath);
+
+        const mimeTypes: Record<string, string> = {
+          docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        };
+
+        const putHeaders = { "Content-Type": mimeTypes[docType] || "application/octet-stream" };
+        let putRes: Response;
+        try {
+          putRes = await graphMailFetchWithRetry(
+            accessToken,
+            `/me/drive/root:/${encodeURI(folderPath)}/${encodeURIComponent(fileName)}:/content`,
+            {
+              method: "PUT",
+              headers: putHeaders,
+              body: new Uint8Array(0),
+            },
+          );
+        } catch (e) {
+          const m = e instanceof Error ? e.message : String(e);
+          if (!/\[404\]/.test(m)) throw e;
+          putRes = await graphMailFetchWithRetry(
+            accessToken,
+            `/me/drive/root:/${encodeURIComponent(fileName)}:/content`,
+            {
+              method: "PUT",
+              headers: putHeaders,
+              body: new Uint8Array(0),
+            },
+          );
+        }
+
+        const createdFile = await putRes.json();
+        result = {
+          success: true,
+          id: createdFile.id,
+          name: createdFile.name,
+          webUrl: createdFile.webUrl,
+          parentPath: createdFile.parentReference?.path,
+        };
+        break;
+      }
+
+      case "forward": {
+        await graphMailFetchWithRetry(accessToken, `/me/messages/${params.messageId}/forward`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            comment: params.comment,
+            toRecipients: params.toRecipients,
+          }),
+        });
+        result = { success: true };
+        break;
+      }
+
+      case "inbox-folder-meta": {
+        result = await graphRequest(
+          accessToken,
+          "/me/mailFolders/inbox?$select=id,unreadItemCount,totalItemCount"
+        );
+        break;
+      }
+
+      case "mail-folders": {
+        // Fetch root folders first (with $select so we get wellKnownFolderName + childFolderCount).
+        const rootFolders = await listMailFoldersRootOnlyLegacy(accessToken) as Record<string, unknown>[];
+        console.log(`[microsoft-api] mail-folders: root=${rootFolders.length}`);
+
+        // Fetch children for every root folder that declares children, plus always inbox.
+        // This handles users (like vturcott) whose custom folders live inside inbox or any other
+        // root folder. We cap at 20 parent fetches to avoid timeouts.
+        const childrenByParent = new Map<string, unknown[]>();
+
+        /** Fetch all child folders for a given parent ID with two strategies (hidden / plain). */
+        async function fetchChildFolders(parentId: string): Promise<unknown[]> {
+          const strategies = [
+            `/me/mailFolders/${encodeURIComponent(parentId)}/childFolders?$select=${MAIL_FOLDER_LIST_SELECT}&$top=1000&includeHiddenFolders=true`,
+            `/me/mailFolders/${encodeURIComponent(parentId)}/childFolders?$select=${MAIL_FOLDER_LIST_SELECT}&$top=1000`,
+          ];
+          for (const firstPath of strategies) {
+            try {
+              const fetched: unknown[] = [];
+              let path: string | null = firstPath;
+              for (let page = 0; page < 10 && path; page++) {
+                const data = (await graphRequest(accessToken, path)) as {
+                  value?: unknown[];
+                  "@odata.nextLink"?: string;
+                };
+                if (Array.isArray(data?.value)) for (const v of data.value) fetched.push(v);
+                const nl = data?.["@odata.nextLink"];
+                path = typeof nl === "string" && nl ? nextLinkToPath(nl) : null;
+              }
+              return fetched;
+            } catch (e) {
+              console.warn(`[microsoft-api] mail-folders: childFolders(${parentId}) strategy failed`, String(e).slice(0, 200));
+            }
+          }
+          return [];
+        }
+
+        // System well-known folder names that we never need to expand — their children
+        // (if any) are not custom user folders and would clutter the sidebar.
+        const SYSTEM_WELL_KNOWN = new Set([
+          "deleteditems", "sentitems", "junkemail", "outbox", "drafts",
+          "archive", "msgfolderroot", "recoverableitemsdeletions",
+          "conversationhistory", "scheduled",
+        ]);
+
+        // Identify which root folders to fetch children for.
+        // Always include inbox (by wellKnownFolderName or alias), plus any non-system folder
+        // that declares children. Skip system folders to avoid noise.
+        const inboxFolder = rootFolders.find(
+          (f) => String(f.wellKnownFolderName || "").toLowerCase() === "inbox"
+        );
+
+        const parentIdsToFetch = new Set<string>();
+
+        // Add inbox by actual ID (preferred) or fall back to well-known alias.
+        if (inboxFolder?.id && typeof inboxFolder.id === "string") {
+          parentIdsToFetch.add(inboxFolder.id);
+        } else {
+          // Alias fallback — treated as a special marker below.
+          parentIdsToFetch.add("__inbox_alias__");
+        }
+
+        // Add non-system root folders that have children.
+        for (const f of rootFolders) {
+          const id = typeof f.id === "string" ? f.id : null;
+          if (!id) continue;
+          const wk = String(f.wellKnownFolderName || "").toLowerCase();
+          if (wk && SYSTEM_WELL_KNOWN.has(wk)) continue; // skip system folders
+          const cc = typeof f.childFolderCount === "number" ? f.childFolderCount : -1;
+          if (cc !== 0) parentIdsToFetch.add(id);
+        }
+
+        let parentFetchCount = 0;
+        for (const parentId of parentIdsToFetch) {
+          if (parentFetchCount >= 20) break;
+          parentFetchCount++;
+          const resolvedId = parentId === "__inbox_alias__" ? "inbox" : parentId;
+          const children = await fetchChildFolders(resolvedId);
+          if (children.length > 0) {
+            childrenByParent.set(resolvedId, children);
+            console.log(`[microsoft-api] mail-folders: children(${resolvedId})=${children.length}`);
+          }
+        }
+
+        const allChildren = Array.from(childrenByParent.values()).flat();
+        console.log(`[microsoft-api] mail-folders: total children=${allChildren.length}`);
+        result = { folders: [...rootFolders, ...allChildren] };
+        break;
+      }
+
+      case "child-folders": {
+        const parentId = params?.parentId;
+        if (!parentId || typeof parentId !== "string") {
+          return new Response(JSON.stringify({ error: "parentId is required" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        const all: unknown[] = [];
+        let path = `/me/mailFolders/${encodeURIComponent(parentId)}/childFolders?$select=${MAIL_FOLDER_LIST_SELECT}&$top=1000`;
+        const maxPages = 10;
+        for (let page = 0; page < maxPages; page++) {
+          const data = (await graphRequest(accessToken, path)) as {
+            value?: unknown[];
+            "@odata.nextLink"?: string;
+          };
+          if (Array.isArray(data?.value)) {
+            for (const v of data.value) all.push(v);
+          }
+          const nl = data?.["@odata.nextLink"];
+          if (typeof nl !== "string" || !nl) break;
+          const next = nextLinkToPath(nl);
+          if (!next) break;
+          path = next;
+        }
+        result = { folders: all };
+        break;
+      }
+
+      case "email-conversation": {
+        const convId = params?.conversationId;
+        if (!convId) throw new Error("conversationId required");
+        const odataSafe = String(convId).replace(/'/g, "''");
+        const convSelect =
+          "$select=id,conversationId,subject,bodyPreview,body,from,receivedDateTime,sentDateTime,createdDateTime,isRead,hasAttachments";
+        const filter = encodeURIComponent(`conversationId eq '${odataSafe}'`);
+        const data = await graphRequest(
+          accessToken,
+          `/me/messages?${convSelect}&$filter=${filter}&$orderby=receivedDateTime asc&$top=50`,
+          { headers: GRAPH_MAIL_PREFER_IMMUTABLE },
+        );
+        result = data?.value || [];
+        break;
+      }
+
+      case "create-reply-draft": {
+        const messageId = normalizeGraphMessageOrAttachmentId(params?.messageId);
+        if (!messageId) throw new Error("messageId required");
+        const replyAll = params?.replyAll || false;
+        const endpoint = replyAll ? "createReplyAll" : "createReply";
+        try {
+          const res = await graphMailFetchWithRetry(
+            accessToken,
+            `/me/messages/${messageId}/${endpoint}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json", ...GRAPH_MAIL_PREFER_IMMUTABLE },
+              body: JSON.stringify({ comment: "" }),
+            },
+          );
+          result = await res.json();
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          const errBody = msg.replace(/^Microsoft Graph error \[\d+\]: /, "");
+          let graphCode: string | undefined;
+          try {
+            const j = JSON.parse(errBody);
+            graphCode = j?.error?.code;
+          } catch {
+            /* ignore */
+          }
+          /** Algunos mensajes (borradores, carpetas especiales, tipos raros) no admiten createReply en Graph. */
+          const lower = errBody.toLowerCase();
+          const invalidRef =
+            graphCode === "ErrorInvalidReferenceItem" ||
+            graphCode === "ErrorItemNotFound" ||
+            lower.includes("errorinvalidreferenceitem") ||
+            lower.includes("erroritemnotfound");
+          if (invalidRef) {
+            result = {
+              code: "REFERENCE_NOT_SUPPORTED",
+              error:
+                "Este mensaje no admite respuesta con borrador. Puedes escribir y enviar; se usará envío simple.",
+            };
+            break;
+          }
+          throw e;
+        }
+        break;
+      }
+
+      /** Borrador de reenvío (incluye plantilla y firma de Outlook como en el cliente). */
+      case "create-forward-draft": {
+        const messageId = normalizeGraphMessageOrAttachmentId(params?.messageId);
+        if (!messageId) throw new Error("messageId required");
+        const res = await graphMailFetchWithRetry(accessToken, `/me/messages/${messageId}/createForward`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...GRAPH_MAIL_PREFER_IMMUTABLE },
+          body: JSON.stringify({ comment: "" }),
+        });
+        result = await res.json();
+        break;
+      }
+
+      /**
+       * Firma para “Nuevo correo”.
+       * Graph no expone el HTML de firma de Outlook/OWA; orden: Kawiil (DB) → inferida (Enviados) → /me
+       */
+      case "get-email-signature-html": {
+        const escapeHtml = (s: string) =>
+          s
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;");
+
+        const { data: profileRow, error: profileSigErr } = await supabaseAdmin
+          .from("profiles")
+          .select("outlook_signature_html")
+          .eq("user_id", userId)
+          .maybeSingle();
+        if (!profileSigErr && profileRow) {
+          const manual = String((profileRow as { outlook_signature_html?: string }).outlook_signature_html || "")
+            .trim();
+          if (manual) {
+            result = { html: manual, source: "kawiil_profile" };
+            break;
+          }
+        }
+
+        // Nota: se retiró la inferencia de firma a partir de "Enviados": tomaba bloques recurrentes
+        // (p. ej. agendas de reunión) y los inyectaba como firma en cada correo nuevo. Ahora, sin
+        // firma manual, se genera una firma limpia desde el perfil de Microsoft (abajo).
+
+        const me = await graphRequest(
+          accessToken,
+          "/me?$select=displayName,mail,userPrincipalName,jobTitle,mobilePhone,officeLocation",
+        );
+        const displayName = String(me?.displayName || "").trim();
+        const mail = String(me?.mail || me?.userPrincipalName || "").trim();
+        const title = String(me?.jobTitle || "").trim();
+        const phone = String(me?.mobilePhone || "").trim();
+        const office = String(me?.officeLocation || "").trim();
+
+        let fallbackHtml = `<p><br></p><p style="font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#333;">`;
+        if (displayName) fallbackHtml += `<strong>${escapeHtml(displayName)}</strong><br/>`;
+        if (title) fallbackHtml += `${escapeHtml(title)}<br/>`;
+        if (office) fallbackHtml += `${escapeHtml(office)}<br/>`;
+        if (mail) {
+          fallbackHtml += `<a href="mailto:${escapeHtml(mail)}">${escapeHtml(mail)}</a>`;
+        }
+        if (phone) fallbackHtml += `<br/>${escapeHtml(phone)}`;
+        fallbackHtml += `</p>`;
+
+        result = { html: fallbackHtml, source: "microsoft_profile", displayName, mail };
+        break;
+      }
+
+      case "update-draft": {
+        const draftId = normalizeGraphMessageOrAttachmentId(params?.draftId);
+        if (!draftId) throw new Error("draftId required");
+        const payload = params?.payload;
+        await graphRequest(accessToken, `/me/messages/${draftId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", ...GRAPH_MAIL_PREFER_IMMUTABLE },
+          body: JSON.stringify(payload),
+        });
+        result = { success: true };
+        break;
+      }
+
+      case "send-draft": {
+        const draftId = normalizeGraphMessageOrAttachmentId(params?.draftId);
+        if (!draftId) throw new Error("draftId required");
+        await graphMailFetchWithRetry(accessToken, `/me/messages/${draftId}/send`, {
+          method: "POST",
+          headers: { ...GRAPH_MAIL_PREFER_IMMUTABLE },
+        });
+        result = { success: true };
+        break;
+      }
+
+      case "add-draft-attachment": {
+        const draftId = normalizeGraphMessageOrAttachmentId(params?.draftId);
+        const attachment = params?.attachment;
+        if (!draftId || !attachment?.name || !attachment?.contentBytes) {
+          throw new Error("draftId y attachment son requeridos");
+        }
+        await graphRequest(accessToken, `/me/messages/${draftId}/attachments`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...GRAPH_MAIL_PREFER_IMMUTABLE },
+          body: JSON.stringify({
+            "@odata.type": "#microsoft.graph.fileAttachment",
+            name: attachment.name,
+            contentType: attachment.contentType || "application/octet-stream",
+            contentBytes: attachment.contentBytes,
+          }),
+        });
+        result = { success: true };
+        break;
+      }
+
+      case "move-email": {
+        const messageId = normalizeGraphMessageOrAttachmentId(params?.messageId);
+        const destinationId = params?.destinationId;
+        if (!messageId || !destinationId) throw new Error("messageId and destinationId required");
+        result = await graphRequest(accessToken, `/me/messages/${messageId}/move`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...GRAPH_MAIL_PREFER_IMMUTABLE },
+          body: JSON.stringify({ destinationId }),
+        });
+        break;
+      }
+
+      case "flag-email": {
+        const messageId = normalizeGraphMessageOrAttachmentId(params?.messageId);
+        const flagStatus = params?.flagStatus ?? "flagged"; // "flagged" | "notFlagged"
+        if (!messageId) throw new Error("messageId required");
+        result = await graphRequest(accessToken, `/me/messages/${messageId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", ...GRAPH_MAIL_PREFER_IMMUTABLE },
+          body: JSON.stringify({ flag: { flagStatus } }),
+        });
+        break;
+      }
+
+      case "delete-email": {
+        const messageId = params?.messageId;
+        if (!messageId) throw new Error("messageId required");
+        await graphMailFetchWithRetry(accessToken, `/me/messages/${messageId}`, {
+          method: "DELETE",
+          headers: {},
+        });
+        result = { success: true };
+        break;
+      }
+
+      case "message-attachment-content": {
+        /** JSON + base64: puede superar límites del gateway; preferir message-attachment-binary en el cliente. */
+        const r = await loadMessageFileAttachmentFromGraph(accessToken, params?.messageId, params?.attachmentId);
+        result = {
+          name: r.name,
+          contentType: r.contentType,
+          contentBytes: uint8ArrayToBase64(r.body),
+          size: r.size,
+          isInline: r.isInline,
+          contentId: r.contentId,
+        };
+        break;
+      }
+
+      /** Cuerpo binario sin base64; reenvía el stream de Graph (sin bufferizar el PDF en la edge). */
+      case "message-attachment-binary": {
+        const messageId = normalizeGraphMessageOrAttachmentId(params?.messageId);
+        const attachmentId = normalizeGraphMessageOrAttachmentId(params?.attachmentId);
+        if (!messageId || !attachmentId) {
+          throw new Error("messageId y attachmentId son requeridos");
+        }
+        const metaPath =
+          `/me/messages/${messageId}/attachments/${attachmentId}?$select=id,name,contentType,size,isInline`;
+        const att = await graphRequest(accessToken, metaPath, {
+          headers: GRAPH_MAIL_PREFER_IMMUTABLE,
+        });
+        const odataType = (att as Record<string, unknown>)["@odata.type"] as string | undefined;
+        if (odataType && String(odataType).includes("itemAttachment")) {
+          throw new Error("Este tipo de adjunto no se puede previsualizar");
+        }
+        if (odataType && String(odataType).includes("referenceAttachment")) {
+          throw new Error("Este tipo de adjunto no se puede previsualizar");
+        }
+
+        let contentType = String((att as Record<string, unknown>).contentType || "application/octet-stream");
+        const name = String((att as Record<string, unknown>).name ?? "adjunto");
+
+        const valuePathBin = `/me/messages/${messageId}/attachments/${attachmentId}/$value`;
+        const valueRes = await graphMailFetchWithRetry(accessToken, valuePathBin, {
+          headers: {
+            Accept: "application/octet-stream",
+            ...GRAPH_MAIL_PREFER_IMMUTABLE,
+          },
+        });
+        const hdr = valueRes.headers.get("content-type");
+        if (hdr) {
+          const main = hdr.split(";")[0].trim().toLowerCase();
+          if (main && main !== "application/octet-stream") {
+            contentType = hdr.split(";")[0].trim();
+          }
+        }
+
+        const streamBody = valueRes.body;
+        if (!streamBody) {
+          const buf = new Uint8Array(await valueRes.arrayBuffer());
+          return new Response(buf, {
+            status: 200,
+            headers: {
+              ...corsHeaders,
+              "Content-Type": contentType || "application/octet-stream",
+              "X-Kawiil-Attachment-Name": encodeURIComponent(name),
+              "Access-Control-Expose-Headers": "Content-Type, X-Kawiil-Attachment-Name",
+            },
+          });
+        }
+
+        return new Response(streamBody, {
+          status: 200,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": contentType || "application/octet-stream",
+            "X-Kawiil-Attachment-Name": encodeURIComponent(name),
+            "Access-Control-Expose-Headers": "Content-Type, X-Kawiil-Attachment-Name",
+          },
+        });
+      }
+
+      /**
+       * Trozos en JSON (base64) para cuando binario/stream falla en el cliente o el gateway trunca.
+       * Usa Range en Graph si responde 206; si no, solo byteStart=0 con lectura parcial + cancel.
+       */
+      case "message-attachment-chunk": {
+        const messageId = normalizeGraphMessageOrAttachmentId(params?.messageId);
+        const attachmentId = normalizeGraphMessageOrAttachmentId(params?.attachmentId);
+        const byteStart = Math.max(0, Math.floor(Number(params?.byteStart ?? 0)));
+        const maxLen = Math.min(Math.max(1, Math.floor(Number(params?.maxLength ?? 196608))), 262144);
+        if (!messageId || !attachmentId) {
+          throw new Error("messageId y attachmentId son requeridos");
+        }
+
+        const metaPath =
+          `/me/messages/${messageId}/attachments/${attachmentId}?$select=id,name,contentType,size`;
+        const att = await graphRequest(accessToken, metaPath, {
+          headers: GRAPH_MAIL_PREFER_IMMUTABLE,
+        });
+        const odataType = (att as Record<string, unknown>)["@odata.type"] as string | undefined;
+        if (odataType && String(odataType).includes("itemAttachment")) {
+          throw new Error("Este tipo de adjunto no se puede previsualizar");
+        }
+        if (odataType && String(odataType).includes("referenceAttachment")) {
+          throw new Error("Este tipo de adjunto no se puede previsualizar");
+        }
+
+        let contentType = String((att as Record<string, unknown>).contentType || "application/octet-stream");
+        const name = String((att as Record<string, unknown>).name ?? "adjunto");
+        const totalFromMeta =
+          typeof (att as Record<string, unknown>).size === "number"
+            ? Number((att as Record<string, unknown>).size)
+            : null;
+
+        const valuePathChunk = `/me/messages/${messageId}/attachments/${attachmentId}/$value`;
+        const rangeEnd = byteStart + maxLen - 1;
+
+        /** No enviar Range en el primer trozo: Graph/Exchange a veces responde 416 o cuerpo vacío con bytes=0-… */
+        const chunkHeaders: Record<string, string> = {
+          Accept: "application/octet-stream",
+          ...GRAPH_MAIL_PREFER_IMMUTABLE,
+        };
+        if (byteStart > 0) {
+          chunkHeaders.Range = `bytes=${byteStart}-${rangeEnd}`;
+        }
+
+        const valueRes = await graphMailFetchWithRetry(accessToken, valuePathChunk, {
+          headers: chunkHeaders,
+        });
+
+        let buf: Uint8Array;
+        let totalSize: number | null = totalFromMeta;
+
+        if (valueRes.status === 206) {
+          buf = new Uint8Array(await valueRes.arrayBuffer());
+          const cr = valueRes.headers.get("content-range");
+          if (cr) {
+            const m = cr.match(/\/(\d+)\s*$/);
+            if (m) totalSize = parseInt(m[1], 10);
+          }
+          const hdr = valueRes.headers.get("content-type");
+          if (hdr) {
+            const main = hdr.split(";")[0].trim().toLowerCase();
+            if (main && main !== "application/octet-stream") {
+              contentType = hdr.split(";")[0].trim();
+            }
+          }
+        } else if (valueRes.status === 200 && byteStart === 0) {
+          const streamBody = valueRes.body;
+          if (!streamBody) {
+            buf = new Uint8Array(await valueRes.arrayBuffer());
+          } else {
+            buf = await readFirstBytesFromStream(streamBody, maxLen);
+          }
+          const hdr = valueRes.headers.get("content-type");
+          if (hdr) {
+            const main = hdr.split(";")[0].trim().toLowerCase();
+            if (main && main !== "application/octet-stream") {
+              contentType = hdr.split(";")[0].trim();
+            }
+          }
+          if (totalSize == null) {
+            const cl = valueRes.headers.get("content-length");
+            const n = cl ? parseInt(cl, 10) : NaN;
+            if (Number.isFinite(n)) totalSize = n;
+          }
+        } else if (valueRes.status === 200 && byteStart > 0) {
+          if (totalFromMeta != null && totalFromMeta <= 6 * 1024 * 1024) {
+            const full = new Uint8Array(await valueRes.arrayBuffer());
+            if (byteStart >= full.length) {
+              buf = new Uint8Array(0);
+            } else {
+              buf = full.subarray(byteStart, Math.min(byteStart + maxLen, full.length));
+            }
+            totalSize = totalFromMeta;
+            const hdr = valueRes.headers.get("content-type");
+            if (hdr) {
+              const main = hdr.split(";")[0].trim().toLowerCase();
+              if (main && main !== "application/octet-stream") {
+                contentType = hdr.split(";")[0].trim();
+              }
+            }
+          } else {
+            const errText = await valueRes.text();
+            throw new Error(
+              `Graph no devolvió 206 en offset ${byteStart} (Range). ${errText.slice(0, 120)}`,
+            );
+          }
+        } else {
+          const errText = await valueRes.text();
+          throw new Error(`Adjunto chunk [${valueRes.status}]: ${errText}`);
+        }
+
+        const done =
+          buf.length === 0 ||
+          (totalSize != null && byteStart + buf.length >= totalSize) ||
+          (totalSize == null && buf.length < maxLen);
+
+        result = {
+          name,
+          contentType,
+          byteStart,
+          length: buf.length,
+          totalSize,
+          partBase64: uint8ArrayToBase64(buf),
+          done,
+        };
+        break;
+      }
+
+      case "email-attachments": {
+        const messageId = normalizeGraphMessageOrAttachmentId(params?.messageId);
+        if (!messageId) throw new Error("messageId required");
+        result = await graphRequest(
+          accessToken,
+          `/me/messages/${messageId}/attachments?$top=100`,
+          { headers: GRAPH_MAIL_PREFER_IMMUTABLE },
+        );
+        break;
+      }
+
+      /**
+       * Descarga la foto de perfil de Microsoft 365 (Graph /me/photo/$value),
+       * la sube al bucket `avatars` (carpeta {userId}/) y guarda la URL en
+       * profiles.avatar_url. Si el usuario no tiene foto en Microsoft, devuelve
+       * { code: "NO_PHOTO" } sin tocar profiles.
+       */
+      case "sync-profile-photo": {
+        result = await syncProfilePhotoFor(supabaseAdmin, userId, accessToken);
+        break;
+      }
+
+      case "create-mail-folder": {
+        const displayName = params?.displayName;
+        if (!displayName) throw new Error("displayName required");
+        const existing = await findRootMailFolderByDisplayName(accessToken, displayName);
+        if (existing) {
+          result = existing;
+          break;
+        }
+        try {
+          const res = await graphMailFetchWithRetry(accessToken, `/me/mailFolders`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ displayName }),
+          });
+          result = await res.json();
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          const code = graphErrorCodeFromThrownMessage(msg);
+          if (code === "ErrorFolderExists" || msg.includes("[409]")) {
+            const again = await findRootMailFolderByDisplayName(accessToken, displayName);
+            if (again) {
+              result = again;
+              break;
+            }
+          }
+          throw e;
+        }
+        break;
+      }
+
+      case "create-mail-rule": {
+        const { displayName, senderEmail, moveToFolderId, markAsRead } = params || {};
+        if (!senderEmail) throw new Error("senderEmail required");
+        const rule: Record<string, unknown> = {
+          displayName: displayName || `Regla: ${senderEmail}`,
+          sequence: 1,
+          isEnabled: true,
+          conditions: {
+            fromAddresses: [{ emailAddress: { address: senderEmail } }],
+          },
+          actions: {
+            ...(moveToFolderId ? { moveToFolder: moveToFolderId } : {}),
+            ...(markAsRead ? { markAsRead: true } : {}),
+          },
+        };
+        result = await graphRequest(accessToken, "/me/mailFolders/inbox/messageRules", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(rule),
+        });
+        break;
+      }
+
+      case "list-mail-rules": {
+        result = await graphRequest(accessToken, "/me/mailFolders/inbox/messageRules");
+        break;
+      }
+
+      // Aplica una regla a los correos que YA están en la bandeja (las reglas de Outlook solo
+      // aplican a mail nuevo). Mueve los mensajes del remitente a la carpeta indicada.
+      case "apply-mail-rule": {
+        const senderEmail = String(params?.senderEmail || "").trim().toLowerCase();
+        const moveToFolderId = params?.moveToFolderId as string | undefined;
+        const alsoMarkRead = params?.markAsRead === true;
+        if (!senderEmail) throw new Error("senderEmail required");
+        const filter = encodeURIComponent(`from/emailAddress/address eq '${senderEmail.replace(/'/g, "''")}'`);
+        let moved = 0;
+        let total = 0;
+        const MAX_TOTAL = 500; // tope de seguridad
+        // Repetir por lotes: al mover, los correos salen de la bandeja, así que siempre
+        // pedimos el primer lote de los que quedan hasta que no haya más (o alcanzar el tope).
+        for (let batch = 0; batch < 20; batch++) {
+          const list = (await graphRequest(
+            accessToken,
+            `/me/mailFolders/inbox/messages?$filter=${filter}&$select=id,isRead&$top=50`,
+            { headers: GRAPH_MAIL_PREFER_IMMUTABLE },
+          )) as { value?: Array<{ id: string; isRead?: boolean }> };
+          const items = list.value ?? [];
+          if (items.length === 0) break;
+          total += items.length;
+          for (const m of items) {
+            if (moved >= MAX_TOTAL) break;
+            try {
+              if (alsoMarkRead && m.isRead === false) {
+                await graphRequest(accessToken, `/me/messages/${m.id}`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ isRead: true }),
+                });
+              }
+              if (moveToFolderId) {
+                await graphRequest(accessToken, `/me/messages/${m.id}/move`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ destinationId: moveToFolderId }),
+                });
+              }
+              moved++;
+            } catch {
+              /* seguir con el resto */
+            }
+          }
+          // Si no hay carpeta destino (solo markAsRead), no salen de la bandeja → evitar bucle infinito.
+          if (!moveToFolderId || moved >= MAX_TOTAL) break;
+        }
+        result = { moved, total };
+        break;
+      }
+    }
+
+    if (result === undefined) {
+      return new Response(
+        JSON.stringify({
+          error:
+            "Acción no reconocida o microsoft-api desactualizada. Despliega: supabase functions deploy microsoft-api --no-verify-jwt",
+          code: "UNKNOWN_ACTION",
+          action: action ?? null,
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    return new Response(JSON.stringify(result), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  } catch (error) {
+    console.error("Microsoft API error:", error);
+    const message = (error as Error).message || "Unknown error";
+    const lower = message.toLowerCase();
+    /** Red de seguridad: si createReply escapó sin mapear, no devolver 500 (evita runtime en cliente / Lovable). */
+    if (lower.includes("createreplydraft") && lower.includes("errorinvalidreferenceitem")) {
+      return new Response(
+        JSON.stringify({
+          code: "REFERENCE_NOT_SUPPORTED",
+          error:
+            "Este mensaje no admite respuesta con borrador. Puedes escribir y enviar; se usará envío simple.",
+        }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    if (message.startsWith("MICROSOFT_PERMISSION_REQUIRED:")) {
+      return new Response(JSON.stringify({
+        error: "Tu conexión de Microsoft no tiene los permisos necesarios. Reconecta Microsoft para aplicar los permisos nuevos.",
+        code: "PERMISSION_REQUIRED",
+        details: message.replace("MICROSOFT_PERMISSION_REQUIRED:", ""),
+      }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (message.startsWith("MICROSOFT_AUTH_CONFIG_EXPIRED:")) {
+      return new Response(JSON.stringify({
+        error: message.replace("MICROSOFT_AUTH_CONFIG_EXPIRED:", ""),
+        code: "AUTH_CONFIG_EXPIRED",
+      }), {
+        status: 503,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (message.startsWith("MICROSOFT_RECONNECT_REQUIRED:")) {
+      return new Response(JSON.stringify({
+        error: message.replace("MICROSOFT_RECONNECT_REQUIRED:", ""),
+        code: "RECONNECT_REQUIRED",
+      }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    /**
+     * Graph 404 / ErrorItemNotFound. Usamos HTTP 200 para que el cliente Supabase
+     * reciba el JSON en `data`: con 4xx `invoke` deja `data` en null y solo
+     * `error` (FunctionsHttpError), y el front no puede leer `code` → runtime / pantalla en blanco.
+     */
+    if (message.includes("[404]") || message.includes("ErrorItemNotFound")) {
+      return new Response(JSON.stringify({
+        error: "El elemento no fue encontrado. Es posible que haya sido eliminado o modificado. Recarga la vista para actualizar.",
+        code: "ITEM_NOT_FOUND",
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (
+      lower.includes("applicationthrottled") ||
+      lower.includes("mailboxconcurrency") ||
+      message.includes("[429]")
+    ) {
+      return new Response(
+        JSON.stringify({
+          error:
+            "Microsoft limitó temporalmente las peticiones al buzón. Espera unos segundos y vuelve a intentar.",
+          code: "GRAPH_THROTTLED",
+        }),
+        {
+          status: 503,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+});
