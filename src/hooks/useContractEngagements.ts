@@ -19,6 +19,7 @@ import {
   formatMoneyMx,
   mergeTokens,
 } from "@/lib/contractMerge";
+import { formatContractRpcError } from "@/lib/contractRpcError";
 
 export const contractQueryKeys = {
   byLead: (leadId: string) => ["contract-engagements", "lead", leadId] as const,
@@ -184,16 +185,19 @@ export function useStartContractEngagement() {
         p_lead_id: input.leadId,
         p_package_kind: input.packageKind,
       } as never);
-      if (error) throw error;
+      if (error) throw new Error(formatContractRpcError(error));
       const j = data as RpcJson;
       if (!j?.ok) {
-        const err = String(j?.error || "No se pudo iniciar el onboarding");
-        if (err === "lead_not_converted") {
+        const err = formatContractRpcError(
+          { ...j, message: j?.error != null ? String(j.error) : undefined },
+          "No se pudo iniciar el onboarding",
+        );
+        if (String(j?.error || "") === "lead_not_converted") {
           const stageName = j.stage_name ? String(j.stage_name) : j.stage ? String(j.stage) : null;
           throw new Error(
             stageName
-              ? `lead_not_converted: el lead está en «${stageName}»; muévelo a Cerrado (etapa ganada).`
-              : "lead_not_converted",
+              ? `El lead está en «${stageName}»; muévelo a Cerrado (etapa ganada) para iniciar el contrato.`
+              : err,
           );
         }
         throw new Error(err);

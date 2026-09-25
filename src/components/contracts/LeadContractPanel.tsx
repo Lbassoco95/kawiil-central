@@ -28,6 +28,7 @@ import {
   isWonPipelineStage,
   wonStageDisplayLabel,
 } from "@/lib/pipelineWonStage";
+import { formatContractRpcError } from "@/lib/contractRpcError";
 
 interface Props {
   leadId: string;
@@ -104,13 +105,11 @@ export function LeadContractPanel({
       }
       void refetch();
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      if (msg.includes("lead_not_converted")) {
+      const msg = formatContractRpcError(e);
+      if (msg.toLowerCase().includes("etapa ganada") || msg.includes("lead_not_converted")) {
         toast.error(
           `El lead debe estar en etapa ganada (${wonLabel}) para iniciar el contrato.`,
         );
-      } else if (msg.includes("Could not find") || msg.includes("schema cache") || msg.includes("does not exist")) {
-        toast.error("Falta aplicar la migración de contratos en Supabase.");
       } else {
         toast.error(msg || "No se pudo iniciar");
       }

@@ -32,6 +32,7 @@ import {
   isWonPipelineStage,
   wonStageDisplayLabel,
 } from "@/lib/pipelineWonStage";
+import { formatContractRpcError } from "@/lib/contractRpcError";
 
 function suggestKinds(serviceTypes: unknown): ContractPackageKind[] {
   const services = normalizeServices(serviceTypes);
@@ -101,8 +102,8 @@ export default function LeadContractPage() {
       void refetch();
       window.location.replace(`/pipeline/leads/${leadId}/contrato?e=${res.engagement_id}`);
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      if (msg.includes("lead_not_converted")) {
+      const msg = formatContractRpcError(e);
+      if (msg.toLowerCase().includes("etapa ganada") || msg.includes("lead_not_converted")) {
         toast.error(`El lead debe estar en etapa ganada (${wonLabel}).`);
       } else {
         toast.error(msg || "No se pudo iniciar");
