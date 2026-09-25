@@ -29,7 +29,7 @@ export type LeadSavioPromotionCardProps = {
   companyName: string | null;
   email: string | null;
   phone: string | null;
-  /** Slug de la etapa actual (`convertido` = trato ganado). */
+  /** Slug de la etapa actual (Cerrado / convertido = trato ganado). */
   stageSlug: string | undefined;
   billingLegalName: string | null;
   billingRfc: string | null;
