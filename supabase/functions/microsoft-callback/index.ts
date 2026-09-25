@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { classifyMicrosoftOAuthError } from "../_shared/microsoftOAuthErrors.ts";
 
 const postMessageOrigin = '*';
 
@@ -125,10 +126,16 @@ Deno.serve(async (req) => {
 
     if (!tokenResponse.ok) {
       console.error("Token exchange failed:", tokenData);
+      const classified = classifyMicrosoftOAuthError(tokenData);
+      const userMsg = classified?.message
+        || "No se pudo completar la autenticación con Microsoft.";
+      const errCode = classified?.code === "AUTH_CONFIG_EXPIRED"
+        ? "auth_config_expired"
+        : "token_exchange_failed";
       return new Response(
         `<html><head></head><body>
-          <script>window.opener?.postMessage({type:'microsoft-auth-error',error:'token_exchange_failed'},'${postMessageOrigin}');</script>
-          ${renderPage('error', 'Error al obtener token', 'No se pudo completar la autenticación con Microsoft.')}
+          <script>window.opener?.postMessage({type:'microsoft-auth-error',error:'${errCode}'},'${postMessageOrigin}');</script>
+          ${renderPage('error', 'Error al obtener token', userMsg)}
         </body></html>`,
         { headers: { "Content-Type": "text/html" } }
       );

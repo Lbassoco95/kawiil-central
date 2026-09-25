@@ -143,3 +143,41 @@ functions para que la API key viva **solo en el servidor**.
 7. ⬜ IMAP/SMTP para correo (con caché + cron).
 8. ⬜ Rotar la `GOOGLE_MAPS_API_KEY` expuesta.
 7. ⬜ Cifrado de secretos IMAP (Vault/pgsodium).
+
+---
+
+## 5. Incidentes: client secret de Microsoft expirado (AADSTS7000222)
+
+Si al guardar/crear/eliminar eventos el toast muestra `Token refresh failed` /
+`invalid_client` / `AADSTS7000222`, **no es un bug del calendario**: el secreto
+de la App Registration en Azure AD caducó.
+
+App ID observada en producción: `db370917-4e36-4ef5-b152-322394f50980`.
+
+### Qué falla
+
+- Refresco de tokens (`microsoft-api`, correo, cuentas Outlook vinculadas).
+- Nuevas conexiones OAuth (`microsoft-callback` / `outlook-account-callback`).
+- Mientras el access token en caché siga vivo, la UI puede **mostrar** eventos
+  pero las escrituras fallan al renovar.
+
+### Remedio operativo (admin)
+
+1. Azure Portal → **Microsoft Entra ID** → **App registrations** → app
+   `db370917-…` → **Certificates & secrets** → **New client secret**.
+2. Copiar el valor del secreto (solo se muestra una vez).
+3. Supabase proyecto `qppfampapbxdgednkofc` → **Project Settings → Edge
+   Functions → Secrets** → actualizar `MICROSOFT_CLIENT_SECRET` (y
+   `AZURE_CLIENT_SECRET` si también se usa en funciones de pipeline/mail).
+4. No hace falta redeploy de funciones solo por el secreto; sí conviene
+   desplegar `microsoft-api` / `microsoft-callback` si hay cambios de código
+   de mensajes de error:
+   ```bash
+   supabase functions deploy microsoft-api microsoft-callback outlook-account-api --no-verify-jwt
+   ```
+5. Verificar: editar un evento en Calendario y guardar → toast «Evento
+   actualizado». Si el access token del usuario sigue inválido por otras
+   causas, pedir **Reconectar Microsoft 365**.
+
+Reconectar desde la UI **no** arregla un secret caducado: el exchange del code
+también usa `MICROSOFT_CLIENT_SECRET`.

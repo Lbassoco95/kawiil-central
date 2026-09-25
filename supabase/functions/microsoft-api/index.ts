@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { throwMicrosoftOAuthError } from "../_shared/microsoftOAuthErrors.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": '*',
@@ -475,7 +476,7 @@ async function refreshTokenIfNeeded(supabaseAdmin: any, userId: string, tokenRow
   );
 
   const data = await res.json();
-  if (!res.ok) throw new Error(`Token refresh failed: ${JSON.stringify(data)}`);
+  if (!res.ok) throwMicrosoftOAuthError(data, "Token refresh failed");
 
   const newExpiresAt = new Date(Date.now() + data.expires_in * 1000).toISOString();
 
@@ -2342,6 +2343,26 @@ Deno.serve(async (req) => {
         details: message.replace("MICROSOFT_PERMISSION_REQUIRED:", ""),
       }), {
         status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (message.startsWith("MICROSOFT_AUTH_CONFIG_EXPIRED:")) {
+      return new Response(JSON.stringify({
+        error: message.replace("MICROSOFT_AUTH_CONFIG_EXPIRED:", ""),
+        code: "AUTH_CONFIG_EXPIRED",
+      }), {
+        status: 503,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (message.startsWith("MICROSOFT_RECONNECT_REQUIRED:")) {
+      return new Response(JSON.stringify({
+        error: message.replace("MICROSOFT_RECONNECT_REQUIRED:", ""),
+        code: "RECONNECT_REQUIRED",
+      }), {
+        status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

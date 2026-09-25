@@ -12,6 +12,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useCurrentProfile } from "@/hooks/useCurrentProfile";
 import { toast } from "sonner";
 import type { ComposerAttachment } from "@/lib/emailComposer";
+import { formatMicrosoftIntegrationError } from "@/lib/microsoftIntegrationErrors";
 
 /** No leídos de Bandeja de entrada (Graph `mailFolders/inbox.unreadItemCount`). Sidebar + módulo correo. */
 export const INBOX_UNREAD_QUERY_KEY = ["inbox-unread-count"] as const;
@@ -71,10 +72,18 @@ function debugMicrosoftRuntimeLog(
 function getActionableError(err: Error): string {
   const message = String(err?.message || "");
   const lower = message.toLowerCase();
+  // Secret / app registration antes del chequeo genérico de "invalid" (destinatarios).
+  if (
+    lower.includes("auth_config_expired") ||
+    lower.includes("aadsts7000222") ||
+    (lower.includes("invalid_client") && (lower.includes("expired") || lower.includes("secret")))
+  ) {
+    return formatMicrosoftIntegrationError(err);
+  }
   if (lower.includes("permission_required")) {
     return "Faltan permisos de Microsoft. Reconecta tu cuenta de Microsoft 365.";
   }
-  if (lower.includes("not_connected")) {
+  if (lower.includes("not_connected") || lower.includes("reconnect_required")) {
     return "Tu cuenta no está conectada. Vuelve a conectar Microsoft 365.";
   }
   if (lower.includes("invalid") || lower.includes("recipient")) {
@@ -391,24 +400,9 @@ export function useCreateCalendarEvent() {
       });
       const errBody = await readSupabaseFunctionErrorBody(error);
       if (error) {
-        let detailedError = "";
-        if (errBody) {
-          try {
-            const parsed = JSON.parse(errBody) as { error?: unknown; code?: unknown };
-            const code = typeof parsed.code === "string" ? parsed.code : "";
-            const msg = typeof parsed.error === "string" ? parsed.error : "";
-            if (code === "PERMISSION_REQUIRED" && msg) {
-              throw new Error(msg);
-            }
-            detailedError = msg || errBody;
-          } catch {
-            detailedError = errBody;
-          }
-        }
-        const fallback = String((error as Error)?.message || "No se pudo crear el evento");
-        throw new Error(detailedError || fallback);
+        throw new Error(formatMicrosoftIntegrationError(error, errBody));
       }
-      if (data?.error) throw new Error(String(data.error));
+      if (data?.error) throw new Error(formatMicrosoftIntegrationError(new Error(String(data.error))));
       return data;
     },
     onSuccess: (data) => {
@@ -435,7 +429,7 @@ export function useCreateCalendarEvent() {
       }
     },
     onError: (err: Error) => {
-      const msg = String(err.message || "");
+      const msg = formatMicrosoftIntegrationError(err);
       if (
         msg.includes("Edge Function returned a non-2xx status code") ||
         msg.includes("Failed to send a request to the Edge Function")
@@ -446,7 +440,7 @@ export function useCreateCalendarEvent() {
         );
         return;
       }
-      toast.error("Error al crear evento: " + msg);
+      toast.error("Error al crear evento: " + msg, { duration: 10000 });
     },
   });
 }
@@ -470,6 +464,11 @@ export function useDeleteCalendarEvent() {
       queryClient.invalidateQueries({ queryKey: ["calendar-events"] });
       queryClient.invalidateQueries({ queryKey: ["calendar-event-detail"] });
       toast.success("Evento eliminado");
+    },
+    onError: (err: Error) => {
+      toast.error("Error al eliminar evento: " + formatMicrosoftIntegrationError(err), {
+        duration: 10000,
+      });
     },
   });
 }
@@ -533,14 +532,12 @@ export function useUpdateCalendarEvent() {
         if (msg.includes("Unexpected end of JSON") || msg.includes("json")) {
           return { success: true, eventId, payload };
         }
-        // "non-2xx" a secas no es accionable: incluir el motivo real de Graph.
-        const detail = (errBody || "").trim().slice(0, 300);
-        throw new Error(detail ? `${msg}: ${detail}` : msg);
+        throw new Error(formatMicrosoftIntegrationError(res.error, errBody));
       }
       if (res.data?.code === "ITEM_NOT_FOUND") {
         throw new Error("El evento no fue encontrado. Puede que haya sido eliminado o modificado.");
       }
-      if (res.data?.error) throw new Error(res.data.error);
+      if (res.data?.error) throw new Error(formatMicrosoftIntegrationError(new Error(String(res.data.error))));
       return { ...(res.data || {}), success: true, eventId, payload };
     },
     onMutate: async ({ eventId, payload }) => {
@@ -580,7 +577,9 @@ export function useUpdateCalendarEvent() {
           queryClient.setQueryData(key, data);
         }
       }
-      toast.error("Error al actualizar evento: " + err.message);
+      toast.error("Error al actualizar evento: " + formatMicrosoftIntegrationError(err), {
+        duration: 10000,
+      });
     },
     onSuccess: (_data, vars) => {
       // Mantener el cambio visual inmediato y sincronizar después
