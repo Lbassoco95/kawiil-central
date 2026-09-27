@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   encodeMicrosoftOAuthState,
+  sanitizeAppOrigin,
   sanitizeReturnPath,
 } from "../_shared/microsoftOAuthState.ts";
 
@@ -33,6 +34,7 @@ Deno.serve(async (req) => {
 
     let returnTo = "/microsoft365/calendario";
     let mode: "redirect" | "popup" = "redirect";
+    let appOriginHeader: string | null = null;
     try {
       const body = await req.json();
       if (body && typeof body === "object") {
@@ -40,6 +42,9 @@ Deno.serve(async (req) => {
           returnTo = sanitizeReturnPath((body as { returnTo: string }).returnTo);
         }
         if ((body as { mode?: unknown }).mode === "popup") mode = "popup";
+        if (typeof (body as { appOrigin?: unknown }).appOrigin === "string") {
+          appOriginHeader = sanitizeAppOrigin((body as { appOrigin: string }).appOrigin);
+        }
       }
     } catch {
       /* body vacío u opcional */
@@ -79,7 +84,12 @@ Deno.serve(async (req) => {
         redirect_uri: redirectUri,
         scope: scopes,
         response_mode: "query",
-        state: encodeMicrosoftOAuthState({ u: user.id, r: returnTo, m: mode }),
+        state: encodeMicrosoftOAuthState({
+          u: user.id,
+          r: returnTo,
+          m: mode,
+          ...(appOriginHeader ? { o: appOriginHeader } : {}),
+        }),
         prompt: "consent",
       }).toString();
 

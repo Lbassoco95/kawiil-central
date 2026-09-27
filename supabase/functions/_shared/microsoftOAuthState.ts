@@ -1,5 +1,5 @@
 /**
- * Estado OAuth Microsoft embebido en `state` (userId + returnTo + modo).
+ * Estado OAuth Microsoft embebido en `state` (userId + returnTo + modo + origen).
  * Compatible con state legado = solo UUID de usuario.
  */
 
@@ -9,10 +9,18 @@ export type MicrosoftOAuthState = {
   r?: string;
   /** redirect = navegación completa; popup = window.open + postMessage */
   m?: "redirect" | "popup";
+  /** Origen allowlisted del front (https://www.kawiil-central.mx, Lovable, etc.) */
+  o?: string;
 };
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const ALLOWED_ORIGINS = new Set([
+  "https://www.kawiil-central.mx",
+  "https://kawiil-central.mx",
+  "https://kawiil-core-hub.lovable.app",
+]);
 
 function b64urlEncode(raw: string): string {
   const bytes = new TextEncoder().encode(raw);
@@ -56,17 +64,45 @@ export function sanitizeReturnPath(path: unknown, fallback = "/microsoft365/cale
   return p;
 }
 
-export function appOrigin(): string {
-  const fromEnv = (Deno.env.get("KAWIIL_APP_URL") || Deno.env.get("SITE_URL") || "")
-    .trim()
-    .replace(/\/$/, "");
-  if (fromEnv.startsWith("http://") || fromEnv.startsWith("https://")) return fromEnv;
+export function sanitizeAppOrigin(origin: unknown): string | null {
+  if (typeof origin !== "string") return null;
+  const o = origin.trim().replace(/\/$/, "");
+  if (ALLOWED_ORIGINS.has(o)) return o;
+  // Preview Lovable / Vercel / localhost en desarrollo
+  try {
+    const u = new URL(o);
+    if (u.protocol === "http:" && (u.hostname === "localhost" || u.hostname === "127.0.0.1")) {
+      return `${u.protocol}//${u.host}`;
+    }
+    if (u.protocol === "https:" && (u.hostname.endsWith(".lovable.app") || u.hostname.endsWith(".vercel.app"))) {
+      return `${u.protocol}//${u.host}`;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+/** Preferencia: origen del cliente (allowlisted) → KAWIIL_APP_URL → producción. */
+export function appOrigin(preferred?: string | null): string {
+  const fromClient = sanitizeAppOrigin(preferred);
+  if (fromClient) return fromClient;
+
+  const fromEnv = (Deno.env.get("KAWIIL_APP_URL") || "").trim().replace(/\/$/, "");
+  const fromEnvOk = sanitizeAppOrigin(fromEnv);
+  if (fromEnvOk) return fromEnvOk;
+
+  // SITE_URL a veces apunta a Lovable; no usarlo como default de producción.
   return "https://www.kawiil-central.mx";
 }
 
-export function buildAppReturnUrl(returnPath: string, query: Record<string, string>): string {
+export function buildAppReturnUrl(
+  returnPath: string,
+  query: Record<string, string>,
+  preferredOrigin?: string | null,
+): string {
   const path = sanitizeReturnPath(returnPath);
-  const url = new URL(path, appOrigin());
+  const url = new URL(path, appOrigin(preferredOrigin));
   for (const [k, v] of Object.entries(query)) url.searchParams.set(k, v);
   return url.toString();
 }

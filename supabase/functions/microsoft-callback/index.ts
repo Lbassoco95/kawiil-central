@@ -113,10 +113,14 @@ function finishHtml(
   const returnPath = sanitizeReturnPath(state?.r);
   const returnUrl =
     mode === "redirect"
-      ? buildAppReturnUrl(returnPath, {
+      ? buildAppReturnUrl(
+        returnPath,
+        {
           ms: kind === "success" ? "connected" : "error",
           ...(postMessageError ? { ms_err: postMessageError.slice(0, 80) } : {}),
-        })
+        },
+        state?.o,
+      )
       : undefined;
 
   const postMsg =
@@ -124,13 +128,13 @@ function finishHtml(
       ? `window.opener?.postMessage({type:'microsoft-auth-success'},'${postMessageOrigin}');`
       : `window.opener?.postMessage({type:'microsoft-auth-error',error:${JSON.stringify(postMessageError || "error")}},'${postMessageOrigin}');`;
 
-  return new Response(
-    `<html><head></head><body>
-      <script>${postMsg}</script>
-      ${renderPage(kind, title, detail, { returnUrl, autoClose: mode === "popup" })}
-    </body></html>`,
-    { headers: { "Content-Type": "text/html" } },
-  );
+  const page = renderPage(kind, title, detail, { returnUrl, autoClose: mode === "popup" });
+  // Inyectar postMessage justo antes de </body> (evitar HTML anidado / mojibake).
+  const html = page.replace("</body>", `<script>${postMsg}</script></body>`);
+
+  return new Response(html, {
+    headers: { "Content-Type": "text/html; charset=utf-8" },
+  });
 }
 
 Deno.serve(async (req) => {
@@ -257,7 +261,7 @@ Deno.serve(async (req) => {
       renderPage("error", "Error interno", "Ocurrió un error inesperado. Intenta de nuevo.", {
         returnUrl: buildAppReturnUrl("/microsoft365/calendario", { ms: "error" }),
       }),
-      { status: 500, headers: { "Content-Type": "text/html" } },
+      { status: 500, headers: { "Content-Type": "text/html; charset=utf-8" } },
     );
   }
 });

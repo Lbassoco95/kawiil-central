@@ -134,7 +134,11 @@ export function useMicrosoftConnection() {
     mutationFn: async () => {
       const returnTo = `${window.location.pathname}${window.location.search}` || "/microsoft365/calendario";
       const { data, error } = await supabase.functions.invoke("microsoft-auth", {
-        body: { returnTo, mode: "redirect" },
+        body: {
+          returnTo,
+          mode: "redirect",
+          appOrigin: window.location.origin,
+        },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
