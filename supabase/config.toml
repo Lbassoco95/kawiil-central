@@ -152,3 +152,10 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = true
   [functions.update-user-email]
     verify_jwt = true
+  # Portal del cliente: el JWT se valida dentro (hay rutas públicas y de cron).
+  [functions.portal-api]
+    verify_jwt = false
+  [functions.portal-notify]
+    verify_jwt = false
+  [functions.portal-dropbox-sync]
+    verify_jwt = false
