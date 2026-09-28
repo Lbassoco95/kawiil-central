@@ -54,3 +54,4 @@ docs/mtg/acceptance/
 .tmp-moffin*
 .tmp_health*
 tmp_deploy/
+dist-portal
