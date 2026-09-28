@@ -104,7 +104,7 @@ function num(v: string | undefined | null): number | null {
 const s = (v: string | undefined | null) => (v == null || v.trim() === "" ? null : v.trim());
 
 export function parseCfdiXml(xmlRaw: string): CfdiParsed | null {
-  const xml = xmlRaw.replace(/^﻿/, "");
+  const xml = xmlRaw.replace(/^\uFEFF/, "");
   const comp = firstTag(xml, "Comprobante");
   if (!comp) return null;
   const emisor = firstTag(xml, "Emisor") ?? {};

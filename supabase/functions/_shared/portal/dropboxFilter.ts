@@ -43,7 +43,7 @@ export function normalizeAreaName(raw: string): string {
     .replace(/[̀-ͯ]/g, "")
     .trim()
     .toUpperCase()
-    .replace(/[\s\-]+/g, "_");
+    .replace(/[\s-]+/g, "_");
 }
 
 export function areaOf(folderName: string): PortalArea | "ADMINISTRATIVO" | null {
