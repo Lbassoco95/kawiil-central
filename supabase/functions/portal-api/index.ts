@@ -16,13 +16,13 @@
  */
 import JSZip from "npm:jszip@3.10.1";
 import { encryptFielSecret, sha256HexFromBase64File } from "../_shared/moffinFielCrypto.ts";
-import { parseSatCertificate, rfcBasesMatch } from "../_shared/satCertificateParser.ts";
 import {
   ApiError, assertClientAccess, audit, b64ToBytes, buildCtx, corsHeaders, json, requireUser, str, uuid, type Ctx,
 } from "../_shared/portal/http.ts";
 import { directionForClient, toPortalCfdiRow, validateCfdiXml } from "../_shared/portal/cfdiXml.ts";
 import { crearEmisor, EmisionRechazada, PacNoConfigurado, type BorradorFactura } from "../_shared/portal/emission/index.ts";
 import { publicCsdView } from "../_shared/portal/csd.ts";
+import { registerCsd } from "../_shared/portal/csdRegister.ts";
 import { suggestCategory } from "../_shared/portal/openclaw.ts";
 import { normalizeRfc } from "../_shared/portal/validate.ts";
 
@@ -258,42 +258,57 @@ const crearFactura: Handler = async (ctx) => {
   }
 };
 
-/** Carga del CSD: una sola vez. Se cifra al llegar; nunca se devuelve. */
+/**
+ * Carga del CSD (C1, C2, C5): autorización previa → validación en memoria →
+ * cifrado con secretos propios → guardado en una transacción. Si algo falla no
+ * se guarda nada. La respuesta y la bitácora nunca llevan llave ni contraseña.
+ */
 const cargarCsd: Handler = async (ctx) => {
   const clientId = uuid(ctx.body.client_id, "el cliente");
   await assertClientAccess(ctx, clientId, ["administrador"]);
-  if (ctx.isStaff) {
-    const { data } = await requireUser(ctx).rpc("portal_is_staff_admin", { _uid: ctx.userId });
-    if (data !== true) throw new ApiError(403, "sin_permiso", "Solo G3/G4 cargan un CSD desde central.");
-  }
+  const via = ctx.isPortal ? "portal" : "central";
   const cerB64 = str(ctx.body.cer_base64, "el archivo .cer", 20_000).replace(/^data:[^,]*,/, "");
   const keyB64 = str(ctx.body.key_base64, "el archivo .key", 20_000).replace(/^data:[^,]*,/, "");
   const password = str(ctx.body.password, "la contraseña de la llave", 200);
-  const fielSecret = Deno.env.get("MOFFIN_FIEL_SECRET") ?? "";
-  const csdSecret = Deno.env.get("PORTAL_CSD_SECRET") ?? "";
-  if (fielSecret.length < 32 || csdSecret.length < 32) throw new ApiError(503, "no_configurado", "El resguardo de certificados no está configurado.");
-  let parsed;
-  try { parsed = parseSatCertificate(cerB64); } catch { throw new ApiError(400, "certificado_invalido", "El archivo .cer no es un certificado válido."); }
-  const { org, rfcs } = await clientRfcs(ctx, clientId);
-  if (!rfcs.some((r) => rfcBasesMatch(parsed.subjectRfc, r))) throw new ApiError(400, "rfc_distinto", "El certificado no pertenece al RFC del cliente.");
-  if (new Date(parsed.notAfter) <= new Date()) throw new ApiError(400, "vencido", "El certificado ya está vencido.");
-  const { data: cert, error } = await ctx.admin.from("client_sat_certificates").insert({
-    organization_id: org, client_id: clientId, cert_type: "csd_sello", label: "Portal del cliente",
-    cert_ciphertext: await encryptFielSecret(cerB64, fielSecret),
-    key_ciphertext: await encryptFielSecret(keyB64, fielSecret),
-    cert_serial: parsed.serialNumber, cert_subject_rfc: parsed.subjectRfc,
-    cert_not_before: parsed.notBefore, cert_not_after: parsed.notAfter,
-    cert_fingerprint_sha256: await sha256HexFromBase64File(cerB64), updated_by: ctx.userId,
-  }).select("id").single();
-  if (error) throw new ApiError(409, "ya_cargado", /duplicate/i.test(error.message) ? "Ese certificado ya estaba cargado." : "No se pudo guardar el certificado.");
-  await ctx.admin.from("portal_csd_secrets").insert({ certificate_id: cert.id, password_ciphertext: await encryptFielSecret(password, csdSecret) });
-  const { data: reg } = await ctx.admin.from("portal_csd_registry").insert({
-    organization_id: org, client_id: clientId, certificate_id: cert.id, cert_serial: parsed.serialNumber,
-    cert_not_before: parsed.notBefore, cert_not_after: parsed.notAfter,
-    registered_via: ctx.isPortal ? "portal" : "central", registered_by: ctx.userId,
-  }).select("id, cert_serial, cert_not_before, cert_not_after, registered_via, registered_at").single();
-  await audit(ctx, "csd_carga", clientId, "portal_csd_registry", reg?.id ?? null, { serie: parsed.serialNumber, vence: parsed.notAfter });
-  return { csd: publicCsdView({ registry_id: reg?.id, ...reg }) };
+  const r = await registerCsd({
+    via,
+    secrets: {
+      key: Deno.env.get("PORTAL_CSD_KEY_SECRET"),
+      password: Deno.env.get("PORTAL_CSD_SECRET"),
+      fiel: Deno.env.get("MOFFIN_FIEL_SECRET"),
+    },
+    async preconditions() {
+      const { data, error } = await ctx.admin.rpc("portal_csd_upload_check", { _client_id: clientId, _actor: ctx.userId, _via: via });
+      if (error) throw new ApiError(500, "autorizacion", "No se pudo revisar la autorización.");
+      return data as { ok: boolean; missing: { key: string; label: string }[] };
+    },
+    clientRfcs: async () => (await clientRfcs(ctx, clientId)).rfcs,
+    encrypt: encryptFielSecret,
+    fingerprint: sha256HexFromBase64File,
+    async store(row) {
+      const { data, error } = await ctx.admin.rpc("portal_csd_store", {
+        _client_id: clientId, _actor: ctx.userId, _via: via,
+        _cert_ciphertext: row.certCiphertext, _key_ciphertext: row.keyCiphertext, _password_ciphertext: row.passwordCiphertext,
+        _serial: row.serialHex, _subject_rfc: row.subjectRfc, _not_before: row.notBefore, _not_after: row.notAfter, _fingerprint: row.fingerprint,
+      });
+      if (error) throw new ApiError(500, "guardado", "No se pudo guardar el certificado. No se guardó nada; intente de nuevo.");
+      return { registryId: data?.registry_id, duplicate: data?.duplicate === true };
+    },
+    audit: (action, details) => audit(ctx, action, clientId, "portal_csd_registry", null, details),
+  }, { cerB64, keyB64, password });
+  if (!r.ok) throw new ApiError(r.status, r.code, r.message, r.missing);
+  return { csd: publicCsdView({ registry_id: r.registryId, cert_serial: r.meta.serial, cert_not_before: r.meta.notBefore, cert_not_after: r.meta.notAfter, registered_via: via }) };
+};
+
+/** Qué falta para poder cargar el CSD (para la pantalla, antes de pedir archivos). */
+const requisitosCsd: Handler = async (ctx) => {
+  const clientId = uuid(ctx.body.client_id, "el cliente");
+  await assertClientAccess(ctx, clientId, ["administrador"]);
+  const { data, error } = await requireUser(ctx).rpc("portal_csd_upload_check", {
+    _client_id: clientId, _actor: ctx.userId, _via: ctx.isPortal ? "portal" : "central",
+  });
+  if (error) throw new ApiError(403, "sin_permiso", error.message);
+  return data;
 };
 
 const estadoCsd: Handler = async (ctx) => {
@@ -428,6 +443,7 @@ const ROUTES: Record<string, Handler> = {
   "facturas.crear": crearFactura,
   "csd.cargar": cargarCsd,
   "csd.estado": estadoCsd,
+  "csd.requisitos": requisitosCsd,
   "csd.revocar": revocarCsd,
   "central/invitar": invitar,
   "central/tickets.facturar": facturarTicket,
