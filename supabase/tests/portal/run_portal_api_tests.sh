@@ -26,7 +26,7 @@ migrate() { # $1 db, $2 = all | pre
 pgrst() { # $1 nombre, $2 db, $3 puerto, $4 db-config
   docker rm -f "$1" >/dev/null 2>&1 || true
   docker run -d --name "$1" --network host \
-    -e PGRST_DB_URI="postgres://authenticator@$TCP:${PGPORT:-5432}/$2" -e PGRST_DB_SCHEMAS=public -e PGRST_DB_ANON_ROLE=anon \
+    -e PGRST_DB_URI="postgres://authenticator${AUTHENTICATOR_PASSWORD:+:$AUTHENTICATOR_PASSWORD}@$TCP:${PGPORT:-5432}/$2" -e PGRST_DB_SCHEMAS=public -e PGRST_DB_ANON_ROLE=anon \
     -e PGRST_JWT_SECRET="$SECRET" -e PGRST_SERVER_PORT="$3" -e PGRST_DB_CONFIG="$4" postgrest/postgrest:v12.2.3 >/dev/null
   for _ in $(seq 1 30); do curl -s -o /dev/null "http://localhost:$3/" && return 0; sleep 1; done
   echo "PostgREST $1 no arrancó"; docker logs "$1"; exit 1
@@ -45,6 +45,9 @@ fresh portal_base; migrate portal_base pre
 q portal_base -f "$T/06_seed_staff_regression.sql" >/dev/null
 echo "  portal_api (con portal) y portal_base (sin portal) listas"
 
+if [[ -n "${AUTHENTICATOR_PASSWORD:-}" ]]; then  # CI: el Postgres del servicio pide contraseña por TCP
+  q postgres -c "ALTER ROLE authenticator PASSWORD '$AUTHENTICATOR_PASSWORD'" >/dev/null
+fi
 echo "== PostgREST"
 pgrst pgrst_portal portal_api 3055 true
 pgrst pgrst_base portal_base 3056 false
