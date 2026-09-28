@@ -76,14 +76,27 @@ async function meetingEndEpoch(accessToken: string): Promise<number | null> {
   return null;
 }
 
-async function setSlackStatus(token: string, status: Status, expiration: number) {
-  await fetch("https://slack.com/api/users.profile.set", {
+/** Errores de Slack que marcan la conexión como rota (hay que reconectar). */
+const SLACK_FATAL_ERRORS = new Set([
+  "token_revoked",
+  "invalid_auth",
+  "not_authed",
+  "account_inactive",
+  "not_allowed_token",
+]);
+
+/** Devuelve null si el estado quedó fijado, o el código de error de Slack. */
+async function setSlackStatus(token: string, status: Status, expiration: number): Promise<string | null> {
+  const res = await fetch("https://slack.com/api/users.profile.set", {
     method: "POST",
     headers: { "Content-Type": "application/json; charset=utf-8", Authorization: `Bearer ${token}` },
     body: JSON.stringify({
       profile: { status_text: status.text, status_emoji: status.emoji, status_expiration: expiration },
     }),
   });
+  const data = await res.json().catch(() => null);
+  if (data?.ok) return null;
+  return typeof data?.error === "string" ? data.error : res.ok ? "unknown" : `http_${res.status}`;
 }
 
 Deno.serve(async (req) => {
@@ -107,11 +120,15 @@ Deno.serve(async (req) => {
 
     const endOfDay = mexEndOfDayEpoch();
     let updated = 0;
+    const broken: string[] = [];
 
     for (const s of sessions ?? []) {
       // Slack conectado
       const { data: slack } = await admin
-        .from("user_slack_connections").select("access_token").eq("user_id", s.user_id).maybeSingle();
+        .from("user_slack_connections")
+        .select("id, access_token, slack_status_broken_at")
+        .eq("user_id", s.user_id)
+        .maybeSingle();
       if (!slack?.access_token) continue;
 
       // Estado de pausa según el último evento de la jornada
@@ -126,15 +143,17 @@ Deno.serve(async (req) => {
       const onBreak = lastEv?.event_type === "break_start";
 
       let status: Status = WORK_MODE[s.work_mode] ?? WORK_MODE.office;
-      // Comida/descanso/trayecto no expiran solos (0): los termina el usuario.
+      // Todas las expiraciones caen al fin del día: si una pausa quedó abierta
+      // (cierre forzado, token muerto, olvido) el estado se limpia solo de
+      // madrugada en lugar de quedar pegado indefinidamente.
       let expiration = endOfDay;
 
       if (onLunch) {
-        status = LUNCH; expiration = 0;
+        status = LUNCH;
       } else if (onBreak) {
-        status = BREAK; expiration = 0;
+        status = BREAK;
       } else if (s.in_transit) {
-        status = TRANSIT; expiration = 0;
+        status = TRANSIT;
       } else {
         // ¿En reunión? (calendario de Outlook del usuario)
         const { data: msTok } = await admin
@@ -148,10 +167,28 @@ Deno.serve(async (req) => {
         }
       }
 
-      try { await setSlackStatus(slack.access_token, status, expiration); updated++; } catch { /* best-effort */ }
+      try {
+        const err = await setSlackStatus(slack.access_token, status, expiration);
+        if (err === null) {
+          updated++;
+          // La conexión volvió a responder: limpia la bandera si estaba rota.
+          if (slack.slack_status_broken_at) {
+            await admin.from("user_slack_connections")
+              .update({ slack_status_broken_at: null }).eq("id", slack.id);
+          }
+        } else if (SLACK_FATAL_ERRORS.has(err)) {
+          // Token muerto: marca la conexión para que la app avise que hay que
+          // reconectar Slack (el estado queda congelado hasta entonces).
+          broken.push(s.user_id);
+          if (!slack.slack_status_broken_at) {
+            await admin.from("user_slack_connections")
+              .update({ slack_status_broken_at: new Date().toISOString() }).eq("id", slack.id);
+          }
+        }
+      } catch { /* best-effort */ }
     }
 
-    return new Response(JSON.stringify({ ok: true, sessions: sessions?.length ?? 0, updated }), {
+    return new Response(JSON.stringify({ ok: true, sessions: sessions?.length ?? 0, updated, broken }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {

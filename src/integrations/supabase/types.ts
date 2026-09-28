@@ -5433,6 +5433,7 @@ export type Database = {
           organization_id: string
           refresh_token: string | null
           scopes: string | null
+          slack_status_broken_at: string | null
           slack_team_id: string
           slack_user_id: string
           token_expires_at: string | null
@@ -5446,6 +5447,7 @@ export type Database = {
           organization_id: string
           refresh_token?: string | null
           scopes?: string | null
+          slack_status_broken_at?: string | null
           slack_team_id: string
           slack_user_id: string
           token_expires_at?: string | null
@@ -5459,6 +5461,7 @@ export type Database = {
           organization_id?: string
           refresh_token?: string | null
           scopes?: string | null
+          slack_status_broken_at?: string | null
           slack_team_id?: string
           slack_user_id?: string
           token_expires_at?: string | null
