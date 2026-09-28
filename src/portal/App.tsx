@@ -6,6 +6,7 @@ import Layout from "./components/Layout";
 import Ingresar from "./pages/Ingresar";
 import Registro from "./pages/Registro";
 import Recuperar from "./pages/Recuperar";
+import Reenviar from "./pages/Reenviar";
 import Restablecer from "./pages/Restablecer";
 import Legal from "./pages/Legal";
 import Pendiente from "./pages/Pendiente";
@@ -68,6 +69,7 @@ export default function App() {
           <Route path="/ingresar" element={<Ingresar />} />
           <Route path="/registro" element={<Registro />} />
           <Route path="/recuperar" element={<Recuperar />} />
+          <Route path="/reenviar" element={<Reenviar />} />
           <Route path="/restablecer" element={<Restablecer />} />
           <Route path="/legal/:kind" element={<Legal />} />
           <Route path="/pendiente" element={<Gate><Pendiente /></Gate>} />

@@ -44,6 +44,7 @@ export default function Ingresar() {
       <div className="mt-4 flex flex-col gap-2 text-sm">
         <Link className="text-primary underline" to="/recuperar">¿Olvidó su contraseña?</Link>
         <Link className="text-primary underline" to="/registro">Crear una cuenta</Link>
+        <Link className="text-primary underline" to="/reenviar">Reenviar correo de confirmación</Link>
         <Link className="text-muted-foreground underline" to="/legal/aviso_privacidad">Aviso de privacidad</Link>
       </div>
     </AuthShell>
