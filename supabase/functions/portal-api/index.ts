@@ -25,6 +25,8 @@ import { publicCsdView } from "../_shared/portal/csd.ts";
 import { registerCsd } from "../_shared/portal/csdRegister.ts";
 import { suggestCategory } from "../_shared/portal/openclaw.ts";
 import { normalizeRfc } from "../_shared/portal/validate.ts";
+import { clientIp, GENERIC_ACCOUNT_MESSAGE, guardPublic, registerAccount, turnstileSiteverify, type PublicKind } from "../_shared/portal/publicAuth.ts";
+import { sha256Hex } from "../_shared/portal/hash.ts";
 
 const API_VERSION = "v1";
 const SIGNED_URL_SECONDS = 120;
@@ -53,38 +55,112 @@ function randomPassword(): string {
 
 // ── Operaciones ─────────────────────────────────────────────────────
 
-/** Registro público. Responde igual exista o no el correo (no enumera cuentas). */
-const registrar: Handler = async (ctx) => {
+// ── Operaciones públicas (C3) ───────────────────────────────────────
+const envInt = (k: string, d: number) => {
+  const n = Number(Deno.env.get(k));
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : d;
+};
+
+/** ¿El cerco de rutas corrió en esta petición? Se pregunta POR PostgREST, que es quien corre el pre-request (V1). */
+async function routeGuardStatus(ctx: Ctx): Promise<{ ok: boolean; [k: string]: unknown }> {
+  const { data, error } = await ctx.anon.rpc("portal_route_guard_status");
+  if (error || !data) return { ok: false, error: "sin_diagnostico" };
+  return data as { ok: boolean };
+}
+
+function publicGuardDeps(ctx: Ctx) {
+  const salt = Deno.env.get("PORTAL_RL_SALT") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  const secret = Deno.env.get("TURNSTILE_SECRET_KEY");
+  return {
+    turnstileSecret: secret,
+    verifyTurnstile: (token: string, ip: string | null) => turnstileSiteverify(secret!, token, ip),
+    async rateLimit(bucket: string, keyHash: string, limit: number, windowSeconds: number) {
+      const { data, error } = await ctx.admin.rpc("portal_rate_limit_hit", { _bucket: bucket, _key_hash: keyHash, _limit: limit, _window_seconds: windowSeconds });
+      // Si el límite no se puede consultar, se cierra (no se abre).
+      return error || !data ? { allowed: false } : (data as { allowed: boolean });
+    },
+    hash: (v: string) => sha256Hex(new TextEncoder().encode(`${salt}|${v}`)),
+    routeGuardOk: async () => (await routeGuardStatus(ctx)).ok === true,
+    limits: {
+      ipPerWindow: envInt("PORTAL_RL_IP_PER_WINDOW", 10),
+      emailPerWindow: envInt("PORTAL_RL_EMAIL_PER_WINDOW", 3),
+      windowSeconds: envInt("PORTAL_RL_WINDOW_SECONDS", 3600),
+    },
+  };
+}
+
+async function publicGuard(ctx: Ctx, kind: PublicKind, email: string) {
+  const g = await guardPublic(publicGuardDeps(ctx), { kind, captchaToken: ctx.body.captcha_token as string, ip: clientIp(ctx.req.headers), email });
+  if (!g.ok) throw new ApiError(g.status, g.code, g.message);
+}
+
+function publicEmail(ctx: Ctx): string {
   const email = str(ctx.body.email, "el correo", 254).toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new ApiError(400, "dato_invalido", "El correo no es válido.");
+  return email;
+}
+
+/** Registro público. Captcha + límite + cerco verificado. Responde igual exista o no el correo. */
+const registrar: Handler = async (ctx) => {
+  const email = publicEmail(ctx);
   const password = str(ctx.body.password, "la contraseña", 128);
   const fullName = str(ctx.body.full_name, "el nombre", 200);
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new ApiError(400, "dato_invalido", "El correo no es válido.");
   if (password.length < 10) throw new ApiError(400, "dato_invalido", "La contraseña debe tener al menos 10 caracteres.");
   if (ctx.body.acepta_aviso !== true || ctx.body.acepta_terminos !== true) {
     throw new ApiError(400, "legal", "Debe aceptar el aviso de privacidad y los términos para crear su cuenta.");
   }
-  const { data, error } = await ctx.admin.auth.admin.createUser({
-    email, password, email_confirm: false,
-    user_metadata: { kawiil_portal: true, full_name: fullName },
-    app_metadata: { kawiil_portal: true, portal_created_via: "registro" },
-  });
-  if (data?.user) {
-    const ua = ctx.req.headers.get("user-agent")?.slice(0, 300) ?? null;
-    for (const kind of ["aviso_privacidad", "terminos"]) {
-      const { data: doc } = await ctx.admin.rpc("portal_current_legal", { _kind: kind });
-      if (doc?.id) {
-        await ctx.admin.from("portal_legal_acceptances").insert({
-          user_id: data.user.id, user_email: email, document_id: doc.id, kind, version: doc.version, user_agent: ua,
-        });
+  await publicGuard(ctx, "registro", email);
+  const r = await registerAccount({
+    async createUser(e, p, n) {
+      const { data, error } = await ctx.admin.auth.admin.createUser({
+        email: e, password: p, email_confirm: false,
+        user_metadata: { kawiil_portal: true, full_name: n },
+        app_metadata: { kawiil_portal: true, portal_created_via: "registro" },
+      });
+      if (data?.user) return { userId: data.user.id };
+      if (error && /already|registered|exists/i.test(error.message)) return { exists: true as const };
+      return { error: error?.message ?? "desconocido" };
+    },
+    async recordLegal(userId, e) {
+      const ua = ctx.req.headers.get("user-agent")?.slice(0, 300) ?? null;
+      for (const kind of ["aviso_privacidad", "terminos"]) {
+        const { data: doc } = await ctx.admin.rpc("portal_current_legal", { _kind: kind });
+        if (doc?.id) {
+          await ctx.admin.from("portal_legal_acceptances").insert({ user_id: userId, user_email: e, document_id: doc.id, kind, version: doc.version, user_agent: ua });
+        }
       }
-    }
-    ctx.userId = data.user.id;
-    await audit(ctx, "cuenta_registro", null, "portal_accounts", data.user.id, {});
-    await ctx.anon.auth.resend({ type: "signup", email, options: { emailRedirectTo: `${PORTAL_URL}/ingresar` } });
-  } else if (error && !/already|registered|exists/i.test(error.message)) {
-    throw new ApiError(500, "registro", "No se pudo crear la cuenta. Intente más tarde.");
-  }
-  return { ok: true, message: "Si el correo es válido, le enviamos un enlace para confirmarlo." };
+    },
+    async sendConfirmation(e) {
+      await ctx.anon.auth.resend({ type: "signup", email: e, options: { emailRedirectTo: `${PORTAL_URL}/ingresar` } });
+    },
+    async audit(userId) {
+      ctx.userId = userId;
+      await audit(ctx, "cuenta_registro", null, "portal_accounts", userId, {});
+      ctx.userId = null;
+    },
+  }, { email, password, fullName });
+  if (!r.ok) throw new ApiError(r.status, r.code, r.message);
+  return { ok: true, message: r.message };
+};
+
+const recuperar: Handler = async (ctx) => {
+  const email = publicEmail(ctx);
+  await publicGuard(ctx, "recuperacion", email);
+  await ctx.anon.auth.resetPasswordForEmail(email, { redirectTo: `${PORTAL_URL}/restablecer` }).catch(() => undefined);
+  return { ok: true, message: GENERIC_ACCOUNT_MESSAGE };
+};
+
+const reenviarConfirmacion: Handler = async (ctx) => {
+  const email = publicEmail(ctx);
+  await publicGuard(ctx, "reenvio", email);
+  await ctx.anon.auth.resend({ type: "signup", email, options: { emailRedirectTo: `${PORTAL_URL}/ingresar` } }).catch(() => undefined);
+  return { ok: true, message: GENERIC_ACCOUNT_MESSAGE };
+};
+
+/** Diagnóstico público del cerco (solo booleanos y un conteo). */
+const diagnosticoCerco: Handler = async (ctx) => {
+  const g = await routeGuardStatus(ctx);
+  return { cerco: g, captcha_configurado: !!Deno.env.get("TURNSTILE_SECRET_KEY") };
 };
 
 /** Enlace firmado de vida corta para un archivo que la RLS del usuario ya deja ver. */
@@ -360,6 +436,10 @@ const invitar: Handler = async (ctx) => {
   const clientId = uuid(ctx.body.client_id, "el cliente");
   const role = str(ctx.body.role, "el rol", 20);
   const tier = (ctx.body.tier as string) ?? "premier";
+  // V1: sin cerco verificado no se crea ni se vincula ninguna cuenta.
+  if (!(await routeGuardStatus(ctx)).ok) {
+    throw new ApiError(503, "cerco_no_verificado", "El cerco de rutas del portal no está verificado; la vinculación de cuentas está bloqueada.");
+  }
   let userId: string | null = null;
   const { data: created, error } = await ctx.admin.auth.admin.createUser({
     email, password: randomPassword(), email_confirm: true,
@@ -434,8 +514,14 @@ const avisar: Handler = async (ctx) => {
   return { ok: true, destinatarios: (to ?? []).length };
 };
 
+/** Únicas operaciones sin sesión. Todas las demás responden 401 sin JWT válido (V3). */
+const PUBLIC_OPS = new Set(["cuenta.registrar", "cuenta.recuperar", "cuenta.reenviar_confirmacion", "diagnostico.cerco"]);
+
 const ROUTES: Record<string, Handler> = {
   "cuenta.registrar": registrar,
+  "cuenta.recuperar": recuperar,
+  "cuenta.reenviar_confirmacion": reenviarConfirmacion,
+  "diagnostico.cerco": diagnosticoCerco,
   "cuenta.eliminar": eliminarCuenta,
   "archivos.enlace": enlaceArchivo,
   "facturas.cargar": cargarFacturas,
@@ -462,7 +548,7 @@ Deno.serve(async (req) => {
     if (version !== API_VERSION) return json({ error: "version_no_soportada", message: `Use /${API_VERSION}/<operación>.` }, 404);
     const handler = ROUTES[rest.join("/")];
     if (!handler) return json({ error: "operacion_desconocida" }, 404);
-    if (rest.join("/") !== "cuenta.registrar" && !ctx.userId) return json({ error: "no_autorizado", message: "Inicie sesión." }, 401);
+    if (!PUBLIC_OPS.has(rest.join("/")) && !ctx.userId) return json({ error: "no_autorizado", message: "Inicie sesión." }, 401);
     return json({ version: API_VERSION, data: await handler(ctx) });
   } catch (err) {
     if (err instanceof ApiError) return json({ error: err.code, message: err.message, details: err.details }, err.status);
