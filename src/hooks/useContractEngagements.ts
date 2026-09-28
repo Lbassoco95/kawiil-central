@@ -27,6 +27,7 @@ export const contractQueryKeys = {
   catalog: (kind: ContractPackageKind) => ["pricing-catalog", kind] as const,
   items: (engagementId: string) => ["contract-items", engagementId] as const,
   template: (engagementId: string) => ["contract-template", engagementId] as const,
+  latestVersion: (engagementId: string) => ["contract-version", "latest", engagementId] as const,
 };
 
 type RpcJson = Record<string, unknown>;
@@ -237,6 +238,30 @@ export function useStaffPatchAnswers() {
   });
 }
 
+export function useLatestContractVersion(engagementId: string | undefined) {
+  return useQuery({
+    queryKey: contractQueryKeys.latestVersion(engagementId || ""),
+    enabled: !!engagementId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("contract_versions" as never)
+        .select("id, version_number, merged_html, created_at")
+        .eq("engagement_id", engagementId!)
+        .eq("status", "ready")
+        .order("version_number", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data as unknown as {
+        id: string;
+        version_number: number;
+        merged_html: string | null;
+        created_at: string;
+      } | null;
+    },
+  });
+}
+
 export function useGenerateContractVersion() {
   const qc = useQueryClient();
   return useMutation({
@@ -268,6 +293,7 @@ export function useGenerateContractVersion() {
     onSuccess: (_d, vars) => {
       void qc.invalidateQueries({ queryKey: contractQueryKeys.byLead(vars.leadId || "") });
       void qc.invalidateQueries({ queryKey: contractQueryKeys.items(vars.engagementId) });
+      void qc.invalidateQueries({ queryKey: contractQueryKeys.latestVersion(vars.engagementId) });
     },
   });
 }
