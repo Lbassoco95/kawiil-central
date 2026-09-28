@@ -413,6 +413,8 @@ export function useCreateCalendarEvent() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["calendar-events"] });
+      setTimeout(() => queryClient.invalidateQueries({ queryKey: ["calendar-events"] }), 1500);
+      setTimeout(() => queryClient.invalidateQueries({ queryKey: ["calendar-events"] }), 5000);
       const d = (data || {}) as {
         onlineMeetingFallback?: boolean;
         fallbackApplied?: string;

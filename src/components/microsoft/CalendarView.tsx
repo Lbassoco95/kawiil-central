@@ -2593,8 +2593,8 @@ export function CalendarView({
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreate(false)}>Cancelar</Button>
-            <Button onClick={handleCreateEvent} disabled={createEvent.isPending || !newEvent.subject}>
-              {createEvent.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button onClick={handleCreateEvent} disabled={createEvent.isPending || createLinkedEvent.isPending || !newEvent.subject}>
+              {(createEvent.isPending || createLinkedEvent.isPending) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Crear evento
             </Button>
           </DialogFooter>
