@@ -72,3 +72,18 @@ describe("emisión detrás de adaptador", () => {
     await expect(e.emitir(borrador(), ctx())).rejects.toBeInstanceOf(PacNoConfigurado);
   });
 });
+
+import { publicCsdView, csdExpiryLevel } from "../../../supabase/functions/_shared/portal/csd.ts";
+describe("CSD: nada se lee de vuelta", () => {
+  it("la vista pública descarta cualquier campo de cifrado o llave", () => {
+    const v = publicCsdView({ registry_id: "r", cert_serial: "1", cert_ciphertext: "X", key_ciphertext: "Y", password_ciphertext: "Z", private_key: "K" });
+    expect(Object.keys(v)).toEqual(["registry_id", "cert_serial"]);
+    expect(JSON.stringify(v)).not.toMatch(/X|Y|Z|K"/);
+  });
+  it("alerta de vencimiento", () => {
+    const now = new Date("2026-09-28T00:00:00Z");
+    expect(csdExpiryLevel("2026-10-05T00:00:00Z", now).level).toBe("urgente");
+    expect(csdExpiryLevel("2026-11-15T00:00:00Z", now).level).toBe("aviso");
+    expect(csdExpiryLevel("2026-09-01T00:00:00Z", now).level).toBe("vencido");
+  });
+});
