@@ -21,7 +21,23 @@ export const pipelineQueryKeys = {
   tasks: (leadId: string) => ["pipeline-tasks", leadId] as const,
   allTasks: ["pipeline-all-tasks"] as const,
   automations: ["pipeline-automations"] as const,
+  referralClients: ["pipeline-referral-clients"] as const,
 };
+
+export function useReferralClients() {
+  return useQuery({
+    queryKey: pipelineQueryKeys.referralClients,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("clients")
+        .select("id, name, status")
+        .neq("status", "prospecto")
+        .order("name", { ascending: true });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+}
 
 export function usePipelineStages() {
   return useQuery({

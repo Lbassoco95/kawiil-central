@@ -16,11 +16,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Building2, User, Handshake } from "lucide-react";
+import { Building2, User, Handshake, UserRoundCheck } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useCreateLead, usePipelineStages, type PipelineStage } from "@/hooks/usePipeline";
+import {
+  useCreateLead,
+  usePipelineStages,
+  useReferralClients,
+  type PipelineStage,
+} from "@/hooks/usePipeline";
 import { usePipelinePartners } from "@/hooks/usePartners";
 import { LeadServicesPicker } from "@/components/pipeline/LeadServicesPicker";
 import { LeadValueFields } from "@/components/pipeline/LeadValueFields";
@@ -43,13 +48,14 @@ const OPTIONAL_COLUMNS = [
   "service_type",
   "service_types",
   "partner_id",
+  "referred_by_client_id",
   "estimated_value_one_time",
   "estimated_value_monthly",
   "estimated_months",
 ] as const;
 
 function isMissingColumnError(message: string): boolean {
-  return /person_type|contact_role|service_type|service_types|partner_id|estimated_value_|estimated_months|schema cache|column .* does not exist/i.test(
+  return /person_type|contact_role|service_type|service_types|partner_id|referred_by_client_id|estimated_value_|estimated_months|schema cache|column .* does not exist/i.test(
     message,
   );
 }
@@ -74,6 +80,7 @@ export function NewLeadDialog({ open, onOpenChange, defaultStageId, stages: stag
   const stages = stagesProp ?? stagesQuery;
   const createLead = useCreateLead();
   const { data: partners = [] } = usePipelinePartners();
+  const { data: referralClients = [] } = useReferralClients();
 
   const [personType, setPersonType] = useState<PersonType | null>(null);
   const [personName, setPersonName] = useState("");
@@ -84,7 +91,9 @@ export function NewLeadDialog({ open, onOpenChange, defaultStageId, stages: stag
   const [phone, setPhone] = useState("");
   const [value, setValue] = useState<ValueBreakdown>({ oneTime: null, monthly: null, months: null });
   const [serviceTypes, setServiceTypes] = useState<ServiceArea[]>([]);
+  const [originType, setOriginType] = useState<"own" | "partner" | "client">("own");
   const [partnerId, setPartnerId] = useState<string>("");
+  const [referringClientId, setReferringClientId] = useState<string>("");
   const [saving, setSaving] = useState(false);
 
   const { data: orgId } = useQuery({
@@ -113,7 +122,9 @@ export function NewLeadDialog({ open, onOpenChange, defaultStageId, stages: stag
     setPhone("");
     setValue({ oneTime: null, monthly: null, months: null });
     setServiceTypes([]);
+    setOriginType("own");
     setPartnerId("");
+    setReferringClientId("");
   }, [open]);
 
   const submit = async () => {
@@ -127,6 +138,14 @@ export function NewLeadDialog({ open, onOpenChange, defaultStageId, stages: stag
     }
     if (!targetStage) {
       toast.error("No hay etapas configuradas en el pipeline");
+      return;
+    }
+    if (originType === "partner" && !partnerId) {
+      toast.error("Selecciona el partner o convenio que refirió al prospecto");
+      return;
+    }
+    if (originType === "client" && !referringClientId) {
+      toast.error("Selecciona el cliente que hizo la recomendación");
       return;
     }
 
@@ -164,7 +183,8 @@ export function NewLeadDialog({ open, onOpenChange, defaultStageId, stages: stag
       contact_role: isMoral ? contactRole.trim() || null : null,
       service_types: serviceTypes,
       service_type: primaryService(serviceTypes),
-      partner_id: partnerId || null,
+      partner_id: originType === "partner" ? partnerId || null : null,
+      referred_by_client_id: originType === "client" ? referringClientId || null : null,
       estimated_value_one_time: value.oneTime,
       estimated_value_monthly: value.monthly,
       estimated_months: value.monthly ? contractMonths(value.months) : null,
@@ -375,30 +395,62 @@ export function NewLeadDialog({ open, onOpenChange, defaultStageId, stages: stag
                     />
                   </div>
                 </div>
-                {activePartners.length > 0 ? (
-                  <div>
-                    <Label className="flex items-center gap-1.5">
-                      <Handshake className="h-3.5 w-3.5" />
-                      Viene de (partner / convenio)
-                    </Label>
-                    <Select
-                      value={partnerId || "__none__"}
-                      onValueChange={(v) => setPartnerId(v === "__none__" ? "" : v)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Canal propio" />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-64">
-                        <SelectItem value="__none__">Canal propio (sin partner)</SelectItem>
-                        {activePartners.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ) : null}
+                <div className="space-y-2">
+                  <Label>¿Cómo llegó este prospecto?</Label>
+                  <Select
+                    value={originType}
+                    onValueChange={(v: "own" | "partner" | "client") => {
+                      setOriginType(v);
+                      if (v !== "partner") setPartnerId("");
+                      if (v !== "client") setReferringClientId("");
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="own">Canal propio</SelectItem>
+                      <SelectItem value="partner">Partner / convenio</SelectItem>
+                      <SelectItem value="client">Recomendación de cliente</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {originType === "partner" ? (
+                    <div>
+                      <Label className="flex items-center gap-1.5 text-xs">
+                        <Handshake className="h-3.5 w-3.5" />
+                        Partner / convenio
+                      </Label>
+                      <Select value={partnerId} onValueChange={setPartnerId}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecciona quién lo refirió" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-64">
+                          {activePartners.map((p) => (
+                            <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : null}
+                  {originType === "client" ? (
+                    <div>
+                      <Label className="flex items-center gap-1.5 text-xs">
+                        <UserRoundCheck className="h-3.5 w-3.5" />
+                        Cliente que recomendó
+                      </Label>
+                      <Select value={referringClientId} onValueChange={setReferringClientId}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecciona un cliente" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-64">
+                          {referralClients.map((client) => (
+                            <SelectItem key={client.id} value={client.id}>{client.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </>
           ) : null}
