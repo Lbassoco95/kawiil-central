@@ -23,7 +23,11 @@ describe("C5: ninguna función existente descifra filas csd_sello", () => {
   it("quien descifra con MOFFIN_FIEL_SECRET solo lee la vista de e.firma (cert_type = 'fiel')", () => {
     const root = resolve(process.cwd(), "supabase/functions");
     const files: string[] = [];
-    const walk = (d: string) => readdirSync(d).forEach((n) => { const p = join(d, n); statSync(p).isDirectory() ? walk(p) : /\.ts$/.test(n) && files.push(p); });
+    const walk = (d: string) => readdirSync(d).forEach((n) => {
+      const p = join(d, n);
+      if (statSync(p).isDirectory()) walk(p);
+      else if (/\.ts$/.test(n)) files.push(p);
+    });
     walk(root);
     const decrypters = files.filter((f) => !f.includes("/_shared/") && !/\/portal-/.test(f) && /decryptFielSecret\(/.test(readFileSync(f, "utf8")));
     expect(decrypters.length).toBeGreaterThan(0);
