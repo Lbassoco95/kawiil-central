@@ -1,4 +1,9 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireMicrosoftClientSecretCandidates } from "../_shared/microsoftClientSecrets.ts";
+import {
+  classifyMicrosoftOAuthError,
+  throwMicrosoftOAuthError,
+} from "../_shared/microsoftOAuthErrors.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": '*',
@@ -457,27 +462,40 @@ async function refreshTokenIfNeeded(supabaseAdmin: any, userId: string, tokenRow
   }
 
   const clientId = Deno.env.get("MICROSOFT_CLIENT_ID")!.trim();
-  const clientSecret = Deno.env.get("MICROSOFT_CLIENT_SECRET")!.trim();
+  const clientSecrets = requireMicrosoftClientSecretCandidates();
   const tenantId = Deno.env.get("MICROSOFT_TENANT_ID")!.trim();
 
-  const res = await fetch(
-    `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: clientId,
-        client_secret: clientSecret,
-        refresh_token: tokenRow.refresh_token,
-        grant_type: "refresh_token",
-      }),
+  let data: Record<string, unknown> = {};
+  let ok = false;
+  let lastFail: unknown = null;
+  for (let i = 0; i < clientSecrets.length; i++) {
+    const res = await fetch(
+      `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: clientId,
+          client_secret: clientSecrets[i],
+          refresh_token: tokenRow.refresh_token,
+          grant_type: "refresh_token",
+        }),
+      },
+    );
+    data = await res.json().catch(() => ({}));
+    if (res.ok && typeof data.access_token === "string") {
+      ok = true;
+      break;
     }
-  );
+    lastFail = data;
+    const classified = classifyMicrosoftOAuthError(data);
+    const retryable =
+      classified?.code === "AUTH_CONFIG_EXPIRED" || classified?.code === "SECRET_INVALID";
+    if (!retryable || i === clientSecrets.length - 1) break;
+  }
+  if (!ok) throwMicrosoftOAuthError(lastFail, "Token refresh failed");
 
-  const data = await res.json();
-  if (!res.ok) throw new Error(`Token refresh failed: ${JSON.stringify(data)}`);
-
-  const newExpiresAt = new Date(Date.now() + data.expires_in * 1000).toISOString();
+  const newExpiresAt = new Date(Date.now() + Number(data.expires_in || 3600) * 1000).toISOString();
 
   await supabaseAdmin
     .from("microsoft_tokens")
@@ -2342,6 +2360,26 @@ Deno.serve(async (req) => {
         details: message.replace("MICROSOFT_PERMISSION_REQUIRED:", ""),
       }), {
         status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (message.startsWith("MICROSOFT_AUTH_CONFIG_EXPIRED:")) {
+      return new Response(JSON.stringify({
+        error: message.replace("MICROSOFT_AUTH_CONFIG_EXPIRED:", ""),
+        code: "AUTH_CONFIG_EXPIRED",
+      }), {
+        status: 503,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (message.startsWith("MICROSOFT_RECONNECT_REQUIRED:")) {
+      return new Response(JSON.stringify({
+        error: message.replace("MICROSOFT_RECONNECT_REQUIRED:", ""),
+        code: "RECONNECT_REQUIRED",
+      }), {
+        status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

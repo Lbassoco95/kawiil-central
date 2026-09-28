@@ -166,12 +166,17 @@ App ID: `db370917-4e36-4ef5-b152-322394f50980` (proyecto Supabase
    - `AZURE_CLIENT_SECRET` (pipeline/mail; debe coincidir si es la misma app)
 4. No hace falta redeploy solo por rotar el secreto.
 
-Errores Azure habituales al pegar mal el secreto:
+Errores Azure habituales al pegar mal el secreto (sonda y callback los distinguen):
 
-| Código Azure | Significado |
-|---|---|
-| `AADSTS7000222` | Secret **expirado** (sigue el Value viejo en Supabase) |
-| `AADSTS7000215` | Secret **inválido** (typo, truncado, o se pegó el **Secret ID** en lugar del Value) |
+| Código Azure | Significado | Qué hacer |
+|---|---|---|
+| `AADSTS7000222` | Secret **expirado** (sigue el Value viejo en `MICROSOFT_CLIENT_SECRET`) | Pegar el **Value** del secreto nuevo |
+| `AADSTS7000215` | Secret **inválido** (typo, truncado, o se pegó el **Secret ID**) | Copiar el **Value**, no el Secret ID |
+
+Estado verificado 2026-09-28 en `qppfampapbxdgednkofc`: `MICROSOFT_CLIENT_SECRET`
+seguía en `7000222` y `AZURE_CLIENT_SECRET` en `7000215` (Values distintos y ambos
+malos). Mientras Azure responda así, Calendario mostrará `auth_config_expired` al
+conectar — **no es un bug del front**.
 
 ### Verificación end-to-end (sonda)
 
