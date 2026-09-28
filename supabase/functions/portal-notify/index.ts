@@ -111,5 +111,17 @@ Deno.serve(async (req) => {
       summary.errores++;
     }
   }
-  return json(summary);
+  // Cola de borrado de archivos (eliminación de cuenta y purga por plazo vencido, C4).
+  const { data: purge } = await admin.from("portal_storage_purge_queue").select("id, bucket, path").is("done_at", null).limit(200);
+  const byBucket = new Map<string, { id: number; path: string }[]>();
+  for (const p of purge ?? []) byBucket.set(p.bucket, [...(byBucket.get(p.bucket) ?? []), { id: p.id, path: p.path }]);
+  let archivos = 0;
+  for (const [bucket, items] of byBucket) {
+    const { error } = await admin.storage.from(bucket).remove(items.map((i) => i.path));
+    await admin.from("portal_storage_purge_queue")
+      .update(error ? { error: error.message.slice(0, 300) } : { done_at: new Date().toISOString() })
+      .in("id", items.map((i) => i.id));
+    if (!error) archivos += items.length;
+  }
+  return json({ ...summary, archivos_borrados: archivos });
 });

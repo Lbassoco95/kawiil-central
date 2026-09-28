@@ -10,6 +10,54 @@ import { fmtDate } from "../lib/format";
 import { Notice, PageTitle, StatusPill } from "../components/ui";
 import { csdExpiryLevel } from "../../../supabase/functions/_shared/portal/csd.ts";
 
+interface PlanItem { key: string; label: string; detalle: string; cantidad?: number; client?: string; anios?: number; hasta?: string }
+interface Plan { bloqueada: boolean; bloqueos: { client: string; motivo: string }[]; elimina: PlanItem[]; conserva: PlanItem[]; politica: { fiscal_retention_years: number; confirmada: boolean } }
+
+/**
+ * Eliminar la cuenta (C4). El DESGLOSE sale de la base (portal_account_deletion_plan):
+ * lo que se borra y lo que se conserva según los datos reales y la política vigente.
+ * Los textos de encabezado son MARCADORES que Polo reemplaza.
+ */
+function DeletionSection({ onDone }: { onDone: () => void }) {
+  const [plan, setPlan] = useState<Plan | null>(null);
+  const [confirm, setConfirm] = useState("");
+  const [msg, setMsg] = useState<{ tone: "ok" | "bad" | "warn"; text: string } | null>(null);
+  useEffect(() => {
+    db.rpc("portal_account_deletion_plan", {}).then(({ data }) => setPlan((data as Plan) ?? null));
+  }, []);
+  const itemText = (i: PlanItem) => `${i.label}${i.client ? ` — ${i.client}` : ""}${typeof i.cantidad === "number" ? ` (${i.cantidad})` : ""}`;
+  return (
+    <section className="rounded-xl border border-destructive/40 bg-card p-4" aria-labelledby="del-t">
+      <h2 id="del-t" className="text-lg text-destructive">Eliminar mi cuenta</h2>
+      <p className="kw-placeholder mt-2 rounded-md p-2 text-sm">[MARCADOR — texto de Polo] Explicación general sobre la eliminación de la cuenta y la conservación de datos fiscales.</p>
+      {!plan ? <p className="mt-2 text-sm text-muted-foreground">Calculando qué se borrará y qué se conservará…</p> : (
+        <>
+          <h3 className="mt-3 font-semibold">Se eliminará</h3>
+          <ul className="list-disc pl-5 text-sm">{plan.elimina.map((i, n) => <li key={n}><strong>{itemText(i)}</strong>: {i.detalle}</li>)}</ul>
+          <h3 className="mt-3 font-semibold">Se conservará, y por qué</h3>
+          <ul className="list-disc pl-5 text-sm">{plan.conserva.map((i, n) => (
+            <li key={n}><strong>{itemText(i)}</strong>: {i.detalle}{i.hasta ? ` Hasta el ${fmtDate(i.hasta)} (${i.anios} años).` : ""}</li>
+          ))}</ul>
+          {!plan.politica.confirmada && <p className="mt-2 text-xs text-muted-foreground">El plazo de conservación de {plan.politica.fiscal_retention_years} años es una propuesta pendiente de confirmación por el Oficial de Cumplimiento de Kawiil.</p>}
+          {plan.bloqueada ? (
+            <div className="mt-3 space-y-2">{plan.bloqueos.map((b, n) => <Notice key={n} tone="warn" title={`No se puede eliminar todavía: ${b.client}`}>{b.motivo}</Notice>)}</div>
+          ) : (
+            <>
+              <Label htmlFor="del" className="mt-3 block text-sm">Escriba ELIMINAR para confirmar</Label>
+              <Input id="del" value={confirm} onChange={(e) => setConfirm(e.target.value)} className="mt-1 max-w-xs" />
+              <Button className="mt-2" variant="destructive" disabled={confirm !== "ELIMINAR"} onClick={async () => {
+                try { await callApi("cuenta.eliminar", { confirmacion: "ELIMINAR" }); await db.auth.signOut(); onDone(); }
+                catch (e) { setMsg({ tone: "bad", text: (e as Error).message }); }
+              }}>Eliminar mi cuenta</Button>
+            </>
+          )}
+        </>
+      )}
+      {msg && <div className="mt-3"><Notice tone={msg.tone}>{msg.text}</Notice></div>}
+    </section>
+  );
+}
+
 interface Csd { registry_id: string; cert_serial: string | null; cert_not_after: string | null; revoked_at: string | null; registered_via: string; last_used_at: string | null }
 const ROLE: Record<string, string> = { administrador: "Administrador", operativo: "Operativo", consulta: "Consulta" };
 
@@ -21,11 +69,12 @@ export default function Cuenta() {
   const [key, setKey] = useState<File | null>(null);
   const [pwd, setPwd] = useState("");
   const [msg, setMsg] = useState<{ tone: "ok" | "bad" | "warn"; text: string } | null>(null);
-  const [confirm, setConfirm] = useState("");
   const isAdmin = active?.role === "administrador";
 
+  const [req, setReq] = useState<{ ok: boolean; missing: { key: string; label: string }[] } | null>(null);
   const loadCsd = async () => {
     if (!active || !isAdmin) return;
+    setReq(await callApi<{ ok: boolean; missing: { key: string; label: string }[] }>("csd.requisitos", { client_id: active.client_id }).catch(() => null));
     const r = await callApi<{ csd: Csd[] }>("csd.estado", { client_id: active.client_id }).catch(() => ({ csd: [] }));
     setCsd(r.csd);
   };
@@ -40,6 +89,7 @@ export default function Cuenta() {
       setMsg({ tone: "ok", text: "Certificado guardado y cifrado. Por seguridad no se puede ver ni descargar de nuevo." });
       await loadCsd();
     } catch (err) {
+      setPwd(""); // nunca se conserva la contraseña en pantalla tras un intento fallido
       setMsg({ tone: "bad", text: err instanceof PortalApiError ? err.message : "No se pudo guardar el certificado." });
     }
   };
@@ -72,12 +122,17 @@ export default function Cuenta() {
               </div>
             );
           })}
-          <form onSubmit={uploadCsd} className="mt-3 grid gap-2 md:grid-cols-3">
+          {req && !req.ok && (
+            <div className="mt-3"><Notice tone="warn" title="Antes de recibir su certificado falta:">
+              <ul className="list-disc pl-5">{req.missing.map((m) => <li key={m.key}>{m.label}</li>)}</ul>
+            </Notice></div>
+          )}
+          {req?.ok && <form onSubmit={uploadCsd} className="mt-3 grid gap-2 md:grid-cols-3">
             <div><Label htmlFor="cer">Archivo .cer</Label><Input id="cer" type="file" accept=".cer" onChange={(e) => setCer(e.target.files?.[0] ?? null)} /></div>
             <div><Label htmlFor="key">Archivo .key</Label><Input id="key" type="file" accept=".key" onChange={(e) => setKey(e.target.files?.[0] ?? null)} /></div>
             <div><Label htmlFor="pwd">Contraseña de la llave</Label><Input id="pwd" type="password" autoComplete="off" value={pwd} onChange={(e) => setPwd(e.target.value)} /></div>
             <Button type="submit" className="md:col-span-3 md:w-fit" disabled={!cer || !key || !pwd}>Guardar certificado</Button>
-          </form>
+          </form>}
           {msg && <div className="mt-3"><Notice tone={msg.tone}>{msg.text}</Notice></div>}
         </section>
       )}
@@ -91,16 +146,7 @@ export default function Cuenta() {
         </div>
       </section>
 
-      <section className="rounded-xl border border-destructive/40 bg-card p-4" aria-labelledby="del-t">
-        <h2 id="del-t" className="text-lg text-destructive">Eliminar mi cuenta</h2>
-        <p className="text-sm">Se elimina su acceso al portal. Las facturas y documentos de su empresa se conservan en Kawiil conforme a las obligaciones fiscales; el registro de la eliminación queda en la bitácora.</p>
-        <Label htmlFor="del" className="mt-2 block text-sm">Escriba ELIMINAR para confirmar</Label>
-        <Input id="del" value={confirm} onChange={(e) => setConfirm(e.target.value)} className="mt-1 max-w-xs" />
-        <Button className="mt-2" variant="destructive" disabled={confirm !== "ELIMINAR"} onClick={async () => {
-          try { await callApi("cuenta.eliminar", { confirmacion: "ELIMINAR" }); await db.auth.signOut(); navigate("/ingresar"); }
-          catch (e) { setMsg({ tone: "bad", text: (e as Error).message }); }
-        }}>Eliminar mi cuenta</Button>
-      </section>
+      <DeletionSection onDone={() => navigate("/ingresar")} />
     </>
   );
 }

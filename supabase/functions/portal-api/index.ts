@@ -408,15 +408,29 @@ const revocarCsd: Handler = async (ctx) => {
   return { ok: true };
 };
 
-/** Eliminación de la cuenta desde el portal (requisito de App Store y Google Play). */
+/**
+ * Eliminación de la cuenta desde el portal (C4; requisito de App Store y Google Play).
+ * La base decide qué se borra, qué se conserva y si está bloqueada
+ * (portal_execute_account_deletion). Después se borra el usuario de Auth y los
+ * archivos salen por la cola de borrado (portal-notify).
+ */
 const eliminarCuenta: Handler = async (ctx) => {
   requireUser(ctx);
   if (!ctx.isPortal) throw new ApiError(403, "sin_permiso", "Solo cuentas del portal.");
   if (ctx.body.confirmacion !== "ELIMINAR") throw new ApiError(400, "confirmacion", "Escriba ELIMINAR para confirmar.");
-  await audit(ctx, "cuenta_eliminada", null, "portal_accounts", ctx.userId, { via: "portal" });
-  const { error } = await ctx.admin.auth.admin.deleteUser(ctx.userId!);
-  if (error) throw new ApiError(500, "eliminacion", "No se pudo eliminar la cuenta. Intente de nuevo o escríbanos.");
-  return { ok: true };
+  const uid = ctx.userId!;
+  const { data: res, error } = await ctx.admin.rpc("portal_execute_account_deletion", { _uid: uid });
+  if (error || !res) throw new ApiError(500, "eliminacion", "No se pudo procesar la eliminación. No se borró nada; intente de nuevo.");
+  if (res.bloqueada) {
+    throw new ApiError(409, "eliminacion_bloqueada", "Su cuenta no se puede eliminar todavía.", res.bloqueos);
+  }
+  const { error: delErr } = await ctx.admin.auth.admin.deleteUser(uid);
+  await ctx.admin.rpc("portal_finish_account_deletion", { _request_id: res.request_id, _ok: !delErr, _error: delErr?.message ?? null });
+  // Bitácora del hecho sin identificar a la persona (ya está seudonimizada).
+  ctx.userId = null;
+  await audit(ctx, "cuenta_eliminada", null, "portal_deletion_requests", res.request_id, { via: "portal", resultado: delErr ? "error_auth" : "ok" });
+  if (delErr) throw new ApiError(500, "eliminacion", "Sus datos ya se procesaron, pero falta cerrar su acceso. Intente de nuevo o escríbanos.");
+  return { ok: true, resultado: res.result };
 };
 
 // ── Central → app ───────────────────────────────────────────────────
