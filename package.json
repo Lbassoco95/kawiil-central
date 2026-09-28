@@ -21,7 +21,8 @@
     "dev:portal": "vite --config vite.config.portal.ts",
     "build:portal": "vite build --config vite.config.portal.ts",
     "preview:portal": "vite preview --config vite.config.portal.ts",
-    "test:portal-db": "bash supabase/tests/portal/run_portal_db_tests.sh"
+    "test:portal-db": "bash supabase/tests/portal/run_portal_db_tests.sh",
+    "test:portal-api": "node supabase/tests/portal/api_isolation.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

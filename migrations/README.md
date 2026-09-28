@@ -27,3 +27,9 @@ Convención:
 | 2026-09-18 | `2026-09-18_mtg_unmatched_transcripts.rollback.sql` | Rollback unmatched transcripts. |
 | 2026-09-18 | `2026-09-18_mtg_documents_group_and_slack.rollback.sql` | Rollback `documents.client_group_id` + `mtg_series.slack_channel_id`. |
 | 2026-09-18 | *(pendiente apply prod)* | `20260918140000`, `20260918140100`, `20260918140200` **aún no** en `schema_migrations` de prod. Harness local (`verify.sh` B345) debe pasar en Mac de Polo antes de `supabase db push`. Rama: `feat/mtg-juntas-b2`. |
+| 2026-09-28 | `2026-09-28_portal_isolation_guard.rollback.sql` | **Rollback** de `20260928140500_portal_isolation_guard.sql` (portal del cliente): quita las policies restrictivas `portal_deny_portal_accounts`, la de storage y el `pgrst.db_pre_request`. Correr PRIMERO. |
+| 2026-09-28 | `2026-09-28_portal_tickets.rollback.sql` | **Rollback** de `20260928140400_portal_tickets.sql`: quita policies, vista y RPC del portal sobre Ju'un. No borra tickets. |
+| 2026-09-28 | `2026-09-28_portal_cfdi.rollback.sql` | **Rollback** de `20260928140300_portal_cfdi.sql`. Destructivo para datos del portal (facturas cargadas, emisiones, cancelaciones, registro de CSD). No toca `client_sat_certificates`. |
+| 2026-09-28 | `2026-09-28_portal_documents.rollback.sql` | **Rollback** de `20260928140200_portal_documents.sql`. Borra mapeo y registro de documentos; el bucket `portal` solo si está vacío. |
+| 2026-09-28 | `2026-09-28_portal_messaging.rollback.sql` | **Rollback** de `20260928140100_portal_messaging.sql`. Borra hilos y mensajes del portal. |
+| 2026-09-28 | `2026-09-28_portal_core.rollback.sql` | **Rollback** de `20260928140000_portal_core.sql`. Correr AL FINAL. Borra cuentas del portal (y sus usuarios de Auth, por seguridad) y restaura `handle_new_user`. |
