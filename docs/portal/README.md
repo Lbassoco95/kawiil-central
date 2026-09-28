@@ -8,6 +8,7 @@ Cara nueva de `kawiil-central` para los clientes de Kawiil: tablero de gasto, fa
 | [API.md](API.md) | Contrato v1 entre la app y central |
 | [RUNBOOK.md](RUNBOOK.md) | Migraciones, variables, pasos manuales, cron |
 | [TIENDAS.md](TIENDAS.md) | Lo que falta para App Store y Google Play |
+| [CONSERVACION.md](CONSERVACION.md) | Política de conservación y eliminación de datos (pendiente de confirmación de Polo) |
 
 ## Cómo está armado
 
@@ -49,12 +50,10 @@ npm run test              # incluye src/test/portal/* (Dropbox con carpeta local
 
 # Base (Postgres local ≥15 con superusuario; el stub imita Auth/Storage/Vault/cron de Supabase):
 PGHOST=/ruta/socket PGPORT=5432 PGUSER=postgres npm run test:portal-db
-#  → base vacía, rollback + reaplicación, base con datos previos, idempotencia; 103 verificaciones por corrida
+#  → base vacía, rollback + reaplicación, base con datos previos, idempotencia; 154 verificaciones por corrida
 
-# API (PostgREST real frente a una base con los datos sintéticos del paso anterior):
-#   1) crear la base portal_api: stub + migraciones + 10_isolation_test.sql sin su DROP final
-#   2) docker run --network host -e PGRST_DB_URI=postgres://authenticator@127.0.0.1:5432/portal_api \
-#        -e PGRST_DB_SCHEMAS=public -e PGRST_DB_ANON_ROLE=anon -e PGRST_JWT_SECRET=<32+> -e PGRST_SERVER_PORT=3055 postgrest/postgrest:v12.2.3
-PGRST_URL=http://localhost:3055 PGRST_JWT_SECRET=<32+> npm run test:portal-api   # 54 verificaciones
+# API (Postgres local + Docker con postgrest/postgrest:v12.2.3):
+PGHOST=… PGPORT=… PGUSER=postgres npm run test:portal-api   # orquesta todo (bases, PostgREST en Docker, aislamiento, regresión del equipo, cerco y su negativo)
+DENO=/ruta/deno npm run test:portal-edge   # funciones con verify_jwt=false sin credencial
 ```
 Todos los datos de prueba son sintéticos (RFC ficticios, dominios `.invalid`).

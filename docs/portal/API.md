@@ -21,12 +21,16 @@ Respuesta de `portal-api`: `{ "version": "v1", "data": … }`. Error: `{ "error"
 ### Cuenta
 | Operación | Puerta | Cuerpo | Notas |
 |---|---|---|---|
-| `v1/cuenta.registrar` | portal-api (pública) | `{ email, password (≥10), full_name, acepta_aviso: true, acepta_terminos: true }` | Crea la cuenta **pendiente** (marca `kawiil_portal`), guarda la aceptación del aviso y de los términos con versión y fecha, y pide a Auth el correo de confirmación. Responde igual exista o no el correo. |
+| `v1/cuenta.registrar` | portal-api (pública) | `{ email, password (≥10), full_name, acepta_aviso: true, acepta_terminos: true, captcha_token }` | Turnstile + límite por IP y correo + cerco de rutas verificado. Crea la cuenta **pendiente**, guarda la aceptación con versión y fecha y pide a Auth el correo de confirmación. Responde igual exista o no el correo. Sin `TURNSTILE_SECRET_KEY` → `503 registro_cerrado`. |
+| `v1/cuenta.recuperar` | portal-api (pública) | `{ email, captcha_token }` | Turnstile + límite. Respuesta genérica. |
+| `v1/cuenta.reenviar_confirmacion` | portal-api (pública) | `{ email, captcha_token }` | Turnstile + límite. Respuesta genérica. |
+| `v1/diagnostico.cerco` | portal-api (pública) | `{}` | Booleanos del cerco de rutas y si el captcha está configurado. |
 | `rpc/portal_me` | PostgREST | `{}` | Cuenta, nivel, clientes (con rol, emisión, tickets) y textos pendientes de aceptar. |
 | `rpc/portal_accept_legal` | PostgREST | `{ _kind: "aviso_privacidad"\|"terminos"\|"contrato_uso", _client_id?, _user_agent? }` | Acepta la versión vigente. Deja bitácora. |
 | `rpc/portal_log_access` | PostgREST | `{ _client_id? }` | Bitácora de acceso (la llama el portal al iniciar sesión). |
 | `rpc/portal_activate_basic` | PostgREST | `{ _razon_social, _rfc }` | Cuenta pendiente → nivel básico con su propio cliente (prospecto). |
-| `v1/cuenta.eliminar` | portal-api | `{ confirmacion: "ELIMINAR" }` | Bitácora `cuenta_eliminada` y borrado del usuario de Auth (cascada a cuenta y membresías). |
+| `rpc/portal_account_deletion_plan` | PostgREST | `{}` | Qué se elimina, qué se conserva (con cantidades y fecha de purga) y bloqueos, calculado de los datos reales y de `portal_retention_policy`. |
+| `v1/cuenta.eliminar` | portal-api | `{ confirmacion: "ELIMINAR" }` | Ejecuta la política (C4): destruye el CSD del nivel básico propio, borra mensajes y tickets no facturados, retiene CFDI y tickets facturados con fecha de purga, seudonimiza bitácora y aceptaciones, borra el usuario de Auth. Única administradora de un premier → `409 eliminacion_bloqueada`. |
 | Recuperar contraseña / cerrar sesión en todos los dispositivos | Supabase Auth | `resetPasswordForEmail`, `signOut({ scope: "global" })` | — |
 
 ### Facturas
@@ -43,7 +47,8 @@ Respuesta de `portal-api`: `{ "version": "v1", "data": … }`. Error: `{ "error"
 ### CSD
 | Operación | Puerta | Cuerpo | Notas |
 |---|---|---|---|
-| `v1/csd.cargar` | portal-api | `{ client_id, cer_base64, key_base64, password }` | Verifica que el certificado sea del RFC del cliente y esté vigente; cifra en la Edge. Responde **solo metadatos**. |
+| `v1/csd.requisitos` | portal-api | `{ client_id }` | Qué falta para poder cargar (aviso de privacidad y, en básico, contrato de uso; en central, carta de instrucción vigente). |
+| `v1/csd.cargar` | portal-api | `{ client_id, cer_base64, key_base64, password }` | Autorización previa → en memoria: la contraseña abre la llave, la llave corresponde al certificado, es CSD y no e.firma, RFC del cliente, vigente → cifrado con `PORTAL_CSD_KEY_SECRET` / `PORTAL_CSD_SECRET` → guardado en una transacción. Si algo falla no se guarda nada; bitácora `csd_carga` o `csd_carga_rechazada` con un código. Responde **solo metadatos**. |
 | `v1/csd.estado` | portal-api (o `rpc/portal_csd_status`) | `{ client_id }` | Serie, vigencia, días para vencer, revocado, último uso. |
 | `v1/csd.revocar` | portal-api | `{ registry_id }` | Revoca y apaga la emisión del cliente. |
 
@@ -96,7 +101,7 @@ Lo hace el equipo desde central; el portal lo ve en su siguiente lectura y recib
 
 ## 3. Códigos de error de `portal-api`
 
-`no_autorizado` 401 · `sin_permiso` 403 · `emision_apagada` 403 · `expediente_incompleto` 403 · `limite_basico` 402 · `validacion` 422 (con `details` = lista de `{ campo, mensaje }`) · `cfdi_invalido` 422 · `pac_no_configurado` 503 · `no_configurado` 503 · `dato_faltante`/`dato_invalido` 400 · `no_encontrado` 404 · `ya_cargado` 409 · `interno` 500.
+`no_autorizado` 401 · `sin_permiso` 403 · `registro_cerrado` 503 · `captcha_requerido` 400 · `captcha_invalido`/`captcha_vencido` 403 · `demasiados_intentos` 429 · `autorizacion_pendiente` 403 (con `details` = lo que falta) · `llave_o_contrasena`/`llave_no_corresponde`/`es_efirma`/`tipo_indeterminado`/`rfc_ajeno`/`vencido` 400 · `eliminacion_bloqueada` 409 · `cerco_no_verificado` 503 · `emision_apagada` 403 · `expediente_incompleto` 403 · `limite_basico` 402 · `validacion` 422 (con `details` = lista de `{ campo, mensaje }`) · `cfdi_invalido` 422 · `pac_no_configurado` 503 · `no_configurado` 503 · `dato_faltante`/`dato_invalido` 400 · `no_encontrado` 404 · `ya_cargado` 409 · `interno` 500.
 
 ## 4. Lo que la API nunca hace
 
