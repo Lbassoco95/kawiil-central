@@ -61,6 +61,9 @@ GRANT EXECUTE ON FUNCTION portal_test.login(uuid) TO authenticated, anon;
 
 RESET ROLE;
 SELECT set_config('request.jwt.claims', '', false);
+-- Simula lo que hace PostgREST en cada petición: corre portal_pre_request() (V1).
+-- Sin esta marca la base bloquea la vinculación (lo prueba 20_corrections_test.sql).
+SELECT set_config('portal.pre_request_ran', 'on', false);
 
 INSERT INTO public.organizations (id, name, slug) VALUES
   (:'orgk', 'Kawiil (prueba)', 'kawiil-prueba'), (:'org2', 'Otra org (prueba)', 'otra-prueba')
@@ -541,5 +544,4 @@ SELECT portal_test.ok(NOT EXISTS (
   'toda tabla del back-office tiene portal_deny_portal_accounts (una tabla nueva sin ella hace fallar esta prueba)');
 
 RESET ROLE;
-DROP SCHEMA portal_test CASCADE;
-\echo 'TODAS LAS PRUEBAS DE BASE DEL PORTAL PASARON'
+-- Continúa en 20_corrections_test.sql (mismos datos y utilidades).

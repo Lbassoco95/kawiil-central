@@ -21,8 +21,16 @@ PORTAL_MIGS=(
   20260928140300_portal_cfdi
   20260928140400_portal_tickets
   20260928140500_portal_isolation_guard
+  20260928150000_portal_csd_authorization
+  20260928150100_portal_rate_limits
+  20260928150200_portal_account_deletion
+  20260928150300_portal_route_guard_health
 )
 ROLLBACKS=(
+  2026-09-28_portal_route_guard_health
+  2026-09-28_portal_account_deletion
+  2026-09-28_portal_rate_limits
+  2026-09-28_portal_csd_authorization
   2026-09-28_portal_isolation_guard
   2026-09-28_portal_tickets
   2026-09-28_portal_cfdi
@@ -76,6 +84,7 @@ assert_no_portal_left() {
       UNION ALL SELECT 'función '||proname FROM pg_proc WHERE pronamespace='public'::regnamespace AND proname ~ '^portal_'
       UNION ALL SELECT 'policy '||tablename||'.'||policyname FROM pg_policies WHERE policyname ~* 'portal'
       UNION ALL SELECT 'trigger '||tgname FROM pg_trigger WHERE tgname ~ 'portal'
+      UNION ALL SELECT 'cron '||jobname FROM cron.job WHERE jobname ~ 'portal'
       UNION ALL SELECT 'bucket portal vacío' FROM storage.buckets WHERE id='portal'
                  AND NOT EXISTS (SELECT 1 FROM storage.objects WHERE bucket_id='portal')
       UNION ALL SELECT 'pre_request' FROM pg_db_role_setting s JOIN pg_roles r ON r.oid=s.setrole
@@ -89,7 +98,7 @@ fn_hash() { psql -X -At -d "$1" -c "SELECT md5(pg_get_functiondef('public.handle
 
 run_tests() {
   local db="$1"
-  if ! q "$db" -f "$T/10_isolation_test.sql" > "/tmp/portal_test_$db.log" 2>&1; then
+  if ! cat "$T/10_isolation_test.sql" "$T/20_corrections_test.sql" | q "$db" > "/tmp/portal_test_$db.log" 2>&1; then
     grep -E "FALLA|ERROR" "/tmp/portal_test_$db.log" | head -20
     echo "FALLA: pruebas en $db (log: /tmp/portal_test_$db.log)"; exit 1
   fi
