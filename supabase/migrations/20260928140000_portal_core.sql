@@ -335,7 +335,13 @@ CREATE OR REPLACE FUNCTION public.portal_client_org_id(_client_id uuid)
 RETURNS uuid
 LANGUAGE sql STABLE SECURITY DEFINER
 SET search_path = pg_temp, public
-AS $$ SELECT organization_id FROM public.clients WHERE id = _client_id $$;
+AS $$
+  SELECT c.organization_id FROM public.clients c
+   WHERE c.id = _client_id
+     AND (auth.uid() IS NULL
+          OR c.id IN (SELECT public.portal_my_client_ids())
+          OR (public.portal_is_staff(auth.uid()) AND c.organization_id = public.get_user_org_id(auth.uid())))
+$$;
 
 -- ¿El usuario del portal tiene algún cliente en esa organización?
 CREATE OR REPLACE FUNCTION public.portal_can_read_org(_org_id uuid)
