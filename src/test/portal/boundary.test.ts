@@ -34,10 +34,12 @@ describe("frontera del build del portal", () => {
   it("hay código de portal que revisar", () => expect(all.length).toBeGreaterThan(10));
   it("no importa páginas, layouts, contextos ni hooks de central", () => {
     const bad: string[] = [];
+    let checked = 0;
     for (const f of all) {
       const src = readFileSync(f, "utf8");
-      for (const m of src.matchAll(/(?:import|from)\s*\(?\s*["']([^"']+)["']/g)) {
-        const spec = m[1];
+      for (const m of src.matchAll(/(?:^|\n)\s*(?:import|export)\s[^;]*?from\s*["']([^"']+)["']|import\(\s*["']([^"']+)["']\s*\)/g)) {
+        const spec = m[1] ?? m[2];
+        checked++;
         if (spec.startsWith("../") && !spec.includes("supabase/functions/_shared/portal") && !/^\.\.\/(lib|components|pages)\//.test(spec) && !spec.startsWith("./")) {
           // relativo que sale de src/portal: solo hacia los módulos compartidos del portal
           const target = resolve(f, "..", spec);
@@ -47,6 +49,7 @@ describe("frontera del build del portal", () => {
         if (!ALLOWED.some((re) => re.test(spec))) bad.push(`${f}: ${spec}`);
       }
     }
+    expect(checked).toBeGreaterThan(80);
     expect(bad).toEqual([]);
   });
   it("el back-office no importa el portal", () => {
