@@ -53,3 +53,13 @@ Si algo del prompt chocó con el repo, **ganó el repo** y queda anotado en la s
 | «Rama `feat/kawiil-os-portal`» | La sesión obliga a `claude/elegant-gates-ha1ika` | Se trabaja en esa rama; commits separados por módulo. |
 | «Corre en la Mac» | Corrió en un agente en la nube | Sin acceso a Dropbox real, SAT ni Supabase remoto: todo se probó en Postgres 16 local con stub de Supabase. |
 | Matriz régimen–uso «de la fuente oficial» | No existe en el repo y no hay red al SAT | Catálogo vacío + generador; emisión bloqueada hasta cargarla. |
+
+## 4. Hallazgos durante la construcción
+
+| Hallazgo | Riesgo para el portal | Qué se hizo |
+|---|---|---|
+| `lead_tasks` tiene policies `SELECT` y `UPDATE` con `USING (true)` para `authenticated`; `slack_user_profiles`, `compliance_*` y `fis_recipe_versions` se leen con `true`; `knowledge_insights` permite `UPDATE` a `public` | Una cuenta del portal (es `authenticated`) leería o editaría datos internos | Policy restrictiva `portal_deny_portal_accounts` en **toda** tabla del back-office (138) — solo afecta a cuentas del portal. El problema para el resto de usuarios queda **sin tocar** y se reporta. |
+| Bucket `documents` con policies `bucket_id = 'documents'` a secas | Una cuenta del portal listaría/descargaría archivos internos | Policy restrictiva en `storage.objects`: fuera de `portal` y `juun`, nada. |
+| ~45 funciones `SECURITY DEFINER` ejecutables por `authenticated` que no verifican organización (p. ej. `detect_duplicates`, `client_knowledge_stats(p_org_id)`) y el id de organización es conocido | Fuga por RPC | `portal_pre_request` (db_pre_request de PostgREST) con lista blanca de rutas para cuentas del portal. |
+| `scripts/` está en `.gitignore` | El generador que cita el README de Ju'un nunca llegó al repo | El generador del portal vive en `tools/portal/`. |
+| `deno check` con Deno 2.x marca 3 errores de tipos en `_shared/moffinFielCrypto.ts` y `_shared/satCertificateParser.ts` | Ninguno para el portal (son preexistentes) | No se tocaron (Moffin/certificados fuera de alcance). |
