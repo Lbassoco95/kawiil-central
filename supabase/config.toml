@@ -31,6 +31,8 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = false
   [functions.microsoft-api]
     verify_jwt = false
+  [functions.microsoft-secret-health]
+    verify_jwt = false
   [functions.google-auth]
     verify_jwt = false
   [functions.google-callback]
