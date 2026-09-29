@@ -2,7 +2,7 @@
 # Pruebas de base del portal del cliente en un Postgres LOCAL (nunca en producción).
 #
 #   1. Base vacía: stub de Supabase + todas las migraciones → pruebas.
-#   2. Rollback de las 13 migraciones del portal → no queda nada del portal y
+#   2. Rollback de las 14 migraciones del portal → no queda nada del portal y
 #      handle_new_user vuelve a su versión previa → reaplicar → pruebas otra vez.
 #   3. Base con datos: migraciones hasta antes del portal + datos sintéticos
 #      previos → portal → pruebas → rollback → los datos previos siguen intactos.
@@ -28,8 +28,10 @@ PORTAL_MIGS=(
   20260929120400_portal_retention_terms
   20260929120500_portal_offboarding
   20260929120600_portal_client_offboarding
+  20260929120700_portal_function_grants
 )
 ROLLBACKS=(
+  2026-09-29_portal_function_grants
   2026-09-28_portal_client_offboarding
   2026-09-28_portal_offboarding
   2026-09-28_portal_retention_terms

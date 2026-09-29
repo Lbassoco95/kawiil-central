@@ -4,22 +4,23 @@
 
 | # | Archivo (`supabase/migrations/`) | Qué hace | Rollback (`migrations/`, a mano, **en orden inverso**) |
 |---|---|---|---|
-| 1 | `20260929110000_portal_core.sql` | Cuentas, membresías, ajustes, textos legales (marcadores), bitácora inmutable, aislamiento, rama del portal en `handle_new_user` | `2026-09-28_portal_core.rollback.sql` (13.º) |
-| 2 | `…110100_portal_messaging.sql` | Hilos, mensajes, adjuntos, bandeja de salida | `…portal_messaging.rollback.sql` (12.º) |
-| 3 | `…110200_portal_documents.sql` | Bucket `portal`, Dropbox, documentos, publicación | `…portal_documents.rollback.sql` (11.º) |
-| 4 | `…110300_portal_cfdi.sql` | Facturas, tablero, expediente, CSD, emisión, cancelaciones | `…portal_cfdi.rollback.sql` (10.º) |
-| 5 | `…110400_portal_tickets.sql` | Tickets sobre Ju'un | `…portal_tickets.rollback.sql` (9.º) |
-| 6 | `…110500_portal_isolation_guard.sql` | Cerco restrictivo + `pgrst.db_pre_request` | `…portal_isolation_guard.rollback.sql` (8.º) |
-| 7 | `…120000_portal_csd_authorization.sql` | C2/C5: autorización previa del CSD, guardado atómico, versión de secreto | `…portal_csd_authorization.rollback.sql` (7.º) |
-| 8 | `…120100_portal_rate_limits.sql` | C3: límites por IP/correo (huellas) | `…portal_rate_limits.rollback.sql` (6.º) |
-| 9 | `…120200_portal_account_deletion.sql` | C4: política de conservación, eliminación, seudonimización, purga diaria (pg_cron `portal-retention-purge`) | `…portal_account_deletion.rollback.sql` (5.º) |
-| 10 | `…120300_portal_route_guard_health.sql` | V1: diagnóstico del cerco y bloqueo de vinculación si no está activo | `…portal_route_guard_health.rollback.sql` (4.º) |
-| 11 | `…120400_portal_retention_terms.sql` | B1: resguardo 5 (omisión) o 10 años, elecciones registradas, plazo por cliente premier, purga por plazo propio | `…portal_retention_terms.rollback.sql` (3.º) |
-| 12 | `…120500_portal_offboarding.sql` | B2/B3: baja de empresa (CSD, accesos, mensajes, contacto), empresa sin personas activas = baja, verificación posterior, reactivación | `…portal_offboarding.rollback.sql` (2.º) |
-| 13 | `…120600_portal_client_offboarding.sql` | B4: baja de un cliente premier desde central con doble confirmación | `…portal_client_offboarding.rollback.sql` (1.º) |
+| 1 | `20260929110000_portal_core.sql` | Cuentas, membresías, ajustes, textos legales (marcadores), bitácora inmutable, aislamiento, rama del portal en `handle_new_user` | `2026-09-28_portal_core.rollback.sql` (14.º) |
+| 2 | `…110100_portal_messaging.sql` | Hilos, mensajes, adjuntos, bandeja de salida | `…portal_messaging.rollback.sql` (13.º) |
+| 3 | `…110200_portal_documents.sql` | Bucket `portal`, Dropbox, documentos, publicación | `…portal_documents.rollback.sql` (12.º) |
+| 4 | `…110300_portal_cfdi.sql` | Facturas, tablero, expediente, CSD, emisión, cancelaciones | `…portal_cfdi.rollback.sql` (11.º) |
+| 5 | `…110400_portal_tickets.sql` | Tickets sobre Ju'un | `…portal_tickets.rollback.sql` (10.º) |
+| 6 | `…110500_portal_isolation_guard.sql` | Cerco restrictivo + `pgrst.db_pre_request` | `…portal_isolation_guard.rollback.sql` (9.º) |
+| 7 | `…120000_portal_csd_authorization.sql` | C2/C5: autorización previa del CSD, guardado atómico, versión de secreto | `…portal_csd_authorization.rollback.sql` (8.º) |
+| 8 | `…120100_portal_rate_limits.sql` | C3: límites por IP/correo (huellas) | `…portal_rate_limits.rollback.sql` (7.º) |
+| 9 | `…120200_portal_account_deletion.sql` | C4: política de conservación, eliminación, seudonimización, purga diaria (pg_cron `portal-retention-purge`) | `…portal_account_deletion.rollback.sql` (6.º) |
+| 10 | `…120300_portal_route_guard_health.sql` | V1: diagnóstico del cerco y bloqueo de vinculación si no está activo | `…portal_route_guard_health.rollback.sql` (5.º) |
+| 11 | `…120400_portal_retention_terms.sql` | B1: resguardo 5 (omisión) o 10 años, elecciones registradas, plazo por cliente premier, purga por plazo propio | `…portal_retention_terms.rollback.sql` (4.º) |
+| 12 | `…120500_portal_offboarding.sql` | B2/B3: baja de empresa (CSD, accesos, mensajes, contacto), empresa sin personas activas = baja, verificación posterior, reactivación | `…portal_offboarding.rollback.sql` (3.º) |
+| 13 | `…120600_portal_client_offboarding.sql` | B4: baja de un cliente premier desde central con doble confirmación | `…portal_client_offboarding.rollback.sql` (2.º) |
+| 14 | `…120700_portal_function_grants.sql` | Cierre: solo 4 funciones del portal quedan para `anon` (pre-request, diagnóstico, cerco, texto legal) | `2026-09-29_portal_function_grants.rollback.sql` (1.º) |
 
 - El pipeline (`deploy-supabase.yml`) aplica las migraciones al integrar a `main` (forward-only). Los rollback se corren a mano en el SQL editor.
-- Ninguna migración borra ni altera datos existentes (probado: huella de datos previos idéntica antes, después y tras el rollback). Los rollback 7–13 del portal son destructivos **solo** para datos del portal (los de 11–13 pierden registros de elecciones, resguardos de constancias y solicitudes de baja de clientes; cada archivo dice qué anotar antes). Ningún rollback devuelve lo ya destruido en una baja.
+- Ninguna migración borra ni altera datos existentes (probado: huella de datos previos idéntica antes, después y tras el rollback). Los rollback 7–14 del portal son destructivos **solo** para datos del portal (los de 11–13 pierden registros de elecciones, resguardos de constancias y solicitudes de baja de clientes; cada archivo dice qué anotar antes). Ningún rollback devuelve lo ya destruido en una baja.
 - Si la migración 6 avisa `No se pudo registrar pgrst.db_pre_request` o `ya tiene pgrst.db_pre_request`:
   ```sql
   ALTER ROLE authenticator SET pgrst.db_pre_request TO 'public.portal_pre_request';
@@ -140,7 +141,7 @@ SELECT public.portal_offboarding_verify('<client_id>', NULL, NULL, true);
 
 ```bash
 npm run test                                                  # Vitest (incluye src/test/portal)
-PGHOST=… PGPORT=… PGUSER=postgres npm run test:portal-db      # base vacía, con datos, rollback, idempotencia (215 verificaciones)
+PGHOST=… PGPORT=… PGUSER=postgres npm run test:portal-db      # base vacía, con datos, rollback, idempotencia (217 verificaciones)
 PGHOST=… PGPORT=… PGUSER=postgres npm run test:portal-api     # PostgREST en Docker: aislamiento, regresión del equipo, cerco (y su negativo), B5 (PG_LOG_CMD=… para revisar el log del servidor)
 DENO=… npm run test:portal-edge                               # funciones con verify_jwt=false sin credencial
 ```
