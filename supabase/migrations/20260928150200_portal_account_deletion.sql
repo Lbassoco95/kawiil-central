@@ -156,8 +156,12 @@ ALTER TABLE public.portal_storage_purge_queue ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.portal_storage_purge_queue FROM PUBLIC, anon, authenticated;
 
 -- ── Qué clientes «son» de la persona ────────────────────────────────
--- owned  = cliente de nivel básico creado por la persona y del que es el único miembro activo.
--- premier_sole_admin = cliente de Kawiil (o compartido) donde es la única administradora activa → bloquea.
+-- owned  = cliente de nivel básico creado por la persona y del que es el ÚNICO miembro
+--          (cuenta cualquier membresía no revocada, también las suspendidas; revocar = borrar la fila).
+-- member (básico compartido) = básico creado por la persona donde los demás miembros están
+--          suspendidos: se retira su membresía y NO se destruye nada (falla hacia conservar).
+-- sole_admin = cliente de Kawiil (o compartido con miembros activos) donde es la única
+--          administradora activa → bloquea.
 CREATE OR REPLACE FUNCTION public.portal_deletion_scope(_uid uuid)
 RETURNS TABLE (client_id uuid, client_name text, relation text)
 LANGUAGE sql STABLE SECURITY DEFINER
@@ -167,8 +171,12 @@ AS $$
     CASE
       WHEN COALESCE(s.origin, 'kawiil') = 'basico' AND m.created_by = _uid
            AND NOT EXISTS (SELECT 1 FROM public.portal_memberships o
-                            WHERE o.client_id = m.client_id AND o.user_id <> _uid AND o.status = 'activa')
+                            WHERE o.client_id = m.client_id AND o.user_id <> _uid)
         THEN 'owned'
+      WHEN COALESCE(s.origin, 'kawiil') = 'basico' AND m.created_by = _uid
+           AND NOT EXISTS (SELECT 1 FROM public.portal_memberships o
+                            WHERE o.client_id = m.client_id AND o.user_id <> _uid AND o.status = 'activa')
+        THEN 'member'
       WHEN m.role = 'administrador' AND m.status = 'activa'
            AND NOT EXISTS (SELECT 1 FROM public.portal_memberships o
                             WHERE o.client_id = m.client_id AND o.user_id <> _uid

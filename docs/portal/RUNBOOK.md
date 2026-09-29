@@ -106,7 +106,7 @@ Secretos: `PORTAL_CSD_KEY_SECRET` (`.cer`/`.key`), `PORTAL_CSD_SECRET` (contrase
 
 ```bash
 npm run test                                                  # Vitest (incluye src/test/portal)
-PGHOST=… PGPORT=… PGUSER=postgres npm run test:portal-db      # base vacía, con datos, rollback, idempotencia (154 verificaciones)
+PGHOST=… PGPORT=… PGUSER=postgres npm run test:portal-db      # base vacía, con datos, rollback, idempotencia (165 verificaciones)
 PGHOST=… PGPORT=… PGUSER=postgres npm run test:portal-api     # PostgREST en Docker: aislamiento, regresión del equipo, cerco (y su negativo)
 DENO=… npm run test:portal-edge                               # funciones con verify_jwt=false sin credencial
 ```

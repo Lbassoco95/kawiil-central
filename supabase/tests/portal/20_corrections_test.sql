@@ -263,6 +263,127 @@ SELECT portal_test.ok(:purga_vencida = 2
   'C4 purga: plazo vencido simulado → CFDI y tickets facturados purgados, archivos a la cola, hecho en bitácora');
 SELECT portal_test.ok(EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'portal-retention-purge'), 'C4: la purga está programada (pg_cron)');
 
+
+-- =================================================================
+-- C4 · Básico con un miembro SUSPENDIDO: es compartido, no «de la persona»
+-- =================================================================
+\set us1 '22222222-0000-0000-0000-0000000000c1'
+\set us2 '22222222-0000-0000-0000-0000000000c2'
+INSERT INTO auth.users (id, email, raw_user_meta_data) VALUES
+  (:'us1', 'titular.compartida@prueba.invalid', '{"kawiil_portal":true}'),
+  (:'us2', 'suspendida@prueba.invalid', '{"kawiil_portal":true}');
+SET ROLE authenticated;
+SELECT portal_test.login(:'us1');
+SELECT (public.portal_activate_basic('Compartida Sintética', 'COMP800101AB1')->>'client_id') AS cl_shared \gset
+SELECT public.portal_thread_create(:'cl_shared', 'Hilo compartido', 'Mensaje sintético') AS thread_shared \gset
+SELECT public.portal_accept_legal('aviso_privacidad');
+SELECT public.portal_accept_legal('contrato_uso', :'cl_shared');
+RESET ROLE;
+SELECT set_config('request.jwt.claims', '', false);
+SELECT public.portal_csd_store(:'cl_shared', :'us1', 'portal', 'CIFRADO-CER-C', 'CIFRADO-KEY-C', 'CIFRADO-PASS-C',
+  '3330303031303030303030353030303030303934', 'COMP800101AB1', now() - interval '1 day', now() + interval '1 year', 'huella-c');
+INSERT INTO public.portal_memberships (client_id, user_id, role, status, created_by)
+VALUES (:'cl_shared', :'us2', 'operativo', 'suspendida', :'us1');
+
+SELECT public.portal_account_deletion_plan(:'us1') AS plan_us1 \gset
+SELECT portal_test.ok(NOT (:'plan_us1'::jsonb->>'bloqueada')::boolean
+  AND :'plan_us1'::jsonb->'elimina' @> '[{"key":"membresia","client":"Compartida Sintética"}]'
+  AND :'plan_us1'::jsonb->'conserva' @> '[{"key":"datos_empresa","client":"Compartida Sintética"}]'
+  AND NOT :'plan_us1'::jsonb->'elimina' @> '[{"key":"csd"}]'
+  AND NOT :'plan_us1'::jsonb->'elimina' @> '[{"key":"mensajes"}]',
+  'C4 básico con miembro suspendido: el plan retira la membresía y no destruye CSD ni mensajes');
+SELECT public.portal_execute_account_deletion(:'us1') AS del_us1 \gset
+DELETE FROM auth.users WHERE id = :'us1';
+SELECT public.portal_finish_account_deletion((:'del_us1'::jsonb->>'request_id')::uuid, true);
+SELECT portal_test.ok(
+  (SELECT count(*) FROM public.client_sat_certificates WHERE client_id = :'cl_shared' AND cert_type = 'csd_sello') = 1
+  AND EXISTS (SELECT 1 FROM public.portal_csd_registry WHERE client_id = :'cl_shared' AND revoked_at IS NULL)
+  AND EXISTS (SELECT 1 FROM public.portal_threads WHERE id = :'thread_shared')
+  AND EXISTS (SELECT 1 FROM public.portal_memberships WHERE client_id = :'cl_shared' AND user_id = :'us2' AND status = 'suspendida')
+  AND NOT EXISTS (SELECT 1 FROM public.portal_memberships WHERE user_id = :'us1')
+  AND NOT EXISTS (SELECT 1 FROM public.portal_retention_holds WHERE client_id = :'cl_shared')
+  AND NOT EXISTS (SELECT 1 FROM public.portal_audit_log WHERE action = 'csd_destruccion' AND client_id = :'cl_shared'),
+  'C4 básico con miembro suspendido: CSD, conversaciones y la membresía suspendida quedan intactos; sin retenciones ni destrucción');
+SELECT portal_test.ok(NOT EXISTS (SELECT 1 FROM public.portal_messages WHERE client_id = :'cl_shared' AND author_user_id = :'us1')
+  AND EXISTS (SELECT 1 FROM public.portal_messages WHERE client_id = :'cl_shared' AND author_name = 'Usuario eliminado'),
+  'C4 básico con miembro suspendido: los mensajes de la titular quedan como «Usuario eliminado»');
+
+-- =================================================================
+-- C4 · Reintento cuando falla el borrado en Auth
+-- =================================================================
+\set ur '22222222-0000-0000-0000-0000000000c3'
+INSERT INTO auth.users (id, email, raw_user_meta_data) VALUES (:'ur', 'reintento@prueba.invalid', '{"kawiil_portal":true}');
+SET ROLE authenticated;
+SELECT portal_test.login(:'ur');
+SELECT (public.portal_activate_basic('Reintento Sintética', 'REIN800101AB1')->>'client_id') AS cl_retry \gset
+SELECT public.portal_thread_create(:'cl_retry', 'Hilo', 'Mensaje sintético');
+SELECT public.portal_accept_legal('aviso_privacidad');
+RESET ROLE;
+SELECT set_config('request.jwt.claims', '', false);
+CREATE TEMP TABLE hechos_ur AS SELECT id, occurred_at, action FROM public.portal_audit_log WHERE actor_user_id = :'ur';
+SELECT count(*) AS n_hechos_ur FROM hechos_ur \gset
+
+-- Primer intento: la base procesa, pero Auth falla (portal-api no borra el usuario y registra el error).
+SELECT public.portal_execute_account_deletion(:'ur') AS del_r1 \gset
+SELECT public.portal_finish_account_deletion((:'del_r1'::jsonb->>'request_id')::uuid, false, 'fallo simulado de Auth');
+SELECT portal_test.ok((SELECT status FROM public.portal_deletion_requests WHERE id = (:'del_r1'::jsonb->>'request_id')::uuid) = 'error'
+  AND EXISTS (SELECT 1 FROM auth.users WHERE id = :'ur') AND EXISTS (SELECT 1 FROM public.portal_accounts WHERE user_id = :'ur')
+  AND NOT EXISTS (SELECT 1 FROM public.portal_threads WHERE client_id = :'cl_retry'),
+  'C4 reintento: fallo de Auth → solicitud en «error», la cuenta sigue existiendo y lo de la base ya se procesó');
+
+-- Segundo intento: plan vacío (sin membresías), la seudonimización se repite sin chocar con la bitácora.
+SELECT public.portal_execute_account_deletion(:'ur') AS del_r2 \gset
+SELECT portal_test.ok(NOT (:'del_r2'::jsonb->>'bloqueada')::boolean
+  AND (:'del_r2'::jsonb->>'request_id') <> (:'del_r1'::jsonb->>'request_id')
+  AND (SELECT plan->'elimina' FROM public.portal_deletion_requests WHERE id = (:'del_r2'::jsonb->>'request_id')::uuid) @> '[{"key":"acceso"}]'
+  AND (SELECT jsonb_array_length(plan->'elimina') FROM public.portal_deletion_requests WHERE id = (:'del_r2'::jsonb->>'request_id')::uuid) = 1,
+  'C4 reintento: el segundo intento corre con un plan que ya solo cierra el acceso');
+DELETE FROM auth.users WHERE id = :'ur';
+SELECT public.portal_finish_account_deletion((:'del_r2'::jsonb->>'request_id')::uuid, true);
+SELECT portal_test.ok((SELECT status FROM public.portal_deletion_requests WHERE id = (:'del_r2'::jsonb->>'request_id')::uuid) = 'ejecutada'
+  AND (SELECT status FROM public.portal_deletion_requests WHERE id = (:'del_r1'::jsonb->>'request_id')::uuid) = 'error'
+  AND (SELECT count(*) FROM public.portal_retention_holds WHERE client_id = :'cl_retry') = 2,
+  'C4 reintento: segunda solicitud ejecutada, la primera queda como constancia del error; retenciones sin duplicar');
+SELECT portal_test.ok(:n_hechos_ur > 0
+  AND NOT EXISTS (SELECT 1 FROM public.portal_audit_log WHERE actor_user_id = :'ur' OR entity_id = :'ur'
+                   OR details->>'user_id' = :'ur' OR lower(actor_email) = 'reintento@prueba.invalid')
+  AND NOT EXISTS (SELECT 1 FROM public.portal_legal_acceptances WHERE user_email = 'reintento@prueba.invalid')
+  AND (SELECT count(*) FROM public.portal_audit_log l JOIN hechos_ur h USING (id)
+        WHERE l.occurred_at = h.occurred_at AND l.action = h.action AND l.actor_email LIKE 'seud:%'
+          AND l.actor_user_id = public.portal_pseudonym_uuid(:'ur')) = :n_hechos_ur,
+  'C4 reintento: sin identificadores personales; los hechos siguen, con el mismo seudónimo en ambos intentos');
+
+-- =================================================================
+-- C4 · La sal de los seudónimos no es alcanzable desde el navegador
+-- =================================================================
+SELECT portal_test.ok((SELECT relrowsecurity FROM pg_class WHERE oid = 'public.portal_pseudonym_salt'::regclass)
+  AND NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'portal_pseudonym_salt')
+  AND NOT has_table_privilege('authenticated', 'public.portal_pseudonym_salt', 'SELECT')
+  AND NOT has_table_privilege('anon', 'public.portal_pseudonym_salt', 'SELECT'),
+  'C4 sal: RLS activa, sin políticas y sin privilegio de lectura para authenticated ni anon');
+SELECT portal_test.ok(NOT has_function_privilege('authenticated', 'public.portal_pseudonym_uuid(uuid)', 'EXECUTE')
+  AND NOT has_function_privilege('authenticated', 'public.portal_pseudonym_text(text)', 'EXECUTE')
+  AND NOT has_function_privilege('authenticated', 'public.portal_pseudonymize_subject(uuid, text, uuid)', 'EXECUTE')
+  AND NOT has_function_privilege('anon', 'public.portal_pseudonym_uuid(uuid)', 'EXECUTE')
+  AND NOT has_function_privilege('anon', 'public.portal_pseudonym_text(text)', 'EXECUTE')
+  AND NOT has_function_privilege('anon', 'public.portal_pseudonymize_subject(uuid, text, uuid)', 'EXECUTE'),
+  'C4 sal: las funciones de seudónimo y de seudonimizar no se pueden ejecutar como authenticated ni anon');
+SET ROLE authenticated;
+SELECT portal_test.login(:'ua');
+SELECT portal_test.ok(portal_test.raises('SELECT salt FROM public.portal_pseudonym_salt')
+  AND portal_test.raises(format('SELECT public.portal_pseudonym_uuid(%L)', :'ua'))
+  AND portal_test.raises('SELECT public.portal_pseudonym_text(''x@prueba.invalid'')')
+  AND portal_test.raises(format('SELECT public.portal_pseudonymize_subject(%L, ''x@prueba.invalid'', NULL)', :'ub')),
+  'C4 sal: una sesión del portal no lee la sal ni ejecuta las funciones de seudonimización');
+RESET ROLE;
+SET ROLE anon;
+SELECT portal_test.ok(portal_test.raises('SELECT salt FROM public.portal_pseudonym_salt')
+  AND portal_test.raises(format('SELECT public.portal_pseudonym_uuid(%L)', :'ua'))
+  AND portal_test.raises(format('SELECT public.portal_pseudonymize_subject(%L, NULL, NULL)', :'ub')),
+  'C4 sal: sin sesión tampoco');
+RESET ROLE;
+SELECT set_config('request.jwt.claims', '', false);
+
 RESET ROLE;
 DROP SCHEMA portal_test CASCADE;
 \echo 'TODAS LAS PRUEBAS DE BASE DEL PORTAL PASARON'
