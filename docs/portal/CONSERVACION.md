@@ -10,7 +10,8 @@ A la **persona** que tiene una cuenta en el portal y pide eliminarla. Se disting
 
 | Situación | Ejemplo |
 |---|---|
-| **Cliente de nivel básico creado por la persona**, sin otras personas activas | Un emprendedor que se registró desde la tienda y activó el nivel básico. |
+| **Cliente de nivel básico creado por la persona**, sin ninguna otra persona con acceso (ni activa ni suspendida) | Un emprendedor que se registró desde la tienda y activó el nivel básico. |
+| **Cliente de nivel básico creado por la persona, con otra persona suspendida** | Se trata como empresa compartida: solo se retira el acceso de quien pide la eliminación; **no se destruye nada** (ni el CSD ni las conversaciones). Ante la duda, el sistema conserva. |
 | **Persona de un cliente de Kawiil (premier)** | La contadora de una empresa cliente con acceso al portal. |
 | **Única administradora de un cliente premier** | La eliminación **se detiene**: la persona debe designar a otra administradora o comunicarse con Kawiil. |
 
@@ -28,6 +29,8 @@ A la **persona** que tiene una cuenta en el portal y pide eliminarla. Se disting
 | Bitácora de actividad | Se conservan **los hechos** (qué ocurrió, cuándo, sobre qué empresa). El nombre, el correo y el identificador de la persona se sustituyen por un **seudónimo** irreversible. | La bitácora es evidencia de cumplimiento; los datos personales no son necesarios para ella. |
 | Constancia de aceptación del aviso de privacidad, términos y contrato de uso | Se conserva la versión y la fecha; la identidad se seudonimiza. *Pendiente de confirmación de Polo* (podría requerirse identidad plena por el plazo de prescripción). | Evidencia del consentimiento otorgado. |
 | Registro de la solicitud de eliminación | Se guarda fecha, alcance y resultado, sin identificar a la persona. | Rendición de cuentas. |
+
+Si el cierre del acceso falla después de procesar los datos, la solicitud queda registrada como fallida y la persona puede repetirla: el segundo intento ya no encuentra nada que destruir, vuelve a aplicar el seudónimo (el mismo) y cierra el acceso.
 
 ## 3. Cómo se informa a la persona
 

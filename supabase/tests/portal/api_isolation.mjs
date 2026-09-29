@@ -82,6 +82,17 @@ for (const p of ["/clients", "/lead_tasks", "/profiles", "/slack_user_profiles",
 }
 const patch = await req(UA, "PATCH", "/lead_tasks?id=not.is.null", { title: "pwned" });
 check(patch.status === 403, "PATCH /lead_tasks → 403 (antes USING true)", patch);
+// La sal de los seudónimos y las funciones que la usan no se alcanzan por la API.
+for (const [method, path, body] of [
+  ["GET", "/portal_pseudonym_salt?select=salt"],
+  ["POST", "/rpc/portal_pseudonym_uuid", { _uid: UA }],
+  ["POST", "/rpc/portal_pseudonym_text", { _value: "x@prueba.invalid" }],
+  ["POST", "/rpc/portal_pseudonymize_subject", { _uid: UA, _email: null, _request_id: null }],
+]) {
+  const r = await req(UA, method, path, body);
+  const empty = r.status === 200 && Array.isArray(r.data) && r.data.length === 0;
+  check(r.status >= 400 || empty, `${method} ${path} → ${r.status} (sin acceso a la sal)`, r.data);
+}
 // Lo propio sí funciona.
 const mine = await req(UA, "GET", `/portal_cfdi?client_id=eq.${A}`);
 check(mine.status === 200 && mine.data.length > 0, "GET /portal_cfdi de A → sí ve lo suyo", mine.status);
