@@ -2,7 +2,7 @@
 # Pruebas de base del portal del cliente en un Postgres LOCAL (nunca en producción).
 #
 #   1. Base vacía: stub de Supabase + todas las migraciones → pruebas.
-#   2. Rollback de las 6 migraciones del portal → no queda nada del portal y
+#   2. Rollback de las 13 migraciones del portal → no queda nada del portal y
 #      handle_new_user vuelve a su versión previa → reaplicar → pruebas otra vez.
 #   3. Base con datos: migraciones hasta antes del portal + datos sintéticos
 #      previos → portal → pruebas → rollback → los datos previos siguen intactos.
@@ -25,8 +25,14 @@ PORTAL_MIGS=(
   20260928150100_portal_rate_limits
   20260928150200_portal_account_deletion
   20260928150300_portal_route_guard_health
+  20260928150400_portal_retention_terms
+  20260928150500_portal_offboarding
+  20260928150600_portal_client_offboarding
 )
 ROLLBACKS=(
+  2026-09-28_portal_client_offboarding
+  2026-09-28_portal_offboarding
+  2026-09-28_portal_retention_terms
   2026-09-28_portal_route_guard_health
   2026-09-28_portal_account_deletion
   2026-09-28_portal_rate_limits
@@ -98,7 +104,7 @@ fn_hash() { psql -X -At -d "$1" -c "SELECT md5(pg_get_functiondef('public.handle
 
 run_tests() {
   local db="$1"
-  if ! cat "$T/10_isolation_test.sql" "$T/20_corrections_test.sql" | q "$db" > "/tmp/portal_test_$db.log" 2>&1; then
+  if ! cat "$T/10_isolation_test.sql" "$T/20_corrections_test.sql" "$T/30_offboarding_test.sql" | q "$db" > "/tmp/portal_test_$db.log" 2>&1; then
     grep -E "FALLA|ERROR" "/tmp/portal_test_$db.log" | head -20
     echo "FALLA: pruebas en $db (log: /tmp/portal_test_$db.log)"; exit 1
   fi

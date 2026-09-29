@@ -166,12 +166,14 @@ SELECT portal_test.ok(NOT (:'plan_up'::jsonb->>'bloqueada')::boolean
   AND :'plan_up'::jsonb->'elimina' @> '[{"key":"tickets_no_facturados","cantidad":1}]'
   AND :'plan_up'::jsonb->'conserva' @> '[{"key":"cfdi","cantidad":1,"anios":5}]'
   AND :'plan_up'::jsonb->'conserva' @> '[{"key":"tickets_facturados","cantidad":1,"anios":5}]'
-  AND (:'plan_up'::jsonb->'politica'->>'confirmada')::boolean = false,
-  'C4 plan básico: destruye CSD, borra ticket pendiente, conserva CFDI y ticket facturado 5 años (propuesta sin confirmar)');
-UPDATE public.portal_retention_policy SET value = '7' WHERE key = 'fiscal_retention_years';
-SELECT portal_test.ok(public.portal_account_deletion_plan(:'up')->'conserva' @> '[{"key":"cfdi","anios":7}]',
-  'C4: el plazo es un parámetro (cambia el plan sin tocar código)');
+  AND (:'plan_up'::jsonb->'politica'->>'confirmada')::boolean = true,
+  'C4 plan básico: destruye CSD, borra ticket pendiente, resguarda CFDI y ticket facturado 5 años (fijado por Polo)');
+UPDATE public.portal_retention_policy SET value = '10' WHERE key = 'fiscal_retention_years';
+SELECT portal_test.ok(public.portal_account_deletion_plan(:'up')->'conserva' @> '[{"key":"cfdi","anios":10}]',
+  'C4: el plazo por omisión es un parámetro (cambia el plan sin tocar código)');
 UPDATE public.portal_retention_policy SET value = '5' WHERE key = 'fiscal_retention_years';
+SELECT portal_test.ok(portal_test.raises('UPDATE public.portal_retention_policy SET value = ''7'' WHERE key = ''fiscal_retention_years'''),
+  'B1: el plazo por omisión solo puede ser 5 o 10');
 SET ROLE authenticated;
 SELECT portal_test.login(:'ub');
 SELECT portal_test.ok(portal_test.raises(format('SELECT public.portal_account_deletion_plan(%L)', :'up')), 'C4: nadie pide el plan de otra persona');
@@ -254,18 +256,19 @@ SELECT public.portal_purge_expired_retention(now()) AS purga_hoy \gset
 SELECT portal_test.ok(:purga_hoy = 0 AND EXISTS (SELECT 1 FROM public.portal_cfdi WHERE client_id = :'cl_basic'),
   'C4 purga: antes del plazo no borra nada');
 SELECT public.portal_purge_expired_retention(now() + interval '5 years 2 days') AS purga_vencida \gset
-SELECT portal_test.ok(:purga_vencida = 2
+SELECT portal_test.ok(:purga_vencida = 3
+  AND NOT EXISTS (SELECT 1 FROM public.portal_legal_acceptances WHERE user_id = public.portal_pseudonym_uuid(:'up'))
   AND NOT EXISTS (SELECT 1 FROM public.portal_cfdi WHERE client_id = :'cl_basic')
   AND NOT EXISTS (SELECT 1 FROM public.fis_receipts WHERE client_id = :'cl_basic')
   AND (SELECT count(*) FROM public.portal_retention_holds WHERE client_id = :'cl_basic' AND purged_at IS NOT NULL) = 2
   AND EXISTS (SELECT 1 FROM public.portal_audit_log WHERE action = 'retencion_purga' AND client_id = :'cl_basic')
   AND EXISTS (SELECT 1 FROM public.portal_storage_purge_queue WHERE reason = 'retencion_vencida' AND path = 'x/fact.pdf'),
-  'C4 purga: plazo vencido simulado → CFDI y tickets facturados purgados, archivos a la cola, hecho en bitácora');
+  'C4 purga: plazo vencido simulado → CFDI, tickets facturados y constancias legales purgados, archivos a la cola, hecho en bitácora');
 SELECT portal_test.ok(EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'portal-retention-purge'), 'C4: la purga está programada (pg_cron)');
 
 
 -- =================================================================
--- C4 · Básico con un miembro SUSPENDIDO: es compartido, no «de la persona»
+-- B3 · Básico que queda solo con personas SUSPENDIDAS = empresa dada de baja
 -- =================================================================
 \set us1 '22222222-0000-0000-0000-0000000000c1'
 \set us2 '22222222-0000-0000-0000-0000000000c2'
@@ -284,29 +287,78 @@ SELECT public.portal_csd_store(:'cl_shared', :'us1', 'portal', 'CIFRADO-CER-C', 
   '3330303031303030303030353030303030303934', 'COMP800101AB1', now() - interval '1 day', now() + interval '1 year', 'huella-c');
 INSERT INTO public.portal_memberships (client_id, user_id, role, status, created_by)
 VALUES (:'cl_shared', :'us2', 'operativo', 'suspendida', :'us1');
+-- Un adjunto con su archivo en Storage, y un CFDI resguardado con el suyo.
+INSERT INTO public.portal_message_attachments (message_id, organization_id, client_id, storage_path, file_name)
+SELECT id, :'orgk', :'cl_shared', :'orgk' || '/' || :'cl_shared' || '/mensajes/' || :'thread_shared' || '/c.pdf', 'c.pdf'
+  FROM public.portal_messages WHERE thread_id = :'thread_shared' LIMIT 1;
+INSERT INTO public.portal_cfdi (organization_id, client_id, uuid, direction, source, rfc_emisor, rfc_receptor, total, xml_path, created_by)
+VALUES (:'orgk', :'cl_shared', 'C3C3C3C3-0000-4000-8000-000000000001', 'emitida', 'emision_prueba', 'COMP800101AB1', 'XAXX010101000', 58,
+        :'orgk' || '/' || :'cl_shared' || '/cfdi/c3.xml', :'us2');
+INSERT INTO storage.objects (bucket_id, name) VALUES
+  ('portal', :'orgk' || '/' || :'cl_shared' || '/mensajes/' || :'thread_shared' || '/c.pdf'),
+  ('portal', :'orgk' || '/' || :'cl_shared' || '/cfdi/c3.xml');
 
 SELECT public.portal_account_deletion_plan(:'us1') AS plan_us1 \gset
 SELECT portal_test.ok(NOT (:'plan_us1'::jsonb->>'bloqueada')::boolean
-  AND :'plan_us1'::jsonb->'elimina' @> '[{"key":"membresia","client":"Compartida Sintética"}]'
-  AND :'plan_us1'::jsonb->'conserva' @> '[{"key":"datos_empresa","client":"Compartida Sintética"}]'
-  AND NOT :'plan_us1'::jsonb->'elimina' @> '[{"key":"csd"}]'
-  AND NOT :'plan_us1'::jsonb->'elimina' @> '[{"key":"mensajes"}]',
-  'C4 básico con miembro suspendido: el plan retira la membresía y no destruye CSD ni mensajes');
-SELECT public.portal_execute_account_deletion(:'us1') AS del_us1 \gset
+  AND :'plan_us1'::jsonb->'elimina' @> '[{"key":"csd","cantidad":1,"client":"Compartida Sintética"}]'
+  AND :'plan_us1'::jsonb->'elimina' @> '[{"key":"mensajes"}]'
+  AND :'plan_us1'::jsonb->'elimina' @> '[{"key":"empresa_sin_personas_activas","cantidad":1}]'
+  AND NOT (:'plan_us1'::jsonb->'resguardo'->>'elige')::boolean
+  AND :'plan_us1'::jsonb->'conserva' @> '[{"key":"cfdi","elige":false,"anios":5}]',
+  'B3 plan: sin personas activas la empresa se da de baja; nadie elige el plazo (cinco años)');
+-- Aunque llegue una elección, en B3 corre la omisión.
+SELECT public.portal_execute_account_deletion(:'us1', 10) AS del_us1 \gset
 DELETE FROM auth.users WHERE id = :'us1';
 SELECT public.portal_finish_account_deletion((:'del_us1'::jsonb->>'request_id')::uuid, true);
 SELECT portal_test.ok(
-  (SELECT count(*) FROM public.client_sat_certificates WHERE client_id = :'cl_shared' AND cert_type = 'csd_sello') = 1
-  AND EXISTS (SELECT 1 FROM public.portal_csd_registry WHERE client_id = :'cl_shared' AND revoked_at IS NULL)
-  AND EXISTS (SELECT 1 FROM public.portal_threads WHERE id = :'thread_shared')
-  AND EXISTS (SELECT 1 FROM public.portal_memberships WHERE client_id = :'cl_shared' AND user_id = :'us2' AND status = 'suspendida')
-  AND NOT EXISTS (SELECT 1 FROM public.portal_memberships WHERE user_id = :'us1')
-  AND NOT EXISTS (SELECT 1 FROM public.portal_retention_holds WHERE client_id = :'cl_shared')
-  AND NOT EXISTS (SELECT 1 FROM public.portal_audit_log WHERE action = 'csd_destruccion' AND client_id = :'cl_shared'),
-  'C4 básico con miembro suspendido: CSD, conversaciones y la membresía suspendida quedan intactos; sin retenciones ni destrucción');
-SELECT portal_test.ok(NOT EXISTS (SELECT 1 FROM public.portal_messages WHERE client_id = :'cl_shared' AND author_user_id = :'us1')
-  AND EXISTS (SELECT 1 FROM public.portal_messages WHERE client_id = :'cl_shared' AND author_name = 'Usuario eliminado'),
-  'C4 básico con miembro suspendido: los mensajes de la titular quedan como «Usuario eliminado»');
+  (SELECT count(*) FROM public.client_sat_certificates WHERE client_id = :'cl_shared' AND cert_type = 'csd_sello') = 0
+  AND NOT EXISTS (SELECT 1 FROM public.portal_csd_registry WHERE client_id = :'cl_shared')
+  AND (SELECT NOT emission_enabled AND offboarded_at IS NOT NULL FROM public.portal_client_settings WHERE client_id = :'cl_shared')
+  AND NOT EXISTS (SELECT 1 FROM public.portal_threads WHERE client_id = :'cl_shared')
+  AND EXISTS (SELECT 1 FROM public.portal_audit_log WHERE action = 'csd_destruccion' AND client_id = :'cl_shared')
+  AND EXISTS (SELECT 1 FROM public.portal_audit_log WHERE action = 'empresa_baja' AND client_id = :'cl_shared'
+                AND details->>'motivo' = 'sin_personas_activas' AND actor_user_id IS NULL AND actor_email IS NULL),
+  'B3: CSD, llave y contraseña destruidos, emisión apagada, mensajes eliminados; bitácora del hecho sin datos personales');
+SELECT portal_test.ok(
+  (SELECT count(*) FROM public.portal_retention_holds WHERE client_id = :'cl_shared' AND subject IN ('cfdi', 'tickets_facturados')
+     AND years = 5 AND retain_until::date = (now() + interval '5 years')::date) = 2
+  AND EXISTS (SELECT 1 FROM public.portal_retention_elections WHERE client_id = :'cl_shared' AND elected_kind = 'omision' AND years = 5),
+  'B3: resguardo a cinco años por omisión (nadie elige)');
+SELECT portal_test.ok(
+  EXISTS (SELECT 1 FROM public.portal_memberships WHERE client_id = :'cl_shared' AND user_id = :'us2' AND status = 'suspendida')
+  AND EXISTS (SELECT 1 FROM public.portal_accounts WHERE user_id = :'us2')
+  AND NOT (public.portal_csd_upload_check(:'cl_shared', :'us2', 'portal')->>'ok')::boolean
+  AND (SELECT created_by FROM public.portal_cfdi WHERE client_id = :'cl_shared') = public.portal_pseudonym_uuid(:'us2'),
+  'B3: la suspendida conserva su ficha, no puede cargar certificados y lo resguardado ya no la identifica');
+
+-- Verificación de B2: con el archivo aún en Storage hay hallazgo; al vaciarse la cola, limpio.
+SELECT public.portal_offboarding_verify(:'cl_shared') AS ver1 \gset
+SELECT portal_test.ok(NOT (:'ver1'::jsonb->>'ok')::boolean
+  AND :'ver1'::jsonb->'hallazgos' @> '[{"hallazgo":"archivos_en_storage"}]'
+  AND :'ver1'::jsonb->'hallazgos' @> '[{"hallazgo":"archivos_pendientes_de_borrar"}]',
+  'B2 verificación: detecta el adjunto que sigue en Storage');
+DELETE FROM storage.objects o USING public.portal_storage_purge_queue q
+ WHERE q.deletion_request_id = (:'del_us1'::jsonb->>'request_id')::uuid AND o.bucket_id = q.bucket AND o.name = q.path;
+SELECT public.portal_purge_queue_done(ARRAY(SELECT id FROM public.portal_storage_purge_queue WHERE deletion_request_id = (:'del_us1'::jsonb->>'request_id')::uuid));
+SELECT public.portal_offboarding_record_verification((:'del_us1'::jsonb->>'request_id')::uuid, :'us1', 'titular.compartida@prueba.invalid') AS ver2 \gset
+SELECT portal_test.ok((:'ver2'::jsonb->>'ok')::boolean
+  AND EXISTS (SELECT 1 FROM storage.objects WHERE name = :'orgk' || '/' || :'cl_shared' || '/cfdi/c3.xml')
+  AND (SELECT (result->'verificacion'->>'ok')::boolean FROM public.portal_deletion_requests WHERE id = (:'del_us1'::jsonb->>'request_id')::uuid),
+  'B2 verificación: tras la baja no hay certificados, contraseñas, accesos ni adjuntos; el XML resguardado sigue');
+
+-- Si la suspendida se reactiva, la empresa deja de estar de baja y debe cargar el CSD de nuevo.
+UPDATE public.portal_accounts SET status = 'activa', tier = 'basico' WHERE user_id = :'us2';
+SET ROLE authenticated;
+SELECT portal_test.login(:'staff');
+SELECT public.portal_staff_set_membership((SELECT id FROM public.portal_memberships WHERE user_id = :'us2' AND client_id = :'cl_shared'), 'administrador', 'activa');
+RESET ROLE;
+SELECT set_config('request.jwt.claims', '', false);
+SELECT portal_test.ok(
+  (SELECT offboarded_at IS NULL AND NOT emission_enabled FROM public.portal_client_settings WHERE client_id = :'cl_shared')
+  AND NOT EXISTS (SELECT 1 FROM public.portal_retention_holds WHERE client_id = :'cl_shared' AND cancelled_at IS NULL AND purged_at IS NULL)
+  AND (SELECT count(*) FROM public.client_sat_certificates WHERE client_id = :'cl_shared') = 0
+  AND public.portal_csd_upload_check(:'cl_shared', :'us2', 'portal')->'missing' @> '[{"key":"aviso_privacidad"},{"key":"contrato_uso"}]',
+  'B3: al reactivarse, el resguardo se cancela; sin CSD y con la autorización previa de siempre pendiente');
 
 -- =================================================================
 -- C4 · Reintento cuando falla el borrado en Auth
@@ -385,5 +437,5 @@ RESET ROLE;
 SELECT set_config('request.jwt.claims', '', false);
 
 RESET ROLE;
-DROP SCHEMA portal_test CASCADE;
-\echo 'TODAS LAS PRUEBAS DE BASE DEL PORTAL PASARON'
+SELECT set_config('request.jwt.claims', '', false);
+-- (sigue en 30_offboarding_test.sql)
