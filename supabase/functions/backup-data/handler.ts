@@ -35,7 +35,6 @@ export const TABLES_TO_BACKUP = [
   "compliance_task_templates",
   "tax_obligation_types",
   "activity_log",
-  "integrations",
   "catalog_tags",
   "notifications",
   "reminders",
@@ -49,8 +48,28 @@ export const TABLES_TO_BACKUP = [
   "mood_checkins",
   "personalized_phrases",
   "user_preferences",
-  "microsoft_tokens",
   "savio_webhook_events",
+];
+
+/**
+ * A3 · Tablas que NO se respaldan porque guardan credenciales, tokens o secretos.
+ * Criterio: una tabla sale del respaldo si alguna columna guarda algo que sirve para
+ * entrar a un sistema propio o de terceros (token de acceso o de refresco, llave,
+ * contraseña, secreto o material cifrado de ellos). Son reemitibles: si se pierden,
+ * se vuelve a conectar la cuenta; conservarlas en un respaldo solo agrega riesgo.
+ * Revisadas columna por columna las 39 tablas del listado anterior (ver
+ * docs/seguridad/backup-data.md): solo estas dos cumplen el criterio.
+ */
+export const EXCLUDED_TABLES: Record<string, string> = {
+  microsoft_tokens: "access_token y refresh_token de Microsoft 365 de cada persona (reemitibles volviendo a conectar la cuenta).",
+  integrations: "config guarda credenciales de integraciones (p. ej. refresh_token de Dropbox que leen process-document e index-dropbox).",
+};
+
+/** Nunca deben entrar al respaldo aunque alguien las agregue a la lista (certificados, secretos y sal). */
+export const NEVER_BACKUP = [
+  ...Object.keys(EXCLUDED_TABLES),
+  "client_sat_certificates", "moffin_client_fiel", "moffin_client_sat_ciec",
+  "portal_csd_secrets", "portal_csd_registry", "portal_pseudonym_salt", "user_slack_connections",
 ];
 
 export const MIN_SECRET_LENGTH = 32;
@@ -161,6 +180,7 @@ export async function handleBackup(req: Request, deps: BackupDeps): Promise<Resp
   const backupData: Record<string, unknown[]> = {};
   const errors: string[] = [];
   for (const table of TABLES_TO_BACKUP) {
+    if (NEVER_BACKUP.includes(table)) continue; // defensa en profundidad
     let all: unknown[] = [];
     for (let from = 0; ; from += PAGE_SIZE) {
       const { rows, error } = await deps.readTable(table, from, from + PAGE_SIZE - 1);

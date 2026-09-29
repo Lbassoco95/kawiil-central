@@ -2,7 +2,7 @@
  * Pruebas de backup-data con Deno y datos SINTÉTICOS (sin red, sin Supabase).
  *   deno test supabase/functions/backup-data/handler.test.ts
  */
-import { handleBackup, safeEqual, TABLES_TO_BACKUP, type BackupDeps, type BackupLogEntry } from "./handler.ts";
+import { EXCLUDED_TABLES, handleBackup, NEVER_BACKUP, safeEqual, TABLES_TO_BACKUP, type BackupDeps, type BackupLogEntry } from "./handler.ts";
 
 const SECRET = "s".repeat(40) + "-secreto-sintetico-de-cron";
 const ORG = "a0000000-0000-0000-0000-000000000001";
@@ -128,4 +128,19 @@ Deno.test("A2 · include_data: el cron nunca recibe datos; el G4 sí", async () 
   const s = deps();
   const rs = await handleBackup(post({ Authorization: "Bearer jwt-g4" }), s.d);
   assert(!(await rs.text()).includes("dato-sintetico"), "sin include_data no debe haber datos");
+});
+
+Deno.test("A3 · el volcado no contiene tablas con credenciales (ni en el archivo ni en la respuesta)", async () => {
+  assert(TABLES_TO_BACKUP.length === 37, `quedan ${TABLES_TO_BACKUP.length} tablas`);
+  for (const t of Object.keys(EXCLUDED_TABLES)) assert(!TABLES_TO_BACKUP.includes(t), `${t} sigue en la lista`);
+  for (const t of NEVER_BACKUP) assert(!TABLES_TO_BACKUP.includes(t), `${t} está en la lista`);
+  // Aunque la fuente devolviera esas tablas, no se leen ni se escriben.
+  const g = deps();
+  const r = await handleBackup(post({ Authorization: "Bearer jwt-g4" }, { include_data: true }), g.d);
+  const out = await r.text() + g.uploads.map((u) => u.json).join("");
+  for (const t of NEVER_BACKUP) {
+    assert(!g.reads.includes(t), `se leyó ${t}`);
+    assert(!out.includes(`"${t}"`) && !out.includes(`dato-sintetico-${t}`), `${t} aparece en el volcado`);
+  }
+  assert(out.includes("dato-sintetico-profiles"), "control: el volcado sí trae las demás tablas");
 });
