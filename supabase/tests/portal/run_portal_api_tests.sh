@@ -4,6 +4,7 @@
 #   · staff_regression.mjs   — V2: el equipo lee/escribe igual con y sin las migraciones del portal
 #   · verify-route-guard.mjs — V1: script de verificación post-despliegue (debe pasar)
 #   · negativo V1            — PostgREST SIN pre-request: el script FALLA y la vinculación se bloquea
+#   · b5Plaintext.db.test.ts — B5: sin contenido en claro en base, Storage, logs (PG_LOG_CMD) y API
 # Uso: PGHOST=/var/tmp/pgk PGPORT=54329 PGUSER=postgres PG_TCP_HOST=127.0.0.1 bash supabase/tests/portal/run_portal_api_tests.sh
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -78,5 +79,13 @@ echo "$G" | grep -q '"ok" *: *false' && echo "  OK  sin cerco: diagnóstico púb
 S2="$(link 3055)"
 [[ "$S2" == 200 ]] && echo "  OK  con cerco: vincular por HTTP → $S2" || { echo "FALLA: con cerco no se pudo vincular ($S2)"; exit 1; }
 docker rm -f pgrst_sin_cerco >/dev/null
+
+echo "== B5 búsqueda de contenido en claro (base, Storage, logs, bitácora, API) y baja sin cifrado residual"
+PORTAL_B5_DB=portal_api PGRST_URL=http://localhost:3055 PGRST_JWT_SECRET="$SECRET" PG_LOG_CMD="${PG_LOG_CMD:-}" \
+  npx vitest run src/test/portal/b5Plaintext.db.test.ts >/tmp/portal_b5.log 2>&1 \
+  || { echo "FALLA B5"; tail -40 /tmp/portal_b5.log; exit 1; }
+grep -E "B5:" /tmp/portal_b5.log || true
+grep -qE "Tests +1 passed" /tmp/portal_b5.log || { echo "FALLA B5: la prueba no corrió"; tail -20 /tmp/portal_b5.log; exit 1; }
+echo "  OK  sin contenido en claro; tras la baja no queda ni el cifrado"
 echo
-echo "TODO VERDE: API, regresión del equipo y cerco de rutas verificados por HTTP."
+echo "TODO VERDE: API, regresión del equipo, cerco de rutas y B5 verificados por HTTP."

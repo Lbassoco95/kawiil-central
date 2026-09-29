@@ -58,11 +58,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 20 }
+        with: { node-version: 20, cache: npm }
+      - run: npm ci
       - run: sudo apt-get update && sudo apt-get install -y postgresql-client
       - run: bash supabase/tests/portal/run_portal_db_tests.sh
       - run: docker pull postgrest/postgrest:v12.2.3
+      # B5 revisa también el log del servidor Postgres (el del contenedor del servicio).
       - run: bash supabase/tests/portal/run_portal_api_tests.sh
+        env:
+          PG_LOG_CMD: docker logs $(docker ps -q --filter ancestor=pgvector/pgvector:pg16) 2>&1
 
   edge:
     name: Funciones sin verify_jwt rechazan sin credencial
