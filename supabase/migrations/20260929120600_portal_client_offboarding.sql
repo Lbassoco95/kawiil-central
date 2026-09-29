@@ -39,7 +39,7 @@ AS $$
 DECLARE
   v_c public.clients;
   v_s public.portal_client_settings;
-  v_years int := public.portal_client_retention_years(_client_id);
+  v_years int := public.portal__client_retention_years(_client_id);
   v_bloqueos jsonb := '[]'::jsonb;
   v_personas jsonb;
   n_csd int; n_threads int; n_msgs int; n_att int; n_tk_open int; n_docs int; n_cfdi int; n_tk_done int; n_acc int;
@@ -120,7 +120,7 @@ DECLARE
   v_plan jsonb;
   v_motivo text;
   v_req uuid;
-  v_years int := public.portal_client_retention_years(_client_id);
+  v_years int := public.portal__client_retention_years(_client_id);
   v_kind text;
   v_by uuid;
   v_users uuid[] := '{}';

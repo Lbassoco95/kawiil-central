@@ -61,6 +61,7 @@ DROP TABLE IF EXISTS public.portal_retention_elections;
 DROP FUNCTION IF EXISTS public.portal_retention_elections_append_only();
 
 DROP FUNCTION IF EXISTS public.portal_client_retention_years(uuid);
+DROP FUNCTION IF EXISTS public.portal__client_retention_years(uuid);
 DROP TRIGGER IF EXISTS trg_portal_client_settings_retention ON public.portal_client_settings;
 DROP FUNCTION IF EXISTS public.portal_client_settings_retention_guard();
 ALTER TABLE public.portal_client_settings DROP CONSTRAINT IF EXISTS portal_client_settings_retention_years_check;

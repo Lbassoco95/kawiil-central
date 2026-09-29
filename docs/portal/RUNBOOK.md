@@ -140,7 +140,7 @@ SELECT public.portal_offboarding_verify('<client_id>', NULL, NULL, true);
 
 ```bash
 npm run test                                                  # Vitest (incluye src/test/portal)
-PGHOST=… PGPORT=… PGUSER=postgres npm run test:portal-db      # base vacía, con datos, rollback, idempotencia (207 verificaciones)
+PGHOST=… PGPORT=… PGUSER=postgres npm run test:portal-db      # base vacía, con datos, rollback, idempotencia (215 verificaciones)
 PGHOST=… PGPORT=… PGUSER=postgres npm run test:portal-api     # PostgREST en Docker: aislamiento, regresión del equipo, cerco (y su negativo), B5 (PG_LOG_CMD=… para revisar el log del servidor)
 DENO=… npm run test:portal-edge                               # funciones con verify_jwt=false sin credencial
 ```

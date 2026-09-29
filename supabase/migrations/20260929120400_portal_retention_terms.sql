@@ -86,10 +86,27 @@ CREATE TRIGGER trg_portal_client_settings_retention
   BEFORE UPDATE OF retention_years ON public.portal_client_settings
   FOR EACH ROW EXECUTE FUNCTION public.portal_client_settings_retention_guard();
 
-CREATE OR REPLACE FUNCTION public.portal_client_retention_years(_client_id uuid)
+-- Uso interno (las funciones de baja ya comprobaron quién llama).
+CREATE OR REPLACE FUNCTION public.portal__client_retention_years(_client_id uuid)
 RETURNS int LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_temp, public
 AS $$ SELECT COALESCE((SELECT retention_years FROM public.portal_client_settings WHERE client_id = _client_id),
                       public.portal_retention_years()) $$;
+REVOKE ALL ON FUNCTION public.portal__client_retention_years(uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.portal__client_retention_years(uuid) TO service_role;
+
+-- Para pantallas: solo personas del portal con membresía en ese cliente y G3/G4 de su organización.
+CREATE OR REPLACE FUNCTION public.portal_client_retention_years(_client_id uuid)
+RETURNS int LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = pg_temp, public
+AS $$
+BEGIN
+  IF auth.uid() IS NOT NULL AND NOT (
+       public.portal_can_read_client(_client_id)
+       OR (public.portal_is_staff_admin(auth.uid()) AND public.portal_staff_in_client_org(auth.uid(), _client_id))) THEN
+    RAISE EXCEPTION 'Sin permiso' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN public.portal__client_retention_years(_client_id);
+END;
+$$;
 REVOKE ALL ON FUNCTION public.portal_client_retention_years(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.portal_client_retention_years(uuid) TO authenticated, service_role;
 

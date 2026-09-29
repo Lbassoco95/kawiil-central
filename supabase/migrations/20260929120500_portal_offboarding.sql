@@ -241,7 +241,7 @@ BEGIN
         'motivo', 'Usted es la única persona administradora de esta empresa en el portal. Designe a otra administradora o escriba a Kawiil antes de eliminar su cuenta.');
     ELSE
       SELECT count(*) INTO n_msgs_company FROM public.portal_messages WHERE client_id = r.client_id AND author_user_id = v_uid;
-      v_acc_years := GREATEST(v_acc_years, public.portal_client_retention_years(r.client_id));
+      v_acc_years := GREATEST(v_acc_years, public.portal__client_retention_years(r.client_id));
       v_elimina := v_elimina || jsonb_build_object('key', 'membresia', 'client', r.client_name, 'cantidad', 1,
         'label', 'Su acceso a la empresa', 'detalle', 'Se retira su membresía.');
       v_conserva := v_conserva || jsonb_build_object('key', 'datos_empresa', 'client', r.client_name, 'cantidad', n_msgs_company,
@@ -332,8 +332,8 @@ BEGIN
       v_c := public.portal__offboard_company(r.client_id, v_req, v_def, 'omision', NULL, true, 'sin_personas_activas');
     ELSE
       v_c := NULL;
-      IF public.portal_client_retention_years(r.client_id) > v_acc_years THEN
-        v_acc_years := public.portal_client_retention_years(r.client_id);
+      IF public.portal__client_retention_years(r.client_id) > v_acc_years THEN
+        v_acc_years := public.portal__client_retention_years(r.client_id);
         v_acc_kind := 'kawiil';
       END IF;
     END IF;
