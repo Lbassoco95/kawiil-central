@@ -535,11 +535,18 @@ Deno.serve(async (req) => {
 
     if (action === "mail-folders") {
       const acc = getAccount(params?.accountId);
-      if (!acc) return jsonResp({ value: [] });
+      if (!acc) {
+        console.log("[outlook-account-api] mail-folders: no_account");
+        return jsonResp({ value: [] });
+      }
       const token = await ensureAccessToken(supabaseAdmin, acc);
-      if (!token) return jsonResp({ value: [] });
+      if (!token) {
+        console.log(`[outlook-account-api] mail-folders: no_token account=${acc.email || acc.id}`);
+        return jsonResp({ value: [] });
+      }
 
       const rootFolders = await listMailFoldersRoot(token);
+      console.log(`[outlook-account-api] mail-folders: account=${acc.email || acc.id} root=${rootFolders.length}`);
 
       // Recursively fetch children for inbox and for any non-system root folder that declares children.
       const SYSTEM_WELL_KNOWN = new Set([
@@ -580,6 +587,7 @@ Deno.serve(async (req) => {
         _accountId: acc.id,
         _rawId: f.id,
       }));
+      console.log(`[outlook-account-api] mail-folders: total=${folders.length} account=${acc.email || acc.id}`);
       return jsonResp({ folders, _accountId: acc.id });
     }
 
