@@ -83,6 +83,8 @@ describe.skipIf(!DB)("B5 · base, Storage, logs y API sin contenido en claro (pr
     } finally {
       Object.assign(console, orig);
     }
+    // Solo el alta del CSD se registra con log_statement = all (el volcado no llena el log).
+    sql(`ALTER DATABASE ${DB} RESET log_statement`);
     expect(findPlain(JSON.stringify({ outcomes, logs }), [...list, "contrasena-equivocada-B5-e2e"])).toEqual([]);
 
     const cipher = sql(`SELECT c.cert_ciphertext || ' ' || c.key_ciphertext || ' ' || s.password_ciphertext FROM public.client_sat_certificates c
@@ -131,6 +133,5 @@ describe.skipIf(!DB)("B5 · base, Storage, logs y API sin contenido en claro (pr
     for (const c of cipher) expect(d2.includes(c), "tras la baja sigue el cifrado del CSD").toBe(false);
     const ver = JSON.parse(sql(`SELECT public.portal_offboarding_record_verification('${res.request_id}', '${USER}', 'b5@prueba.invalid')`));
     expect(ver.ok).toBe(true);
-    sql(`ALTER DATABASE ${DB} RESET log_statement`);
   }, 120_000);
 });
