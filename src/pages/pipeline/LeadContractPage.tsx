@@ -12,6 +12,7 @@ import {
   useContractPackageItems,
   useGenerateContractVersion,
   useLeadContractEngagements,
+  useLatestContractVersion,
   useStaffPatchAnswers,
   publicContractUrl,
   useRotateAccessToken,
@@ -27,7 +28,7 @@ import {
   openPrintPreview,
 } from "@/lib/contractMerge";
 import { useLeadDetail, usePipelineStages } from "@/hooks/usePipeline";
-import { normalizeServices, activeBundles } from "@/lib/leadServices";
+import { normalizeServices, activeBundles, formatServices } from "@/lib/leadServices";
 import {
   isWonPipelineStage,
   wonStageDisplayLabel,
@@ -76,6 +77,7 @@ export default function LeadContractPage() {
 
   const { data: tplBundle } = useActiveContractTemplate(engagement?.id);
   const { data: items = [] } = useContractPackageItems(engagement?.id);
+  const { data: latestVersion } = useLatestContractVersion(engagement?.id);
   const patchMut = useStaffPatchAnswers();
   const genMut = useGenerateContractVersion();
   const confirmMut = useConfirmContractSigned();
@@ -86,8 +88,36 @@ export default function LeadContractPage() {
   const [clientToken, setClientToken] = useState<string | null>(null);
 
   useEffect(() => {
-    if (engagement?.answers) setLocalAnswers(engagement.answers);
-  }, [engagement?.id, engagement?.answers]);
+    if (!engagement?.answers) return;
+    const services = normalizeServices(
+      lead?.service_types ?? (lead as { service_type?: unknown } | undefined)?.service_type,
+    );
+    const now = new Date();
+    const contractDate = new Intl.DateTimeFormat("es-MX", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    }).format(now);
+    const monthlyFee = Number(
+      (lead as { estimated_value_monthly?: number | null } | undefined)?.estimated_value_monthly,
+    );
+    setLocalAnswers({
+      ...engagement.answers,
+      ...(Number.isFinite(monthlyFee) && monthlyFee > 0 ? { net_price: monthlyFee } : {}),
+      "services.labeled": formatServices(services),
+      "firma.fecha": engagement.answers["firma.fecha"] || contractDate,
+    });
+  }, [
+    engagement?.id,
+    engagement?.answers,
+    lead?.service_types,
+    lead?.service_type,
+    lead?.estimated_value_monthly,
+  ]);
+
+  useEffect(() => {
+    if (latestVersion?.merged_html) setLastMerged(latestVersion.merged_html);
+  }, [latestVersion?.id, latestVersion?.merged_html]);
 
   const deferredItems = useMemo(
     () => items.filter((i) => i.status === "pending"),
@@ -203,7 +233,7 @@ export default function LeadContractPage() {
         fields: tplBundle.fields || [],
       });
       setLastMerged(String(res.merged_html || ""));
-      toast.success("Documento generado. Puedes descargarlo o imprimir a PDF.");
+      toast.success("Vista previa generada. Revísala abajo antes de imprimir o guardar como PDF.");
       void refetch();
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Error al generar");
@@ -277,10 +307,10 @@ export default function LeadContractPage() {
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
           <FileText className="h-6 w-6" />
-          Onboarding · contrato
+          Expediente contractual
         </h1>
         <p className="text-sm text-muted-foreground">
-          Dual fill con el cliente. Genera, descarga y confirma la firma hecha fuera de Kawiil
+          Integra la información legal del cliente y administra internamente las condiciones del contrato
           {engagement.package_kind === "softlanding"
             ? ". En Softlanding el RFC es opcional hasta que exista la sociedad."
             : "."}
@@ -289,7 +319,7 @@ export default function LeadContractPage() {
 
       <div className="flex flex-wrap gap-2">
         <Button variant="secondary" size="sm" onClick={() => void ensureLink()} disabled={rotateMut.isPending}>
-          Copiar link cliente
+          Compartir solicitud con cliente
         </Button>
         {clientToken ? (
           <span className="text-xs text-muted-foreground self-center truncate max-w-[240px]">
@@ -298,15 +328,15 @@ export default function LeadContractPage() {
         ) : null}
         <Button size="sm" onClick={() => void generate()} disabled={genMut.isPending || engagement.status === "signed_confirmed"}>
           {genMut.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-          Generar contrato
+          Generar vista previa
         </Button>
         <Button size="sm" variant="outline" onClick={download} disabled={!lastMerged}>
           <Download className="h-4 w-4 mr-1" />
-          Descargar HTML
+          Descargar documento
         </Button>
         <Button size="sm" variant="outline" onClick={printPdf} disabled={!lastMerged}>
           <Printer className="h-4 w-4 mr-1" />
-          Imprimir / PDF
+          Imprimir / Guardar PDF
         </Button>
         <Button
           size="sm"
@@ -318,6 +348,35 @@ export default function LeadContractPage() {
           Confirmar que ya se firmó
         </Button>
       </div>
+
+      {lastMerged ? (
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <CardTitle className="text-sm">Vista previa del contrato</CardTitle>
+              {latestVersion ? (
+                <Badge variant="outline" className="text-[10px]">
+                  Versión {latestVersion.version_number}
+                </Badge>
+              ) : null}
+            </div>
+          </CardHeader>
+          <CardContent>
+            <iframe
+              title="Vista previa del contrato"
+              srcDoc={lastMerged}
+              className="h-[680px] w-full rounded-lg border bg-white"
+              sandbox="allow-same-origin"
+            />
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="border-dashed">
+          <CardContent className="py-5 text-sm text-muted-foreground">
+            Aún no hay una vista previa. Completa la información y selecciona “Generar vista previa”.
+          </CardContent>
+        </Card>
+      )}
 
       {engagement.client_id ? (
         <Card>

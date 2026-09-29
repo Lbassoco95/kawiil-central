@@ -70,6 +70,7 @@ const PACKAGE_INCLUDED_SERVICES: Record<ServicePackage, ServiceArea[]> = {
 
 // Extra services that can be added on top of a package
 const EXTRA_SERVICES: { value: ServiceArea; label: string }[] = [
+  { value: "nomina", label: "Nómina" },
   { value: "pld_ft", label: "PLD/FT" },
   { value: "juicios", label: "Juicios" },
   { value: "gestoria", label: "Gestoría" },
@@ -80,6 +81,7 @@ const EXTRA_SERVICES: { value: ServiceArea; label: string }[] = [
 
 const INDIVIDUAL_SERVICES: { value: ServiceArea; label: string }[] = [
   { value: "contabilidad", label: "Contabilidad" },
+  { value: "nomina", label: "Nómina" },
   { value: "legal", label: "Legal" },
   { value: "pld_ft", label: "PLD/FT" },
   { value: "juicios", label: "Juicios" },
@@ -91,6 +93,7 @@ const INDIVIDUAL_SERVICES: { value: ServiceArea; label: string }[] = [
 
 const ALL_SERVICE_AREAS = [
   "contabilidad",
+  "nomina",
   "legal",
   "softlanding",
   "pld_ft",
