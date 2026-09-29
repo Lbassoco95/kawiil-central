@@ -37,6 +37,11 @@ CREATE TABLE IF NOT EXISTS auth.users (
   phone text, banned_until timestamptz, deleted_at timestamptz, is_anonymous boolean DEFAULT false
 );
 CREATE TABLE IF NOT EXISTS auth.sessions (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE, created_at timestamptz DEFAULT now());
+-- Como en Supabase: al borrar el usuario caen sus sesiones, tokens de refresco y enlaces de un solo uso.
+CREATE TABLE IF NOT EXISTS auth.refresh_tokens (id bigserial PRIMARY KEY, token text, user_id varchar(255), revoked boolean DEFAULT false,
+  session_id uuid REFERENCES auth.sessions(id) ON DELETE CASCADE, created_at timestamptz DEFAULT now());
+CREATE TABLE IF NOT EXISTS auth.one_time_tokens (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  token_type text NOT NULL, token_hash text NOT NULL, relates_to text NOT NULL DEFAULT '', created_at timestamptz DEFAULT now());
 CREATE TABLE IF NOT EXISTS auth.identities (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE, provider text, identity_data jsonb);
 GRANT SELECT ON auth.users TO service_role;
 
