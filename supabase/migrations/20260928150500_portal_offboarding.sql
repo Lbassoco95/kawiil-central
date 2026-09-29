@@ -228,11 +228,13 @@ BEGIN
              'label', 'Facturas (CFDI) emitidas y recibidas', 'para', v_para_fiscal,
              'elige', r.relation = 'owned', 'anios', v_def, 'hasta', (now() + make_interval(years => v_def))::date,
              'hasta_por_opcion', CASE WHEN r.relation = 'owned' THEN jsonb_build_object('5', d5, '10', d10) END,
+             'anios_por_opcion', CASE WHEN r.relation = 'owned' THEN jsonb_build_object('5', 5, '10', 10) END,
              'detalle', 'En resguardo durante el plazo; al vencer se eliminan automáticamente.')
         || jsonb_build_object('key', 'tickets_facturados', 'client', r.client_name, 'cantidad', n_tk_done,
              'label', 'Tickets ya facturados, con su factura', 'para', v_para_fiscal,
              'elige', r.relation = 'owned', 'anios', v_def, 'hasta', (now() + make_interval(years => v_def))::date,
              'hasta_por_opcion', CASE WHEN r.relation = 'owned' THEN jsonb_build_object('5', d5, '10', d10) END,
+             'anios_por_opcion', CASE WHEN r.relation = 'owned' THEN jsonb_build_object('5', 5, '10', 10) END,
              'detalle', 'En resguardo durante el plazo; al vencer se eliminan automáticamente.');
     ELSIF r.relation = 'sole_admin' THEN
       v_bloqueos := v_bloqueos || jsonb_build_object('client_id', r.client_id, 'client', r.client_name,
@@ -255,6 +257,7 @@ BEGIN
          'hasta_por_opcion', CASE WHEN v_elige THEN jsonb_build_object(
              '5', (now() + make_interval(years => GREATEST(5, v_acc_years)))::date,
              '10', (now() + make_interval(years => GREATEST(10, v_acc_years)))::date) END,
+         'anios_por_opcion', CASE WHEN v_elige THEN jsonb_build_object('5', GREATEST(5, v_acc_years), '10', GREATEST(10, v_acc_years)) END,
          'detalle', 'Se conserva la versión y la fecha, con su identidad seudonimizada; al vencer el plazo se elimina.')
     || jsonb_build_object('key', 'bitacora', 'cantidad', (SELECT count(*) FROM public.portal_audit_log WHERE actor_user_id = v_uid),
          'label', 'Bitácora de actividad', 'para', 'Evidencia de cumplimiento.',

@@ -9,18 +9,25 @@ import { callApi, fileToBase64, PortalApiError } from "../lib/api";
 import { fmtDate } from "../lib/format";
 import { Notice, PageTitle, StatusPill } from "../components/ui";
 import { csdExpiryLevel } from "../../../supabase/functions/_shared/portal/csd.ts";
+import { hastaPara, PLAZO_OMISION, PLAZOS, type Plazo, type ResguardoItem } from "../lib/retention";
 
-interface PlanItem { key: string; label: string; detalle: string; cantidad?: number; client?: string; anios?: number; hasta?: string }
-interface Plan { bloqueada: boolean; bloqueos: { client: string; motivo: string }[]; elimina: PlanItem[]; conserva: PlanItem[]; politica: { fiscal_retention_years: number; confirmada: boolean } }
+interface PlanItem extends ResguardoItem { key: string; label: string; detalle: string; cantidad?: number; client?: string; para?: string }
+interface Plan {
+  bloqueada: boolean; bloqueos: { client: string; motivo: string }[]; elimina: PlanItem[]; conserva: PlanItem[];
+  resguardo: { elige: boolean; omision: number; opciones: { anios: Plazo; hasta: string }[] };
+  politica: { fiscal_retention_years: number; confirmada: boolean };
+}
 
 /**
- * Eliminar la cuenta (C4). El DESGLOSE sale de la base (portal_account_deletion_plan):
- * lo que se borra y lo que se conserva según los datos reales y la política vigente.
+ * Eliminar la cuenta (C4, B1–B3). El DESGLOSE sale de la base (portal_account_deletion_plan):
+ * lo que se elimina y lo que se resguarda según los datos reales y la política vigente.
+ * Si la persona es titular de un básico elige el plazo: 5 años (preseleccionado) o 10.
  * Los textos de encabezado son MARCADORES que Polo reemplaza.
  */
 function DeletionSection({ onDone }: { onDone: () => void }) {
   const [plan, setPlan] = useState<Plan | null>(null);
   const [confirm, setConfirm] = useState("");
+  const [plazo, setPlazo] = useState<Plazo>(PLAZO_OMISION);
   const [msg, setMsg] = useState<{ tone: "ok" | "bad" | "warn"; text: string } | null>(null);
   useEffect(() => {
     db.rpc("portal_account_deletion_plan", {}).then(({ data }) => setPlan((data as Plan) ?? null));
@@ -29,16 +36,34 @@ function DeletionSection({ onDone }: { onDone: () => void }) {
   return (
     <section className="rounded-xl border border-destructive/40 bg-card p-4" aria-labelledby="del-t">
       <h2 id="del-t" className="text-lg text-destructive">Eliminar mi cuenta</h2>
-      <p className="kw-placeholder mt-2 rounded-md p-2 text-sm">[MARCADOR — texto de Polo] Explicación general sobre la eliminación de la cuenta y la conservación de datos fiscales.</p>
-      {!plan ? <p className="mt-2 text-sm text-muted-foreground">Calculando qué se borrará y qué se conservará…</p> : (
+      <p className="kw-placeholder mt-2 rounded-md p-2 text-sm">[MARCADOR — texto de Polo] Explicación general sobre la eliminación de la cuenta y el resguardo de la información fiscal.</p>
+      {!plan ? <p className="mt-2 text-sm text-muted-foreground">Calculando qué se eliminará y qué se resguardará…</p> : (
         <>
-          <h3 className="mt-3 font-semibold">Se eliminará</h3>
+          <h3 className="mt-3 font-semibold">Se eliminará de inmediato</h3>
           <ul className="list-disc pl-5 text-sm">{plan.elimina.map((i, n) => <li key={n}><strong>{itemText(i)}</strong>: {i.detalle}</li>)}</ul>
-          <h3 className="mt-3 font-semibold">Se conservará, y por qué</h3>
-          <ul className="list-disc pl-5 text-sm">{plan.conserva.map((i, n) => (
-            <li key={n}><strong>{itemText(i)}</strong>: {i.detalle}{i.hasta ? ` Hasta el ${fmtDate(i.hasta)} (${i.anios} años).` : ""}</li>
-          ))}</ul>
-          {!plan.politica.confirmada && <p className="mt-2 text-xs text-muted-foreground">El plazo de conservación de {plan.politica.fiscal_retention_years} años es una propuesta pendiente de confirmación por el Oficial de Cumplimiento de Kawiil.</p>}
+          {plan.resguardo?.elige && (
+            <fieldset className="mt-3 rounded-md border p-3" data-testid="plazo">
+              <legend className="px-1 text-sm font-semibold">¿Cuánto tiempo resguardamos su información fiscal?</legend>
+              <p className="kw-placeholder mb-2 rounded-md p-2 text-xs">[MARCADOR — texto de Polo] Por qué se resguarda y en qué caso conviene elegir diez años.</p>
+              {PLAZOS.map((p) => {
+                const op = plan.resguardo.opciones.find((o) => o.anios === p);
+                return (
+                  <label key={p} className="flex items-center gap-2 text-sm">
+                    <input type="radio" name="plazo" value={p} checked={plazo === p} onChange={() => setPlazo(p)} />
+                    {p} años{p === PLAZO_OMISION ? " (recomendado)" : ""}{op ? ` — hasta el ${fmtDate(op.hasta)}` : ""}
+                  </label>
+                );
+              })}
+            </fieldset>
+          )}
+          <h3 className="mt-3 font-semibold">Se resguardará, para qué y hasta cuándo</h3>
+          <ul className="list-disc pl-5 text-sm">{plan.conserva.map((i, n) => {
+            const h = hastaPara(i, plazo);
+            return (
+              <li key={n}><strong>{itemText(i)}</strong>: {i.para ? `${i.para} ` : ""}{i.detalle}{h.hasta ? ` Hasta el ${fmtDate(h.hasta)} (${h.anios} años).` : ""}</li>
+            );
+          })}</ul>
+          <p className="mt-2 text-xs text-muted-foreground">Nunca se resguardan certificados, llaves, contraseñas, accesos ni mensajes.</p>
           {plan.bloqueada ? (
             <div className="mt-3 space-y-2">{plan.bloqueos.map((b, n) => <Notice key={n} tone="warn" title={`No se puede eliminar todavía: ${b.client}`}>{b.motivo}</Notice>)}</div>
           ) : (
@@ -46,8 +71,10 @@ function DeletionSection({ onDone }: { onDone: () => void }) {
               <Label htmlFor="del" className="mt-3 block text-sm">Escriba ELIMINAR para confirmar</Label>
               <Input id="del" value={confirm} onChange={(e) => setConfirm(e.target.value)} className="mt-1 max-w-xs" />
               <Button className="mt-2" variant="destructive" disabled={confirm !== "ELIMINAR"} onClick={async () => {
-                try { await callApi("cuenta.eliminar", { confirmacion: "ELIMINAR" }); await db.auth.signOut(); onDone(); }
-                catch (e) { setMsg({ tone: "bad", text: (e as Error).message }); }
+                try {
+                  await callApi("cuenta.eliminar", { confirmacion: "ELIMINAR", ...(plan.resguardo?.elige ? { plazo_anios: plazo } : {}) });
+                  await db.auth.signOut(); onDone();
+                } catch (e) { setMsg({ tone: "bad", text: (e as Error).message }); }
               }}>Eliminar mi cuenta</Button>
             </>
           )}
