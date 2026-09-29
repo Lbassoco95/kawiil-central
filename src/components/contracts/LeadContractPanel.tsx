@@ -80,7 +80,7 @@ export function LeadContractPanel({
           <CardTitle className="text-base">Onboarding de contrato</CardTitle>
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground">
-          El onboarding de contrato se habilita cuando el lead está en etapa ganada del
+          El expediente contractual se habilita cuando el lead está en etapa ganada del
           pipeline (en este tablero: <strong>Cerrado</strong>). Mueve el trato a esa etapa
           para iniciar Softlanding o Backoffice.
         </CardContent>
@@ -143,7 +143,7 @@ export function LeadContractPanel({
         <div className="flex items-center justify-between gap-2">
           <CardTitle className="text-base flex items-center gap-2">
             <FileText className="h-4 w-4" />
-            Onboarding de contrato
+            Expediente contractual
           </CardTitle>
           <Badge variant="secondary" className="text-[10px]">
             Firma externa
@@ -194,7 +194,7 @@ export function LeadContractPanel({
                 <div className="flex flex-wrap gap-2">
                   <Button size="sm" variant="outline" asChild>
                     <Link to={`/pipeline/leads/${leadId}/contrato?e=${e.id}`}>
-                      Abrir wizard
+                      Abrir expediente
                       <ExternalLink className="h-3.5 w-3.5 ml-1" />
                     </Link>
                   </Button>
@@ -205,7 +205,7 @@ export function LeadContractPanel({
                     onClick={() => void copyLink(e.id)}
                   >
                     <Copy className="h-3.5 w-3.5 mr-1" />
-                    Copiar link cliente
+                    Compartir solicitud
                   </Button>
                   {e.client_id ? (
                     <Button size="sm" variant="ghost" asChild>

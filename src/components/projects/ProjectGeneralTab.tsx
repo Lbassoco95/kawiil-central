@@ -45,6 +45,7 @@ const STATUS_LABELS: Record<ProjectStatus, string> = Object.fromEntries(
 
 const SERVICE_LABELS: Record<string, string> = {
   contabilidad: "Contabilidad",
+  nomina: "Nómina",
   legal: "Legal",
   softlanding: "Soft Landing",
   pld_ft: "PLD/FT",

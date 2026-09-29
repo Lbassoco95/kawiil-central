@@ -5849,6 +5849,7 @@ export type Database = {
         | "cancelled"
       service_area:
         | "contabilidad"
+        | "nomina"
         | "legal"
         | "softlanding"
         | "pld_ft"
@@ -6009,6 +6010,7 @@ export const Constants = {
       ],
       service_area: [
         "contabilidad",
+        "nomina",
         "legal",
         "softlanding",
         "pld_ft",

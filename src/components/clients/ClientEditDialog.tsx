@@ -75,6 +75,7 @@ const PACKAGE_INCLUDED_SERVICES: Record<ServicePackage, ServiceArea[]> = {
 };
 
 const EXTRA_SERVICES: { value: ServiceArea; label: string }[] = [
+  { value: "nomina", label: "Nómina" },
   { value: "pld_ft", label: "PLD/FT" },
   { value: "juicios", label: "Juicios" },
   { value: "gestoria", label: "Gestoría" },
@@ -85,6 +86,7 @@ const EXTRA_SERVICES: { value: ServiceArea; label: string }[] = [
 
 const INDIVIDUAL_SERVICES: { value: ServiceArea; label: string }[] = [
   { value: "contabilidad", label: "Contabilidad" },
+  { value: "nomina", label: "Nómina" },
   { value: "legal", label: "Legal" },
   { value: "pld_ft", label: "PLD/FT" },
   { value: "juicios", label: "Juicios" },
@@ -94,7 +96,7 @@ const INDIVIDUAL_SERVICES: { value: ServiceArea; label: string }[] = [
   { value: "representacion" as ServiceArea, label: "Representación" },
 ];
 
-const ALL_SERVICE_AREAS = ["contabilidad", "legal", "softlanding", "pld_ft", "juicios", "gestoria", "constitucion_nacional", "cumplimiento", "representacion"] as const;
+const ALL_SERVICE_AREAS = ["contabilidad", "nomina", "legal", "softlanding", "pld_ft", "juicios", "gestoria", "constitucion_nacional", "cumplimiento", "representacion"] as const;
 
 const clientSchema = z.object({
   name: z.string().trim().min(1, "El nombre es requerido").max(200),

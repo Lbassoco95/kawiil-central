@@ -8,9 +8,9 @@ export interface WizardStep {
 }
 
 /** Bloques Typeform-ish por proceso (MVP). Campos alineados al manifiesto. */
-export function wizardStepsFor(kind: ContractPackageKind): WizardStep[] {
+export function wizardStepsFor(kind: ContractPackageKind, mode: "staff" | "client" = "staff"): WizardStep[] {
   if (kind === "backoffice_pm") {
-    return [
+    const shared: WizardStep[] = [
       {
         id: "welcome",
         title: "Contrato de Backoffice",
@@ -36,24 +36,29 @@ export function wizardStepsFor(kind: ContractPackageKind): WizardStep[] {
         description: "Escritura, notaría y folio (si ya los tienes).",
         fields: ["client.escritura", "client.notaria", "client.folio_mercantil", "client.lfpiorpi"],
       },
+    ];
+    const summary: WizardStep = {
+      id: "summary",
+      title: "Revisión de información",
+      description: mode === "client" ? "Revisa la información que proporcionaste." : "Revisa antes de generar el documento para firma externa.",
+      fields: [],
+    };
+    if (mode === "client") return [...shared, summary];
+    return [
+      ...shared,
       {
         id: "plan",
-        title: "Plan y honorarios",
-        description: "Elige el plan del catálogo. Puedes aplicar descuento o ajustar el neto.",
-        fields: ["plan_id", "list_price", "discount_amount", "net_price", "payment_method"],
+        title: "Honorarios",
+        description: "Monto mensual tomado del pipeline; el cliente no puede modificarlo.",
+        fields: ["net_price", "payment_method"],
       },
       {
         id: "ops",
-        title: "Operación",
-        description: "Forma de pago y personas autorizadas.",
+        title: "Operación interna",
+        description: "Servicios del pipeline, personas autorizadas y datos de emisión.",
         fields: ["authorized_persons", "services.labeled", "firma.fecha", "firma.lugar"],
       },
-      {
-        id: "summary",
-        title: "Resumen",
-        description: "Revisa antes de generar el documento para firma externa.",
-        fields: [],
-      },
+      summary,
     ];
   }
 

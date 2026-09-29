@@ -4,6 +4,7 @@ type ServiceArea = Database["public"]["Enums"]["service_area"];
 
 export const SERVICE_LABELS: Record<ServiceArea, string> = {
   contabilidad: "Contabilidad",
+  nomina: "Nómina",
   legal: "Legal",
   softlanding: "Soft Landing",
   pld_ft: "PLD/FT",

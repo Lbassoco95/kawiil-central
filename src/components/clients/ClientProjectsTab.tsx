@@ -57,6 +57,10 @@ function getExpectedProjects(services: ServiceArea[]): Array<{ area: ServiceArea
     expected.push({ area: "legal", namePrefix: "Legal" });
   }
 
+  if (services.includes("nomina")) {
+    expected.push({ area: "nomina", namePrefix: "Nómina" });
+  }
+
   // PLD/FT project
   if (services.includes("pld_ft")) {
     expected.push({ area: "pld_ft", namePrefix: "Cumplimiento PLD/FT" });

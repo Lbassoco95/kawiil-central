@@ -104,7 +104,7 @@ export default function ContratoPublico() {
       <div className="mx-auto max-w-xl px-4 pb-16 pt-10">
         <div className="mb-6 text-white">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-200/90">Kawiil</p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight">Onboarding de contrato</h1>
+          <h1 className="mt-1 text-3xl font-semibold tracking-tight">Integración de expediente contractual</h1>
           <div className="mt-2 flex flex-wrap gap-2">
             <Badge className="bg-white/15 text-white border-white/20">
               {PACKAGE_KIND_LABEL[packageKind]}

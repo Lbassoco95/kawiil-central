@@ -39,7 +39,7 @@ export function ContractWizard({
   onChange,
   onSave,
 }: Props) {
-  const steps = useMemo(() => wizardStepsFor(packageKind), [packageKind]);
+  const steps = useMemo(() => wizardStepsFor(packageKind, mode), [packageKind, mode]);
   const [stepIdx, setStepIdx] = useState(0);
   const step = steps[stepIdx];
   const { data: catalog = [] } = usePricingCatalog(packageKind);
