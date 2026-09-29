@@ -22,7 +22,7 @@ describe("filtro de archivos de Dropbox", () => {
     expect(suggestPeriod(["2025", "Septiembre"])).toEqual({ year: 2025, month: 9 });
   });
   it("espejo exacto de portal_is_forbidden_filename() en la migración", () => {
-    const sql = readFileSync(resolve(process.cwd(), "supabase/migrations/20260928140200_portal_documents.sql"), "utf8");
+    const sql = readFileSync(resolve(process.cwd(), "supabase/migrations/20260929110200_portal_documents.sql"), "utf8");
     const ext = sql.match(/\\\.\((key\|[a-z0-9|]+)\)\$/)![1].split("|");
     expect(ext.sort()).toEqual([...FORBIDDEN_EXTENSIONS].sort());
     const words = sql.match(/'\((fiel\|[^']+)\)'/)![1].replace(/\\\./g, ".").replace(/\\-/g, "-");

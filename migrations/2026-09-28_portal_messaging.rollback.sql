@@ -1,5 +1,5 @@
 -- 2026-09-28 · qppfampapbxdgednkofc
--- Rollback de supabase/migrations/20260928140100_portal_messaging.sql
+-- Rollback de supabase/migrations/20260929110100_portal_messaging.sql
 -- DESTRUCTIVO para datos del portal: borra hilos, mensajes, adjuntos (registro, no archivos)
 -- y la bandeja de salida. No toca Slack ni Comunicación.
 DROP FUNCTION IF EXISTS public.portal_thread_read_state(uuid);

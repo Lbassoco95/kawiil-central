@@ -1,5 +1,5 @@
 -- 2026-09-28 · qppfampapbxdgednkofc
--- Rollback de supabase/migrations/20260928150000_portal_csd_authorization.sql.
+-- Rollback de supabase/migrations/20260929120000_portal_csd_authorization.sql.
 -- No borra CSD ya cargados. La bitácora conserva los registros con acciones nuevas:
 -- por eso la lista anterior se restaura como NOT VALID (aplica a filas nuevas, no reescribe las viejas).
 DROP FUNCTION IF EXISTS public.portal_csd_store(uuid, uuid, text, text, text, text, text, text, timestamptz, timestamptz, text);

@@ -1,5 +1,5 @@
 -- 2026-09-28 · qppfampapbxdgednkofc
--- Rollback de supabase/migrations/20260928140200_portal_documents.sql
+-- Rollback de supabase/migrations/20260929110200_portal_documents.sql
 -- DESTRUCTIVO para datos del portal: borra el mapeo de carpetas y el registro de documentos.
 -- El bucket `portal` se elimina SOLO si está vacío (si tiene archivos, avisa y lo deja).
 DROP POLICY IF EXISTS "Portal staff org read" ON storage.objects;

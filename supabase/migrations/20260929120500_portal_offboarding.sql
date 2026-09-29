@@ -4,7 +4,7 @@
 --
 -- Proyecto: qppfampapbxdgednkofc · Fecha: 2026-09-28
 -- Rollback (a mano): migrations/2026-09-28_portal_offboarding.rollback.sql
--- Depende de 20260928150400_portal_retention_terms.sql (plazos 5/10).
+-- Depende de 20260929120400_portal_retention_terms.sql (plazos 5/10).
 --
 -- Relación de la persona con cada cliente al darse de baja (portal_deletion_scope):
 --   owned     básico creado por ella, sin nadie más con acceso        → baja de la empresa; ELIGE 5 o 10 años.

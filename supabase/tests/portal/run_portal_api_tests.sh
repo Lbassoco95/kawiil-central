@@ -12,7 +12,7 @@ T="$ROOT/supabase/tests/portal"
 SECRET="${PGRST_JWT_SECRET:-secreto-local-de-prueba-de-32-caracteres-min}"
 export PGRST_JWT_SECRET="$SECRET"
 TCP="${PG_TCP_HOST:-127.0.0.1}"
-FIRST_PORTAL=20260928140000
+FIRST_PORTAL=20260929110000
 
 q() { psql -X -v ON_ERROR_STOP=1 -q -d "$1" "${@:2}"; }
 fresh() { docker rm -f pgrst_portal pgrst_base pgrst_sin_cerco >/dev/null 2>&1 || true; psql -X -q -d postgres -c "DROP DATABASE IF EXISTS $1 WITH (FORCE)" -c "CREATE DATABASE $1" >/dev/null; }

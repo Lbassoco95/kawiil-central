@@ -15,19 +15,19 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 T="$ROOT/supabase/tests/portal"
 PORTAL_MIGS=(
-  20260928140000_portal_core
-  20260928140100_portal_messaging
-  20260928140200_portal_documents
-  20260928140300_portal_cfdi
-  20260928140400_portal_tickets
-  20260928140500_portal_isolation_guard
-  20260928150000_portal_csd_authorization
-  20260928150100_portal_rate_limits
-  20260928150200_portal_account_deletion
-  20260928150300_portal_route_guard_health
-  20260928150400_portal_retention_terms
-  20260928150500_portal_offboarding
-  20260928150600_portal_client_offboarding
+  20260929110000_portal_core
+  20260929110100_portal_messaging
+  20260929110200_portal_documents
+  20260929110300_portal_cfdi
+  20260929110400_portal_tickets
+  20260929110500_portal_isolation_guard
+  20260929120000_portal_csd_authorization
+  20260929120100_portal_rate_limits
+  20260929120200_portal_account_deletion
+  20260929120300_portal_route_guard_health
+  20260929120400_portal_retention_terms
+  20260929120500_portal_offboarding
+  20260929120600_portal_client_offboarding
 )
 ROLLBACKS=(
   2026-09-28_portal_client_offboarding

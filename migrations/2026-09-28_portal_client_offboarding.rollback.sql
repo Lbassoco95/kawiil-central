@@ -1,6 +1,6 @@
 -- 2026-09-28 · qppfampapbxdgednkofc
--- Rollback de supabase/migrations/20260928150600_portal_client_offboarding.sql (B4).
--- Correr ANTES de los rollbacks de 20260928150500 y 20260928150400.
+-- Rollback de supabase/migrations/20260929120600_portal_client_offboarding.sql (B4).
+-- Correr ANTES de los rollbacks de 20260929120500 y 20260929120400.
 -- Borra los registros de solicitudes de baja de clientes (no tienen persona):
 -- anótelos antes si hace falta:
 --   SELECT id, client_id, status, requested_at FROM public.portal_deletion_requests WHERE subject_pseudonym IS NULL;

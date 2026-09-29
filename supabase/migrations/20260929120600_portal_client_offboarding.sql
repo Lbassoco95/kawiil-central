@@ -3,7 +3,7 @@
 --
 -- Proyecto: qppfampapbxdgednkofc · Fecha: 2026-09-28
 -- Rollback (a mano): migrations/2026-09-28_portal_client_offboarding.rollback.sql
--- Depende de 20260928150400 (plazos) y 20260928150500 (baja de empresa).
+-- Depende de 20260929120400 (plazos) y 20260929120500 (baja de empresa).
 --
 -- Una sola acción registrada, solo G3/G4 de la organización del cliente, con doble
 -- confirmación (escribir «DAR DE BAJA» y el RFC del cliente). La ejecuta portal-api
