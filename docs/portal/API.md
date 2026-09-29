@@ -1,18 +1,12 @@
 # API del portal del cliente — v1
 
-Una sola API versionada entre el portal (web/PWA hoy, Capacitor después) y `kawiil-central`.
-Tiene dos puertas, las dos con el JWT de Supabase Auth del usuario y **nunca** con credenciales de administración:
+API versionada entre el navegador y el proyecto Supabase exclusivo de Kawiil OS. El navegador tiene una sola puerta de datos de negocio: **Edge `portal-api`**, mediante `POST /functions/v1/portal-api/v1/<operación>`. Supabase Auth se usa únicamente para conservar y renovar la sesión.
 
-| Puerta | Qué va ahí | Quién decide el permiso |
-|---|---|---|
-| **Edge `portal-api`** — `POST /functions/v1/portal-api/v1/<operación>` | Lo que necesita Storage, Auth admin, cifrado, el emisor o el lector de XML | La Edge valida el JWT y pregunta a la base (RPC con el JWT del usuario). Solo escribe con service_role. |
-| **PostgREST** — `/rest/v1/<tabla\|vista>` y `/rest/v1/rpc/portal_*` | Lecturas y operaciones que la base puede validar sola | RLS + funciones `SECURITY DEFINER` que verifican rol y cliente |
+La Edge valida el JWT, empresa y papel; consulta el proyecto Kawiil OS y devuelve una respuesta específica para la pantalla. La `service_role` pertenece exclusivamente al proyecto Kawiil OS y no tiene alcance sobre central. RLS por empresa permanece activa como segunda capa.
 
-Versión: el prefijo `v1/` es obligatorio en `portal-api` (otra versión → `404 version_no_soportada`). En PostgREST la versión la dan los nombres `portal_*`; un cambio incompatible se publica con un nombre nuevo (`portal_*_v2`) y el anterior se retira cuando ninguna app instalada lo use.
+Versión: el prefijo `v1/` es obligatorio; otra versión u operación fuera del catálogo devuelve 404. Una regla de CI prohíbe `.from`, `.rpc`, Storage o Functions directas en `src/portal/` fuera del cliente de API.
 
-**Cerco para cuentas del portal.** `portal_pre_request()` (db_pre_request de PostgREST) solo deja pasar a una cuenta del portal hacia `/portal_*`, `/rpc/portal_*`, `/fis_receipts`, `/fis_cfdi` y `/fis_merchants`. Cualquier otra ruta → `403`. Además, cada tabla del back-office tiene la policy restrictiva `portal_deny_portal_accounts`.
-
-Respuesta de `portal-api`: `{ "version": "v1", "data": … }`. Error: `{ "error": "<código>", "message": "<texto para mostrar>", "details"?: … }` con estado HTTP 4xx/5xx.
+Respuesta: `{ "version": "v1", "data": … }`. Error: `{ "error": "<código>", "message": "<texto para mostrar>", "details"?: … }` con estado HTTP 4xx/5xx. Los contratos entre proyectos se documentan en `FRONTERA-API.md`.
 
 ---
 
@@ -25,11 +19,11 @@ Respuesta de `portal-api`: `{ "version": "v1", "data": … }`. Error: `{ "error"
 | `v1/cuenta.recuperar` | portal-api (pública) | `{ email, captcha_token }` | Turnstile + límite. Respuesta genérica. |
 | `v1/cuenta.reenviar_confirmacion` | portal-api (pública) | `{ email, captcha_token }` | Turnstile + límite. Respuesta genérica. |
 | `v1/diagnostico.cerco` | portal-api (pública) | `{}` | Booleanos del cerco de rutas y si el captcha está configurado. |
-| `rpc/portal_me` | PostgREST | `{}` | Cuenta, nivel, clientes (con rol, emisión, tickets) y textos pendientes de aceptar. |
-| `rpc/portal_accept_legal` | PostgREST | `{ _kind: "aviso_privacidad"\|"terminos"\|"contrato_uso", _client_id?, _user_agent? }` | Acepta la versión vigente. Deja bitácora. |
-| `rpc/portal_log_access` | PostgREST | `{ _client_id? }` | Bitácora de acceso (la llama el portal al iniciar sesión). |
-| `rpc/portal_activate_basic` | PostgREST | `{ _razon_social, _rfc }` | Cuenta pendiente → nivel básico con su propio cliente (prospecto). |
-| `rpc/portal_account_deletion_plan` | PostgREST | `{}` | Qué se elimina de inmediato y qué se resguarda, para qué y hasta qué fecha, y los bloqueos, calculado de los datos reales y de la política (B1–B3). `resguardo.elige` = la persona puede elegir; `resguardo.opciones` = `[{anios:5,hasta},{anios:10,hasta}]`; en cada dato resguardado, `hasta_por_opcion` y `anios_por_opcion`. |
+| `v1/sesion.actual` | portal-api | `{}` | Cuenta, nivel, empresas, papel, módulos y textos pendientes. |
+| `v1/legal.aceptar` | portal-api | `{ kind, client_id?, user_agent? }` | Acepta la versión vigente y deja bitácora. |
+| `v1/sesion.registrar_acceso` | portal-api | `{}` | Registra el acceso. |
+| `v1/cuenta.activar_basico` | portal-api | `{ razon_social, rfc }` | Cuenta pendiente → nivel básico propio. |
+| `v1/cuenta.plan_baja` | portal-api | `{}` | Calcula eliminación y resguardo desde la política real. |
 | `v1/cuenta.eliminar` | portal-api | `{ confirmacion: "ELIMINAR", plazo_anios?: 5 \| 10 }` | Ejecuta la baja (B1–B3). `plazo_anios` solo cuenta si `resguardo.elige` (titular de un básico); por omisión 5. Elimina acceso, sesiones y tokens; en la empresa que queda dada de baja destruye CSD, llave y contraseña, mensajes, adjuntos, tickets no facturados, documentos publicados y datos de contacto; resguarda CFDI, tickets facturados y constancias (seudonimizadas) con su plazo; borra de Storage los archivos de la solicitud y registra la verificación. Responde `{ ok, resultado, verificacion: { ok } }`. Única administradora de un premier → `409 eliminacion_bloqueada`; plazo distinto de 5 o 10 → `400 plazo`. |
 | Recuperar contraseña / cerrar sesión en todos los dispositivos | Supabase Auth | `resetPasswordForEmail`, `signOut({ scope: "global" })` | — |
 
