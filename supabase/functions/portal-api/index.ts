@@ -409,31 +409,64 @@ const revocarCsd: Handler = async (ctx) => {
 };
 
 /**
- * Eliminación de la cuenta desde el portal (C4; requisito de App Store y Google Play).
- * La base decide qué se borra, qué se conserva y si está bloqueada
- * (portal_execute_account_deletion). Después se borra el usuario de Auth y los
- * archivos salen por la cola de borrado (portal-notify).
+ * Borra de Storage, en el acto, los archivos que dejó en cola una solicitud de baja
+ * (adjuntos, tickets sin facturar, documentos publicados). Lo que falle queda en la
+ * cola y portal-notify lo reintenta.
+ */
+async function drainRequestFiles(ctx: Ctx, requestId: string): Promise<number> {
+  const { data: rows } = await ctx.admin.from("portal_storage_purge_queue")
+    .select("id, bucket, path").eq("deletion_request_id", requestId).is("done_at", null).limit(1000);
+  const byBucket = new Map<string, { id: number; path: string }[]>();
+  for (const r of rows ?? []) byBucket.set(r.bucket, [...(byBucket.get(r.bucket) ?? []), { id: r.id, path: r.path }]);
+  let n = 0;
+  for (const [bucket, items] of byBucket) {
+    const { error } = await ctx.admin.storage.from(bucket).remove(items.map((i) => i.path));
+    await ctx.admin.rpc("portal_purge_queue_done", { _ids: items.map((i) => i.id), _error: error ? error.message : null });
+    if (!error) n += items.length;
+  }
+  return n;
+}
+
+function plazoAnios(v: unknown): 5 | 10 {
+  if (v === undefined || v === null || v === 5 || v === "5") return 5;
+  if (v === 10 || v === "10") return 10;
+  throw new ApiError(400, "plazo", "El plazo de resguardo solo puede ser de 5 o 10 años.");
+}
+
+/**
+ * Eliminación de la cuenta desde el portal (C4, B1–B3; requisito de App Store y Google Play).
+ * La base decide qué se elimina, qué se resguarda y si está bloqueada
+ * (portal_execute_account_deletion). La titular de un básico elige 5 (preseleccionado)
+ * o 10 años. Después: usuario de Auth (sesiones y tokens caen con él), archivos de
+ * Storage y verificación de B2, que queda registrada en la solicitud.
  */
 const eliminarCuenta: Handler = async (ctx) => {
   requireUser(ctx);
   if (!ctx.isPortal) throw new ApiError(403, "sin_permiso", "Solo cuentas del portal.");
   if (ctx.body.confirmacion !== "ELIMINAR") throw new ApiError(400, "confirmacion", "Escriba ELIMINAR para confirmar.");
+  const years = plazoAnios(ctx.body.plazo_anios);
   const uid = ctx.userId!;
-  const { data: res, error } = await ctx.admin.rpc("portal_execute_account_deletion", { _uid: uid });
+  const { data: acc } = await ctx.admin.from("portal_accounts").select("email").eq("user_id", uid).maybeSingle();
+  const { data: res, error } = await ctx.admin.rpc("portal_execute_account_deletion", { _uid: uid, _years: years });
   if (error || !res) throw new ApiError(500, "eliminacion", "No se pudo procesar la eliminación. No se borró nada; intente de nuevo.");
   if (res.bloqueada) {
     throw new ApiError(409, "eliminacion_bloqueada", "Su cuenta no se puede eliminar todavía.", res.bloqueos);
   }
   const { error: delErr } = await ctx.admin.auth.admin.deleteUser(uid);
   await ctx.admin.rpc("portal_finish_account_deletion", { _request_id: res.request_id, _ok: !delErr, _error: delErr?.message ?? null });
+  await drainRequestFiles(ctx, res.request_id);
+  const { data: check } = await ctx.admin.rpc("portal_offboarding_record_verification", {
+    _request_id: res.request_id, _subject: uid, _email: acc?.email ?? null,
+  });
   // Bitácora del hecho sin identificar a la persona (ya está seudonimizada).
   ctx.userId = null;
-  await audit(ctx, "cuenta_eliminada", null, "portal_deletion_requests", res.request_id, { via: "portal", resultado: delErr ? "error_auth" : "ok" });
+  await audit(ctx, "cuenta_eliminada", null, "portal_deletion_requests", res.request_id, {
+    via: "portal", resultado: delErr ? "error_auth" : "ok", verificacion: check?.ok === true,
+  });
   if (delErr) throw new ApiError(500, "eliminacion", "Sus datos ya se procesaron, pero falta cerrar su acceso. Intente de nuevo o escríbanos.");
-  return { ok: true, resultado: res.result };
+  return { ok: true, resultado: res.result, verificacion: { ok: check?.ok === true } };
 };
 
-// ── Central → app ───────────────────────────────────────────────────
 async function requireStaff(ctx: Ctx, admin = false) {
   requireUser(ctx);
   if (!ctx.isStaff) throw new ApiError(403, "sin_permiso", "Solo el equipo de Kawiil.");
@@ -471,6 +504,62 @@ const invitar: Handler = async (ctx) => {
   await audit(ctx, "invitacion", clientId, "portal_accounts", userId, { email, role, tier });
   await ctx.anon.auth.resetPasswordForEmail(email, { redirectTo: `${PORTAL_URL}/restablecer` });
   return { user_id: userId };
+};
+
+/**
+ * B4 · Baja de un cliente premier desde central (G3/G4, doble confirmación).
+ * Body: { client_id, confirmacion: "DAR DE BAJA", rfc }  → ejecuta.
+ *       { request_id }                                 → reintenta lo que faltó en Auth.
+ * La base vuelve a comprobar rol y confirmaciones; aquí se borran los usuarios de
+ * Auth, los archivos de Storage y se registra la verificación de B2.
+ */
+const bajaCliente: Handler = async (ctx) => {
+  await requireStaff(ctx, true);
+  let requestId: string;
+  let clientId: string;
+  let usuarios: string[];
+  let result: unknown = null;
+  if (ctx.body.request_id) {
+    requestId = uuid(ctx.body.request_id, "la solicitud");
+    const { data: req } = await ctx.admin.from("portal_deletion_requests").select("client_id, status").eq("id", requestId).maybeSingle();
+    if (!req?.client_id) throw new ApiError(404, "no_encontrado", "Solicitud no encontrada.");
+    clientId = req.client_id;
+    const { data: inOrg } = await ctx.user!.rpc("portal_staff_in_client_org", { _uid: ctx.userId, _client_id: clientId });
+    if (inOrg !== true) throw new ApiError(403, "sin_permiso", "Solo G3/G4 de la organización del cliente.");
+    const { data: pend } = await ctx.admin.rpc("portal_client_offboarding_pending", { _request_id: requestId });
+    usuarios = (pend as string[] | null) ?? [];
+  } else {
+    clientId = uuid(ctx.body.client_id, "el cliente");
+    const { data: res, error } = await ctx.admin.rpc("portal_client_offboarding_execute", {
+      _client_id: clientId, _actor: ctx.userId,
+      _confirmacion: typeof ctx.body.confirmacion === "string" ? ctx.body.confirmacion : "",
+      _dato: typeof ctx.body.rfc === "string" ? ctx.body.rfc : "",
+    });
+    if (error || !res) throw new ApiError(500, "baja", "No se pudo procesar la baja. No se borró nada; intente de nuevo.");
+    if (res.rechazada) {
+      const msg: Record<string, string> = {
+        sin_rol: "Solo G3/G4 de la organización del cliente puede dar de baja.",
+        confirmacion: "Escriba DAR DE BAJA para confirmar.",
+        dato_no_coincide: "El RFC no coincide con el del cliente.",
+        bloqueada: "Este cliente no se puede dar de baja desde aquí.",
+      };
+      throw new ApiError(res.motivo === "sin_rol" ? 403 : 400, `baja_${res.motivo}`, msg[res.motivo] ?? "Baja rechazada.", res.bloqueos);
+    }
+    requestId = res.request_id;
+    usuarios = res.usuarios ?? [];
+    result = res.result;
+  }
+  const errores: string[] = [];
+  for (const u of usuarios) {
+    const { error } = await ctx.admin.auth.admin.deleteUser(u);
+    if (error) errores.push(error.message);
+  }
+  const { data: status } = await ctx.admin.rpc("portal_client_offboarding_finish", {
+    _request_id: requestId, _error: errores.length ? errores.join("; ").slice(0, 400) : null,
+  });
+  await drainRequestFiles(ctx, requestId);
+  const { data: check } = await ctx.admin.rpc("portal_offboarding_record_verification", { _request_id: requestId });
+  return { request_id: requestId, estado: status, resultado: result, verificacion: check, cuentas_pendientes: errores.length };
 };
 
 const facturarTicket: Handler = async (ctx) => {
@@ -546,6 +635,7 @@ const ROUTES: Record<string, Handler> = {
   "csd.requisitos": requisitosCsd,
   "csd.revocar": revocarCsd,
   "central/invitar": invitar,
+  "central/cliente.baja": bajaCliente,
   "central/tickets.facturar": facturarTicket,
   "central/categorias.sugerir": sugerirCategorias,
   "central/avisar": avisar,
