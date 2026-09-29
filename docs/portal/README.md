@@ -8,6 +8,7 @@ Cara nueva de `kawiil-central` para los clientes de Kawiil: tablero de gasto, fa
 | [API.md](API.md) | Contrato v1 entre la app y central |
 | [RUNBOOK.md](RUNBOOK.md) | Migraciones, variables, pasos manuales, cron |
 | [TIENDAS.md](TIENDAS.md) | Lo que falta para App Store y Google Play |
+| [PR.md](PR.md) | Descripción del PR para revisión (lenguaje llano) y pasos de Polo antes de fusionar |
 | [CONSERVACION.md](CONSERVACION.md) | Política de baja, resguardo (5 o 10 años) y eliminación de datos, fijada por Polo |
 
 ## Cómo está armado
