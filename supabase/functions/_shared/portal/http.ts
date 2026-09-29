@@ -60,12 +60,9 @@ export async function buildCtx(req: Request): Promise<Ctx> {
     global: { headers: { Authorization: `Bearer ${token}` } },
     auth: { persistSession: false },
   });
-  const [{ data: portal }, { data: staff }] = await Promise.all([
-    admin.from("portal_accounts").select("user_id, status").eq("user_id", data.user.id).maybeSingle(),
-    admin.rpc("portal_is_staff", { _uid: data.user.id }),
-  ]);
-  ctx.isPortal = !!portal;
-  ctx.isStaff = staff === true;
+  const { data: portal } = await admin.from("portal_accounts").select("user_id, status, is_kawiil_operator").eq("user_id", data.user.id).maybeSingle();
+  ctx.isPortal = !!portal && portal.is_kawiil_operator !== true;
+  ctx.isStaff = portal?.is_kawiil_operator === true;
   return ctx;
 }
 
@@ -90,10 +87,10 @@ export function uuid(v: unknown, field: string): string {
 export async function assertClientAccess(ctx: Ctx, clientId: string, portalRoles: string[], staffOk = true) {
   const user = requireUser(ctx);
   if (ctx.isPortal) {
-    const { data } = await user.rpc("portal_has_client_role", { _client_id: clientId, _roles: portalRoles });
+    const { data } = await user.rpc("portal_has_company_role", { _client_id: clientId, _roles: portalRoles });
     if (data === true) return;
   } else if (ctx.isStaff && staffOk) {
-    const { data } = await user.rpc("portal_staff_in_client_org", { _uid: ctx.userId, _client_id: clientId });
+    const { data } = await user.rpc("portal_staff_has_company_access", { _client_id: clientId, _scope: "administration" });
     if (data === true) return;
   }
   throw new ApiError(403, "sin_permiso", "No tiene permiso sobre este cliente.");
