@@ -13,6 +13,34 @@
  *   REST_URL=http://localhost:3055 PORTAL_TEST_JWT=<jwt> node tools/portal/verify-route-guard.mjs
  * Sale con código 0 solo si todo está bien.
  */
+import { readdir, readFile } from "node:fs/promises";
+import { extname, join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
+
+async function portalSources(dir) {
+  const out = [];
+  for (const entry of await readdir(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...await portalSources(path));
+    else if ([".ts", ".tsx"].includes(extname(path))) out.push(path);
+  }
+  return out;
+}
+
+let staticFails = 0;
+for (const file of await portalSources(fileURLToPath(new URL("../../src/portal", import.meta.url)))) {
+  const rel = relative(process.cwd(), file);
+  if (rel.endsWith("src/portal/lib/api.ts") || rel.endsWith("src/portal/lib/supabase.ts")) continue;
+  const source = await readFile(file, "utf8");
+  const direct = /\b(?:db|supabase)\s*\.\s*(?:from|rpc|storage|functions)\b|\.storage\s*\.\s*from\s*\(/g;
+  if (direct.test(source)) {
+    staticFails++;
+    console.error(`FALLA acceso directo a datos en ${rel}`);
+  }
+}
+if (!staticFails) console.log("OK    src/portal solo usa la API para datos de negocio");
+if (staticFails || process.env.PORTAL_STATIC_ONLY === "1") process.exit(staticFails ? 1 : 0);
+
 const SUPABASE_URL = process.env.SUPABASE_URL?.replace(/\/+$/, "");
 const REST = (process.env.REST_URL ?? (SUPABASE_URL ? `${SUPABASE_URL}/rest/v1` : "")).replace(/\/+$/, "");
 const ANON = process.env.SUPABASE_ANON_KEY ?? "";

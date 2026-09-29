@@ -1,11 +1,15 @@
-/**
- * Cliente de Supabase del portal: mismo proyecto y misma llave pública que
- * central (kawiil-central es la única fuente de verdad). NUNCA hay aquí llaves
- * de servicio: todo lo que el portal ve lo decide la RLS.
- * Las tablas del portal aún no están en `types.ts` generado; por eso el cliente
- * se usa sin tipos de tabla.
- */
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { supabase as typed } from "@/integrations/supabase/client";
+import { createClient } from "@supabase/supabase-js";
 
-export const db = typed as unknown as SupabaseClient;
+const url = String(import.meta.env.VITE_PORTAL_SUPABASE_URL ?? "").trim();
+const publishableKey = String(import.meta.env.VITE_PORTAL_SUPABASE_PUBLISHABLE_KEY ?? "").trim();
+
+if (!url || !publishableKey) throw new Error("Kawiil OS no está configurado: faltan las variables de su proyecto Supabase independiente.");
+if (url === String(import.meta.env.VITE_SUPABASE_URL ?? "").trim()) throw new Error("Kawiil OS se niega a usar el proyecto Supabase de central.");
+
+export const db = createClient(url, publishableKey, {
+  auth: {
+    storage: localStorage,
+    persistSession: true,
+    autoRefreshToken: true,
+  },
+});

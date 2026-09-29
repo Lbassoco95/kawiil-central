@@ -7,6 +7,7 @@ import AuthShell from "../components/AuthShell";
 import { Notice } from "../components/ui";
 import { usePortal } from "../lib/session";
 import { db } from "../lib/supabase";
+import { callApi } from "../lib/api";
 
 export default function Pendiente() {
   const { me, refresh } = usePortal();
@@ -16,9 +17,10 @@ export default function Pendiente() {
 
   const activate = async (e: React.FormEvent) => {
     e.preventDefault();
-    const { error } = await db.rpc("portal_activate_basic", { _razon_social: basic.razon, _rfc: basic.rfc });
-    if (error) return setErr(error.message);
-    await refresh();
+    try {
+      await callApi("cuenta.activar_basico", { razon_social: basic.razon, rfc: basic.rfc });
+      await refresh();
+    } catch (error) { setErr((error as Error).message); }
   };
 
   return (

@@ -3,9 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { usePortal } from "../lib/session";
-import { db } from "../lib/supabase";
-import { openFile } from "../lib/api";
-import { prepareTicketFile, safeName } from "../lib/files";
+import { callApi, fileToBase64, openFile } from "../lib/api";
+import { prepareTicketFile } from "../lib/files";
 import { fmtDate, fmtMoney } from "../lib/format";
 import { Empty, Notice, PageTitle, StatusPill } from "../components/ui";
 import { ticketDeadline, ticketFileProblem, VISIBLE_STATUS_LABEL, type MerchantWindow, type VisibleTicketStatus } from "../../../supabase/functions/_shared/portal/tickets.ts";
@@ -28,13 +27,11 @@ export default function Tickets() {
 
   const load = useCallback(async () => {
     if (!active) return;
-    const { data } = await db.from("portal_tickets_v").select("*").eq("client_id", active.client_id).order("created_at", { ascending: false }).limit(100);
-    setTickets((data as Ticket[]) ?? []);
+    const data = await callApi<{ tickets: Ticket[]; merchants: Merchant[] }>("tickets.listar", { client_id: active.client_id });
+    setTickets(data.tickets);
+    setMerchants(data.merchants);
   }, [active]);
-  useEffect(() => {
-    db.from("fis_merchants").select("id, name, slug, window_type, window_days").eq("active", true).order("name").then(({ data }) => setMerchants((data as Merchant[]) ?? []));
-    void load();
-  }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
   const merchant = merchants.find((m) => m.id === f.merchant) ?? null;
   const preview = merchant && f.fecha ? ticketDeadline(merchant, f.fecha) : null;
@@ -52,20 +49,14 @@ export default function Tickets() {
     if (!active || files.length === 0) return;
     setBusy(true);
     const out: { tone: "ok" | "bad" | "warn"; text: string }[] = [];
-    const { data: org } = await db.rpc("portal_client_org_id", { _client_id: active.client_id });
     for (const file of files) {
       try {
         const p = await prepareTicketFile(file);
-        const d = new Date();
-        const path = `${org}/juun/clients/${active.client_id}/${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, "0")}/receipts/${Date.now()}_${safeName(p.name)}`;
-        const up = await db.storage.from("juun").upload(path, p.blob, { contentType: p.type, upsert: false });
-        if (up.error) throw new Error("No se pudo subir el archivo.");
-        const { data, error } = await db.rpc("portal_ticket_register", {
-          _client_id: active.client_id, _file_path: path, _file_hash: p.hash, _merchant_id: f.merchant || null,
-          _merchant_name: f.merchant ? null : f.otro || null, _receipt_date: f.fecha || null, _folio: f.folio || null, _total: f.total ? Number(f.total) : null,
+        const r = await callApi<{ duplicate: boolean; expired?: boolean; message: string }>("tickets.registrar", {
+          client_id: active.client_id, file_name: p.name, file_base64: await fileToBase64(p.blob), file_hash: p.hash, mime_type: p.type,
+          merchant_id: f.merchant || null, merchant_name: f.merchant ? null : f.otro || null,
+          receipt_date: f.fecha || null, folio: f.folio || null, total: f.total ? Number(f.total) : null,
         });
-        if (error) throw new Error(error.message);
-        const r = data as { duplicate: boolean; expired?: boolean; message: string };
         out.push({ tone: r.expired ? "warn" : r.duplicate ? "warn" : "ok", text: `${file.name}: ${r.message}` });
       } catch (err) {
         out.push({ tone: "bad", text: `${file.name}: ${(err as Error).message}` });

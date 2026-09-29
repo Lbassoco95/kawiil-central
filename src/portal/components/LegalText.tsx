@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { db } from "../lib/supabase";
+import { callApi } from "../lib/api";
 import { fmtDate } from "../lib/format";
 import { Notice } from "./ui";
 
@@ -9,7 +9,7 @@ export interface LegalDoc { id: string; kind: string; version: string; title: st
 export function useLegal(kind: string) {
   const [doc, setDoc] = useState<LegalDoc | null>(null);
   useEffect(() => {
-    db.rpc("portal_current_legal", { _kind: kind }).then(({ data }) => setDoc((data as LegalDoc) ?? null));
+    callApi<LegalDoc>("legal.actual", { kind }).then(setDoc).catch(() => setDoc(null));
   }, [kind]);
   return doc;
 }

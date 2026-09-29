@@ -5,6 +5,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { db } from "./supabase";
+import { callApi } from "./api";
 
 export interface PortalClient {
   client_id: string;
@@ -47,8 +48,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   });
 
   const refresh = useCallback(async () => {
-    const { data } = await db.rpc("portal_me");
-    setMe((data as PortalMe) ?? null);
+    setMe(await callApi<PortalMe>("sesion.actual").catch(() => null));
   }, []);
 
   useEffect(() => {
@@ -61,7 +61,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setSession(s);
       if (s && (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED")) {
         void refresh();
-        if (event === "SIGNED_IN") void db.rpc("portal_log_access", {});
+        if (event === "SIGNED_IN") void callApi("sesion.registrar_acceso");
       }
       if (!s) setMe(null);
     });

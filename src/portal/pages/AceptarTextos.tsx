@@ -6,6 +6,7 @@ import AuthShell from "../components/AuthShell";
 import LegalText, { useLegal } from "../components/LegalText";
 import { usePortal } from "../lib/session";
 import { db } from "../lib/supabase";
+import { callApi } from "../lib/api";
 import { Notice } from "../components/ui";
 
 /** Se muestra cuando hay una versión nueva del aviso o de los términos por aceptar. */
@@ -17,10 +18,11 @@ export default function AceptarTextos() {
   const [ok, setOk] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const accept = async () => {
-    const { error } = await db.rpc("portal_accept_legal", { _kind: current.kind, _client_id: null, _user_agent: navigator.userAgent });
-    if (error) return setErr("No se pudo registrar su aceptación.");
-    setOk(false);
-    await refresh();
+    try {
+      await callApi("legal.aceptar", { kind: current.kind, client_id: null, user_agent: navigator.userAgent });
+      setOk(false);
+      await refresh();
+    } catch { setErr("No se pudo registrar su aceptación."); }
   };
   return (
     <AuthShell title="Antes de continuar">
