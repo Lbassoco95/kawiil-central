@@ -49,5 +49,21 @@ check "secreto de cron equivocado" 401 "$(code / '{"action":"descubrir"}' -H 'x-
 check "JWT falso" 401 "$(code / '{"action":"descubrir"}' -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.falso')"
 kill $PID; wait $PID 2>/dev/null
 
+# backup-data (verify_jwt = false): su versión con credencial llega por su propio PR
+# (claude/backup-data-auth). En cuanto esté en la rama (handler.ts), se prueba aquí también.
+if [[ -f "$FN/backup-data/handler.ts" ]]; then
+  echo "== backup-data (verify_jwt = false; secreto de cron o G4)"
+  BACKUP_CRON_SECRET="$(printf 's%.0s' {1..40})-secreto-de-prueba" BACKUP_ORGANIZATION_ID=a0000000-0000-0000-0000-000000000001 \
+    "$DENO" run --quiet --allow-net --allow-env --allow-read --config "$FN/backup-data/deno.test.json" "$FN/backup-data/index.ts" >/tmp/edge_backup-data.log 2>&1 &
+  PID=$!
+  for _ in $(seq 1 90); do (echo > /dev/tcp/127.0.0.1/8000) 2>/dev/null && break; sleep 1; done
+  check "sin credencial" 401 "$(code /backup-data '{"include_data":true}' --max-time 15)"
+  check "secreto equivocado" 401 "$(code /backup-data '{"include_data":true}' --max-time 15 -H 'x-backup-secret: otro')"
+  check "JWT falso" 401 "$(code /backup-data '{"include_data":true}' --max-time 15 -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.falso')"
+  kill $PID; wait $PID 2>/dev/null
+else
+  echo "== backup-data: su corrección aún no está en esta rama (PR propio); se prueba en backup-data-tests.yml"
+fi
+
 echo
 [[ $fails -eq 0 ]] && echo "TODO VERDE: ninguna función abierta responde sin credencial." || { echo "$fails FALLAS"; exit 1; }
