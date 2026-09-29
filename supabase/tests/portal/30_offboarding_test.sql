@@ -363,6 +363,24 @@ SELECT portal_test.ok(NOT EXISTS (SELECT 1 FROM pg_db_role_setting WHERE array_t
   AND (SELECT bool_and(key_secret_ref = 'PORTAL_CSD_KEY_SECRET') FROM public.portal_csd_registry),
   'B5: la base guarda solo el NOMBRE del secreto; ningún valor de secreto está en su configuración');
 
+-- =================================================================
+-- B2 (cierre) · Consulta de comprobación: qué funciones del portal ejecuta PUBLIC o anon
+-- =================================================================
+CREATE TEMP TABLE funciones_abiertas AS
+SELECT p.proname AS funcion
+  FROM pg_proc p
+ WHERE p.pronamespace = 'public'::regnamespace AND p.proname ~ '^portal'
+   AND (has_function_privilege('anon', p.oid, 'EXECUTE') OR has_function_privilege('public', p.oid, 'EXECUTE'));
+SELECT string_agg(funcion, ', ' ORDER BY funcion) AS abiertas FROM funciones_abiertas \gset
+\echo 'B2 · funciones del portal ejecutables por PUBLIC o anon:' :abiertas
+SELECT portal_test.ok((SELECT array_agg(funcion ORDER BY funcion) FROM funciones_abiertas)
+    = ARRAY['portal_caller_is_portal', 'portal_current_legal', 'portal_pre_request', 'portal_route_guard_status']::name[],
+  'B2: solo cuatro funciones del portal quedan para PUBLIC/anon, todas justificadas');
+SELECT portal_test.ok(NOT EXISTS (SELECT 1 FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.proname ~ '^portal'
+                                    AND p.prosecdef AND has_function_privilege('anon', p.oid, 'EXECUTE')
+                                    AND p.proname NOT IN ('portal_caller_is_portal', 'portal_current_legal', 'portal_pre_request', 'portal_route_guard_status')),
+  'B2: ninguna función SECURITY DEFINER del portal queda para anon fuera de esas cuatro');
+
 RESET ROLE;
 DROP SCHEMA portal_test CASCADE;
 \echo 'TODAS LAS PRUEBAS DE BASE DEL PORTAL PASARON'

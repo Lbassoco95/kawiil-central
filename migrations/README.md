@@ -27,7 +27,8 @@ Convención:
 | 2026-09-18 | `2026-09-18_mtg_unmatched_transcripts.rollback.sql` | Rollback unmatched transcripts. |
 | 2026-09-18 | `2026-09-18_mtg_documents_group_and_slack.rollback.sql` | Rollback `documents.client_group_id` + `mtg_series.slack_channel_id`. |
 | 2026-09-18 | *(pendiente apply prod)* | `20260918140000`, `20260918140100`, `20260918140200` **aún no** en `schema_migrations` de prod. Harness local (`verify.sh` B345) debe pasar en Mac de Polo antes de `supabase db push`. Rama: `feat/mtg-juntas-b2`. |
-| 2026-09-28 | `2026-09-28_portal_client_offboarding.rollback.sql` | **Rollback** de `20260929120600_portal_client_offboarding.sql` (B4, baja de cliente premier). Correr PRIMERO. Borra los registros de solicitudes de baja de clientes; no devuelve lo destruido. |
+| 2026-09-29 | `2026-09-29_portal_function_grants.rollback.sql` | **Rollback** de `20260929120700_portal_function_grants.sql` (portal): devuelve EXECUTE a anon en 21 funciones del portal. Correr PRIMERO de los del portal. |
+| 2026-09-28 | `2026-09-28_portal_client_offboarding.rollback.sql` | **Rollback** de `20260929120600_portal_client_offboarding.sql` (B4, baja de cliente premier). Después del de permisos. Borra los registros de solicitudes de baja de clientes; no devuelve lo destruido. |
 | 2026-09-28 | `2026-09-28_portal_offboarding.rollback.sql` | **Rollback** de `20260929120500_portal_offboarding.sql` (B2/B3). Restaura las funciones de baja de `…120200`. No devuelve lo destruido. |
 | 2026-09-28 | `2026-09-28_portal_retention_terms.rollback.sql` | **Rollback** de `20260929120400_portal_retention_terms.sql` (B1). Pierde el registro de elecciones y los resguardos de constancias legales (anotarlos antes). |
 | 2026-09-28 | `2026-09-28_portal_route_guard_health.rollback.sql` | **Rollback** de `20260929120300_portal_route_guard_health.sql` (V1). |
