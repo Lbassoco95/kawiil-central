@@ -35,6 +35,8 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 20, cache: npm }
       - run: npm ci
+      - run: npm run portal:verificar-cerco
+        env: { PORTAL_STATIC_ONLY: "1" }
       - run: npx vitest run
       - run: npm run build:portal
 
@@ -61,6 +63,7 @@ jobs:
         with: { node-version: 20, cache: npm }
       - run: npm ci
       - run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - run: bash supabase/tests/portal/run_kawiil_os_db_tests.sh
       - run: bash supabase/tests/portal/run_portal_db_tests.sh
       - run: docker pull postgrest/postgrest:v12.2.3
       # B5 revisa también el log del servidor Postgres (el del contenedor del servicio).
