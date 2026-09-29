@@ -29,7 +29,8 @@ pgrst() { # $1 nombre, $2 db, $3 puerto, $4 db-config
   docker run -d --name "$1" --network host \
     -e PGRST_DB_URI="postgres://authenticator${AUTHENTICATOR_PASSWORD:+:$AUTHENTICATOR_PASSWORD}@$TCP:${PGPORT:-5432}/$2" -e PGRST_DB_SCHEMAS=public -e PGRST_DB_ANON_ROLE=anon \
     -e PGRST_JWT_SECRET="$SECRET" -e PGRST_SERVER_PORT="$3" -e PGRST_DB_CONFIG="$4" postgrest/postgrest:v12.2.3 >/dev/null
-  for _ in $(seq 1 30); do curl -s -o /dev/null "http://localhost:$3/" && return 0; sleep 1; done
+  # Listo = 200 en la raíz (con 503 aún está cargando el esquema y las pruebas fallarían al azar).
+  for _ in $(seq 1 60); do [[ "$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:$3/")" == 200 ]] && return 0; sleep 0.5; done
   echo "PostgREST $1 no arrancó"; docker logs "$1"; exit 1
 }
 mint() { node -e '
@@ -54,7 +55,7 @@ pgrst pgrst_portal portal_api 3055 true
 pgrst pgrst_base portal_base 3056 false
 
 echo "== Criterio 1 por la API"
-PGRST_URL=http://localhost:3055 node "$T/api_isolation.mjs" | tail -1
+PGRST_URL=http://localhost:3055 node "$T/api_isolation.mjs" | grep -E "^FALLA|OK · " | cut -c1-300
 echo "== V2 regresión del equipo"
 PGRST_BASE=http://localhost:3056 PGRST_PORTAL=http://localhost:3055 DB_BASE=portal_base DB_PORTAL=portal_api node "$T/staff_regression.mjs" | tail -1
 echo "== V1 verificación post-despliegue (cerco activo: debe pasar)"
