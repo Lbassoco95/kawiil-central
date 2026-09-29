@@ -81,7 +81,7 @@ S2="$(link 3055)"
 docker rm -f pgrst_sin_cerco >/dev/null
 
 echo "== B5 búsqueda de contenido en claro (base, Storage, logs, bitácora, API) y baja sin cifrado residual"
-PORTAL_B5_DB=portal_api PGRST_URL=http://localhost:3055 PGRST_JWT_SECRET="$SECRET" PG_LOG_CMD="${PG_LOG_CMD:-}" \
+NO_COLOR=1 PORTAL_B5_DB=portal_api PGRST_URL=http://localhost:3055 PGRST_JWT_SECRET="$SECRET" PG_LOG_CMD="${PG_LOG_CMD:-}" \
   npx vitest run src/test/portal/b5Plaintext.db.test.ts >/tmp/portal_b5.log 2>&1 \
   || { echo "FALLA B5"; tail -40 /tmp/portal_b5.log; exit 1; }
 grep -E "B5:" /tmp/portal_b5.log || true
