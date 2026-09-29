@@ -138,15 +138,16 @@ echo "== 3. Base con datos"
 fresh_db portal_con_datos
 apply_repo_migrations_before_portal portal_con_datos >/dev/null
 q portal_con_datos -f "$T/05_seed_preexisting.sql" >/dev/null
-# Huella SOLO de las filas previas (ids de la semilla empiezan con e0 / f0; objetos con «previo/»).
+# Huella SOLO de las filas previas (ids de la semilla: e0000000-0000-0000-0000-… / f0000000-0000-0000-0000-…, exactos para no
+# atrapar un UUID aleatorio de las pruebas que empiece con «e0»; objetos con «previo/»).
 SNAP_SQL="SELECT md5(string_agg(t || ':' || COALESCE(h, '-'), ',' ORDER BY t)) FROM (
-  SELECT 'clients' t, md5(string_agg(row_to_json(c)::text, '' ORDER BY id)) h FROM public.clients c WHERE id::text LIKE 'e0%'
-  UNION ALL SELECT 'profiles', md5(string_agg(row_to_json(p)::text, '' ORDER BY id)) FROM public.profiles p WHERE user_id::text LIKE 'f0%'
-  UNION ALL SELECT 'user_roles', md5(string_agg(row_to_json(r)::text, '' ORDER BY id)) FROM public.user_roles r WHERE user_id::text LIKE 'f0%'
-  UNION ALL SELECT 'fis_receipts', md5(string_agg(row_to_json(f)::text, '' ORDER BY id)) FROM public.fis_receipts f WHERE id::text LIKE 'e0%'
+  SELECT 'clients' t, md5(string_agg(row_to_json(c)::text, '' ORDER BY id)) h FROM public.clients c WHERE id::text LIKE 'e0000000-0000-0000-0000-%'
+  UNION ALL SELECT 'profiles', md5(string_agg(row_to_json(p)::text, '' ORDER BY id)) FROM public.profiles p WHERE user_id::text LIKE 'f0000000-0000-0000-0000-%'
+  UNION ALL SELECT 'user_roles', md5(string_agg(row_to_json(r)::text, '' ORDER BY id)) FROM public.user_roles r WHERE user_id::text LIKE 'f0000000-0000-0000-0000-%'
+  UNION ALL SELECT 'fis_receipts', md5(string_agg(row_to_json(f)::text, '' ORDER BY id)) FROM public.fis_receipts f WHERE id::text LIKE 'e0000000-0000-0000-0000-%'
   UNION ALL SELECT 'fis_merchants', md5(string_agg(row_to_json(m)::text, '' ORDER BY id)) FROM public.fis_merchants m
-  UNION ALL SELECT 'client_sat_certificates', md5(string_agg(row_to_json(s)::text, '' ORDER BY id)) FROM public.client_sat_certificates s WHERE id::text LIKE 'e0%'
-  UNION ALL SELECT 'documents', md5(string_agg(row_to_json(d)::text, '' ORDER BY id)) FROM public.documents d WHERE id::text LIKE 'e0%'
+  UNION ALL SELECT 'client_sat_certificates', md5(string_agg(row_to_json(s)::text, '' ORDER BY id)) FROM public.client_sat_certificates s WHERE id::text LIKE 'e0000000-0000-0000-0000-%'
+  UNION ALL SELECT 'documents', md5(string_agg(row_to_json(d)::text, '' ORDER BY id)) FROM public.documents d WHERE id::text LIKE 'e0000000-0000-0000-0000-%'
   UNION ALL SELECT 'handle_new_user', md5(pg_get_functiondef('public.handle_new_user()'::regprocedure))
   UNION ALL SELECT 'storage', md5(string_agg(bucket_id || name, '' ORDER BY bucket_id, name)) FROM storage.objects WHERE name LIKE 'previo/%'
 ) x"
