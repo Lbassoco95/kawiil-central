@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Rotación de los secretos del CSD del portal (RUNBOOK §7). SIMULA por defecto.
+ * Rotación de los secretos del CSD del portal (RUNBOOK §8). SIMULA por defecto.
  *
  *   SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… \
  *   OLD_KEY_SECRET=… NEW_KEY_SECRET=…            # PORTAL_CSD_KEY_SECRET (cer/key)

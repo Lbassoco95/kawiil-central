@@ -29,8 +29,8 @@ Respuesta de `portal-api`: `{ "version": "v1", "data": … }`. Error: `{ "error"
 | `rpc/portal_accept_legal` | PostgREST | `{ _kind: "aviso_privacidad"\|"terminos"\|"contrato_uso", _client_id?, _user_agent? }` | Acepta la versión vigente. Deja bitácora. |
 | `rpc/portal_log_access` | PostgREST | `{ _client_id? }` | Bitácora de acceso (la llama el portal al iniciar sesión). |
 | `rpc/portal_activate_basic` | PostgREST | `{ _razon_social, _rfc }` | Cuenta pendiente → nivel básico con su propio cliente (prospecto). |
-| `rpc/portal_account_deletion_plan` | PostgREST | `{}` | Qué se elimina, qué se conserva (con cantidades y fecha de purga) y bloqueos, calculado de los datos reales y de `portal_retention_policy`. |
-| `v1/cuenta.eliminar` | portal-api | `{ confirmacion: "ELIMINAR" }` | Ejecuta la política (C4): destruye el CSD del nivel básico propio, borra mensajes y tickets no facturados, retiene CFDI y tickets facturados con fecha de purga, seudonimiza bitácora y aceptaciones, borra el usuario de Auth. Única administradora de un premier → `409 eliminacion_bloqueada`. |
+| `rpc/portal_account_deletion_plan` | PostgREST | `{}` | Qué se elimina de inmediato y qué se resguarda, para qué y hasta qué fecha, y los bloqueos, calculado de los datos reales y de la política (B1–B3). `resguardo.elige` = la persona puede elegir; `resguardo.opciones` = `[{anios:5,hasta},{anios:10,hasta}]`; en cada dato resguardado, `hasta_por_opcion` y `anios_por_opcion`. |
+| `v1/cuenta.eliminar` | portal-api | `{ confirmacion: "ELIMINAR", plazo_anios?: 5 \| 10 }` | Ejecuta la baja (B1–B3). `plazo_anios` solo cuenta si `resguardo.elige` (titular de un básico); por omisión 5. Elimina acceso, sesiones y tokens; en la empresa que queda dada de baja destruye CSD, llave y contraseña, mensajes, adjuntos, tickets no facturados, documentos publicados y datos de contacto; resguarda CFDI, tickets facturados y constancias (seudonimizadas) con su plazo; borra de Storage los archivos de la solicitud y registra la verificación. Responde `{ ok, resultado, verificacion: { ok } }`. Única administradora de un premier → `409 eliminacion_bloqueada`; plazo distinto de 5 o 10 → `400 plazo`. |
 | Recuperar contraseña / cerrar sesión en todos los dispositivos | Supabase Auth | `resetPasswordForEmail`, `signOut({ scope: "global" })` | — |
 
 ### Facturas
@@ -93,6 +93,9 @@ Lo hace el equipo desde central; el portal lo ve en su siguiente lectura y recib
 | Responder mensaje | `rpc/portal_message_send` (el lado lo decide la base) | Respuesta visible + correo `respuesta_equipo`. |
 | Avisar | `v1/central/avisar { client_id, asunto, mensaje }` | Correo a los usuarios del cliente. |
 | Invitar | `v1/central/invitar { email, full_name, client_id, role, tier }` | Cuenta ya vinculada + correo para crear contraseña. |
+| Plazo de resguardo del cliente (premier) | `rpc/portal_staff_set_client_retention { _client_id, _years: 5 \| 10, _motivo }` (solo G3/G4) | Plazo con el que se resguardará si el cliente se da de baja; con resguardo en curso, lo recalcula (nueva elección expresa). |
+| Plan de baja del cliente | `rpc/portal_client_offboarding_plan { _client_id }` (solo G3/G4) | Nada: muestra qué se eliminará, qué personas pierden acceso, qué se resguarda y hasta cuándo. |
+| Baja del cliente (fin del servicio) | `v1/central/cliente.baja { client_id, confirmacion: "DAR DE BAJA", rfc }` · reintento: `{ request_id }` (solo G3/G4) | Todas las personas pierden el acceso (sin otra empresa → se borra su cuenta), CSD destruido, resguardo con el plazo del cliente. Responde `{ request_id, estado, verificacion, cuentas_pendientes }`. Rechazos registrados: `403 baja_sin_rol`, `400 baja_confirmacion`, `400 baja_dato_no_coincide`, `400 baja_bloqueada`. |
 | Vincular / roles / suspender | `rpc/portal_staff_link_account`, `portal_staff_set_membership`, `portal_staff_set_account` | Cambia lo que ve. |
 | Emisión | `rpc/portal_staff_set_emission`, `portal_staff_register_instruction_letter`, `portal_staff_resolve_cancel` | Activa/desactiva «Crear factura». |
 | Categorías | `rpc/portal_staff_confirm_category`, `v1/central/categorias.sugerir` | Tablero con categorías confirmadas. |
@@ -101,7 +104,7 @@ Lo hace el equipo desde central; el portal lo ve en su siguiente lectura y recib
 
 ## 3. Códigos de error de `portal-api`
 
-`no_autorizado` 401 · `sin_permiso` 403 · `registro_cerrado` 503 · `captcha_requerido` 400 · `captcha_invalido`/`captcha_vencido` 403 · `demasiados_intentos` 429 · `autorizacion_pendiente` 403 (con `details` = lo que falta) · `llave_o_contrasena`/`llave_no_corresponde`/`es_efirma`/`tipo_indeterminado`/`rfc_ajeno`/`vencido` 400 · `eliminacion_bloqueada` 409 · `cerco_no_verificado` 503 · `emision_apagada` 403 · `expediente_incompleto` 403 · `limite_basico` 402 · `validacion` 422 (con `details` = lista de `{ campo, mensaje }`) · `cfdi_invalido` 422 · `pac_no_configurado` 503 · `no_configurado` 503 · `dato_faltante`/`dato_invalido` 400 · `no_encontrado` 404 · `ya_cargado` 409 · `interno` 500.
+`no_autorizado` 401 · `sin_permiso` 403 · `registro_cerrado` 503 · `captcha_requerido` 400 · `captcha_invalido`/`captcha_vencido` 403 · `demasiados_intentos` 429 · `autorizacion_pendiente` 403 (con `details` = lo que falta) · `llave_o_contrasena`/`llave_no_corresponde`/`es_efirma`/`tipo_indeterminado`/`rfc_ajeno`/`vencido` 400 · `eliminacion_bloqueada` 409 · `plazo` 400 · `baja_sin_rol` 403 · `baja_confirmacion`/`baja_dato_no_coincide`/`baja_bloqueada` 400 · `cerco_no_verificado` 503 · `emision_apagada` 403 · `expediente_incompleto` 403 · `limite_basico` 402 · `validacion` 422 (con `details` = lista de `{ campo, mensaje }`) · `cfdi_invalido` 422 · `pac_no_configurado` 503 · `no_configurado` 503 · `dato_faltante`/`dato_invalido` 400 · `no_encontrado` 404 · `ya_cargado` 409 · `interno` 500.
 
 ## 4. Lo que la API nunca hace
 
