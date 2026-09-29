@@ -8,7 +8,7 @@
  *     organización BACKUP_ORGANIZATION_ID.
  * Sin credencial, o con una inválida, responde 401/403 ANTES de leer cualquier
  * tabla del volcado. Si la variable que habilita una vía falta, esa vía queda
- * cerrada.
+ * cerrada. `include_data` (datos en la respuesta) solo se atiende a un G4.
  */
 
 export const TABLES_TO_BACKUP = [
@@ -151,7 +151,9 @@ export async function handleBackup(req: Request, deps: BackupDeps): Promise<Resp
 
   let body: Record<string, unknown> = {};
   try { body = await req.json(); } catch { /* sin cuerpo */ }
-  const includeData = body.include_data === true;
+  // A2: los datos en la respuesta solo son para un G4 con su JWT. El cron recibe el resumen.
+  const asked = body.include_data === true;
+  const includeData = asked && auth.via === "g4";
 
   const now = (deps.now ?? (() => new Date()))();
   const timestamp = now.toISOString().replace(/[:.]/g, "-");
@@ -179,9 +181,10 @@ export async function handleBackup(req: Request, deps: BackupDeps): Promise<Resp
     tables,
     errors: errors.length > 0 ? errors : undefined,
     size_bytes: new TextEncoder().encode(backupJson).length,
+    ...(asked && !includeData ? { include_data: "ignorado: la tarea programada solo recibe el resumen" } : {}),
   };
   await deps.log({
-    outcome: "aceptada", reason: "ok", via: auth.via, user_id: auth.userId, ...meta, include_data: includeData,
+    outcome: "aceptada", reason: asked && !includeData ? "ok_sin_datos_para_cron" : "ok", via: auth.via, user_id: auth.userId, ...meta, include_data: includeData,
     tables: Object.keys(tables).length, rows: Object.values(tables).reduce((a, b) => a + b, 0), file: filePath,
   }).catch(() => undefined);
   // Nunca se registra ni se imprime el contenido del volcado.

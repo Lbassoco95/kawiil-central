@@ -113,3 +113,19 @@ Deno.test("A1 · la comparación del secreto no sale antes (misma cantidad de tr
   assert(/digest\("SHA-256"/.test(fn) && /diff \|= x\[i\] \^ y\[i\]/.test(fn) && !/return false/.test(fn), "safeEqual debe comparar huellas sin salida temprana");
   assert(!/secret\s*[!=]==?\s*deps\.cronSecret|deps\.cronSecret\s*[!=]==?/.test(src), "no debe haber comparación directa del secreto");
 });
+
+Deno.test("A2 · include_data: el cron nunca recibe datos; el G4 sí", async () => {
+  const c = deps();
+  const rc = await handleBackup(post({ "x-backup-secret": SECRET }, { include_data: true }), c.d);
+  const tc = await rc.text();
+  assert(rc.status === 200 && !tc.includes("dato-sintetico") && !JSON.parse(tc).data, "el cron recibió datos");
+  assert(c.logs[0].include_data === false && c.logs[0].reason === "ok_sin_datos_para_cron", JSON.stringify(c.logs));
+  const g = deps();
+  const rg = await handleBackup(post({ Authorization: "Bearer jwt-g4" }, { include_data: true }), g.d);
+  const bg = await rg.json();
+  assert(rg.status === 200 && bg.data && bg.summary, "el G4 no recibió datos");
+  assert(g.logs[0].include_data === true, JSON.stringify(g.logs));
+  const s = deps();
+  const rs = await handleBackup(post({ Authorization: "Bearer jwt-g4" }), s.d);
+  assert(!(await rs.text()).includes("dato-sintetico"), "sin include_data no debe haber datos");
+});
