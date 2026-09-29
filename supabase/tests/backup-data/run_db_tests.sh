@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # A4 · El bucket `backups` es privado y ningún rol del navegador lo puede leer.
+# A6 · La bitácora de llamadas solo la escribe la función y solo la leen los G4; nadie la modifica.
 # Postgres LOCAL (nunca producción): stub mínimo + las dos migraciones históricas del
 # bucket + la nueva (dos veces) + su rollback. Datos sintéticos.
-# Uso: PGHOST=… PGPORT=… PGUSER=postgres bash supabase/tests/backup-data/run_bucket_test.sh
+# Uso: PGHOST=… PGPORT=… PGUSER=postgres bash supabase/tests/backup-data/run_db_tests.sh
 set -euo pipefail
 export PGOPTIONS="-c client_min_messages=warning"
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -44,5 +45,24 @@ q -f "$M/20260929100000_backup_bucket_no_browser_read.sql" >/dev/null
 check "reaplicada: G4 no lee" 0 "$(seen authenticated $G4)"
 check "el archivo sigue en el bucket (no se borró nada)" 1 "$(q -c "SELECT count(*) FROM storage.objects WHERE bucket_id = 'backups'")"
 
+echo "== A6 · bitácora (aplicada dos veces)"
+q -f "$M/20260929100100_backup_access_log.sql" >/dev/null
+q -f "$M/20260929100100_backup_access_log.sql" >/dev/null
+# La función escribe con service_role.
+q -c "SET ROLE service_role" -c "INSERT INTO public.backup_access_log (outcome, reason, via, ip) VALUES ('rechazada', 'sin_credencial', NULL, '203.0.113.7')" >/dev/null
+check "service_role escribe" 1 "$(q -c "SELECT count(*) FROM public.backup_access_log")"
+lee() { q -c "SELECT set_config('request.jwt.claims', '{\"sub\":\"$2\"}', false);" -c "SET ROLE $1" -c "SELECT count(*) FROM public.backup_access_log" 2>/dev/null | tail -1 || echo error; }
+check "G4 lee la bitácora" 1 "$(lee authenticated $G4)"
+check "G3 no la lee" 0 "$(lee authenticated $G3)"
+check "anon no la lee" error "$(q -c "SET ROLE anon" -c "SELECT count(*) FROM public.backup_access_log" 2>/dev/null | tail -1 || echo error)"
+check "el navegador no escribe" error "$(q -c "SELECT set_config('request.jwt.claims', '{\"sub\":\"$G4\"}', false);" -c "SET ROLE authenticated" -c "INSERT INTO public.backup_access_log (outcome, reason) VALUES ('aceptada', 'falsa')" >/dev/null 2>&1 && echo escribio || echo error)"
+check "nadie la modifica (ni service_role)" error "$(q -c "SET ROLE service_role" -c "UPDATE public.backup_access_log SET reason = 'x'" >/dev/null 2>&1 && echo modifico || echo error)"
+check "nadie la borra (ni el dueño)" error "$(q -c "DELETE FROM public.backup_access_log" >/dev/null 2>&1 && echo borro || echo error)"
+check "nadie la vacía (TRUNCATE)" error "$(q -c "TRUNCATE public.backup_access_log" >/dev/null 2>&1 && echo vacio || echo error)"
+check "no tiene columnas de datos del volcado" 0 "$(q -c "SELECT count(*) FROM information_schema.columns WHERE table_name = 'backup_access_log' AND column_name IN ('data', 'payload', 'rows_json', 'content')")"
+q -f "$ROOT/migrations/2026-09-29_backup_access_log.rollback.sql" >/dev/null
+check "rollback quita la tabla" "" "$(q -c "SELECT to_regclass('public.backup_access_log')")"
+q -f "$M/20260929100100_backup_access_log.sql" >/dev/null
+
 psql -X -q -d postgres -c "DROP DATABASE IF EXISTS $DB WITH (FORCE)" >/dev/null
-[[ $fails -eq 0 ]] && echo "TODO VERDE: nadie lee backups desde el navegador." || { echo "$fails FALLAS"; exit 1; }
+[[ $fails -eq 0 ]] && echo "TODO VERDE: nadie lee backups desde el navegador y la bitácora es de solo lectura para G4." || { echo "$fails FALLAS"; exit 1; }

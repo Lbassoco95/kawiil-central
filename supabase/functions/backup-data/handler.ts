@@ -94,7 +94,7 @@ export interface BackupDeps {
 }
 
 export interface BackupLogEntry {
-  outcome: "aceptada" | "rechazada";
+  outcome: "aceptada" | "rechazada" | "error";
   reason: string;
   via: Via | null;
   user_id: string | null;
@@ -155,6 +155,34 @@ function callerMeta(req: Request) {
   };
 }
 
+async function dump(deps: BackupDeps, now: Date, filePath: string) {
+  const backupData: Record<string, unknown[]> = {};
+  const errors: string[] = [];
+  for (const table of TABLES_TO_BACKUP) {
+    if (NEVER_BACKUP.includes(table)) continue; // defensa en profundidad
+    let all: unknown[] = [];
+    for (let from = 0; ; from += PAGE_SIZE) {
+      const { rows, error } = await deps.readTable(table, from, from + PAGE_SIZE - 1);
+      if (error) { errors.push(`${table}: ${error}`); break; }
+      all = all.concat(rows);
+      if (rows.length < PAGE_SIZE) break;
+    }
+    backupData[table] = all;
+  }
+  const backupJson = JSON.stringify(backupData, null, 2);
+  const upErr = await deps.upload(filePath, backupJson);
+  if (upErr) errors.push(`Storage upload: ${upErr}`);
+  const tables = Object.fromEntries(Object.entries(backupData).map(([k, v]) => [k, v.length]));
+  const summary: Record<string, unknown> = {
+    timestamp: now.toISOString(),
+    file: filePath,
+    tables,
+    errors: errors.length > 0 ? errors : undefined,
+    size_bytes: new TextEncoder().encode(backupJson).length,
+  };
+  return { summary, backupData, tables };
+}
+
 export async function handleBackup(req: Request, deps: BackupDeps): Promise<Response> {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   const meta = callerMeta(req);
@@ -175,39 +203,23 @@ export async function handleBackup(req: Request, deps: BackupDeps): Promise<Resp
   const includeData = asked && auth.via === "g4";
 
   const now = (deps.now ?? (() => new Date()))();
-  const timestamp = now.toISOString().replace(/[:.]/g, "-");
-  const filePath = `${now.toISOString().split("T")[0]}/backup-${timestamp}.json`;
-  const backupData: Record<string, unknown[]> = {};
-  const errors: string[] = [];
-  for (const table of TABLES_TO_BACKUP) {
-    if (NEVER_BACKUP.includes(table)) continue; // defensa en profundidad
-    let all: unknown[] = [];
-    for (let from = 0; ; from += PAGE_SIZE) {
-      const { rows, error } = await deps.readTable(table, from, from + PAGE_SIZE - 1);
-      if (error) { errors.push(`${table}: ${error}`); break; }
-      all = all.concat(rows);
-      if (rows.length < PAGE_SIZE) break;
-    }
-    backupData[table] = all;
+  const filePath = `${now.toISOString().split("T")[0]}/backup-${now.toISOString().replace(/[:.]/g, "-")}.json`;
+  let result: { summary: Record<string, unknown>; backupData: Record<string, unknown[]>; tables: Record<string, number> };
+  try {
+    result = await dump(deps, now, filePath);
+  } catch (e) {
+    // También un volcado fallido deja constancia (sin datos).
+    await deps.log({ outcome: "error", reason: "volcado_fallido", via: auth.via, user_id: auth.userId, ...meta,
+      include_data: includeData, tables: null, rows: null, file: filePath }).catch(() => undefined);
+    throw e;
   }
-  const backupJson = JSON.stringify(backupData, null, 2);
-  const upErr = await deps.upload(filePath, backupJson);
-  if (upErr) errors.push(`Storage upload: ${upErr}`);
-
-  const tables = Object.fromEntries(Object.entries(backupData).map(([k, v]) => [k, v.length]));
-  const summary = {
-    timestamp: now.toISOString(),
-    file: filePath,
-    tables,
-    errors: errors.length > 0 ? errors : undefined,
-    size_bytes: new TextEncoder().encode(backupJson).length,
-    ...(asked && !includeData ? { include_data: "ignorado: la tarea programada solo recibe el resumen" } : {}),
-  };
+  const { summary, backupData, tables } = result;
+  if (asked && !includeData) summary.include_data = "ignorado: la tarea programada solo recibe el resumen";
   await deps.log({
     outcome: "aceptada", reason: asked && !includeData ? "ok_sin_datos_para_cron" : "ok", via: auth.via, user_id: auth.userId, ...meta, include_data: includeData,
     tables: Object.keys(tables).length, rows: Object.values(tables).reduce((a, b) => a + b, 0), file: filePath,
   }).catch(() => undefined);
   // Nunca se registra ni se imprime el contenido del volcado.
-  console.log("Backup completed:", JSON.stringify({ file: filePath, via: auth.via, tablas: Object.keys(tables).length, errores: errors.length }));
+  console.log("Backup completed:", JSON.stringify({ file: filePath, via: auth.via, tablas: Object.keys(tables).length, errores: (summary.errors as string[] | undefined)?.length ?? 0 }));
   return includeData ? json({ summary, data: backupData }) : json(summary);
 }

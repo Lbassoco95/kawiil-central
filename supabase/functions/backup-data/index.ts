@@ -35,7 +35,9 @@ Deno.serve(async (req) => {
         return error ? error.message : null;
       },
       async log(entry) {
-        console.log("backup-data:", JSON.stringify({ outcome: entry.outcome, reason: entry.reason, via: entry.via }));
+        // A6: bitácora sin datos del volcado. Si no se puede escribir, al menos queda en los registros de la función.
+        const { error } = await admin.from("backup_access_log").insert(entry);
+        if (error) console.error("backup-data: bitácora no escrita", JSON.stringify({ outcome: entry.outcome, reason: entry.reason, error: error.message }));
       },
     });
   } catch (err) {

@@ -144,3 +144,27 @@ Deno.test("A3 · el volcado no contiene tablas con credenciales (ni en el archiv
   }
   assert(out.includes("dato-sintetico-profiles"), "control: el volcado sí trae las demás tablas");
 });
+
+Deno.test("A6 · toda llamada deja constancia, sin datos del volcado", async () => {
+  const all: BackupLogEntry[] = [];
+  for (const [h, b] of [[{}, {}], [{ "x-backup-secret": "x" }, {}], [{ "x-backup-secret": SECRET }, { include_data: true }],
+    [{ Authorization: "Bearer jwt-g4" }, { include_data: true }], [{ Authorization: "Bearer jwt-g1" }, {}]] as [Record<string, string>, unknown][]) {
+    const { d, logs } = deps();
+    await handleBackup(post({ ...h, "x-forwarded-for": "203.0.113.7, 10.0.0.1", "user-agent": "prueba" }, b), d);
+    assert(logs.length === 1, `cada llamada deja exactamente una constancia (${logs.length})`);
+    all.push(...logs);
+  }
+  const txt = JSON.stringify(all);
+  assert(!txt.includes("dato-sintetico"), "la bitácora contiene datos del volcado");
+  assert(all.every((e) => e.ip === "203.0.113.7" && e.user_agent === "prueba"), "falta IP o navegador");
+  assert(all.map((e) => e.outcome).join(",") === "rechazada,rechazada,aceptada,aceptada,rechazada", txt);
+  assert(all[3].user_id === "u-g4" && all[2].user_id === null, "quién");
+  assert(all[3].tables === 37 && all[3].rows === 37 && all[3].file?.startsWith("2026-09-28/"), "resumen de lo respaldado");
+});
+
+Deno.test("A6 · un volcado que falla a medias también deja constancia", async () => {
+  const { d, logs } = deps({ readTable: async (t) => { if (t === "tasks") throw new Error("caída sintética"); return { rows: fakeRows(t) }; } });
+  let threw = false;
+  try { await handleBackup(post({ "x-backup-secret": SECRET }), d); } catch { threw = true; }
+  assert(threw && logs.length === 1 && logs[0].outcome === "error" && logs[0].reason === "volcado_fallido", JSON.stringify(logs));
+});
