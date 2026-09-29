@@ -537,12 +537,12 @@ Deno.serve(async (req) => {
       const acc = getAccount(params?.accountId);
       if (!acc) {
         console.log("[outlook-account-api] mail-folders: no_account");
-        return jsonResp({ value: [] });
+        return jsonResp({ folders: [], error: "no_account" });
       }
       const token = await ensureAccessToken(supabaseAdmin, acc);
       if (!token) {
         console.log(`[outlook-account-api] mail-folders: no_token account=${acc.email || acc.id}`);
-        return jsonResp({ value: [] });
+        return jsonResp({ folders: [], error: "no_valid_token" });
       }
 
       const rootFolders = await listMailFoldersRoot(token);
