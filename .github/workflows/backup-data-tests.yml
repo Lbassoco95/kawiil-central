@@ -1,0 +1,51 @@
+name: Pruebas de backup-data
+
+# Sin secretos ni entornos reales: Deno local con datos sintéticos y Postgres del
+# servicio. Nunca invoca la función desplegada.
+on:
+  pull_request:
+    paths:
+      - "supabase/functions/backup-data/**"
+      - "supabase/tests/backup-data/**"
+      - "supabase/migrations/20260929100*"
+      - "migrations/2026-09-29_backup_*"
+      - ".github/workflows/backup-data-tests.yml"
+  push:
+    branches-ignore: [main]
+    paths:
+      - "supabase/functions/backup-data/**"
+      - "supabase/tests/backup-data/**"
+      - "supabase/migrations/20260929100*"
+      - ".github/workflows/backup-data-tests.yml"
+
+jobs:
+  deno:
+    name: Credencial obligatoria (Deno local)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with: { deno-version: v2.x }
+      - run: deno test --no-config --allow-read supabase/functions/backup-data/handler.test.ts
+      - run: deno check --config supabase/functions/backup-data/deno.test.json supabase/functions/backup-data/index.ts
+      - run: bash supabase/tests/backup-data/edge_auth_test.sh
+
+  base:
+    name: Bucket sin lectura del navegador y bitácora
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_PASSWORD: postgres }
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - run: bash supabase/tests/backup-data/run_db_tests.sh
