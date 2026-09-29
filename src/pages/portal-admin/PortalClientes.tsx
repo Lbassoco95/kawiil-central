@@ -1,7 +1,7 @@
 /**
  * Central → «Portal de clientes»: administración del portal del cliente (M3).
  * Cuentas, emisión, publicación, mapeo de Dropbox, «Facturación de gastos»
- * (tickets) y facturas. Los permisos los aplica la base (RPC portal_staff_*).
+ * (tickets), facturas, y baja y resguardo (B1/B4). Los permisos los aplica la base (RPC portal_staff_*).
  */
 import { useSearchParams } from "react-router-dom";
 import { Globe } from "lucide-react";
@@ -15,6 +15,7 @@ import DropboxTab from "@/components/portal-admin/DropboxTab";
 import FacturacionGastosTab from "@/components/portal-admin/FacturacionGastosTab";
 import FacturasTab from "@/components/portal-admin/FacturasTab";
 import CatalogosTab from "@/components/portal-admin/CatalogosTab";
+import BajaTab from "@/components/portal-admin/BajaTab";
 
 const TABS = [
   ["cuentas", "Cuentas", CuentasTab],
@@ -24,6 +25,7 @@ const TABS = [
   ["facturas", "Facturas", FacturasTab],
   ["emision", "Emisión", EmisionTab],
   ["catalogos", "Catálogos", CatalogosTab],
+  ["baja", "Baja y resguardo", BajaTab],
 ] as const;
 
 export default function PortalClientes() {

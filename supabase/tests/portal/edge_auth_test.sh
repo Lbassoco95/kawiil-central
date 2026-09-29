@@ -23,7 +23,7 @@ code() { curl -s -o /dev/null -w "%{http_code}" -X POST "http://127.0.0.1:8000$1
 
 echo "== portal-api (verify_jwt = false)"
 serve portal-api
-for op in facturas.cargar facturas.crear csd.cargar csd.estado cuenta.eliminar archivos.enlace central/invitar central/tickets.facturar central/avisar; do
+for op in facturas.cargar facturas.crear csd.cargar csd.estado cuenta.eliminar archivos.enlace central/invitar central/cliente.baja central/tickets.facturar central/avisar; do
   check "sin JWT $op" 401 "$(code /portal-api/v1/$op '{}')"
   check "JWT falso $op" 401 "$(code /portal-api/v1/$op '{}' -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.falso')"
 done
