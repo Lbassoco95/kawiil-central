@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   PenLine,
   Inbox,
@@ -269,7 +270,12 @@ function LinkedOutlookSection({
   const inboxId = `outlook:${account.id}:inbox`;
   const sentId = `outlook:${account.id}:sentItems`;
 
-  const { data: foldersData } = useLinkedOutlookMailFolders(account.id);
+  const queryClient = useQueryClient();
+  const {
+    data: foldersData,
+    isLoading: foldersLoading,
+    error: foldersError,
+  } = useLinkedOutlookMailFolders(account.id);
   const accountFolders = useMemo(() => (foldersData?.folders ?? []) as FolderItem[], [foldersData]);
   const { roots } = useMemo(() => buildFolderTree(accountFolders), [accountFolders]);
 
@@ -306,10 +312,27 @@ function LinkedOutlookSection({
             <p className="text-[9px] font-normal tracking-normal normal-case text-muted-foreground/45 truncate">{subLabel}</p>
           )}
         </div>
+        <button
+          onClick={() => queryClient.invalidateQueries({ queryKey: ["linked-outlook-mail-folders", account.id] })}
+          disabled={foldersLoading}
+          title="Actualizar carpetas"
+          className="text-muted-foreground/50 hover:text-foreground transition-colors disabled:opacity-50"
+        >
+          {foldersLoading ? (
+            <Loader2 className="w-3 h-3 animate-spin" />
+          ) : (
+            <RefreshCw className="w-3 h-3" />
+          )}
+        </button>
         {unreadCount > 0 && (
           <span className="text-[10px] font-medium text-muted-foreground/60 shrink-0">{unreadCount}</span>
         )}
       </div>
+      {foldersError && (
+        <div className="px-4 py-1 text-[10px] text-red-500">
+          Error al cargar carpetas: {foldersError.message || String(foldersError)}
+        </div>
+      )}
       <div className="flex flex-col gap-0.5 px-2">
         {[
           { id: inboxId, label: "Bandeja", icon: <Inbox className="w-[13px] h-[13px]" /> },
