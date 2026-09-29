@@ -278,9 +278,9 @@ function LinkedOutlookSection({
   const extraRoots = useMemo(() => roots.filter((f) => {
     const wk = String(f.wellKnownFolderName || "").toLowerCase();
     const name = f.displayName.toLowerCase().trim();
-    const isInbox = wk === "inbox" || name === "inbox" || name === "bandeja de entrada";
+    const isInbox = wk === "inbox" || name === "inbox" || name.includes("bandeja de entrada");
     const isSent = wk === "sentitems" ||
-      name === "sent items" || name === "elementos enviados" || name.includes("enviados");
+      name.includes("sent item") || name.includes("elementos enviados") || name.includes("enviados");
     return !isInbox && !isSent;
   }), [roots]);
 
