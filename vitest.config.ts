@@ -11,6 +11,10 @@ export default defineConfig({
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
   },
   resolve: {
-    alias: { "@": path.resolve(__dirname, "./src") },
+    alias: [
+      { find: "@", replacement: path.resolve(__dirname, "./src") },
+      // Los módulos compartidos con Deno importan "npm:<paquete>@<versión>"; en Vitest es el paquete de node_modules.
+      { find: /^npm:(node-forge)@[\d.]+$/, replacement: "$1" },
+    ],
   },
 });

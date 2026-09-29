@@ -21,6 +21,8 @@ import {
   Users,
   Wallet,
   X,
+  MessagesSquare,
+  Globe,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
@@ -86,6 +88,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { title: "Correo", url: "/microsoft365/correo", icon: Mail, view: "correo", moduleKey: "correo" },
       { title: "Slack", url: "/comunicacion", icon: MessageSquare, view: "slack", tooltip: "Mensajes y canales del workspace" },
+      { title: "Clientes", url: "/comunicacion/clientes", icon: MessagesSquare, view: "clientes", tooltip: "Mensajes del portal del cliente (guardados en Kawiil OS)" },
       { title: "Notificaciones", url: "/notificaciones", icon: Bell, view: "notificaciones" },
     ],
   },
@@ -107,6 +110,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "Admin",
     items: [
+      { title: "Portal de clientes", url: "/portal-clientes", icon: Globe, view: "config", tooltip: "Cuentas, publicación, facturación de gastos y emisión del portal del cliente" },
       { title: "Configuración", url: "/configuracion", icon: Settings, view: "config", moduleKey: "admin" },
     ],
   },
@@ -154,7 +158,7 @@ function NavItemRow({
     <ActiveAwareWrapper item={item} collapsed={collapsed}>
       <NavLink
         to={item.url}
-        end={item.url === "/"}
+        end={item.url === "/" || item.url === "/comunicacion"}
         data-view-link={item.view}
         data-collapsed={collapsed ? "true" : "false"}
         data-has-badge={badge.count > 0 ? "true" : "false"}
