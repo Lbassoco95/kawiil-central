@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { usePortal } from "../lib/session";
-import { db } from "../lib/supabase";
+import { callApi } from "../lib/api";
 import { fmtDate, fmtMoney, MONTHS, monthLabel } from "../lib/format";
 import { Empty, ManagementLegend, Notice, PageTitle, StatusPill } from "../components/ui";
 
@@ -46,10 +46,9 @@ export default function Inicio() {
   useEffect(() => {
     if (!active) return;
     setErr(null);
-    db.rpc("portal_dashboard", { _client_id: active.client_id, _year: ym.y, _month: ym.m }).then(({ data, error }) => {
-      if (error) setErr("No tiene acceso al tablero completo con su rol.");
-      setD((data as Dash) ?? null);
-    });
+    callApi<Dash>("tablero.consultar", { client_id: active.client_id, year: ym.y, month: ym.m })
+      .then(setD)
+      .catch(() => { setErr("No tiene acceso al tablero completo con su rol."); setD(null); });
   }, [active, ym]);
 
   const months = Array.from({ length: 12 }, (_, i) => {

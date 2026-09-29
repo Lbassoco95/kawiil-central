@@ -30,7 +30,7 @@ function DeletionSection({ onDone }: { onDone: () => void }) {
   const [plazo, setPlazo] = useState<Plazo>(PLAZO_OMISION);
   const [msg, setMsg] = useState<{ tone: "ok" | "bad" | "warn"; text: string } | null>(null);
   useEffect(() => {
-    db.rpc("portal_account_deletion_plan", {}).then(({ data }) => setPlan((data as Plan) ?? null));
+    callApi<Plan>("cuenta.plan_baja").then(setPlan).catch(() => setPlan(null));
   }, []);
   const itemText = (i: PlanItem) => `${i.label}${i.client ? ` — ${i.client}` : ""}${typeof i.cantidad === "number" ? ` (${i.cantidad})` : ""}`;
   return (

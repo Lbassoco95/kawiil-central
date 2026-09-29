@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { usePortal } from "../lib/session";
-import { db } from "../lib/supabase";
-import { openFile } from "../lib/api";
+import { callApi } from "../lib/api";
 import { fmtDate, MONTHS } from "../lib/format";
 import { Empty, Notice, PageTitle } from "../components/ui";
 
@@ -18,9 +17,8 @@ export default function Documentos() {
   const [year, setYear] = useState<number | "todos">("todos");
   useEffect(() => {
     if (!active) return;
-    db.from("portal_documents").select("id, title, doc_type, period_year, period_month, published_at, file_name")
-      .eq("client_id", active.client_id).order("period_year", { ascending: false }).order("period_month", { ascending: false })
-      .then(({ data }) => setDocs((data as Doc[]) ?? []));
+    callApi<{ documentos: Doc[] }>("documentos.listar", { client_id: active.client_id })
+      .then((data) => setDocs(data.documentos)).catch(() => setDocs([]));
   }, [active]);
   const years = useMemo(() => [...new Set(docs.map((d) => d.period_year))], [docs]);
   const shown = docs.filter((d) => year === "todos" || d.period_year === year);
@@ -37,7 +35,7 @@ export default function Documentos() {
           <ul className="space-y-2">{g.list.map((d) => (
             <li key={d.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card p-3">
               <div><p className="font-medium">{d.title}</p><p className="text-xs text-muted-foreground">Periodo {d.period_month ? `${MONTHS[d.period_month - 1]} ` : ""}{d.period_year} · publicado el {fmtDate(d.published_at)}</p></div>
-              <Button size="sm" variant="outline" onClick={async () => { await db.rpc("portal_document_mark_read", { _document_id: d.id }); await openFile("documento", d.id); }}>Descargar</Button>
+              <Button size="sm" variant="outline" onClick={async () => { const { url } = await callApi<{ url: string }>("documentos.descargar", { document_id: d.id }); window.open(url, "_blank", "noopener"); }}>Descargar</Button>
             </li>))}
           </ul>
         </section>

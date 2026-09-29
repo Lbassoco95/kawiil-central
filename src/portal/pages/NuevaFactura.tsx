@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { usePortal } from "../lib/session";
-import { db } from "../lib/supabase";
 import { callApi, PortalApiError } from "../lib/api";
 import { fmtMoney } from "../lib/format";
 import { Notice, PageTitle, StatusPill } from "../components/ui";
@@ -82,7 +81,7 @@ export default function NuevaFactura() {
         <section className="mb-4 rounded-xl border bg-card p-4">
           <h2 className="text-lg">Contrato de uso</h2>
           <LegalText doc={contrato} />
-          <Button className="mt-3" onClick={async () => { await db.rpc("portal_accept_legal", { _kind: "contrato_uso", _client_id: active!.client_id, _user_agent: navigator.userAgent }); await validate(); }}>Acepto el contrato de uso</Button>
+          <Button className="mt-3" onClick={async () => { await callApi("legal.aceptar", { kind: "contrato_uso", client_id: active!.client_id, user_agent: navigator.userAgent }); await validate(); }}>Acepto el contrato de uso</Button>
         </section>
       )}
 

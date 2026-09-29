@@ -5,9 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Check, CheckCheck, Paperclip } from "lucide-react";
 import { usePortal } from "../lib/session";
-import { db } from "../lib/supabase";
-import { openFile } from "../lib/api";
-import { safeName } from "../lib/files";
+import { callApi, fileToBase64, openFile } from "../lib/api";
 import { fmtDateTime } from "../lib/format";
 import { Empty, Notice, PageTitle, StatusPill } from "../components/ui";
 
@@ -31,55 +29,29 @@ export default function Mensajes() {
 
   const loadThreads = useCallback(async () => {
     if (!active) return;
-    const { data } = await db.from("portal_threads").select("id, subject, status, kind, last_message_at").eq("client_id", active.client_id).order("last_message_at", { ascending: false });
-    setThreads((data as Thread[]) ?? []);
+    const data = await callApi<{ hilos: Thread[] }>("mensajes.listar", { client_id: active.client_id });
+    setThreads(data.hilos);
   }, [active]);
   const loadThread = useCallback(async (id: string) => {
-    const [{ data: m }, { data: a }, { data: rs }] = await Promise.all([
-      db.from("portal_messages").select("id, author_kind, author_name, body, created_at").eq("thread_id", id).order("created_at"),
-      db.from("portal_message_attachments").select("id, message_id, file_name, portal_messages!inner(thread_id)").eq("portal_messages.thread_id", id),
-      db.rpc("portal_thread_read_state", { _thread_id: id }),
-    ]);
-    setMsgs((m as Msg[]) ?? []);
-    setAtts((a as Att[]) ?? []);
-    setReadState(rs as { team_last_read_at: string | null });
-    await db.rpc("portal_thread_mark_read", { _thread_id: id });
+    const data = await callApi<{ mensajes: Msg[]; adjuntos: Att[]; lectura: { team_last_read_at: string | null } }>("mensajes.leer", { thread_id: id });
+    setMsgs(data.mensajes);
+    setAtts(data.adjuntos);
+    setReadState(data.lectura);
   }, []);
   useEffect(() => { void loadThreads(); }, [loadThreads]);
   useEffect(() => { if (sel) void loadThread(sel); }, [sel, loadThread]);
-
-  const uploadAll = async (threadId: string) => {
-    const { data: org } = await db.rpc("portal_client_org_id", { _client_id: active!.client_id });
-    const out = [];
-    for (const f of files) {
-      if (f.size > 20 * 1024 * 1024) throw new Error(`«${f.name}» pasa de 20 MB.`);
-      const path = `${org}/${active!.client_id}/mensajes/${threadId}/${Date.now()}_${safeName(f.name)}`;
-      const up = await db.storage.from("portal").upload(path, f, { contentType: f.type || "application/octet-stream" });
-      if (up.error) throw new Error("No se pudo subir el adjunto.");
-      out.push({ storage_path: path, file_name: f.name, mime_type: f.type, size_bytes: f.size });
-    }
-    return out;
-  };
 
   const send = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!active || !text.trim()) return;
     setErr(null);
     try {
-      if (!sel) {
-        const { data, error } = await db.rpc("portal_thread_create", { _client_id: active.client_id, _subject: subject || (basic ? "Quiero contratar un servicio" : "Consulta"), _body: text });
-        if (error) throw new Error(error.message);
-        if (files.length) {
-          const attachments = await uploadAll(data as string);
-          await db.rpc("portal_message_send", { _thread_id: data, _body: "(adjuntos)", _attachments: attachments });
-        }
-        setSel(data as string);
-      } else {
-        const attachments = files.length ? await uploadAll(sel) : [];
-        const { error } = await db.rpc("portal_message_send", { _thread_id: sel, _body: text, _attachments: attachments });
-        if (error) throw new Error(error.message);
-        await loadThread(sel);
-      }
+      const encoded = await Promise.all(files.map(async (file) => ({ name: file.name, type: file.type, base64: await fileToBase64(file) })));
+      const data = await callApi<{ thread_id: string }>("mensajes.enviar", {
+        client_id: active.client_id, thread_id: sel, subject: subject || (basic ? "Quiero contratar un servicio" : "Consulta"), body: text, files: encoded,
+      });
+      if (!sel) setSel(data.thread_id);
+      else await loadThread(sel);
       setText(""); setSubject(""); setFiles([]);
       await loadThreads();
     } catch (e2) {

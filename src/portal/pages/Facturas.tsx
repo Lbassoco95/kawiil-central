@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { usePortal } from "../lib/session";
-import { db } from "../lib/supabase";
 import { callApi, fileToBase64, openFile, PortalApiError } from "../lib/api";
 import { fmtDate, fmtMoney } from "../lib/format";
 import { Empty, Notice, PageTitle, StatusPill } from "../components/ui";
@@ -31,15 +30,8 @@ export default function Facturas() {
 
   const load = useCallback(async () => {
     if (!active) return;
-    let s = db.from("portal_cfdi_v").select("*").eq("client_id", active.client_id).eq("direction", dir).order("fecha", { ascending: false }).limit(200);
-    if (q.desde) s = s.gte("fecha", q.desde);
-    if (q.hasta) s = s.lte("fecha", `${q.hasta}T23:59:59`);
-    if (q.rfc) s = s.or(`rfc_emisor.ilike.%${q.rfc.replace(/[^A-Za-z0-9&Ñ]/g, "")}%,rfc_receptor.ilike.%${q.rfc.replace(/[^A-Za-z0-9&Ñ]/g, "")}%`);
-    if (q.min) s = s.gte("total", Number(q.min));
-    if (q.max) s = s.lte("total", Number(q.max));
-    if (q.estatus) s = s.eq("sat_status", q.estatus);
-    const { data } = await s;
-    setRows((data as Cfdi[]) ?? []);
+    const data = await callApi<{ facturas: Cfdi[] }>("facturas.listar", { client_id: active.client_id, direction: dir, filters: q });
+    setRows(data.facturas);
   }, [active, dir, q]);
   useEffect(() => { void load(); }, [load]);
 
@@ -137,8 +129,10 @@ function CancelDialog({ cfdi, onClose }: { cfdi: Cfdi; onClose: () => void }) {
   const [nota, setNota] = useState("");
   const [msg, setMsg] = useState<{ tone: "ok" | "bad"; text: string } | null>(null);
   const send = async () => {
-    const { error } = await db.rpc("portal_cancel_request", { _cfdi_id: cfdi.id, _motivo: motivo, _folio_sustitucion: folio || null, _comment: nota || null });
-    setMsg(error ? { tone: "bad", text: error.message } : { tone: "ok", text: "Solicitud enviada. Kawiil la revisa y ejecuta la cancelación; le avisaremos." });
+    try {
+      await callApi("facturas.solicitar_cancelacion", { cfdi_id: cfdi.id, motivo, folio_sustitucion: folio || null, comment: nota || null });
+      setMsg({ tone: "ok", text: "Solicitud enviada. Kawiil la revisa y ejecuta la cancelación; le avisaremos." });
+    } catch (error) { setMsg({ tone: "bad", text: (error as Error).message }); }
   };
   return (
     <div role="dialog" aria-modal="true" aria-labelledby="cancel-t" className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4">

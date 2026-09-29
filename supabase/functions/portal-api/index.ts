@@ -36,8 +36,8 @@ type Handler = (ctx: Ctx) => Promise<unknown>;
 
 // ── Utilidades ──────────────────────────────────────────────────────
 async function clientRfcs(ctx: Ctx, clientId: string): Promise<{ org: string; rfcs: string[] }> {
-  const { data: c } = await ctx.admin.from("clients").select("organization_id, rfc").eq("id", clientId).single();
-  const { data: tp } = await ctx.admin.from("fis_tax_profiles").select("rfc").eq("client_id", clientId).eq("active", true);
+  const { data: c } = await ctx.admin.from("portal_companies").select("organization_id, rfc").eq("id", clientId).single();
+  const { data: tp } = await ctx.admin.from("portal_tax_profiles").select("rfc").eq("client_id", clientId).eq("active", true);
   const rfcs = [c?.rfc, ...(tp ?? []).map((t: { rfc: string }) => t.rfc)].filter(Boolean).map((r) => normalizeRfc(r as string));
   return { org: c!.organization_id, rfcs: [...new Set(rfcs)] };
 }
@@ -251,7 +251,7 @@ const cargarFacturas: Handler = async (ctx) => {
 };
 
 async function emissionContext(ctx: Ctx, clientId: string) {
-  const { data: tp } = await ctx.admin.from("fis_tax_profiles")
+  const { data: tp } = await ctx.admin.from("portal_tax_profiles")
     .select("rfc, razon_social, regimen_fiscal, cp_fiscal").eq("client_id", clientId).eq("is_default", true).eq("active", true).maybeSingle();
   const { data: reg } = await ctx.admin.from("portal_csd_registry")
     .select("id, certificate_id, cert_serial, cert_not_before, cert_not_after, revoked_at, use_count")
@@ -471,8 +471,8 @@ async function requireStaff(ctx: Ctx, admin = false) {
   requireUser(ctx);
   if (!ctx.isStaff) throw new ApiError(403, "sin_permiso", "Solo el equipo de Kawiil.");
   if (admin) {
-    const { data } = await ctx.user!.rpc("portal_is_staff_admin", { _uid: ctx.userId });
-    if (data !== true) throw new ApiError(403, "sin_permiso", "Solo G3/G4.");
+    const { data } = await ctx.admin.from("portal_accounts").select("operator_level").eq("user_id", ctx.userId).maybeSingle();
+    if (!data?.operator_level || data.operator_level < 3) throw new ApiError(403, "sin_permiso", "Solo G3/G4.");
   }
 }
 
@@ -565,7 +565,7 @@ const bajaCliente: Handler = async (ctx) => {
 const facturarTicket: Handler = async (ctx) => {
   await requireStaff(ctx);
   const receiptId = uuid(ctx.body.receipt_id, "el ticket");
-  const { data: r } = await ctx.user!.from("fis_receipts").select("id, client_id, organization_id").eq("id", receiptId).maybeSingle();
+  const { data: r } = await ctx.user!.from("portal_tickets").select("id, client_id, organization_id").eq("id", receiptId).maybeSingle();
   if (!r) throw new ApiError(404, "no_encontrado", "Ticket no encontrado.");
   const xmlText = new TextDecoder().decode(b64ToBytes(str(ctx.body.xml_base64, "el XML", 8_000_000)));
   const pdfBytes = b64ToBytes(str(ctx.body.pdf_base64, "el PDF", 14_000_000));
@@ -617,6 +617,198 @@ const avisar: Handler = async (ctx) => {
   return { ok: true, destinatarios: (to ?? []).length };
 };
 
+const sesionActual: Handler = async (ctx) => {
+  const { data, error } = await requireUser(ctx).rpc("portal_me");
+  if (error) throw new ApiError(403, "sin_permiso", "No se pudo consultar la sesión.");
+  return data;
+};
+
+const registrarAcceso: Handler = async (ctx) => {
+  const { error } = await requireUser(ctx).rpc("portal_log_access", {});
+  if (error) throw new ApiError(403, "sin_permiso", "No se pudo registrar el acceso.");
+  return { ok: true };
+};
+
+const legalActual: Handler = async (ctx) => {
+  const kind = str(ctx.body.kind, "el tipo de texto", 40);
+  const { data, error } = await requireUser(ctx).rpc("portal_current_legal", { _kind: kind });
+  if (error) throw new ApiError(403, "sin_permiso", "No se pudo consultar el texto legal.");
+  return data;
+};
+
+const aceptarLegal: Handler = async (ctx) => {
+  const kind = str(ctx.body.kind, "el tipo de texto", 40);
+  const clientId = ctx.body.client_id ? uuid(ctx.body.client_id, "el cliente") : null;
+  const { error } = await requireUser(ctx).rpc("portal_accept_legal", {
+    _kind: kind, _client_id: clientId, _user_agent: typeof ctx.body.user_agent === "string" ? ctx.body.user_agent.slice(0, 300) : null,
+  });
+  if (error) throw new ApiError(403, "sin_permiso", "No se pudo registrar la aceptación.");
+  return { ok: true };
+};
+
+const activarBasico: Handler = async (ctx) => {
+  const { error } = await requireUser(ctx).rpc("portal_activate_basic", {
+    _razon_social: str(ctx.body.razon_social, "la razón social", 200), _rfc: str(ctx.body.rfc, "el RFC", 13),
+  });
+  if (error) throw new ApiError(400, "activacion", error.message);
+  return { ok: true };
+};
+
+const tablero: Handler = async (ctx) => {
+  const clientId = uuid(ctx.body.client_id, "el cliente");
+  await assertClientAccess(ctx, clientId, ["administrador", "consulta"]);
+  const { data, error } = await requireUser(ctx).rpc("portal_dashboard", {
+    _client_id: clientId, _year: Number(ctx.body.year), _month: Number(ctx.body.month),
+  });
+  if (error) throw new ApiError(403, "sin_permiso", "No tiene acceso al tablero completo con su rol.");
+  return data;
+};
+
+const listarFacturas: Handler = async (ctx) => {
+  const clientId = uuid(ctx.body.client_id, "el cliente");
+  await assertClientAccess(ctx, clientId, ["administrador", "operativo", "consulta"]);
+  const filters = (ctx.body.filters ?? {}) as Record<string, unknown>;
+  let query = requireUser(ctx).from("portal_cfdi_v").select("*").eq("client_id", clientId)
+    .eq("direction", ctx.body.direction === "emitida" ? "emitida" : "recibida").order("fecha", { ascending: false }).limit(200);
+  if (typeof filters.desde === "string" && filters.desde) query = query.gte("fecha", filters.desde);
+  if (typeof filters.hasta === "string" && filters.hasta) query = query.lte("fecha", `${filters.hasta}T23:59:59`);
+  const rfc = typeof filters.rfc === "string" ? filters.rfc.replace(/[^A-Za-z0-9&Ñ]/g, "") : "";
+  if (rfc) query = query.or(`rfc_emisor.ilike.%${rfc}%,rfc_receptor.ilike.%${rfc}%`);
+  if (Number.isFinite(Number(filters.min)) && filters.min !== "") query = query.gte("total", Number(filters.min));
+  if (Number.isFinite(Number(filters.max)) && filters.max !== "") query = query.lte("total", Number(filters.max));
+  if (typeof filters.estatus === "string" && filters.estatus) query = query.eq("sat_status", filters.estatus);
+  const { data, error } = await query;
+  if (error) throw new ApiError(400, "consulta", "No se pudieron consultar las facturas.");
+  return { facturas: data ?? [] };
+};
+
+const solicitarCancelacion: Handler = async (ctx) => {
+  const { error } = await requireUser(ctx).rpc("portal_cancel_request", {
+    _cfdi_id: uuid(ctx.body.cfdi_id, "la factura"), _motivo: str(ctx.body.motivo, "el motivo", 2),
+    _folio_sustitucion: typeof ctx.body.folio_sustitucion === "string" && ctx.body.folio_sustitucion ? ctx.body.folio_sustitucion : null,
+    _comment: typeof ctx.body.comment === "string" && ctx.body.comment ? ctx.body.comment.slice(0, 1000) : null,
+  });
+  if (error) throw new ApiError(400, "cancelacion", error.message);
+  return { ok: true };
+};
+
+const listarDocumentos: Handler = async (ctx) => {
+  const clientId = uuid(ctx.body.client_id, "el cliente");
+  await assertClientAccess(ctx, clientId, ["administrador", "operativo", "consulta"]);
+  const { data, error } = await requireUser(ctx).from("portal_documents")
+    .select("id, title, doc_type, period_year, period_month, published_at, file_name").eq("client_id", clientId)
+    .order("period_year", { ascending: false }).order("period_month", { ascending: false });
+  if (error) throw new ApiError(400, "consulta", "No se pudieron consultar los documentos.");
+  return { documentos: data ?? [] };
+};
+
+const descargarDocumento: Handler = async (ctx) => {
+  const id = uuid(ctx.body.document_id, "el documento");
+  const { error } = await requireUser(ctx).rpc("portal_document_mark_read", { _document_id: id });
+  if (error) throw new ApiError(403, "sin_permiso", "No tiene acceso al documento.");
+  ctx.body.kind = "documento";
+  ctx.body.id = id;
+  return enlaceArchivo(ctx);
+};
+
+const listarTickets: Handler = async (ctx) => {
+  const clientId = uuid(ctx.body.client_id, "el cliente");
+  await assertClientAccess(ctx, clientId, ["administrador", "operativo", "consulta"]);
+  const [{ data: tickets, error }, { data: merchants }] = await Promise.all([
+    requireUser(ctx).from("portal_tickets_v").select("*").eq("client_id", clientId).order("created_at", { ascending: false }).limit(100),
+    requireUser(ctx).from("portal_merchants").select("id, name, slug, window_type, window_days").eq("active", true).order("name"),
+  ]);
+  if (error) throw new ApiError(400, "consulta", "No se pudieron consultar los tickets.");
+  return { tickets: tickets ?? [], merchants: merchants ?? [] };
+};
+
+const registrarTicket: Handler = async (ctx) => {
+  const clientId = uuid(ctx.body.client_id, "el cliente");
+  await assertClientAccess(ctx, clientId, ["administrador", "operativo"]);
+  const bytes = b64ToBytes(str(ctx.body.file_base64, "el archivo", 15_000_000));
+  if (bytes.length > 10 * 1024 * 1024) throw new ApiError(400, "dato_invalido", "El archivo pasa de 10 MB.");
+  const name = str(ctx.body.file_name, "el nombre del archivo", 240).replace(/[^a-zA-Z0-9._-]/g, "_");
+  const mime = typeof ctx.body.mime_type === "string" ? ctx.body.mime_type : "application/octet-stream";
+  const { org } = await clientRfcs(ctx, clientId);
+  const d = new Date();
+  const path = `${org}/juun/clients/${clientId}/${d.getUTCFullYear()}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/receipts/${Date.now()}_${name}`;
+  await upload(ctx, "juun", path, bytes, mime);
+  const { data, error } = await requireUser(ctx).rpc("portal_ticket_register", {
+    _client_id: clientId, _file_path: path, _file_hash: str(ctx.body.file_hash, "la huella", 128),
+    _merchant_id: ctx.body.merchant_id || null, _merchant_name: ctx.body.merchant_name || null,
+    _receipt_date: ctx.body.receipt_date || null, _folio: ctx.body.folio || null, _total: ctx.body.total ?? null,
+  });
+  if (error) {
+    await ctx.admin.storage.from("juun").remove([path]);
+    throw new ApiError(400, "ticket", error.message);
+  }
+  return data;
+};
+
+const listarHilos: Handler = async (ctx) => {
+  const clientId = uuid(ctx.body.client_id, "el cliente");
+  await assertClientAccess(ctx, clientId, ["administrador", "operativo", "consulta"]);
+  const { data, error } = await requireUser(ctx).from("portal_threads").select("id, subject, status, kind, last_message_at")
+    .eq("client_id", clientId).order("last_message_at", { ascending: false });
+  if (error) throw new ApiError(400, "consulta", "No se pudieron consultar las conversaciones.");
+  return { hilos: data ?? [] };
+};
+
+const leerHilo: Handler = async (ctx) => {
+  const id = uuid(ctx.body.thread_id, "la conversación");
+  const user = requireUser(ctx);
+  const [{ data: messages, error }, { data: attachments }, { data: readState }] = await Promise.all([
+    user.from("portal_messages").select("id, author_kind, author_name, body, created_at").eq("thread_id", id).order("created_at"),
+    user.from("portal_message_attachments").select("id, message_id, file_name, portal_messages!inner(thread_id)").eq("portal_messages.thread_id", id),
+    user.rpc("portal_thread_read_state", { _thread_id: id }),
+  ]);
+  if (error) throw new ApiError(403, "sin_permiso", "No tiene acceso a la conversación.");
+  await user.rpc("portal_thread_mark_read", { _thread_id: id });
+  return { mensajes: messages ?? [], adjuntos: attachments ?? [], lectura: readState };
+};
+
+async function messageAttachments(ctx: Ctx, clientId: string, threadId: string) {
+  const files = Array.isArray(ctx.body.files) ? ctx.body.files as Record<string, unknown>[] : [];
+  const { org } = await clientRfcs(ctx, clientId);
+  const out = [];
+  for (const file of files.slice(0, 10)) {
+    const bytes = b64ToBytes(str(file.base64, "el adjunto", 28_000_000));
+    if (bytes.length > 20 * 1024 * 1024) throw new ApiError(400, "dato_invalido", "Un adjunto pasa de 20 MB.");
+    const name = str(file.name, "el nombre del adjunto", 240).replace(/[^a-zA-Z0-9._-]/g, "_");
+    const path = `${org}/${clientId}/mensajes/${threadId}/${Date.now()}_${name}`;
+    await upload(ctx, "portal", path, bytes, typeof file.type === "string" ? file.type : "application/octet-stream");
+    out.push({ storage_path: path, file_name: name, mime_type: file.type || "application/octet-stream", size_bytes: bytes.length });
+  }
+  return out;
+}
+
+const enviarMensaje: Handler = async (ctx) => {
+  const clientId = uuid(ctx.body.client_id, "el cliente");
+  await assertClientAccess(ctx, clientId, ["administrador", "operativo"]);
+  const body = str(ctx.body.body, "el mensaje", 10_000);
+  let threadId = typeof ctx.body.thread_id === "string" && ctx.body.thread_id ? uuid(ctx.body.thread_id, "la conversación") : null;
+  if (!threadId) {
+    const { data, error } = await requireUser(ctx).rpc("portal_thread_create", {
+      _client_id: clientId, _subject: str(ctx.body.subject || "Consulta", "el asunto", 200), _body: body,
+    });
+    if (error) throw new ApiError(400, "mensaje", error.message);
+    threadId = data as string;
+    const attachments = await messageAttachments(ctx, clientId, threadId);
+    if (attachments.length) await requireUser(ctx).rpc("portal_message_send", { _thread_id: threadId, _body: "(adjuntos)", _attachments: attachments });
+  } else {
+    const attachments = await messageAttachments(ctx, clientId, threadId);
+    const { error } = await requireUser(ctx).rpc("portal_message_send", { _thread_id: threadId, _body: body, _attachments: attachments });
+    if (error) throw new ApiError(400, "mensaje", error.message);
+  }
+  return { thread_id: threadId };
+};
+
+const planBajaCuenta: Handler = async (ctx) => {
+  const { data, error } = await requireUser(ctx).rpc("portal_account_deletion_plan", {});
+  if (error) throw new ApiError(403, "sin_permiso", "No se pudo preparar el plan de baja.");
+  return data;
+};
+
 /** Únicas operaciones sin sesión. Todas las demás responden 401 sin JWT válido (V3). */
 const PUBLIC_OPS = new Set(["cuenta.registrar", "cuenta.recuperar", "cuenta.reenviar_confirmacion", "diagnostico.cerco"]);
 
@@ -625,11 +817,27 @@ const ROUTES: Record<string, Handler> = {
   "cuenta.recuperar": recuperar,
   "cuenta.reenviar_confirmacion": reenviarConfirmacion,
   "diagnostico.cerco": diagnosticoCerco,
+  "sesion.actual": sesionActual,
+  "sesion.registrar_acceso": registrarAcceso,
+  "legal.actual": legalActual,
+  "legal.aceptar": aceptarLegal,
+  "cuenta.activar_basico": activarBasico,
+  "cuenta.plan_baja": planBajaCuenta,
   "cuenta.eliminar": eliminarCuenta,
   "archivos.enlace": enlaceArchivo,
+  "tablero.consultar": tablero,
+  "facturas.listar": listarFacturas,
   "facturas.cargar": cargarFacturas,
   "facturas.validar": validarFactura,
   "facturas.crear": crearFactura,
+  "facturas.solicitar_cancelacion": solicitarCancelacion,
+  "documentos.listar": listarDocumentos,
+  "documentos.descargar": descargarDocumento,
+  "tickets.listar": listarTickets,
+  "tickets.registrar": registrarTicket,
+  "mensajes.listar": listarHilos,
+  "mensajes.leer": leerHilo,
+  "mensajes.enviar": enviarMensaje,
   "csd.cargar": cargarCsd,
   "csd.estado": estadoCsd,
   "csd.requisitos": requisitosCsd,
