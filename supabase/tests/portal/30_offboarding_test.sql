@@ -287,6 +287,31 @@ SELECT portal_test.ok((SELECT bool_and(years = 5 AND retain_until = created_at +
   '8: solo una nueva elección expresa (G3/G4) cambia el plazo en curso, contado desde el inicio del resguardo');
 
 -- =================================================================
+-- B1 (cierre) · El plazo de un cliente solo lo consultan sus personas y G3/G4 de su organización
+-- =================================================================
+SET ROLE authenticated;
+SELECT portal_test.login(:'ua');
+SELECT portal_test.ok(public.portal_client_retention_years(:'cla') = 5, 'B1: una persona del portal consulta el plazo de SU cliente');
+SELECT portal_test.ok(portal_test.raises(format('SELECT public.portal_client_retention_years(%L)', :'clb')),
+  'B1: una persona del portal NO consulta el plazo de otro cliente');
+SELECT portal_test.ok(portal_test.raises(format('SELECT public.portal_client_retention_years(%L)', :'cld')),
+  'B1: ni el de un cliente dado de baja al que no pertenece');
+SELECT portal_test.login(:'staff');
+SELECT portal_test.ok(public.portal_client_retention_years(:'cld') = 5 AND public.portal_client_retention_years(:'clb') = 5,
+  'B1: G3/G4 de la organización consulta el plazo de sus clientes');
+SELECT portal_test.ok(portal_test.raises(format('SELECT public.portal_client_retention_years(%L)', :'clc')),
+  'B1: G3/G4 no consulta el de un cliente de otra organización');
+SELECT portal_test.login(:'staff2');
+SELECT portal_test.ok(portal_test.raises(format('SELECT public.portal_client_retention_years(%L)', :'cla')), 'B1: G1 no consulta plazos');
+SELECT portal_test.ok(portal_test.raises(format('SELECT public.portal__client_retention_years(%L)', :'cla')),
+  'B1: la versión interna no la ejecuta ningún usuario');
+RESET ROLE;
+SET ROLE anon;
+SELECT portal_test.ok(portal_test.raises(format('SELECT public.portal_client_retention_years(%L)', :'cla')), 'B1: sin sesión, no');
+RESET ROLE;
+SELECT set_config('request.jwt.claims', '', false);
+
+-- =================================================================
 -- 7 · La purga respeta el plazo de cada resguardo (cinco y diez)
 -- =================================================================
 SELECT public.portal_purge_expired_retention(now() + interval '5 years 2 days') AS p5 \gset

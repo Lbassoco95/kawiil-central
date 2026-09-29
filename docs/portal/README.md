@@ -50,7 +50,7 @@ npm run test              # incluye src/test/portal/* (Dropbox con carpeta local
 
 # Base (Postgres local ≥15 con superusuario; el stub imita Auth/Storage/Vault/cron de Supabase):
 PGHOST=/ruta/socket PGPORT=5432 PGUSER=postgres npm run test:portal-db
-#  → base vacía, rollback + reaplicación, base con datos previos, idempotencia; 207 verificaciones por corrida
+#  → base vacía, rollback + reaplicación, base con datos previos, idempotencia; 215 verificaciones por corrida
 
 # API (Postgres local + Docker con postgrest/postgrest:v12.2.3):
 PGHOST=… PGPORT=… PGUSER=postgres npm run test:portal-api   # orquesta todo (bases, PostgREST en Docker, aislamiento, regresión del equipo, cerco y su negativo, B5 sin contenido en claro)
