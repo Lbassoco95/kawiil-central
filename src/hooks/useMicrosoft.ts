@@ -1048,11 +1048,26 @@ export function useChildFolders(parentId: string | null) {
   return useQuery({
     queryKey: ["child-folders", parentId],
     queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke("microsoft-api", {
-        body: { action: "child-folders", params: { parentId } },
-      });
+      let data: unknown;
+      let error: unknown;
+      if (parentId?.startsWith("outlook:")) {
+        const parts = parentId.split(":");
+        const accountId = parts[1];
+        const rawParentId = parts.slice(2).join(":");
+        const res = await supabase.functions.invoke("outlook-account-api", {
+          body: { action: "child-folders", params: { accountId, parentId: rawParentId } },
+        });
+        data = res.data;
+        error = res.error;
+      } else {
+        const res = await supabase.functions.invoke("microsoft-api", {
+          body: { action: "child-folders", params: { parentId } },
+        });
+        data = res.data;
+        error = res.error;
+      }
       if (error) throw error;
-      const folders = (data as any)?.folders ?? [];
+      const folders = (data as { folders?: unknown[] } | null)?.folders ?? [];
       return folders as { id: string; displayName: string; wellKnownFolderName?: string; unreadItemCount?: number; childFolderCount?: number; parentFolderId?: string }[];
     },
     enabled: !!user && !!parentId,

@@ -34,6 +34,7 @@ import { getLabelStyle, LABEL_COLORS } from "./MailLabelPicker";
 import {
   useLinkedAccounts,
   useLinkedOutlookInboxMeta,
+  useLinkedOutlookMailFolders,
   useGmailInboxMeta,
   useGmailLabels,
   useGoogleConnection,
@@ -105,6 +106,30 @@ function isSystemFolder(f: { wellKnownFolderName?: string; displayName: string }
   if (f.wellKnownFolderName && WELL_KNOWN_IDS.has(f.wellKnownFolderName.toLowerCase())) return true;
   if (SYSTEM_DISPLAY_NAMES.has(f.displayName.toLowerCase().trim())) return true;
   return false;
+}
+
+function buildFolderTree(folders: FolderItem[]): {
+  roots: FolderItem[];
+  childrenMap: Map<string, FolderItem[]>;
+} {
+  const byId = new Map<string, FolderItem>();
+  for (const f of folders) byId.set(f.id, f);
+  const childrenMap = new Map<string, FolderItem[]>();
+  const roots: FolderItem[] = [];
+  for (const f of folders) {
+    const pid = f.parentFolderId;
+    if (pid && byId.has(pid)) {
+      const arr = childrenMap.get(pid) ?? [];
+      arr.push(f);
+      childrenMap.set(pid, arr);
+    } else {
+      roots.push(f);
+    }
+  }
+  if (roots.length === 0 && folders.length > 0) {
+    return { roots: folders, childrenMap: new Map() };
+  }
+  return { roots, childrenMap };
 }
 
 type FolderItem = {
@@ -244,6 +269,31 @@ function LinkedOutlookSection({
   const inboxId = `outlook:${account.id}:inbox`;
   const sentId = `outlook:${account.id}:sentItems`;
 
+  const { data: foldersData } = useLinkedOutlookMailFolders(account.id);
+  const accountFolders = useMemo(() => (foldersData?.folders ?? []) as FolderItem[], [foldersData]);
+  const { roots } = useMemo(() => buildFolderTree(accountFolders), [accountFolders]);
+
+  // Show all remaining folders (drafts, deleted, junk, archive, custom folders, etc.)
+  // but avoid duplicating the fixed Bandeja/Enviados entries.
+  const extraRoots = useMemo(() => roots.filter((f) => {
+    const wk = String(f.wellKnownFolderName || "").toLowerCase();
+    const name = f.displayName.toLowerCase().trim();
+    const isInbox = wk === "inbox" || name === "inbox" || name === "bandeja de entrada";
+    const isSent = wk === "sentitems" ||
+      name === "sent items" || name === "elementos enviados" || name.includes("enviados");
+    return !isInbox && !isSent;
+  }), [roots]);
+
+  const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(new Set());
+  const toggleExpanded = (id: string) => {
+    setExpandedFolderIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   return (
     <div className="mt-2">
       <div className="flex items-center gap-1.5 px-4 mb-1">
@@ -282,6 +332,24 @@ function LinkedOutlookSection({
             </button>
           );
         })}
+
+        {extraRoots.length > 0 && (
+          <div className="flex flex-col gap-0.5 mt-1">
+            {extraRoots.map((folder) => (
+              <FolderRow
+                key={folder.id}
+                folder={folder}
+                depth={0}
+                activeCustomFolderId={activeCustomFolderId ?? ""}
+                onSelectLabel={() => {}}
+                onSelectFolder={(id, name) => onSelectFolder(id, `${label} · ${name}`)}
+                expandedFolderIds={expandedFolderIds}
+                toggleExpanded={toggleExpanded}
+                searchActive={false}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
