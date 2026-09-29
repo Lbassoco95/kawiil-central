@@ -9,7 +9,7 @@
  * b5Plaintext.db.test.ts (la corre el CI con Postgres y PostgREST).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { resolve } from "node:path";
 import { registerCsd, type CsdRegisterDeps, type CsdStoreRow } from "../../../supabase/functions/_shared/portal/csdRegister.ts";
@@ -92,7 +92,9 @@ describe("B5 · la Edge no deja el CSD en claro en ningún lugar", () => {
 describe("B5 · respaldos y exportaciones del repo", () => {
   const SENSIBLES = /certif|csd|fiel|ciec|secret|salt|token/i;
   it("backup-data no incluye tablas de certificados, contraseñas ni la sal (lista cerrada)", () => {
-    const src = readFileSync(resolve(process.cwd(), "supabase/functions/backup-data/index.ts"), "utf8");
+    // La lista vive en handler.ts desde la corrección de backup-data (PR propio); antes, en index.ts.
+    const handler = resolve(process.cwd(), "supabase/functions/backup-data/handler.ts");
+    const src = readFileSync(existsSync(handler) ? handler : resolve(process.cwd(), "supabase/functions/backup-data/index.ts"), "utf8");
     const list = /const TABLES_TO_BACKUP = \[([\s\S]*?)\];/.exec(src);
     expect(list).not.toBeNull();
     const tables = [...list![1].matchAll(/"([a-z0-9_]+)"/g)].map((x) => x[1]);
@@ -100,8 +102,8 @@ describe("B5 · respaldos y exportaciones del repo", () => {
     for (const t of ["client_sat_certificates", "portal_csd_secrets", "portal_csd_registry", "moffin_client_fiel", "portal_pseudonym_salt", "moffin_client_sat_ciec"]) {
       expect(tables).not.toContain(t);
     }
-    // Lo único «sensible» por nombre que lleva es microsoft_tokens (no es de certificados; ver reporte B5).
-    expect(tables.filter((t) => SENSIBLES.test(t))).toEqual(["microsoft_tokens"]);
+    // Antes de la corrección de backup-data llevaba microsoft_tokens; después, ninguna.
+    expect(tables.filter((t) => SENSIBLES.test(t)).filter((t) => t !== "microsoft_tokens")).toEqual([]);
     // Es una lista cerrada: no hay «todas las tablas» ni select de esquemas.
     expect(src).not.toMatch(/information_schema|pg_tables|pg_dump/);
   });
