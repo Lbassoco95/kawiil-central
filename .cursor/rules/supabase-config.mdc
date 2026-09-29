@@ -26,7 +26,7 @@ Las siguientes funciones DEBEN desplegarse con `--no-verify-jwt`:
 - microsoft-auth, microsoft-callback, microsoft-api
 - dropbox-token-exchange
 - auth-email-hook, activate-recovery-link
-- backup-data, process-document, generate-phrase
+- backup-data (valida en código x-backup-secret o JWT de G4; ver docs/seguridad/backup-data.md), process-document, generate-phrase
 - savio-webhook, slack-events, calendly-webhook, moffin-webhook
 - slack-user-callback (redirect OAuth de Slack; sin JWT)
 - slack-user-auth, slack-api, push-subscribe (verify_jwt false en config; validan sesión con getUser + Authorization en código, igual que microsoft-api)
