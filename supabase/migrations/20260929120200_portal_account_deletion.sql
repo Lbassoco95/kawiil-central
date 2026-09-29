@@ -449,4 +449,4 @@ END $$;
 SELECT cron.schedule('portal-retention-purge', '17 9 * * *', $cron$SELECT public.portal_purge_expired_retention()$cron$);
 
 -- Las tablas nuevas de esta corrida llevan su propio prefijo portal_; el cerco
--- restrictivo de 20260928140500 no aplica a ellas y su RLS es propia.
+-- restrictivo de 20260929110500 no aplica a ellas y su RLS es propia.

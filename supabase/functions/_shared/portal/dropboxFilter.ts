@@ -29,7 +29,7 @@ export const FORBIDDEN_EXTENSIONS = ["key", "cer", "dec", "pfx", "p12", "req", "
 /**
  * Palabras que delatan una credencial en el nombre. Espejo EXACTO de la
  * segunda expresión de `portal_is_forbidden_filename()` (migración
- * 20260928140200_portal_documents.sql).
+ * 20260929110200_portal_documents.sql).
  */
 export const FORBIDDEN_NAME_PATTERN =
   /(fiel|e[.\-_ ]?firma|ciec|csd|contrase|password|passwd|clave|llave privada|sello digital)/i;

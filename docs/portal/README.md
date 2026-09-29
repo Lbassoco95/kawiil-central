@@ -25,7 +25,7 @@ supabase/functions/_shared/portal/    lógica pura compartida por Edge, portal y
 supabase/functions/portal-api/        API v1 (Storage, Auth admin, cifrado, emisor, XML)
 supabase/functions/portal-notify/     avisos a Slack (sin contenido) y correos al cliente
 supabase/functions/portal-dropbox-sync/  Dropbox → bucket privado `portal`
-supabase/migrations/2026092814*_portal_*.sql, 2026092815*_portal_*.sql   13 migraciones; rollback en migrations/2026-09-28_portal_*.rollback.sql
+supabase/migrations/2026092911*_portal_*.sql, 2026092912*_portal_*.sql   13 migraciones; rollback en migrations/2026-09-28_portal_*.rollback.sql
 src/pages/portal-admin/PortalClientes.tsx       central → «Portal de clientes» (/portal-clientes), incl. «Baja y resguardo»
 src/pages/portal-admin/BandejaClientes.tsx      central → Comunicación → «Clientes» (/comunicacion/clientes)
 tools/portal/build-sat-catalogs.mjs   genera los catálogos del SAT desde el catCFDI oficial

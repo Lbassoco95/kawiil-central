@@ -1,6 +1,6 @@
 -- 2026-09-28 · qppfampapbxdgednkofc
--- Rollback de supabase/migrations/20260928150300_portal_route_guard_health.sql.
--- Quita el bloqueo por cerco no verificado y restaura portal_pre_request() de 20260928140500.
+-- Rollback de supabase/migrations/20260929120300_portal_route_guard_health.sql.
+-- Quita el bloqueo por cerco no verificado y restaura portal_pre_request() de 20260929110500.
 DROP TRIGGER IF EXISTS trg_portal_memberships_route_guard ON public.portal_memberships;
 DROP FUNCTION IF EXISTS public.portal_require_route_guard();
 DROP FUNCTION IF EXISTS public.portal_route_guard_status();

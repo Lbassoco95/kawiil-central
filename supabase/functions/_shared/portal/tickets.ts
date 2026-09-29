@@ -1,7 +1,7 @@
 /**
  * Portal del cliente — tickets (M7). Espejo de las funciones SQL
  * `portal_ticket_visible_status()` y `portal_ticket_deadline()`
- * (migración 20260928140400_portal_tickets.sql). El servidor manda; esto sirve
+ * (migración 20260929110400_portal_tickets.sql). El servidor manda; esto sirve
  * para avisar en pantalla ANTES de subir y para etiquetar estados.
  */
 export const PORTAL_TICKET_STATUS_MAP = {

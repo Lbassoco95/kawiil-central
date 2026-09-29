@@ -1,5 +1,5 @@
 -- 2026-09-28 · qppfampapbxdgednkofc
--- Rollback de supabase/migrations/20260928140300_portal_cfdi.sql
+-- Rollback de supabase/migrations/20260929110300_portal_cfdi.sql
 -- DESTRUCTIVO para datos del portal: borra facturas cargadas/importadas, emisiones de prueba,
 -- solicitudes de cancelación, cartas registradas y el registro/contraseñas de CSD del portal.
 -- NO toca client_sat_certificates (tabla existente): los CSD cargados ahí se quedan.

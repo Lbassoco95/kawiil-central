@@ -22,8 +22,8 @@ on:
       - "src/portal/**"
       - "supabase/functions/_shared/portal/**"
       - "supabase/functions/portal-*/**"
-      - "supabase/migrations/2026092814*"
-      - "supabase/migrations/2026092815*"
+      - "supabase/migrations/2026092911*"
+      - "supabase/migrations/2026092912*"
       - "supabase/tests/portal/**"
 
 jobs:

@@ -1,6 +1,6 @@
 -- 2026-09-28 · qppfampapbxdgednkofc
--- Rollback de supabase/migrations/20260928150400_portal_retention_terms.sql (B1).
--- Correr DESPUÉS de los rollbacks de 20260928150600 y 20260928150500.
+-- Rollback de supabase/migrations/20260929120400_portal_retention_terms.sql (B1).
+-- Correr DESPUÉS de los rollbacks de 20260929120600 y 20260929120500.
 -- Se pierden el registro de elecciones de plazo y los resguardos de constancias
 -- legales (anótelos antes si hay vigentes:
 --   SELECT * FROM public.portal_retention_elections;
@@ -74,7 +74,7 @@ UPDATE public.portal_retention_policy
        confirmed = false, confirmed_at = NULL, confirmed_by = NULL
  WHERE key = 'fiscal_retention_years';
 
--- Lista de acciones de 20260928150000 (NOT VALID: las filas con acciones nuevas se conservan).
+-- Lista de acciones de 20260929120000 (NOT VALID: las filas con acciones nuevas se conservan).
 ALTER TABLE public.portal_audit_log DROP CONSTRAINT IF EXISTS portal_audit_log_action_check;
 ALTER TABLE public.portal_audit_log ADD CONSTRAINT portal_audit_log_action_check CHECK (action IN (
   'acceso', 'documento_consulta', 'documento_descarga', 'archivo_descarga',

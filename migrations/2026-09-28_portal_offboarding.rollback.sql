@@ -1,7 +1,7 @@
 -- 2026-09-28 · qppfampapbxdgednkofc
--- Rollback de supabase/migrations/20260928150500_portal_offboarding.sql (B2/B3).
--- Correr DESPUÉS del de 20260928150600 y ANTES del de 20260928150400.
--- Vuelve a las funciones de baja de 20260928150200 (copiadas tal cual abajo).
+-- Rollback de supabase/migrations/20260929120500_portal_offboarding.sql (B2/B3).
+-- Correr DESPUÉS del de 20260929120600 y ANTES del de 20260929120400.
+-- Vuelve a las funciones de baja de 20260929120200 (copiadas tal cual abajo).
 -- No revierte bajas ya ejecutadas (lo destruido no vuelve).
 DROP TRIGGER IF EXISTS trg_portal_memberships_offboard_reactivation ON public.portal_memberships;
 DROP FUNCTION IF EXISTS public.portal_memberships_offboard_reactivation();

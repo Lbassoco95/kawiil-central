@@ -144,7 +144,7 @@ ALTER TABLE public.portal_retention_holds
   ADD COLUMN IF NOT EXISTS subject_pseudonym uuid,
   ADD COLUMN IF NOT EXISTS cancelled_at timestamptz,
   ADD COLUMN IF NOT EXISTS cancel_reason text;
--- Resguardos anteriores (de 20260928150200): su plazo se deduce de sus propias fechas.
+-- Resguardos anteriores (de 20260929120200): su plazo se deduce de sus propias fechas.
 UPDATE public.portal_retention_holds
    SET years = CASE WHEN retain_until >= created_at + interval '9 years' THEN 10 ELSE 5 END
  WHERE years IS NULL;

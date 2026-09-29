@@ -1,5 +1,5 @@
 -- 2026-09-28 · qppfampapbxdgednkofc
--- Rollback de supabase/migrations/20260928150200_portal_account_deletion.sql.
+-- Rollback de supabase/migrations/20260929120200_portal_account_deletion.sql.
 -- Destructivo para los REGISTROS de solicitudes y retenciones (las fechas de purga
 -- se pierden: anótelas antes si hay retenciones vigentes:
 --   SELECT client_id, subject, retain_until FROM public.portal_retention_holds WHERE purged_at IS NULL;).
@@ -17,7 +17,7 @@ DROP FUNCTION IF EXISTS public.portal_deletion_scope(uuid);
 DROP TABLE IF EXISTS public.portal_storage_purge_queue;
 DROP TABLE IF EXISTS public.portal_retention_holds;
 DROP TABLE IF EXISTS public.portal_deletion_requests;
--- Inmutabilidad total de nuevo (versión de 20260928140000).
+-- Inmutabilidad total de nuevo (versión de 20260929110000).
 CREATE OR REPLACE FUNCTION public.portal_audit_immutable()
 RETURNS trigger
 LANGUAGE plpgsql

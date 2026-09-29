@@ -1,5 +1,5 @@
 -- 2026-09-28 · qppfampapbxdgednkofc
--- Rollback de supabase/migrations/20260928140400_portal_tickets.sql
+-- Rollback de supabase/migrations/20260929110400_portal_tickets.sql
 -- No borra tickets: las filas de fis_receipts/fis_cfdi (Ju'un) y sus archivos se conservan.
 -- Solo quita lo que el portal agregó encima.
 DROP POLICY IF EXISTS "Portal client receipt upload" ON storage.objects;

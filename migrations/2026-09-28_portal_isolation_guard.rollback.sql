@@ -1,5 +1,5 @@
 -- 2026-09-28 · qppfampapbxdgednkofc
--- Rollback de supabase/migrations/20260928140500_portal_isolation_guard.sql
+-- Rollback de supabase/migrations/20260929110500_portal_isolation_guard.sql
 -- Quita el cerco de aislamiento del portal. Correr ANTES que los demás rollback del portal.
 -- ¡Con esto cualquier cuenta del portal vuelve a alcanzar las rutas abiertas del back-office!
 -- Solo tiene sentido si también se revierten las demás migraciones del portal.

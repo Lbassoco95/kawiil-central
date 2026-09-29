@@ -1,5 +1,5 @@
 -- 2026-09-28 · qppfampapbxdgednkofc
--- Rollback de supabase/migrations/20260928140000_portal_core.sql (correr AL FINAL).
+-- Rollback de supabase/migrations/20260929110000_portal_core.sql (correr AL FINAL).
 -- DESTRUCTIVO para datos del portal: borra cuentas del portal (también sus usuarios de Auth),
 -- membresías, ajustes, textos legales, aceptaciones y la bitácora del portal.
 -- Por qué borra los usuarios de Auth del portal: sin portal_accounts ni el trigger que
