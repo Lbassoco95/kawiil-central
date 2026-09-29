@@ -97,6 +97,8 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = false
   [functions.moffin-health]
     verify_jwt = true
+  [functions.integration-health]
+    verify_jwt = true
   [functions.moffin-facturas]
     verify_jwt = false
   [functions.moffin-monthly-sat]
