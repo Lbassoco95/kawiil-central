@@ -74,5 +74,14 @@ Pendiente en Mac Polo tras harness verde: `20260918140000`, `20260918140100`, `2
 
 ## Conteos Sylon (esperados; no verificados en cloud)
 
-total 31 · vizum 13 / sylon 10 / rivium 8 · resolved 9 / advanced 9 / unchanged 7 / new 3 / blocked_third_party 2 / waiting_authority 1 / decision_needed 0 · decisiones 6 · expected_next 16
+total 31 · vizum 13 / sylon 10 / rivium 8 · resolved 9 / advanced 9 / unchanged 7 / new 3 / blocked_third_party 2 / waiting_authority 1 · decision_needed 0 · decisiones 6 · expected_next 16
+
+## Continuación 2026-09-30 (hub + grabación)
+
+Rama `cursor/mtg-juntas-modulo-b107` (= `feat/mtg-juntas-b2` + merge `main`):
+
+- Hub **`/juntas`**: listado org-wide (estado, transcripción, grabación, acuerdos, tareas abiertas, link a minuta).
+- Sidebar + command palette: entrada **Juntas**.
+- Grabación: `uploadRecording` + `MtgRecordingControls` (micrófono en navegador o subir audio/video) → bucket `mtg`/`recordings` + `mtg_meetings.recording_path`.
+- Confirmado en prod (MCP): tablas `mtg_*` + `job_queue` ya existen con datos seed (series 1, meetings 3, topics 31). Front aún no estaba en `main`.
 

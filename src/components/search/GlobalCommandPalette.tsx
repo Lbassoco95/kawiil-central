@@ -59,6 +59,7 @@ const VIEWS: ViewLink[] = [
   { label: "Dashboard", to: "/", icon: LayoutDashboard, keywords: "inicio panel" },
   { label: "Tareas", to: "/tareas", icon: CheckSquare, keywords: "pendientes" },
   { label: "Proyectos", to: "/proyectos", icon: FolderKanban },
+  { label: "Juntas", to: "/juntas", icon: Calendar, keywords: "reuniones minutas muuch grabacion acuerdos" },
   { label: "Clientes", to: "/clientes", icon: Users, keywords: "cuentas empresas" },
   { label: "Pipeline", to: "/pipeline", icon: Kanban, moduleKey: "pipeline", keywords: "leads prospectos oportunidades" },
   { label: "Documentos", to: "/documentos", icon: FileText, keywords: "archivos" },

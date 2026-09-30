@@ -42,6 +42,7 @@ import { unreviewedCount } from "@/lib/mtg/meetingLifecycle";
 import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, Loader2, Projector } from "lucide-react";
 import { toast } from "sonner";
 import { MtgUploadTranscriptButton } from "@/components/mtg/MtgUploadTranscriptButton";
+import { MtgRecordingControls } from "@/components/mtg/MtgRecordingControls";
 import { MtgTopicHistoryDrawer } from "@/components/mtg/MtgTopicHistoryDrawer";
 import { MtgArchiveSection } from "@/components/mtg/MtgArchiveSection";
 
@@ -138,7 +139,7 @@ export default function JuntaDetalle() {
       <AppLayout>
         <p className="p-8 text-sm text-destructive">No se pudo cargar la junta.</p>
         <Button asChild variant="outline" className="ml-8">
-          <Link to="/clientes">Volver</Link>
+          <Link to="/juntas">Volver a Juntas</Link>
         </Button>
       </AppLayout>
     );
@@ -218,7 +219,7 @@ export default function JuntaDetalle() {
           <div className="flex flex-wrap items-start gap-3 justify-between">
             <div className="flex items-start gap-2 min-w-0">
               <Button asChild variant="ghost" size="icon" className="shrink-0">
-                <Link to={meeting.client_id ? `/clientes/${meeting.client_id}?tab=juntas` : "/clientes"}>
+                <Link to="/juntas">
                   <ArrowLeft className="h-4 w-4" />
                 </Link>
               </Button>
@@ -332,6 +333,15 @@ export default function JuntaDetalle() {
               )}
             </div>
           </div>
+          {user && orgId && (
+            <MtgRecordingControls
+              organizationId={orgId}
+              actorUserId={user.id}
+              meeting={meeting}
+              series={series}
+              onDone={() => board.invalidate()}
+            />
+          )}
 
           {entities.length > 1 && (
             <div className="flex flex-wrap gap-2">

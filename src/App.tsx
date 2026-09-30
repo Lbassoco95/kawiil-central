@@ -18,6 +18,7 @@ import Tareas from "./pages/Tareas";
 import Documentos from "./pages/Documentos";
 import Configuracion from "./pages/Admin";
 import ClienteDetalle from "./pages/ClienteDetalle";
+import Juntas from "./pages/Juntas";
 import JuntaDetalle from "./pages/JuntaDetalle";
 import JuntaMinuta from "./pages/JuntaMinuta";
 import GrupoDetalle from "./pages/GrupoDetalle";
@@ -80,6 +81,7 @@ const App = () => (
               <Route path="/clientes" element={<ProtectedRoute><Clientes /></ProtectedRoute>} />
               <Route path="/clientes/:id" element={<ProtectedRoute><ClienteDetalle /></ProtectedRoute>} />
               <Route path="/grupos/:groupId" element={<ProtectedRoute><GrupoDetalle /></ProtectedRoute>} />
+              <Route path="/juntas" element={<ProtectedRoute><Juntas /></ProtectedRoute>} />
               <Route path="/juntas/:meetingId" element={<ProtectedRoute><JuntaDetalle /></ProtectedRoute>} />
               <Route path="/juntas/:meetingId/minuta" element={<ProtectedRoute><JuntaMinuta /></ProtectedRoute>} />
               <Route path="/proyectos" element={<ProtectedRoute><Proyectos /></ProtectedRoute>} />

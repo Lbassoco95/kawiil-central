@@ -31,6 +31,7 @@ export const MTG_AUDIT_ACTION = {
   TRANSCRIPT_NOTICE_CONFIRMED: "transcript_notice_confirmed",
   TRANSCRIPT_RECEIVED: "transcript_received",
   TRANSCRIPT_UNAVAILABLE: "transcript_unavailable",
+  RECORDING_SAVED: "recording_saved",
   SEED_LOADED: "seed_loaded",
 } as const;
 
