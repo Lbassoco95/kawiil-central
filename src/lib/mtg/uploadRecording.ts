@@ -1,5 +1,6 @@
 /**
  * Subida / grabación de audio-video de la junta → bucket mtg (kind recordings).
+ * Soporta conversaciones de hasta ~3 horas (ver recordingLimits).
  */
 
 import { supabase } from "@/integrations/supabase/client";
@@ -7,6 +8,12 @@ import { mtgDb, type MtgMeetingRow, type MtgSeriesRow } from "@/lib/mtg/db";
 import { logMtgAudit, MTG_AUDIT_ACTION } from "@/lib/mtg/audit";
 import { buildMtgStoragePath, MTG_BUCKET } from "@/lib/mtg/storagePaths";
 import type { MtgMeetingStatus } from "@/lib/mtg/constants";
+import {
+  formatRecordingSizeMb,
+  MTG_MAX_RECORDING_BYTES,
+  MTG_MAX_RECORDING_HOURS,
+  MTG_WHISPER_MAX_BYTES,
+} from "@/lib/mtg/recordingLimits";
 
 const RECORDING_ALLOWED: ReadonlySet<MtgMeetingStatus> = new Set([
   "planned",
@@ -69,17 +76,9 @@ export async function uploadMeetingRecording(opts: {
     throw new Error("Formato no soportado. Usa audio/video (webm, mp3, m4a, mp4, wav…).");
   }
 
-  const maxBytes = 500 * 1024 * 1024; // 500 MB (bucket mtg)
-  /** Whisper / Edge aceptan ~24 MB; avisamos antes si viene muy pesado. */
-  const whisperSoftLimit = 24 * 1024 * 1024;
-  if (asFile.size > maxBytes) {
+  if (asFile.size > MTG_MAX_RECORDING_BYTES) {
     throw new Error(
-      "La grabación supera el límite de 500 MB. Usa «Grabar audio» (sin pantalla) o sube un archivo más liviano.",
-    );
-  }
-  if (asFile.size > whisperSoftLimit) {
-    console.warn(
-      `[mtg] grabación ${(asFile.size / (1024 * 1024)).toFixed(1)} MB > 24 MB: Storage OK, pero Transcribir IA puede fallar hasta comprimir/partir.`,
+      `La grabación pesa ${formatRecordingSizeMb(asFile.size)} MB y supera el tope (~${formatRecordingSizeMb(MTG_MAX_RECORDING_BYTES)} MB / ${MTG_MAX_RECORDING_HOURS} h). Usa audio (sin video de pantalla) o parte la sesión.`,
     );
   }
 
@@ -117,7 +116,7 @@ export async function uploadMeetingRecording(opts: {
       msg.includes("payload too large")
     ) {
       throw new Error(
-        `El archivo pesa ${(asFile.size / (1024 * 1024)).toFixed(0)} MB y Storage lo rechazó. Usa «Grabar audio» (sin pantalla) o un MP3/M4A más liviano; la transcripción IA admite hasta ~24 MB.`,
+        `El archivo pesa ${formatRecordingSizeMb(asFile.size)} MB y Storage lo rechazó. Usa «Grabar audio» / «Audio de llamada» (hasta ~${MTG_MAX_RECORDING_HOURS} h) en vez de video de pantalla.`,
       );
     }
     throw upErr;
@@ -141,6 +140,8 @@ export async function uploadMeetingRecording(opts: {
       file_name: asFile.name,
       size_bytes: asFile.size,
       content_type: contentType,
+      max_hours: MTG_MAX_RECORDING_HOURS,
+      will_chunk_whisper: asFile.size > MTG_WHISPER_MAX_BYTES,
     },
   });
 

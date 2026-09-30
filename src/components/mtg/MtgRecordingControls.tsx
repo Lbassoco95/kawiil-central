@@ -53,7 +53,8 @@ const PHASE_META: Record<
   },
   transcribing: {
     label: "Transcribiendo con IA",
-    detail: "Revisando el audio (multiidioma → español). Esto puede tardar un minuto…",
+    detail:
+      "Revisando el audio (hasta ~3 h; se parte en trozos si pesa mucho). Multiidioma → español…",
     value: 72,
   },
   done: {
@@ -312,9 +313,10 @@ export function MtgRecordingControls(props: {
         recorder = mime
           ? new MediaRecorder(recordStream, {
               mimeType: mime,
-              audioBitsPerSecond: 48_000,
+              // ~64 kbps → ~3 h ≈ 85 MB (bajo tope Storage; Whisper parte en trozos).
+              audioBitsPerSecond: 64_000,
             })
-          : new MediaRecorder(recordStream, { audioBitsPerSecond: 48_000 });
+          : new MediaRecorder(recordStream, { audioBitsPerSecond: 64_000 });
       } catch {
         recorder = mime
           ? new MediaRecorder(recordStream, { mimeType: mime })
@@ -430,7 +432,7 @@ export function MtgRecordingControls(props: {
               variant="outline"
               disabled={disabled}
               onClick={() => void startRecording("audio")}
-              title="Solo micrófono (mejor para Whisper ≤24 MB)"
+              title="Solo micrófono — apto para juntas de hasta ~3 horas"
             >
               {phase === "uploading" ? (
                 <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
@@ -445,7 +447,7 @@ export function MtgRecordingControls(props: {
               variant="outline"
               disabled={disabled}
               onClick={() => void startRecording("av")}
-              title="Audio de la pestaña/llamada + micrófono (sin video; apto para transcribir)"
+              title="Audio de la pestaña/llamada + micrófono (sin video). Hasta ~3 horas."
             >
               <Monitor className="h-3.5 w-3.5 mr-1" />
               Audio de llamada
