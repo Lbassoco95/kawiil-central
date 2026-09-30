@@ -220,7 +220,13 @@ export default function JuntaDetalle() {
       if (!ok) return;
     }
     board.doEnd.mutate(undefined, {
-      onSuccess: () => toast.success("Junta terminada"),
+      onSuccess: () =>
+        toast.success("Junta terminada — borrador de minuta listo", {
+          action: {
+            label: "Ver minuta",
+            onClick: () => navigate(`/juntas/${meetingId}/minuta`),
+          },
+        }),
       onError: (e: Error) => toast.error(e.message),
     });
   };
@@ -390,6 +396,22 @@ export default function JuntaDetalle() {
               onDone={() => board.invalidate()}
             />
           )}
+
+          {!meeting.recording_path &&
+            (meeting.status === "ended" ||
+              meeting.status === "minutes_draft" ||
+              meeting.status === "minutes_review") && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2.5 text-sm space-y-1">
+                <p className="font-medium text-foreground">Sin grabación guardada</p>
+                <p className="text-muted-foreground text-xs">
+                  Si grabaste pantalla+video, el archivo pudo rechazarse por tamaño (límite de
+                  Storage / Whisper ~24 MB). Usa <strong>Grabar audio</strong> o{" "}
+                  <strong>Audio de llamada</strong>, o <strong>Subir grabación</strong> con un
+                  MP3/M4A liviano; luego <strong>Transcribir IA</strong>. La minuta en borrador
+                  está en el botón Minuta.
+                </p>
+              </div>
+            )}
 
           {!meeting.client_id && user && (
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm">

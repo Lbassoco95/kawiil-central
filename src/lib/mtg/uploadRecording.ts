@@ -69,9 +69,18 @@ export async function uploadMeetingRecording(opts: {
     throw new Error("Formato no soportado. Usa audio/video (webm, mp3, m4a, mp4, wav…).");
   }
 
-  const maxBytes = 500 * 1024 * 1024; // 500 MB
+  const maxBytes = 500 * 1024 * 1024; // 500 MB (bucket mtg)
+  /** Whisper / Edge aceptan ~24 MB; avisamos antes si viene muy pesado. */
+  const whisperSoftLimit = 24 * 1024 * 1024;
   if (asFile.size > maxBytes) {
-    throw new Error("La grabación supera el límite de 500 MB");
+    throw new Error(
+      "La grabación supera el límite de 500 MB. Usa «Grabar audio» (sin pantalla) o sube un archivo más liviano.",
+    );
+  }
+  if (asFile.size > whisperSoftLimit) {
+    console.warn(
+      `[mtg] grabación ${(asFile.size / (1024 * 1024)).toFixed(1)} MB > 24 MB: Storage OK, pero Transcribir IA puede fallar hasta comprimir/partir.`,
+    );
   }
 
   const anchorType = opts.series?.anchor_type ?? "client";
@@ -96,7 +105,23 @@ export async function uploadMeetingRecording(opts: {
   const { error: upErr } = await supabase.storage
     .from(MTG_BUCKET)
     .upload(path, asFile, { upsert: true, contentType });
-  if (upErr) throw upErr;
+  if (upErr) {
+    const msg = (upErr.message || "").toLowerCase();
+    const status = (upErr as { statusCode?: string | number }).statusCode;
+    if (
+      status === "413" ||
+      status === 413 ||
+      msg.includes("too large") ||
+      msg.includes("entitytoolarge") ||
+      msg.includes("maximum allowed size") ||
+      msg.includes("payload too large")
+    ) {
+      throw new Error(
+        `El archivo pesa ${(asFile.size / (1024 * 1024)).toFixed(0)} MB y Storage lo rechazó. Usa «Grabar audio» (sin pantalla) o un MP3/M4A más liviano; la transcripción IA admite hasta ~24 MB.`,
+      );
+    }
+    throw upErr;
+  }
 
   const { error: mErr } = await mtgDb
     .from("mtg_meetings")

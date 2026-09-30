@@ -196,14 +196,24 @@ export function useMtgBoard(meetingId: string | undefined) {
       const updates = boardQuery.data.boardTopics
         .map((t) => t.update)
         .filter(Boolean) as MtgTopicUpdateRow[];
-      return endMeeting({
+      const ended = await endMeeting({
         organizationId: boardQuery.data.meeting.organization_id,
         actorUserId: user.id,
         meeting: boardQuery.data.meeting,
         updates,
         pendingDecisionIds: pending,
-        enqueueMinutes: false,
+        enqueueMinutes: true,
       });
+      // Borrador inmediato (acuerdos/tablero); el worker enriquecerá si hay transcripción.
+      try {
+        const { error } = await supabase.functions.invoke("mtg-minutes-draft", {
+          body: { meeting_id: ended.id },
+        });
+        if (error) console.warn("[mtg] minutes-draft after end", error);
+      } catch (e) {
+        console.warn("[mtg] minutes-draft after end", e);
+      }
+      return ended;
     },
     onSuccess: invalidate,
   });

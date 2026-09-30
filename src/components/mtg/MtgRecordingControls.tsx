@@ -286,20 +286,40 @@ export function MtgRecordingControls(props: {
       const { stream, stopExtras } = await buildCaptureStream(mode);
       stopExtrasRef.current = stopExtras;
 
-      const preferVideo = mode === "av" && stream.getVideoTracks().length > 0;
-      const mimeCandidates = preferVideo
-        ? [
-            "video/webm;codecs=vp9,opus",
-            "video/webm;codecs=vp8,opus",
-            "video/webm",
-            "audio/webm;codecs=opus",
-            "audio/webm",
-          ]
-        : ["audio/webm;codecs=opus", "audio/webm"];
+      // Solo audio para Storage + Whisper (≤~24 MB). El video de pantalla
+      // hincha el archivo (~167 MB en 2 h) y Storage/Whisper lo rechazan.
+      const audioTracks = stream.getAudioTracks();
+      if (audioTracks.length === 0) {
+        stopExtras();
+        stopExtrasRef.current = null;
+        throw new Error(
+          mode === "av"
+            ? "No hay audio de la pestaña/micrófono. Marca «Compartir audio» al elegir la pestaña, o usa Grabar audio."
+            : "No se detectó micrófono.",
+        );
+      }
+      const recordStream = new MediaStream(audioTracks);
+
+      const mimeCandidates = [
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/mp4",
+        "audio/ogg;codecs=opus",
+      ];
       const mime = mimeCandidates.find((m) => MediaRecorder.isTypeSupported(m)) || "";
-      const recorder = mime
-        ? new MediaRecorder(stream, { mimeType: mime })
-        : new MediaRecorder(stream);
+      let recorder: MediaRecorder;
+      try {
+        recorder = mime
+          ? new MediaRecorder(recordStream, {
+              mimeType: mime,
+              audioBitsPerSecond: 48_000,
+            })
+          : new MediaRecorder(recordStream, { audioBitsPerSecond: 48_000 });
+      } catch {
+        recorder = mime
+          ? new MediaRecorder(recordStream, { mimeType: mime })
+          : new MediaRecorder(recordStream);
+      }
 
       chunksRef.current = [];
       recorder.ondataavailable = (ev) => {
@@ -308,18 +328,25 @@ export function MtgRecordingControls(props: {
       recorder.onstop = () => {
         stopExtrasRef.current?.();
         stopExtrasRef.current = null;
-        const type = recorder.mimeType || (preferVideo ? "video/webm" : "audio/webm");
+        const type = recorder.mimeType || "audio/webm";
         const blob = new Blob(chunksRef.current, { type });
-        const ext = type.includes("mp4") ? "mp4" : "webm";
+        const ext = type.includes("mp4") ? "m4a" : type.includes("ogg") ? "ogg" : "webm";
         const name =
-          preferVideo ? `grabacion-junta-av.${ext}` : `grabacion-junta.${ext}`;
-        // Fase uploading de inmediato (antes del await) para no volver a «idle».
+          mode === "av" ? `grabacion-llamada.${ext}` : `grabacion-junta.${ext}`;
         setPhase("uploading");
         setElapsedSec(0);
+        if (blob.size < 1024) {
+          setPhase("error");
+          setPhaseError("La grabación quedó vacía. Revisa permisos de micrófono/audio de pestaña.");
+          toast.error("Grabación vacía");
+          mediaRef.current = null;
+          return;
+        }
         void saveBlob(blob, name, "browser_recorder");
         mediaRef.current = null;
       };
 
+      // Si dejan de compartir la pestaña, detener.
       stream.getVideoTracks().forEach((t) => {
         t.addEventListener("ended", () => {
           if (mediaRef.current && mediaRef.current.state !== "inactive") {
@@ -334,7 +361,9 @@ export function MtgRecordingControls(props: {
       setPhase("recording");
       setPhaseError(null);
       if (mode === "av") {
-        toast.message("Grabando pantalla + audio. Detén al terminar la junta.");
+        toast.message(
+          "Grabando audio de la llamada (pestaña + mic). Se guarda solo el audio para poder transcribir.",
+        );
       }
     } catch (e) {
       stopExtrasRef.current?.();
@@ -416,10 +445,10 @@ export function MtgRecordingControls(props: {
               variant="outline"
               disabled={disabled}
               onClick={() => void startRecording("av")}
-              title="Pestaña/pantalla + micrófono (archivo más pesado)"
+              title="Audio de la pestaña/llamada + micrófono (sin video; apto para transcribir)"
             >
               <Monitor className="h-3.5 w-3.5 mr-1" />
-              Pantalla + audio
+              Audio de llamada
             </Button>
           </>
         )}
