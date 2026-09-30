@@ -8,7 +8,16 @@ const BAD = [
   /api\.openai\.com/i,
   /generativelanguage\.googleapis\.com/i,
 ];
-const ROOTS = ["src/lib/mtg", "supabase/functions/mtg-outlook", "supabase/functions/mtg-graph-admin", "supabase/functions/mtg-graph-webhook", "supabase/functions/job-queue-dispatch", "worker/mtg"];
+/** Front/worker mtg no llaman modelos; la única excepción STT es la Edge dedicada. */
+const ROOTS = [
+  "src/lib/mtg",
+  "supabase/functions/mtg-outlook",
+  "supabase/functions/mtg-graph-admin",
+  "supabase/functions/mtg-graph-webhook",
+  "supabase/functions/job-queue-dispatch",
+  "worker/mtg",
+];
+const ALLOW_OPENAI = new Set(["supabase/functions/mtg-transcribe-recording"]);
 
 function walk(dir: string, out: string[] = []): string[] {
   let entries: string[] = [];
@@ -31,9 +40,11 @@ describe("mtg: cero llamadas directas a modelos", () => {
     const files = ROOTS.flatMap((r) => walk(join(ROOT, r)));
     const hits: string[] = [];
     for (const f of files) {
+      const rel = relative(ROOT, f);
+      if ([...ALLOW_OPENAI].some((p) => rel.startsWith(p))) continue;
       const text = readFileSync(f, "utf8");
       for (const re of BAD) {
-        if (re.test(text)) hits.push(`${relative(ROOT, f)}`);
+        if (re.test(text)) hits.push(rel);
       }
     }
     expect(hits).toEqual([]);
