@@ -1,12 +1,13 @@
 # Portal del cliente de Kawiil OS
 
-Cara nueva de `kawiil-central` para los clientes de Kawiil: tablero de gasto, facturas emitidas y recibidas, creación de facturas de ingreso, documentos publicados, tickets y mensajes con el equipo. En la fase actual (espejo) vive en un **proyecto Supabase independiente** (`kawiil-os/`); el navegador solo habla Auth + `portal-api`.
+Cara nueva de `kawiil-central` para los clientes de Kawiil: **espejo fiscal de solo lectura** (tablero IVA/retenciones, facturas, constancia/opinión, declaraciones, notificaciones SAT y alertas) publicado desde central por API firmada. En esta fase el cliente **no** carga XML, no emite ni pide factura de ticket. Vive en un **proyecto Supabase independiente** (`kawiil-os/`); el navegador solo habla Auth + `portal-api`.
 
 | Documento | Para qué |
 |---|---|
 | [RECONOCIMIENTO.md](RECONOCIMIENTO.md) | Qué había en el repo y qué se decidió |
 | [PROYECTO-SEPARADO.md](PROYECTO-SEPARADO.md) | Crear el proyecto OS, aplicar baseline (`npm run kawiil-os:db-push`) y secretos |
 | [FRONTERA-API.md](FRONTERA-API.md) | Frontera entre proyectos, capas y riesgo residual |
+| [PAC.md](PAC.md) | Contrato espejo: PAC/Facturapi viven en central; OS no emite |
 | [API.md](API.md) | Contrato v1 entre la app y central |
 | [RUNBOOK.md](RUNBOOK.md) | Migraciones, variables, pasos manuales, cron |
 | [TIENDAS.md](TIENDAS.md) | Lo que falta para App Store y Google Play |

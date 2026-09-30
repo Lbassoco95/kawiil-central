@@ -140,7 +140,8 @@ SELECT public.portal_offboarding_verify('<client_id>', NULL, NULL, true);
 ## 9. Pruebas
 
 ```bash
-npm run test                                                  # Vitest (incluye src/test/portal)
+npm run test                                                  # Vitest (incluye src/test/portal y casos espejo F2)
+PGHOST=… PGPORT=… PGUSER=postgres npm run test:kawiil-os-db   # baseline + espejo en base vacía
 PGHOST=… PGPORT=… PGUSER=postgres npm run test:portal-db      # base vacía, con datos, rollback, idempotencia (217 verificaciones)
 PGHOST=… PGPORT=… PGUSER=postgres npm run test:portal-api     # PostgREST en Docker: aislamiento, regresión del equipo, cerco (y su negativo), B5 (PG_LOG_CMD=… para revisar el log del servidor)
 DENO=… npm run test:portal-edge                               # funciones con verify_jwt=false sin credencial
@@ -159,4 +160,39 @@ Pendiente de confirmar con material real en el ensayo: la distinción CSD / e.fi
 1. Ensayo (§4) → producción (§3) → verificación (§5).
 2. Sustituir los textos marcadores (Catálogos → Textos legales) y los de la pantalla de eliminación.
 3. Política de baja y resguardo fijada por Polo (`docs/portal/CONSERVACION.md`); quedan sus pendientes de §9 de ese documento.
-4. Clientes piloto; emisión en modo prueba hasta que exista PAC.
+4. Clientes piloto; emisión en modo prueba hasta que exista PAC. En Corte 3 el portal es espejo: no emitir desde OS (`PAC.md`).
+
+## 12. Corte 3 — espejo fiscal (Kawiil OS)
+
+### Migración standalone
+
+Tras el baseline, aplicar en el proyecto OS:
+
+- `kawiil-os/supabase/migrations/20260930120000_kawiil_os_fiscal_mirror.sql`
+- Rollback: `kawiil-os/supabase/rollbacks/20260930120000_kawiil_os_fiscal_mirror.rollback.sql`
+
+`npm run kawiil-os:db-push` aplica todas las migraciones del workdir. La prueba `npm run test:kawiil-os-db` recorre migraciones en orden y rollbacks en orden inverso.
+
+### Operaciones firmadas nuevas
+
+Central → `portal-system-api`: `invoice.publish`, `fiscal_summary.publish`, `declaration.publish`, `alert.publish`, `sat_notification.publish` (además de las de Corte 0). Todas con `idempotency_key` y bitácora. Contrato: `FRONTERA-API.md`. PAC/Facturapi: `PAC.md` (no implementar en OS).
+
+### Variable de fase
+
+| Variable | Valor por omisión | Nota |
+|---|---|---|
+| `PORTAL_MIRROR_READ_ONLY` | `true` | Si es `true`, el portal rechaza carga/emisión/cancelación del cliente (`403 espejo_solo_lectura`). |
+
+### Publicar constancia/opinión (F5)
+
+1. En central, localizar la fila en `moffin_consults` y el PDF en bucket `documents` (`…/moffin/clientes/…`).
+2. Copiar el archivo al bucket `portal` de Kawiil OS (sin exponer secretos Moffin).
+3. Invocar `sat_document.publish` firmado con `obtained_at` y `external_ref` estable.
+4. Verificar en el portal Documentos la fecha de obtención y, en opinión, el resultado.
+
+### Verificación de ensayo (Polo)
+
+- Publicar una factura sintética completa y una solo metadatos; el tablero debe mostrar calidad media/baja y excluir metadatos del IVA.
+- Publicar un resumen de periodo y comprobar que el tablero prioriza ese payload.
+- Publicar alerta EFOS y notificación SAT; deben aparecer en `/alertas`.
+- Confirmar que no hay botones de «Cargar XML» ni «Crear factura» en la UI espejo.

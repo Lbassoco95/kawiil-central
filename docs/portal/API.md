@@ -27,16 +27,21 @@ Respuesta: `{ "version": "v1", "data": … }`. Error: `{ "error": "<código>", "
 | `v1/cuenta.eliminar` | portal-api | `{ confirmacion: "ELIMINAR", plazo_anios?: 5 \| 10 }` | Ejecuta la baja (B1–B3). `plazo_anios` solo cuenta si `resguardo.elige` (titular de un básico); por omisión 5. Elimina acceso, sesiones y tokens; en la empresa que queda dada de baja destruye CSD, llave y contraseña, mensajes, adjuntos, tickets no facturados, documentos publicados y datos de contacto; resguarda CFDI, tickets facturados y constancias (seudonimizadas) con su plazo; borra de Storage los archivos de la solicitud y registra la verificación. Responde `{ ok, resultado, verificacion: { ok } }`. Única administradora de un premier → `409 eliminacion_bloqueada`; plazo distinto de 5 o 10 → `400 plazo`. |
 | Recuperar contraseña / cerrar sesión en todos los dispositivos | Supabase Auth | `resetPasswordForEmail`, `signOut({ scope: "global" })` | — |
 
-### Facturas
+### Facturas (fase espejo)
 | Operación | Puerta | Cuerpo | Notas |
 |---|---|---|---|
-| Lista | PostgREST `GET /portal_cfdi_v?client_id=eq.<id>&direction=eq.recibida` | filtros PostgREST (`fecha`, `rfc_*`, `total`, `sat_status`) | Trae `flags` (marcas de no deducibilidad) y categoría. |
-| `v1/facturas.cargar` | portal-api | `{ client_id, files: [{ name, base64 }] }` (XML o ZIP, ≤20 archivos, ≤10 MB c/u) | Valida estructura CFDI 3.3/4.0 y timbre, que el RFC del cliente sea emisor o receptor, y duplicados por UUID. Respuesta por archivo: `cargada \| duplicada \| rechazada` + motivo. Roles: administrador, operativo. |
-| `v1/facturas.validar` | portal-api | `{ client_id, borrador }` | Validaciones de emisión + expediente + uso del nivel básico. No emite. |
-| `v1/facturas.crear` | portal-api | `{ client_id, borrador: { receptor: { rfc, nombre, regimen, cp, uso }, formaPago, metodoPago, conceptos: [...] } }` | Solo **ingreso**. El emisor sale del perfil fiscal verificado, no del cuerpo. Exige emisión activada, expediente completo, CSD vigente y (básico) límite no alcanzado → `402 limite_basico`. Con `PORTAL_EMISOR=prueba` devuelve un XML marcado «SIN VALIDEZ FISCAL». |
-| `rpc/portal_cancel_request` | PostgREST | `{ _cfdi_id, _motivo: "01".."04", _folio_sustitucion?, _comment? }` | Solo la **solicita**; Kawiil revisa y ejecuta. |
-| `rpc/portal_dashboard` | PostgREST | `{ _client_id, _year, _month }` | Tablero: por categoría, mes, proveedor, comparación, ingresos contra gastos, IVA estimado, marcas. Lleva `leyenda`. Roles: administrador, consulta. |
-| `rpc/portal_emission_dossier` · `rpc/portal_basic_usage` | PostgREST | `{ _client_id }` | Expediente y uso. |
+| `v1/facturas.listar` | portal-api | `{ client_id, direction, filters? }` | Espejo de emitidas/recibidas publicadas por central. |
+| `v1/facturas.detalle` | portal-api | `{ client_id, cfdi_id }` | Conceptos, impuestos, pagos PPD e indicador de calidad. |
+| `v1/tablero.consultar` | portal-api | `{ client_id, year, month }` | IVA, retenciones, regla PUE/PPD (`iva_basis`), calidad de datos. Prioriza `portal_fiscal_summaries` si central publicó el periodo. |
+| `v1/alertas.listar` | portal-api | `{ client_id }` | EFOS, cancelaciones, 69-B. |
+| `v1/sat.notificaciones` | portal-api | `{ client_id }` | Notificaciones SAT con fecha de obtención. |
+| `v1/facturas.cargar` / `crear` / `validar` / `solicitar_cancelacion` | portal-api | — | En espejo (`PORTAL_MIRROR_READ_ONLY`): `403 espejo_solo_lectura`. |
+
+### Documentos
+| Operación | Puerta | Cuerpo |
+|---|---|---|
+| Lista (solo publicados, solo premier) | `v1/documentos.listar` | Incluye `obtained_at` y `opinion_result` (constancia/opinión). |
+| Marcar como leído / enlace | `v1/documentos.descargar` | Bitácora de consulta; URL firmada corta. |
 
 ### CSD
 | Operación | Puerta | Cuerpo | Notas |

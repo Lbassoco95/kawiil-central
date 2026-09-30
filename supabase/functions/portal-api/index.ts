@@ -27,12 +27,65 @@ import { suggestCategory } from "../_shared/portal/openclaw.ts";
 import { normalizeRfc } from "../_shared/portal/validate.ts";
 import { clientIp, GENERIC_ACCOUNT_MESSAGE, guardPublic, registerAccount, turnstileSiteverify, type PublicKind } from "../_shared/portal/publicAuth.ts";
 import { sha256Hex } from "../_shared/portal/hash.ts";
+import { calculateFiscalEstimate, ivaBasisLabel, type FiscalInvoice } from "../_shared/portal/fiscalEstimate.ts";
+import { dataQualityFromInvoices, vatByRateFromTaxLines } from "../_shared/portal/fiscalMirror.ts";
 
 const API_VERSION = "v1";
 const SIGNED_URL_SECONDS = 120;
 const PORTAL_URL = (Deno.env.get("PORTAL_PUBLIC_URL") ?? "").replace(/\/+$/, "");
+/** Fase espejo (Corte 3): el cliente no carga XML ni emite; solo lee lo publicado por central. */
+const MIRROR_READ_ONLY = (Deno.env.get("PORTAL_MIRROR_READ_ONLY") ?? "true").toLowerCase() !== "false";
 
 type Handler = (ctx: Ctx) => Promise<unknown>;
+
+function periodBounds(year: number, month: number): { start: string; end: string } {
+  const start = `${year}-${String(month).padStart(2, "0")}-01`;
+  const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const end = `${year}-${String(month).padStart(2, "0")}-${String(last).padStart(2, "0")}`;
+  return { start, end };
+}
+
+async function loadMirrorInvoices(ctx: Ctx, clientId: string): Promise<{ invoices: FiscalInvoice[]; rows: Record<string, unknown>[] }> {
+  const user = requireUser(ctx);
+  const { data: rows, error } = await user.from("portal_cfdi").select("id, direction, issued_at, payment_method, subtotal, total, vat_transferred, vat_withheld, income_tax_withheld, detail_status, sat_status, issuer_rfc, issuer_name, receiver_rfc, receiver_name, flags, category_name, category_status, uuid").eq("client_id", clientId).limit(5000);
+  if (error) throw new ApiError(400, "consulta", "No se pudieron consultar las facturas del espejo.");
+  const ids = (rows ?? []).map((r: { id: string }) => r.id);
+  const taxByCfdi = new Map<string, { tax: string; kind: "transfer" | "withholding"; rate: number | null; amount: number }[]>();
+  const payByRelated = new Map<string, { paidAt: string; amount: number }[]>();
+  if (ids.length) {
+    const { data: taxes } = await ctx.admin.from("portal_cfdi_tax_lines").select("cfdi_id, tax, kind, rate, amount").in("cfdi_id", ids);
+    for (const line of taxes ?? []) {
+      const list = taxByCfdi.get(line.cfdi_id) ?? [];
+      list.push({ tax: line.tax, kind: line.kind, rate: line.rate, amount: Number(line.amount) });
+      taxByCfdi.set(line.cfdi_id, list);
+    }
+    const { data: links } = await ctx.admin.from("portal_payment_links").select("related_cfdi_id, paid_at, paid_amount").in("related_cfdi_id", ids);
+    for (const link of links ?? []) {
+      const list = payByRelated.get(link.related_cfdi_id) ?? [];
+      list.push({ paidAt: String(link.paid_at), amount: Number(link.paid_amount) });
+      payByRelated.set(link.related_cfdi_id, list);
+    }
+  }
+  const invoices: FiscalInvoice[] = (rows ?? []).map((r: Record<string, unknown>) => {
+    const method = r.payment_method === "PUE" || r.payment_method === "PPD" ? r.payment_method : null;
+    const lines = taxByCfdi.get(String(r.id)) ?? [];
+    return {
+      id: String(r.id),
+      direction: r.direction === "emitida" ? "emitida" : "recibida",
+      issuedAt: String(r.issued_at ?? ""),
+      paymentMethod: method,
+      subtotal: Number(r.subtotal ?? 0),
+      total: Number(r.total ?? 0),
+      vatTransferred: Number(r.vat_transferred ?? 0),
+      vatWithheld: Number(r.vat_withheld ?? 0),
+      incomeTaxWithheld: Number(r.income_tax_withheld ?? 0),
+      vatByRate: vatByRateFromTaxLines(lines),
+      payments: payByRelated.get(String(r.id)),
+      detailComplete: r.detail_status === "complete",
+    };
+  });
+  return { invoices, rows: (rows ?? []) as Record<string, unknown>[] };
+}
 
 // ── Utilidades ──────────────────────────────────────────────────────
 async function clientRfcs(ctx: Ctx, clientId: string): Promise<{ org: string; rfcs: string[] }> {
@@ -657,19 +710,113 @@ const activarBasico: Handler = async (ctx) => {
 const tablero: Handler = async (ctx) => {
   const clientId = uuid(ctx.body.client_id, "el cliente");
   await assertClientAccess(ctx, clientId, ["administrador", "consulta"]);
-  const { data, error } = await requireUser(ctx).rpc("portal_dashboard", {
-    _client_id: clientId, _year: Number(ctx.body.year), _month: Number(ctx.body.month),
+  const year = Number(ctx.body.year);
+  const month = Number(ctx.body.month);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
+    throw new ApiError(400, "dato_invalido", "Indique año y mes válidos.");
+  }
+
+  const { data: settings } = await requireUser(ctx).from("portal_client_settings").select("iva_basis").eq("client_id", clientId).maybeSingle();
+  const ivaBasis = settings?.iva_basis === "issuance" ? "issuance" as const : "cash_flow" as const;
+
+  // Preferir resumen publicado por central si existe (espejo).
+  const publishedRes = await requireUser(ctx).from("portal_fiscal_summaries")
+    .select("payload, quality, iva_basis, published_at").eq("client_id", clientId).eq("period_year", year).eq("period_month", month).maybeSingle();
+  const published = publishedRes.error ? null : publishedRes.data;
+  if (published?.payload && typeof published.payload === "object") {
+    return {
+      ...(published.payload as object),
+      iva_basis: published.iva_basis ?? ivaBasis,
+      iva_basis_label: ivaBasisLabel((published.iva_basis === "issuance" ? "issuance" : "cash_flow")),
+      calidad: published.quality ?? {},
+      espejo: true,
+      resumen_publicado_en: published.published_at,
+      leyenda: "Cifras publicadas por Kawiil desde central. Solo lectura.",
+    };
+  }
+
+  // Cálculo local del espejo a partir de CFDI ya publicados.
+  const { start, end } = periodBounds(year, month);
+  const { invoices, rows } = await loadMirrorInvoices(ctx, clientId);
+  const estimate = calculateFiscalEstimate(invoices, start, end, ivaBasis);
+  const quality = dataQualityFromInvoices(rows.map((r) => ({ detail_status: String(r.detail_status ?? "metadata") })));
+  const inMonth = rows.filter((r) => {
+    const d = String(r.issued_at ?? "").slice(0, 10);
+    return d >= start && d <= end;
   });
-  if (error) throw new ApiError(403, "sin_permiso", "No tiene acceso al tablero completo con su rol.");
-  return data;
+  const gasto = inMonth.filter((r) => r.direction === "recibida").reduce((s, r) => s + Number(r.total ?? 0), 0);
+  const ingreso = inMonth.filter((r) => r.direction === "emitida").reduce((s, r) => s + Number(r.total ?? 0), 0);
+  const marcas = inMonth.filter((r) => Array.isArray(r.flags) && (r.flags as unknown[]).length > 0).map((r) => ({
+    cfdi_id: r.id, emisor: r.issuer_name ?? r.issuer_rfc, total: r.total, fecha: r.issued_at, flags: r.flags,
+  }));
+
+  // Compatibilidad con RPC portal_dashboard cuando exista (cadena de ensayo en central).
+  const { data: rpcData, error: rpcError } = await requireUser(ctx).rpc("portal_dashboard", {
+    _client_id: clientId, _year: year, _month: month,
+  });
+  if (!rpcError && rpcData && typeof rpcData === "object") {
+    return {
+      ...rpcData,
+      iva_basis: ivaBasis,
+      iva_basis_label: ivaBasisLabel(ivaBasis),
+      retenciones: {
+        iva_retenido_a_la_empresa: estimate.vatWithheldFromCompany,
+        iva_retenido_por_la_empresa: estimate.vatWithheldByCompany,
+        isr_retenido_a_la_empresa: estimate.incomeTaxWithheldFromCompany,
+        isr_retenido_por_la_empresa: estimate.incomeTaxWithheldByCompany,
+      },
+      iva_flujo: {
+        trasladado: estimate.vatTransferred,
+        acreditable: estimate.vatCreditable,
+        estimado: estimate.estimatedVat,
+        por_tasa: estimate.byRate,
+        pendientes_de_pago: estimate.pendingPayment,
+      },
+      calidad: quality,
+      espejo: MIRROR_READ_ONLY,
+    };
+  }
+
+  return {
+    gasto_total: Math.round(gasto * 100) / 100,
+    gasto_mes_anterior: 0,
+    ingreso_total: Math.round(ingreso * 100) / 100,
+    ingreso_mes_anterior: 0,
+    por_categoria: [],
+    por_proveedor: [],
+    por_mes: [],
+    iva: { trasladado: estimate.vatTransferred, acreditable: estimate.vatCreditable, facturas_sin_desglose: quality.metadata_only },
+    iva_estimado: estimate.estimatedVat,
+    retenciones: {
+      iva_retenido_a_la_empresa: estimate.vatWithheldFromCompany,
+      iva_retenido_por_la_empresa: estimate.vatWithheldByCompany,
+      isr_retenido_a_la_empresa: estimate.incomeTaxWithheldFromCompany,
+      isr_retenido_por_la_empresa: estimate.incomeTaxWithheldByCompany,
+    },
+    iva_flujo: {
+      trasladado: estimate.vatTransferred,
+      acreditable: estimate.vatCreditable,
+      estimado: estimate.estimatedVat,
+      por_tasa: estimate.byRate,
+      pendientes_de_pago: estimate.pendingPayment,
+    },
+    iva_basis: ivaBasis,
+    iva_basis_label: ivaBasisLabel(ivaBasis),
+    calidad: quality,
+    marcas,
+    por_confirmar: inMonth.filter((r) => r.category_status !== "confirmada").length,
+    espejo: true,
+    leyenda: "Estimación a partir del espejo de facturas publicadas por Kawiil. No es una declaración presentada.",
+  };
 };
 
 const listarFacturas: Handler = async (ctx) => {
   const clientId = uuid(ctx.body.client_id, "el cliente");
   await assertClientAccess(ctx, clientId, ["administrador", "operativo", "consulta"]);
   const filters = (ctx.body.filters ?? {}) as Record<string, unknown>;
+  const direction = ctx.body.direction === "emitida" ? "emitida" : "recibida";
   let query = requireUser(ctx).from("portal_cfdi_v").select("*").eq("client_id", clientId)
-    .eq("direction", ctx.body.direction === "emitida" ? "emitida" : "recibida").order("fecha", { ascending: false }).limit(200);
+    .eq("direction", direction).order("fecha", { ascending: false }).limit(200);
   if (typeof filters.desde === "string" && filters.desde) query = query.gte("fecha", filters.desde);
   if (typeof filters.hasta === "string" && filters.hasta) query = query.lte("fecha", `${filters.hasta}T23:59:59`);
   const rfc = typeof filters.rfc === "string" ? filters.rfc.replace(/[^A-Za-z0-9&Ñ]/g, "") : "";
@@ -677,9 +824,92 @@ const listarFacturas: Handler = async (ctx) => {
   if (Number.isFinite(Number(filters.min)) && filters.min !== "") query = query.gte("total", Number(filters.min));
   if (Number.isFinite(Number(filters.max)) && filters.max !== "") query = query.lte("total", Number(filters.max));
   if (typeof filters.estatus === "string" && filters.estatus) query = query.eq("sat_status", filters.estatus);
-  const { data, error } = await query;
-  if (error) throw new ApiError(400, "consulta", "No se pudieron consultar las facturas.");
-  return { facturas: data ?? [] };
+  let { data, error } = await query;
+  if (error) {
+    // Fallback si la vista aún no existe en un entorno viejo.
+    let q2 = requireUser(ctx).from("portal_cfdi").select("*").eq("client_id", clientId).eq("direction", direction).order("issued_at", { ascending: false }).limit(200);
+    if (typeof filters.desde === "string" && filters.desde) q2 = q2.gte("issued_at", filters.desde);
+    if (typeof filters.hasta === "string" && filters.hasta) q2 = q2.lte("issued_at", `${filters.hasta}T23:59:59`);
+    const alt = await q2;
+    if (alt.error) throw new ApiError(400, "consulta", "No se pudieron consultar las facturas.");
+    data = (alt.data ?? []).map((c: Record<string, unknown>) => ({
+      ...c,
+      fecha: c.issued_at,
+      rfc_emisor: c.issuer_rfc,
+      nombre_emisor: c.issuer_name,
+      rfc_receptor: c.receiver_rfc,
+      nombre_receptor: c.receiver_name,
+      metodo_pago: c.payment_method,
+      forma_pago: c.payment_form,
+    }));
+    error = null;
+  }
+  return { facturas: data ?? [], espejo: MIRROR_READ_ONLY, carga_cliente_habilitada: !MIRROR_READ_ONLY };
+};
+
+const detalleFactura: Handler = async (ctx) => {
+  const clientId = uuid(ctx.body.client_id, "el cliente");
+  await assertClientAccess(ctx, clientId, ["administrador", "operativo", "consulta"]);
+  const cfdiId = uuid(ctx.body.cfdi_id, "la factura");
+  const { data: cfdi, error } = await requireUser(ctx).from("portal_cfdi").select("*").eq("client_id", clientId).eq("id", cfdiId).maybeSingle();
+  if (error || !cfdi) throw new ApiError(404, "no_encontrado", "No se encontró la factura.");
+  const [{ data: taxLines }, { data: concepts }, { data: payments }] = await Promise.all([
+    ctx.admin.from("portal_cfdi_tax_lines").select("tax, kind, rate, factor, base, amount").eq("cfdi_id", cfdiId),
+    ctx.admin.from("portal_cfdi_concepts").select("product_service_key, description, quantity, unit_value, amount, discount").eq("cfdi_id", cfdiId),
+    ctx.admin.from("portal_payment_links").select("paid_at, paid_amount, payment_cfdi_id").eq("related_cfdi_id", cfdiId),
+  ]);
+  return {
+    factura: {
+      id: cfdi.id,
+      uuid: cfdi.uuid,
+      direction: cfdi.direction,
+      fecha: cfdi.issued_at,
+      rfc_emisor: cfdi.issuer_rfc,
+      nombre_emisor: cfdi.issuer_name,
+      rfc_receptor: cfdi.receiver_rfc,
+      nombre_receptor: cfdi.receiver_name,
+      forma_pago: cfdi.payment_form,
+      metodo_pago: cfdi.payment_method,
+      subtotal: cfdi.subtotal,
+      total: cfdi.total,
+      vat_transferred: cfdi.vat_transferred,
+      vat_withheld: cfdi.vat_withheld,
+      income_tax_withheld: cfdi.income_tax_withheld,
+      sat_status: cfdi.sat_status,
+      detail_status: cfdi.detail_status,
+      category_name: cfdi.category_name,
+      category_status: cfdi.category_status,
+      flags: cfdi.flags,
+      xml_path: cfdi.xml_path,
+      pdf_path: cfdi.pdf_path,
+      is_test: cfdi.is_test,
+    },
+    impuestos: taxLines ?? [],
+    conceptos: concepts ?? [],
+    pagos: payments ?? [],
+    calidad: cfdi.detail_status === "complete" ? "completa" : "solo_metadatos",
+    espejo: true,
+  };
+};
+
+const listarAlertas: Handler = async (ctx) => {
+  const clientId = uuid(ctx.body.client_id, "el cliente");
+  await assertClientAccess(ctx, clientId, ["administrador", "operativo", "consulta"]);
+  const { data, error } = await requireUser(ctx).from("portal_fiscal_alerts")
+    .select("id, alert_type, severity, title, detail, related_uuid, detected_at, published_at")
+    .eq("client_id", clientId).order("published_at", { ascending: false }).limit(200);
+  if (error) throw new ApiError(400, "consulta", "No se pudieron consultar las alertas.");
+  return { alertas: data ?? [] };
+};
+
+const listarNotificacionesSat: Handler = async (ctx) => {
+  const clientId = uuid(ctx.body.client_id, "el cliente");
+  await assertClientAccess(ctx, clientId, ["administrador", "operativo", "consulta"]);
+  const { data, error } = await requireUser(ctx).from("portal_sat_notifications")
+    .select("id, title, body, notification_type, notified_at, obtained_at, file_name, published_at")
+    .eq("client_id", clientId).order("published_at", { ascending: false }).limit(200);
+  if (error) throw new ApiError(400, "consulta", "No se pudieron consultar las notificaciones del SAT.");
+  return { notificaciones: data ?? [] };
 };
 
 const solicitarCancelacion: Handler = async (ctx) => {
@@ -696,7 +926,8 @@ const listarDocumentos: Handler = async (ctx) => {
   const clientId = uuid(ctx.body.client_id, "el cliente");
   await assertClientAccess(ctx, clientId, ["administrador", "operativo", "consulta"]);
   const { data, error } = await requireUser(ctx).from("portal_documents")
-    .select("id, title, doc_type, period_year, period_month, published_at, file_name").eq("client_id", clientId)
+    .select("id, title, doc_type, period_year, period_month, published_at, obtained_at, opinion_result, file_name")
+    .eq("client_id", clientId)
     .order("period_year", { ascending: false }).order("period_month", { ascending: false });
   if (error) throw new ApiError(400, "consulta", "No se pudieron consultar los documentos.");
   return { documentos: data ?? [] };
@@ -827,10 +1058,25 @@ const ROUTES: Record<string, Handler> = {
   "archivos.enlace": enlaceArchivo,
   "tablero.consultar": tablero,
   "facturas.listar": listarFacturas,
-  "facturas.cargar": cargarFacturas,
-  "facturas.validar": validarFactura,
-  "facturas.crear": crearFactura,
-  "facturas.solicitar_cancelacion": solicitarCancelacion,
+  "facturas.detalle": detalleFactura,
+  "facturas.cargar": async (ctx) => {
+    if (MIRROR_READ_ONLY) throw new ApiError(403, "espejo_solo_lectura", "En esta fase el cliente no carga XML; las facturas las publica Kawiil desde central.");
+    return cargarFacturas(ctx);
+  },
+  "facturas.validar": async (ctx) => {
+    if (MIRROR_READ_ONLY) throw new ApiError(403, "espejo_solo_lectura", "La emisión no está disponible en la fase espejo.");
+    return validarFactura(ctx);
+  },
+  "facturas.crear": async (ctx) => {
+    if (MIRROR_READ_ONLY) throw new ApiError(403, "espejo_solo_lectura", "La emisión no está disponible en la fase espejo.");
+    return crearFactura(ctx);
+  },
+  "facturas.solicitar_cancelacion": async (ctx) => {
+    if (MIRROR_READ_ONLY) throw new ApiError(403, "espejo_solo_lectura", "Las cancelaciones las gestiona Kawiil en central durante la fase espejo.");
+    return solicitarCancelacion(ctx);
+  },
+  "alertas.listar": listarAlertas,
+  "sat.notificaciones": listarNotificacionesSat,
   "documentos.listar": listarDocumentos,
   "documentos.descargar": descargarDocumento,
   "tickets.listar": listarTickets,

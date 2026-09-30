@@ -52,14 +52,32 @@ La credencial `service_role` de Kawiil OS pertenece al proyecto Kawiil OS y, por
 
 Endpoint: `portal-system-api`.
 
+Toda petición exige `idempotency_key` en el cuerpo. El receptor guarda la clave en `portal_system_inbox` (junto con el hash de la petición) y, ante repetición idéntica, responde el mismo resultado sin duplicar efectos. Nonce + timestamp + HMAC siguen vigentes. Cada operación deja bitácora `system.<operación>`.
+
 | Operación | Emisor | Datos mínimos | Efecto |
 |---|---|---|---|
 | `company.upsert` | central G3/G4 | referencia, nombre, nivel y RFC cuando corresponda | alta o actualización de empresa |
-| `company.modules` | central G3/G4 | referencia y banderas | activa fiscal, tickets o RH |
+| `company.modules` | central G3/G4 | referencia, banderas y opcional `iva_basis` (`cash_flow` \| `issuance`) | activa fiscal, tickets o RH; publica la regla PUE/PPD visible |
 | `company.delete` | central G3/G4 | referencia | revoca acceso y comienza baja |
 | `document.publish` | central | metadatos y ruta del objeto ya copiado | publica un documento autorizado |
-| `sat_document.publish` | central | solo constancia u opinión | publicación automática controlada |
+| `sat_document.publish` | central | solo constancia (`tax_status_certificate`) u opinión (`compliance_opinion`), `obtained_at`, ruta en bucket `portal` de OS | publicación automática controlada (F5) |
+| `declaration.publish` | central | declaración SAT, periodo, `obtained_at` | espejo de declaraciones |
+| `invoice.publish` | central | CFDI con detalle (conceptos, impuestos, vínculos PPD) o solo metadatos | espejo de facturas emitidas/recibidas |
+| `fiscal_summary.publish` | central | periodo, `iva_basis`, resumen e indicador de calidad | tablero IVA/retenciones por periodo |
+| `alert.publish` | central | tipo `efos` \| `cancelacion` \| `lista_69b` \| `otro`, título | alertas fiscales |
+| `sat_notification.publish` | central | título, fechas de notificación/obtención | notificaciones del SAT |
 | `message.reply` | central | referencia de hilo y respuesta | copia la respuesta al cliente |
+
+### F5 — Dónde guarda central la constancia y la opinión
+
+1. **Consulta:** Edge `moffin-query` / webhook `moffin-webhook` con `consult_type` `constancia_situacion_fiscal` u `opinion_cumplimiento`.
+2. **Historial:** tabla `public.moffin_consults` (central), con `document_id` opcional hacia `public.documents`.
+3. **Archivo PDF:** bucket `documents` de central, ruta `{organization_id}/moffin/clientes/{client_id}/{yyyy}/{mm}/{timestamp}_{base}.pdf` (`buildMoffinPdfStoragePath` en `_shared/moffinStoragePath.ts`).
+4. **Publicación a OS:** central copia el objeto al bucket `portal` de Kawiil OS y firma `sat_document.publish` con `idempotency_key`, `company_ref`, `external_ref`, `obtained_at`, `storage_path` y, en opinión, `opinion_result`. Kawiil OS **nunca** recibe e.firma, CIEC ni SatGo.
+
+### Lecturas del navegador (espejo)
+
+En la fase espejo (`PORTAL_MIRROR_READ_ONLY=true` por omisión) el cliente solo lee: `tablero.consultar`, `facturas.listar`, `facturas.detalle`, `documentos.*`, `alertas.listar`, `sat.notificaciones`. Las operaciones de carga/emisión/cancelación desde el portal responden `403 espejo_solo_lectura`.
 
 ## API Kawiil OS → central
 
@@ -82,6 +100,8 @@ Nunca salen de Kawiil OS:
 - RFC, CURP, NSS, CLABE, banco o ubicación de empleados.
 - Documentos de expedientes laborales.
 - CSD, llaves, contraseñas o texto cifrado.
+
+**Nunca entran a Kawiil OS desde central (espejo fiscal):** e.firma, CIEC, SatGo, tokens Moffin, `MOFFIN_FIEL_SECRET` ni material de sellado. Solo metadatos y archivos ya procesados/publicables.
 
 Central recibe únicamente incidencias agregadas y autorizadas para nómina. El acceso excepcional del equipo a expedientes o resultados agregados se implementa como autorización temporal en Kawiil OS y queda auditado; no concede acceso de base.
 
