@@ -47,6 +47,13 @@ import {
   nubariumRetrySummary,
   nubariumSecretFromEnv,
 } from "../_shared/moffinNubariumRetry.ts";
+import { isSatgoConfigured, resolveSatgoBearer, useSatgoForCsf32d } from "../_shared/satgoAuth.ts";
+import {
+  satgoFetchPdf,
+  satgoKindFromConsultType,
+  satgoServiceName,
+} from "../_shared/satgoClient.ts";
+import { uploadMoffinPdfFromBytes } from "../_shared/moffinPdfDownload.ts";
 
 /**
  * Moffin OpenAPI: https://app.moffin.mx/api/v1/docs · https://moffin.mx/docs
@@ -592,12 +599,17 @@ Deno.serve(async (req) => {
 
   const solutionsAnyAuthConfigured =
     solutionsOAuthConfigured || solutionsStaticConfigured;
-  if (!moffinKey && !(flavor === "solutions" && solutionsAnyAuthConfigured)) {
+  const satgoReady = isSatgoConfigured();
+  if (
+    !moffinKey &&
+    !(flavor === "solutions" && solutionsAnyAuthConfigured) &&
+    !satgoReady
+  ) {
     return new Response(
       JSON.stringify({
         error: "moffin_not_configured",
         message:
-          "Configura MOFFIN_API_KEY (API legacy app.moffin / lista 69-B) o, para Solutions, MOFFIN_SOLUTIONS_CLIENT_ID + MOFFIN_SOLUTIONS_CLIENT_SECRET (OAuth) y/o MOFFIN_SOLUTIONS_BEARER (JWT de /oauth/token). Ver documentación Moffin Solutions.",
+          "Configura SATGO_API_KEY (CSF/32D), y/o MOFFIN_API_KEY (lista 69-B), y/o Moffin Solutions (CLIENT_ID+SECRET o BEARER).",
       }),
       { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
@@ -610,27 +622,42 @@ Deno.serve(async (req) => {
   /** Si auth es static, de qué variable salió el Bearer (para mensajes 401). */
   let solutionsStaticSource: SolutionsStaticBearerSource | null = null;
   let solutionsAuthScheme: MoffinSolutionsAuthScheme = "Bearer";
-  if (flavor === "solutions") {
+  let solutionsAuthError: { code: string; message: string } | null = null;
+  if (flavor === "solutions" && solutionsAnyAuthConfigured) {
     const solAuth = await resolveMoffinSolutionsBearer(solutionsBase);
     if (!solAuth.ok) {
       const errCode =
         "code" in solAuth && solAuth.code === "oauth_incomplete"
           ? "moffin_solutions_oauth_incomplete"
           : "moffin_solutions_auth";
-      return new Response(
-        JSON.stringify({
-          error: errCode,
-          message: solAuth.message,
-        }),
-        { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      solutionsAuthError = { code: errCode, message: solAuth.message };
+      // Con SATgo podemos seguir para CSF/32D; lista 69-B / refresh Moffin fallarán más abajo.
+      if (!satgoReady) {
+        return new Response(
+          JSON.stringify({
+            error: errCode,
+            message: solAuth.message,
+          }),
+          { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+    } else {
+      solutionsBearer = solAuth.bearer;
+      solutionsAuthVia = solAuth.via;
+      solutionsAuthScheme = solAuth.scheme;
+      if (solAuth.via === "static") {
+        solutionsStaticSource = solAuth.staticSource;
+      }
     }
-    solutionsBearer = solAuth.bearer;
-    solutionsAuthVia = solAuth.via;
-    solutionsAuthScheme = solAuth.scheme;
-    if (solAuth.via === "static") {
-      solutionsStaticSource = solAuth.staticSource;
-    }
+  } else if (flavor === "solutions" && !satgoReady && !moffinKey) {
+    return new Response(
+      JSON.stringify({
+        error: "moffin_solutions_auth",
+        message:
+          "Faltan credenciales Moffin Solutions y SATgo. Configura SATGO_API_KEY o MOFFIN_SOLUTIONS_CLIENT_ID + CLIENT_SECRET.",
+      }),
+      { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
   }
   const legacyBase = flavor === "solutions" ? moffinLegacyBaseUrl() : moffinBase;
   const legacyToken = (flavor === "solutions" ? moffinLegacyApiKey() : moffinKey).trim();
@@ -642,6 +669,18 @@ Deno.serve(async (req) => {
     let cronBody: Record<string, unknown> = {};
     try { cronBody = await req.json(); } catch { /* empty body is fine */ }
     if (cronBody.refreshAllPending) {
+      if (!solutionsBearer) {
+        return new Response(
+          JSON.stringify({
+            source: "cron",
+            refreshed: 0,
+            results: [],
+            skipped: "no_moffin_solutions_bearer",
+            note: "CSF/32D SATgo son síncronos; no hay cola Moffin que refrescar sin Bearer Solutions.",
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
       const admin = createClient(supabaseUrl, serviceKey);
       const consultSelect =
         "id, organization_id, project_id, client_id, consult_type, rfc, moffin_query_id, moffin_service, document_id, requested_by, raw_response, created_at";
@@ -747,6 +786,20 @@ Deno.serve(async (req) => {
 
   const consultSelect =
     "id, organization_id, project_id, client_id, consult_type, rfc, moffin_query_id, moffin_service, document_id, requested_by, raw_response";
+
+  if ((refreshProjectId || refreshClientId) && !solutionsBearer) {
+    return new Response(
+      JSON.stringify({
+        refresh: true,
+        scope: refreshProjectId ? "project" : "client",
+        pendingFound: 0,
+        results: [],
+        note:
+          "Sin Bearer Moffin Solutions: las consultas SATgo (CSF/32D) ya son síncronas y no requieren sincronizar cola.",
+      }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
 
   if (refreshProjectId) {
     const { data: projCheck, error: pce } = await userClient
@@ -895,9 +948,200 @@ Deno.serve(async (req) => {
   }
 
   if (
+    (consultType === "constancia_situacion_fiscal" ||
+      consultType === "opinion_cumplimiento") &&
+    useSatgoForCsf32d()
+  ) {
+    const ciecSecret =
+      Deno.env.get("MOFFIN_SAT_CIEC_SECRET")?.trim() ||
+      Deno.env.get("MOFFIN_FIEL_SECRET")?.trim() ||
+      "";
+    if (ciecSecret.length < 32) {
+      return new Response(
+        JSON.stringify({
+          error: "ciec_not_configured",
+          message:
+            "Configura MOFFIN_SAT_CIEC_SECRET o MOFFIN_FIEL_SECRET (≥32 caracteres) para CIEC cifrada (SATgo).",
+        }),
+        { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+    if (!project.client_id) {
+      return new Response(
+        JSON.stringify({
+          error: "client_required",
+          message: "El proyecto debe tener un cliente asociado.",
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+    const { data: ciecRow } = await admin
+      .from("moffin_client_sat_ciec")
+      .select("ciec_ciphertext")
+      .eq("client_id", project.client_id)
+      .maybeSingle();
+    if (!ciecRow?.ciec_ciphertext) {
+      return new Response(
+        JSON.stringify({
+          error: "ciec_required",
+          message:
+            "Guarda la CIEC del cliente en Contabilidad antes de constancia u opinión SAT (SATgo).",
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+    let ciecPlain: string;
+    try {
+      ciecPlain = await decryptFielSecret(ciecRow.ciec_ciphertext, ciecSecret);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return new Response(
+        JSON.stringify({ error: "ciec_decrypt_failed", message: msg }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    const satAuth = await resolveSatgoBearer();
+    if (!satAuth.ok) {
+      return new Response(
+        JSON.stringify({ error: satAuth.code, message: satAuth.message }),
+        { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    const kind = satgoKindFromConsultType(consultType);
+    const serviceName = satgoServiceName(kind);
+    const pdfRes = await satgoFetchPdf({
+      bearer: satAuth.bearer,
+      rfc: rfcRaw,
+      ciec: ciecPlain,
+      kind,
+    });
+
+    if (!pdfRes.ok) {
+      const { data: rowErr } = await admin
+        .from("moffin_consults")
+        .insert({
+          organization_id: project.organization_id,
+          project_id: projectId,
+          client_id: project.client_id,
+          rfc: rfcRaw,
+          consult_type: consultType,
+          moffin_service: serviceName,
+          status: "error",
+          error_message: `Origen: SATgo. ${pdfRes.message}`.slice(0, 500),
+          raw_response: {
+            provider: "satgo",
+            kind,
+            httpStatus: pdfRes.httpStatus,
+            message: pdfRes.message,
+            bodyPreview: pdfRes.bodyPreview,
+            authVia: satAuth.via,
+          },
+          requested_by: user.id,
+        })
+        .select("id")
+        .single();
+      return new Response(
+        JSON.stringify({
+          error: "satgo_api_error",
+          message: pdfRes.message,
+          statusCode: pdfRes.httpStatus,
+          consultId: rowErr?.id,
+          provider: "satgo",
+        }),
+        { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    const displayBase = `${consultType}_${Date.now()}`;
+    const up = await uploadMoffinPdfFromBytes({
+      admin,
+      orgId: project.organization_id,
+      projectId,
+      clientId: project.client_id,
+      uploadedBy: user.id,
+      buf: pdfRes.buf,
+      fileBase: consultType,
+      documentDisplayName: displayBase,
+      documentType:
+        consultType === "constancia_situacion_fiscal"
+          ? "constancia_situacion_fiscal"
+          : "opinion_cumplimiento",
+    });
+
+    const label =
+      consultType === "constancia_situacion_fiscal"
+        ? "Constancia de situación fiscal (SATgo)"
+        : "Opinión de cumplimiento 32D (SATgo)";
+    const status = up.documentId ? "success" : "error";
+    const errorMessage = up.documentId
+      ? null
+      : `PDF recibido de SATgo pero no se pudo guardar: ${up.failureReason ?? "desconocido"}`.slice(
+          0,
+          500,
+        );
+
+    const { data: inserted, error: insErr } = await admin
+      .from("moffin_consults")
+      .insert({
+        organization_id: project.organization_id,
+        project_id: projectId,
+        client_id: project.client_id,
+        rfc: rfcRaw,
+        consult_type: consultType,
+        moffin_service: serviceName,
+        status,
+        error_message: errorMessage,
+        summary: up.documentId
+          ? `${label} · PDF listo (${pdfRes.buf.length} bytes)`
+          : `${label} · error al guardar PDF`,
+        raw_response: {
+          provider: "satgo",
+          kind,
+          httpStatus: pdfRes.httpStatus,
+          contentType: pdfRes.contentType,
+          pdfBytes: pdfRes.buf.length,
+          authVia: satAuth.via,
+          storageFailure: up.failureReason,
+        },
+        moffin_query_id: null,
+        moffin_uuid: null,
+        document_id: up.documentId,
+        requested_by: user.id,
+      })
+      .select("id, status, summary, document_id, created_at")
+      .single();
+
+    if (insErr) {
+      console.error("moffin_consults insert (satgo):", insErr.message);
+      return new Response(JSON.stringify({ error: insErr.message }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    return new Response(JSON.stringify({ consult: inserted, provider: "satgo" }), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  if (
     flavor === "solutions" &&
     (consultType === "constancia_situacion_fiscal" || consultType === "opinion_cumplimiento")
   ) {
+    if (!solutionsBearer) {
+      return new Response(
+        JSON.stringify({
+          error: solutionsAuthError?.code ?? "moffin_solutions_auth",
+          message:
+            solutionsAuthError?.message ??
+            "Moffin Solutions no autenticado y SATgo no está activo para CSF/32D.",
+        }),
+        { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
     const ciecSecret =
       Deno.env.get("MOFFIN_SAT_CIEC_SECRET")?.trim() ||
       Deno.env.get("MOFFIN_FIEL_SECRET")?.trim() ||

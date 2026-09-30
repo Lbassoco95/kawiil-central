@@ -97,12 +97,12 @@ const MOFFIN_CONSULT_META: Record<
     icon: ShieldAlert,
   },
   constancia_situacion_fiscal: {
-    label: "Constancia de situación fiscal (SAT · Moffin)",
+    label: "Constancia de situación fiscal (SAT · SATgo)",
     short: "CSF",
     icon: FileBadge,
   },
   opinion_cumplimiento: {
-    label: "Opinión de cumplimiento 32D (SAT · Moffin)",
+    label: "Opinión de cumplimiento 32D (SAT · SATgo)",
     short: "32D",
     icon: FileCheck2,
   },
@@ -580,7 +580,7 @@ export function AccountingDashboard({
     async (consultType: MoffinConsultType) => {
       if (moffinNeedsCiec(consultType)) {
         if (!moffinCiecStatus?.configured) {
-          toast.error("Primero guarda la CIEC del cliente (Moffin Solutions) en el bloque de credenciales SAT.");
+          toast.error("Primero guarda la CIEC del cliente en el bloque de credenciales SAT.");
           return;
         }
       }
@@ -596,7 +596,7 @@ export function AccountingDashboard({
       }
       if (
         !window.confirm(
-          "Cada consulta puede generar un cargo según tu plan con Moffin. ¿Deseas continuar?"
+          "Cada consulta puede generar un cargo según tu plan con SATgo/Moffin. ¿Deseas continuar?"
         )
       ) {
         return;
@@ -641,7 +641,7 @@ export function AccountingDashboard({
           }
           return;
         }
-        toast.success("Consulta Moffin registrada");
+        toast.success("Consulta SAT registrada");
         queryClient.invalidateQueries({ queryKey: ["moffin-consults", projectId] });
         if (clientId) {
           queryClient.invalidateQueries({ queryKey: ["moffin-consults-client", clientId] });
@@ -735,7 +735,7 @@ export function AccountingDashboard({
 
       <Card className="border-border/80">
         <CardContent className="p-4 space-y-3">
-          <h3 className="text-sm font-semibold text-foreground">Consultas SAT (Moffin)</h3>
+          <h3 className="text-sm font-semibold text-foreground">Consultas SAT (SATgo)</h3>
           {!MOFFIN_USE_SOLUTIONS ? (
             <Alert variant="default" className="border-amber-500/40 bg-amber-500/5 py-3 [&>svg]:top-3.5">
               <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
@@ -758,8 +758,8 @@ export function AccountingDashboard({
           ) : null}
           {clientId ? (
             <p className="text-[10px] text-muted-foreground leading-snug">
-              CSF y opinión 32D se descargan con la CIEC del cliente (Moffin Solutions). La descarga mensual
-              automática (días 1-5) cubre a los clientes con CIEC registrada.
+              CSF y opinión 32D se descargan con la CIEC del cliente vía SATgo (PDF síncrono). La descarga
+              mensual automática (días 1-5) cubre a los clientes con CIEC registrada. Lista 69-B sigue en Moffin.
             </p>
           ) : null}
           {clientId ? (

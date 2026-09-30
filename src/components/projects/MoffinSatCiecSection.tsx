@@ -61,7 +61,7 @@ export function MoffinSatCiecSection({ clientId }: { clientId: string }) {
       }
     },
     onSuccess: () => {
-      toast.success("CIEC guardada (cifrada). Se volverá a registrar el perfil SAT en la próxima consulta.");
+      toast.success("CIEC guardada (cifrada). Ya puedes consultar CSF y 32D con SATgo.");
       queryClient.invalidateQueries({ queryKey: ["moffin-sat-ciec-status", clientId] });
       setOpen(false);
       setCiecInput("");
@@ -104,10 +104,10 @@ export function MoffinSatCiecSection({ clientId }: { clientId: string }) {
       >
         <div className="flex flex-wrap items-center gap-2">
           <KeySquare className="h-3.5 w-3.5 text-muted-foreground" />
-          <span className="text-[11px] font-medium text-foreground">CIEC (Moffin Solutions API)</span>
+          <span className="text-[11px] font-medium text-foreground">CIEC (SATgo · portal SAT)</span>
         </div>
         <p className="text-[10px] text-muted-foreground">
-          Necesaria para crear el perfil SAT en Moffin y consultar constancia (CSF) y opinión (32D). Se guarda cifrada; no
+          Necesaria para descargar constancia (CSF) y opinión (32D) vía SATgo. Se guarda cifrada en Kawiil; no
           la mostramos de nuevo.
         </p>
         {isLoading ? (
@@ -118,7 +118,7 @@ export function MoffinSatCiecSection({ clientId }: { clientId: string }) {
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-medium">CIEC registrada</span>
             {status.profileId != null ? (
-              <span className="text-[9px] text-muted-foreground">Perfil Moffin: #{status.profileId}</span>
+              <span className="text-[9px] text-muted-foreground">Perfil legacy Moffin: #{status.profileId}</span>
             ) : null}
             <Button type="button" variant="outline" size="sm" className="h-7 text-[10px]" onClick={() => setOpen(true)}>
               Actualizar CIEC
@@ -158,7 +158,7 @@ export function MoffinSatCiecSection({ clientId }: { clientId: string }) {
               placeholder="La que usas en el portal del SAT"
             />
             <p className="text-[10px] text-muted-foreground">
-              Tras guardar, la primera consulta CSF/32D creará o actualizará el perfil en Moffin.
+              Tras guardar, puedes pedir CSF u opinión 32D; SATgo usa RFC + CIEC en cada consulta.
             </p>
           </div>
           <DialogFooter className="gap-2 sm:gap-0">

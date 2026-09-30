@@ -6,6 +6,7 @@ import {
   moffinSolutionsBearerToken,
 } from "../_shared/moffinApiFlavor.ts";
 import { looksLikeOauthAccessJwt } from "../_shared/moffinSolutionsAuth.ts";
+import { isSatgoConfigured, satgoBaseUrl, useSatgoForCsf32d } from "../_shared/satgoAuth.ts";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -125,7 +126,13 @@ Deno.serve(async (req) => {
     solutionsBaseHost = solBase ? hostPreview(solBase.startsWith("http") ? solBase : `https://${solBase}`) : null;
     looksLikeSandbox = /sandbox/i.test(solBase);
 
-    if (solutionsTokenSchemeForced()) {
+    const satgoOn = useSatgoForCsf32d();
+    if (satgoOn) {
+      // CSF/32D vía SATgo: no exigir OAuth Moffin Solutions.
+      if (!isSatgoConfigured()) {
+        missing.push("SATGO_API_KEY o SATGO_ACCESS_TOKEN (CSF/32D vía SATgo)");
+      }
+    } else if (solutionsTokenSchemeForced()) {
       if (!solutionsTokenSchemeKeyPresent()) {
         missing.push(
           "MOFFIN_SOLUTIONS_AUTH_SCHEME=token requiere una API key: define MOFFIN_SOLUTIONS_API_KEY (recomendado), o reutiliza MOFFIN_SOLUTIONS_BEARER / MOFFIN_API_KEY.",
@@ -142,21 +149,26 @@ Deno.serve(async (req) => {
 
       if (!solutionsAuthConfigured()) {
         missing.push(
-          "MOFFIN_SOLUTIONS_CLIENT_ID + MOFFIN_SOLUTIONS_CLIENT_SECRET (OAuth) o MOFFIN_SOLUTIONS_BEARER (accessToken de POST …/oauth/token), o define MOFFIN_SOLUTIONS_AUTH_SCHEME=token + MOFFIN_SOLUTIONS_API_KEY para el esquema Token (API key legacy en Solutions).",
+          "MOFFIN_SOLUTIONS_CLIENT_ID + MOFFIN_SOLUTIONS_CLIENT_SECRET (OAuth) o MOFFIN_SOLUTIONS_BEARER (accessToken de POST …/oauth/token), o define MOFFIN_SOLUTIONS_AUTH_SCHEME=token + MOFFIN_SOLUTIONS_API_KEY para el esquema Token (API key legacy en Solutions). Alternativa CSF/32D: SATGO_API_KEY.",
         );
       }
     }
     if (!ciecEncryptionSecretOk()) {
       missing.push("MOFFIN_SAT_CIEC_SECRET o MOFFIN_FIEL_SECRET (mínimo 32 caracteres; cifrado CIEC en moffin-sat-ciec)");
     }
-    if (!Deno.env.get("MOFFIN_SVIX_SIGNING_SECRET")?.trim()) {
+    if (!satgoOn && !Deno.env.get("MOFFIN_SVIX_SIGNING_SECRET")?.trim()) {
       warnings.push(
         "MOFFIN_SVIX_SIGNING_SECRET: opcional en Solutions. CSF y opinión 32D notifican con POST JSON directo (sin firma Svix); el whsec sólo sirve si aún recibís webhooks Svix firmados (cabeceras svix-*) desde otro producto.",
       );
     }
+    if (satgoOn) {
+      warnings.push(
+        "CSF/32D activos vía SATgo (api.sat-go.com). Lista 69-B y facturas CFDI siguen en Moffin si están configurados.",
+      );
+    }
     if (!moffinLegacyApiKey()) {
       warnings.push(
-        "Lista 69-B: falta MOFFIN_LEGACY_API_KEY o MOFFIN_API_KEY (Token API legacy). CSF y opinión 32D no lo requieren.",
+        "Lista 69-B: falta MOFFIN_LEGACY_API_KEY o MOFFIN_API_KEY (Token API legacy). CSF y opinión 32D no lo requieren con SATgo.",
       );
     }
   } else {
@@ -173,6 +185,9 @@ Deno.serve(async (req) => {
   const ok = missing.length === 0;
   const svixSigningSecretPresent = !!(Deno.env.get("MOFFIN_SVIX_SIGNING_SECRET")?.trim());
   const moffinWebhookFullUrl = `${supabaseUrl.replace(/\/$/, "")}/functions/v1/moffin-webhook`;
+  const satgoConfigured = isSatgoConfigured();
+  const satgoCsfActive = useSatgoForCsf32d();
+  const satgoHost = hostPreview(satgoBaseUrl());
 
   // 200 siempre para que supabase.functions.invoke entregue el JSON (incluso si faltan secretos).
   return new Response(
@@ -185,6 +200,9 @@ Deno.serve(async (req) => {
       legacyApiKeyConfigured: !!moffinLegacyApiKey(),
       solutionsAuthConfigured: flavor === "solutions" ? solutionsAuthConfigured() : null,
       solutionsAuthMode: flavor === "solutions" ? solutionsAuthMode() : null,
+      satgoConfigured,
+      satgoCsfActive,
+      satgoBaseHost: satgoHost || null,
       baseUrlHost,
       solutionsBaseHost,
       looksLikeSandbox,
@@ -193,7 +211,9 @@ Deno.serve(async (req) => {
       /** true si existe MOFFIN_SVIX_SIGNING_SECRET (opcional si sólo llegan POST directos Solutions). */
       svixSigningSecretPresent,
       hint: ok
-        ? "Credenciales mínimas para el modo configurado están presentes (no se muestran valores)."
+        ? satgoCsfActive
+          ? "CSF/32D vía SATgo; secretos mínimos presentes (no se muestran valores)."
+          : "Credenciales mínimas para el modo configurado están presentes (no se muestran valores)."
         : "Configura los secretos en Supabase → Edge Functions → Secrets.",
     }),
     { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
