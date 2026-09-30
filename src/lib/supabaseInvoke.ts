@@ -53,10 +53,20 @@ export function functionInvokeUserMessage(data: unknown, invokeError: unknown): 
         "del cliente (consultas SAT / SATgo)."
       );
     }
-    if (payload.error === "ciec_required") {
+    if (payload.error === "ciec_required" || payload.error === "sat_credentials_required") {
       return typeof payload.message === "string" && payload.message.trim()
         ? payload.message
-        : "Guarda la CIEC del cliente antes de ejecutar consultas CSF u opinión (SATgo).";
+        : "Sube la e.firma (.cer/.key + contraseña) del cliente o guarda la CIEC antes de CSF/32D (SATgo).";
+    }
+    if (payload.error === "fiel_password_required") {
+      return typeof payload.message === "string" && payload.message.trim()
+        ? payload.message
+        : "Indica la contraseña de la e.firma al guardar (se cifra a JWE para SATgo).";
+    }
+    if (payload.error === "satgo_jwe_encrypt_failed") {
+      return typeof payload.message === "string" && payload.message.trim()
+        ? payload.message
+        : "No se pudo cifrar la e.firma a JWE con la llave pública de SATgo.";
     }
     if (payload.error === "satgo_not_configured" || payload.error === "satgo_token_exchange_failed") {
       return typeof payload.message === "string" && payload.message.trim()

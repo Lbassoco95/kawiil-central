@@ -1,12 +1,17 @@
 /**
  * Descarga mensual CSF/32D vía SATgo (PDF síncrono).
+ * Preferencia e.firma JWE; fallback CIEC.
  * Auth: x-cron-secret = CRON_SECRET
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { decryptFielSecret } from "../_shared/moffinFielCrypto.ts";
+import { base64FileToBytes } from "../_shared/satgoFielJwe.ts";
+import { fetchSatgoPdfWithFielJwe } from "../_shared/satgoFielClient.ts";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-cron-secret",
 };
 
 type ConsultType = "constancia_situacion_fiscal" | "opinion_cumplimiento";
@@ -92,7 +97,7 @@ async function decryptCiec(cipherB64: string, secret: string): Promise<string> {
   return new TextDecoder().decode(await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, data));
 }
 
-async function fetchPdf(
+async function fetchPdfCiec(
   bearer: string,
   rfc: string,
   ciec: string,
@@ -132,6 +137,17 @@ function firstDayOfMonthIso(): string {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1)).toISOString();
 }
 
+type JobRow = {
+  organization_id: string;
+  client_id: string;
+  rfc: string;
+  authMode: "fiel_jwe" | "ciec";
+  cert_ciphertext?: string;
+  satgo_key_jwe?: string;
+  satgo_password_jwe?: string;
+  ciec_ciphertext?: string;
+};
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -150,34 +166,74 @@ Deno.serve(async (req) => {
   const bearer = await resolveBearer(admin);
   if (!bearer) return json({ error: "satgo_not_configured" }, 503);
 
+  const fielSecret = Deno.env.get("MOFFIN_FIEL_SECRET")?.trim() ?? "";
   const ciecSecret =
-    Deno.env.get("MOFFIN_SAT_CIEC_SECRET")?.trim() ||
-    Deno.env.get("MOFFIN_FIEL_SECRET")?.trim() ||
-    "";
-  if (ciecSecret.length < 32) return json({ error: "ciec_not_configured" }, 503);
+    Deno.env.get("MOFFIN_SAT_CIEC_SECRET")?.trim() || fielSecret || "";
 
-  const { data: ciecRows, error: ciecErr } = await admin
-    .from("moffin_client_sat_ciec")
-    .select("organization_id, client_id, ciec_ciphertext, clients(rfc)")
-    .not("ciec_ciphertext", "is", null);
-  if (ciecErr) return json({ error: ciecErr.message }, 500);
+  const jobs: JobRow[] = [];
+  const seen = new Set<string>();
+
+  const { data: fielRows } = await admin
+    .from("client_sat_certificates")
+    .select(
+      "organization_id, client_id, cert_ciphertext, satgo_key_jwe, satgo_password_jwe, clients(rfc)",
+    )
+    .eq("cert_type", "fiel")
+    .not("satgo_key_jwe", "is", null)
+    .not("satgo_password_jwe", "is", null);
+
+  for (const row of (fielRows ?? []) as Array<{
+    organization_id: string;
+    client_id: string;
+    cert_ciphertext: string;
+    satgo_key_jwe: string;
+    satgo_password_jwe: string;
+    clients: { rfc: string | null } | null;
+  }>) {
+    const rfc = row.clients?.rfc?.trim().toUpperCase().replace(/\s/g, "") ?? "";
+    if (!rfc || seen.has(row.client_id)) continue;
+    seen.add(row.client_id);
+    jobs.push({
+      organization_id: row.organization_id,
+      client_id: row.client_id,
+      rfc,
+      authMode: "fiel_jwe",
+      cert_ciphertext: row.cert_ciphertext,
+      satgo_key_jwe: row.satgo_key_jwe,
+      satgo_password_jwe: row.satgo_password_jwe,
+    });
+  }
+
+  if (ciecSecret.length >= 32) {
+    const { data: ciecRows } = await admin
+      .from("moffin_client_sat_ciec")
+      .select("organization_id, client_id, ciec_ciphertext, clients(rfc)")
+      .not("ciec_ciphertext", "is", null);
+    for (const row of (ciecRows ?? []) as Array<{
+      organization_id: string;
+      client_id: string;
+      ciec_ciphertext: string;
+      clients: { rfc: string | null } | null;
+    }>) {
+      const rfc = row.clients?.rfc?.trim().toUpperCase().replace(/\s/g, "") ?? "";
+      if (!rfc || seen.has(row.client_id)) continue;
+      seen.add(row.client_id);
+      jobs.push({
+        organization_id: row.organization_id,
+        client_id: row.client_id,
+        rfc,
+        authMode: "ciec",
+        ciec_ciphertext: row.ciec_ciphertext,
+      });
+    }
+  }
 
   const monthStart = firstDayOfMonthIso();
   const results: Array<Record<string, unknown>> = [];
   let done = 0;
 
-  for (const row of (ciecRows ?? []) as Array<{
-    organization_id: string;
-    client_id: string;
-    ciec_ciphertext: string;
-    clients: { rfc: string | null } | null;
-  }>) {
+  for (const row of jobs) {
     if (done >= MAX) break;
-    const rfc = row.clients?.rfc?.trim().toUpperCase().replace(/\s/g, "") ?? "";
-    if (!rfc) {
-      results.push({ clientId: row.client_id, skipped: "sin_rfc" });
-      continue;
-    }
     const { data: proj } = await admin
       .from("projects")
       .select("id")
@@ -186,18 +242,6 @@ Deno.serve(async (req) => {
       .maybeSingle();
     if (!proj?.id) {
       results.push({ clientId: row.client_id, skipped: "sin_proyecto" });
-      continue;
-    }
-
-    let ciecPlain: string;
-    try {
-      ciecPlain = await decryptCiec(row.ciec_ciphertext, ciecSecret);
-    } catch (e) {
-      results.push({
-        clientId: row.client_id,
-        status: "error",
-        message: e instanceof Error ? e.message : String(e),
-      });
       continue;
     }
 
@@ -216,19 +260,74 @@ Deno.serve(async (req) => {
       }
 
       const kind = consultType === "constancia_situacion_fiscal" ? "csf" : "oc";
-      const serviceName = kind === "csf" ? "satgo-csf" : "satgo-oc";
-      const pdfRes = await fetchPdf(bearer, rfc, ciecPlain, kind);
+      const serviceName =
+        row.authMode === "fiel_jwe"
+          ? kind === "csf"
+            ? "satgo-csffiel"
+            : "satgo-ocfiel"
+          : kind === "csf"
+            ? "satgo-csf"
+            : "satgo-oc";
+
+      let pdfRes:
+        | { ok: true; buf: Uint8Array }
+        | { ok: false; message: string; status?: number; httpStatus?: number };
+
+      if (row.authMode === "fiel_jwe") {
+        if (fielSecret.length < 32) {
+          results.push({ clientId: row.client_id, status: "error", message: "fiel_not_configured" });
+          continue;
+        }
+        try {
+          const certB64 = await decryptFielSecret(row.cert_ciphertext!, fielSecret);
+          pdfRes = await fetchSatgoPdfWithFielJwe({
+            bearer,
+            rfc: row.rfc,
+            kind,
+            certBytes: base64FileToBytes(certB64),
+            keyJwe: row.satgo_key_jwe!,
+            passwordJwe: row.satgo_password_jwe!,
+          });
+          if (!pdfRes.ok) {
+            pdfRes = { ok: false, message: pdfRes.message, status: pdfRes.httpStatus };
+          }
+        } catch (e) {
+          pdfRes = {
+            ok: false,
+            message: e instanceof Error ? e.message : String(e),
+            status: 500,
+          };
+        }
+      } else {
+        try {
+          const ciecPlain = await decryptCiec(row.ciec_ciphertext!, ciecSecret);
+          pdfRes = await fetchPdfCiec(bearer, row.rfc, ciecPlain, kind);
+        } catch (e) {
+          pdfRes = {
+            ok: false,
+            message: e instanceof Error ? e.message : String(e),
+            status: 500,
+          };
+        }
+      }
+
       if (!pdfRes.ok) {
         await admin.from("moffin_consults").insert({
           organization_id: row.organization_id,
           project_id: proj.id,
           client_id: row.client_id,
-          rfc,
+          rfc: row.rfc,
           consult_type: consultType,
           moffin_service: serviceName,
           status: "error",
-          error_message: `Origen: satgo-monthly. ${pdfRes.message}`.slice(0, 500),
-          raw_response: { provider: "satgo", kind, _auto: true, message: pdfRes.message },
+          error_message: `Origen: satgo-monthly (${row.authMode}). ${pdfRes.message}`.slice(0, 500),
+          raw_response: {
+            provider: "satgo",
+            kind,
+            authMode: row.authMode,
+            _auto: true,
+            message: pdfRes.message,
+          },
           requested_by: null,
         });
         results.push({ clientId: row.client_id, consultType, status: "error" });
@@ -269,15 +368,21 @@ Deno.serve(async (req) => {
         organization_id: row.organization_id,
         project_id: proj.id,
         client_id: row.client_id,
-        rfc,
+        rfc: row.rfc,
         consult_type: consultType,
         moffin_service: serviceName,
         status: documentId ? "success" : "error",
         error_message: documentId ? null : `Storage: ${upErr?.message ?? "fail"}`.slice(0, 500),
         summary: documentId
-          ? `Descarga mensual SATgo · PDF (${pdfRes.buf.length} bytes)`
+          ? `Descarga mensual SATgo · PDF (${pdfRes.buf.length} bytes · ${row.authMode})`
           : "Descarga mensual SATgo · error PDF",
-        raw_response: { provider: "satgo", kind, pdfBytes: pdfRes.buf.length, _auto: true },
+        raw_response: {
+          provider: "satgo",
+          kind,
+          authMode: row.authMode,
+          pdfBytes: pdfRes.buf.length,
+          _auto: true,
+        },
         document_id: documentId,
         requested_by: null,
       });
@@ -286,6 +391,7 @@ Deno.serve(async (req) => {
         consultType,
         status: documentId ? "success" : "error",
         documentId,
+        authMode: row.authMode,
       });
       done += 1;
     }
@@ -295,7 +401,7 @@ Deno.serve(async (req) => {
     source: "cron-monthly",
     provider: "satgo",
     triggered: done,
-    clientsWithCiec: ciecRows?.length ?? 0,
+    jobsQueued: jobs.length,
     results,
   });
 });

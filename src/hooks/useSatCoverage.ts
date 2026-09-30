@@ -3,11 +3,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
 /**
- * Cobertura SAT (Moffin) para el dashboard de Conocimiento.
+ * Cobertura SAT (SATgo) para el dashboard de Conocimiento.
  *
- * "Con acceso a CSF/32D" = cliente activo con al menos un proyecto de contabilidad
- * o softlanding no cancelado (la descarga mensual automática cubre justo a esos).
- * Por mes se marca si la CSF y la opinión 32D quedaron en `success`.
+ * "Con acceso a CSF/32D" = cliente activo con proyecto contabilidad/softlanding.
+ * Credencial lista = e.firma con JWE SATgo (satgo_key_jwe + satgo_password_jwe).
  */
 
 export type SatDoc = { filePath: string; name: string | null };
@@ -18,6 +17,7 @@ export type SatCoverageClient = {
   projectId: string | null;
   responsibleUserId: string | null;
   responsibleName: string | null;
+  /** e.firma con JWE listo para SATgo (antes: CIEC). */
   hasCiec: boolean;
   csfDownloaded: boolean;
   opinionDownloaded: boolean;
@@ -40,7 +40,6 @@ export type SatCoverageData = {
 const SAT_PROJECT_AREAS = ["contabilidad", "softlanding"];
 
 function monthRangeIso(year: number, month0: number): { start: string; end: string } {
-  // month0: 0-11. Rango [primer día del mes, primer día del mes siguiente).
   const start = new Date(Date.UTC(year, month0, 1)).toISOString();
   const end = new Date(Date.UTC(year, month0 + 1, 1)).toISOString();
   return { start, end };
@@ -54,10 +53,13 @@ export function useSatCoverage(year: number, month0: number) {
     queryFn: async () => {
       const { start, end } = monthRangeIso(year, month0);
 
-      const [clientsRes, projectsRes, ciecRes, consultsRes, profilesRes] = await Promise.all([
+      const [clientsRes, projectsRes, fielRes, consultsRes, profilesRes] = await Promise.all([
         supabase.from("clients").select("id, name, responsible_user_id").eq("status", "activo"),
         supabase.from("projects").select("id, client_id, area, status"),
-        supabase.from("moffin_client_sat_ciec").select("client_id, ciec_ciphertext"),
+        supabase
+          .from("client_sat_certificates")
+          .select("client_id, satgo_key_jwe, satgo_password_jwe")
+          .eq("cert_type", "fiel"),
         supabase
           .from("moffin_consults")
           .select("client_id, consult_type, status, created_at, documents(file_path, name)")
@@ -71,11 +73,10 @@ export function useSatCoverage(year: number, month0: number) {
 
       if (clientsRes.error) throw clientsRes.error;
       if (projectsRes.error) throw projectsRes.error;
-      if (ciecRes.error) throw ciecRes.error;
+      if (fielRes.error) throw fielRes.error;
       if (consultsRes.error) throw consultsRes.error;
       if (profilesRes.error) throw profilesRes.error;
 
-      // Clientes con proyecto de contabilidad/softlanding no cancelado → con acceso a SAT.
       const accessClientIds = new Set<string>();
       const projectIdByClient = new Map<string, string>();
       for (const p of projectsRes.data ?? []) {
@@ -85,16 +86,19 @@ export function useSatCoverage(year: number, month0: number) {
         const projectId = (p as { id: string }).id;
         if (clientId && SAT_PROJECT_AREAS.includes(area) && status !== "cancelado") {
           accessClientIds.add(clientId);
-          // Prioriza un proyecto de contabilidad como representativo para disparar consultas.
           if (!projectIdByClient.has(clientId) || area === "contabilidad") {
             projectIdByClient.set(clientId, projectId);
           }
         }
       }
 
-      const ciecClientIds = new Set(
-        (ciecRes.data ?? [])
-          .filter((r) => !!(r as { ciec_ciphertext: string | null }).ciec_ciphertext)
+      const fielReadyIds = new Set(
+        (fielRes.data ?? [])
+          .filter(
+            (r) =>
+              !!(r as { satgo_key_jwe: string | null }).satgo_key_jwe?.trim() &&
+              !!(r as { satgo_password_jwe: string | null }).satgo_password_jwe?.trim(),
+          )
           .map((r) => (r as { client_id: string }).client_id),
       );
 
@@ -108,7 +112,6 @@ export function useSatCoverage(year: number, month0: number) {
         const fp = (rec as { file_path?: string } | null)?.file_path;
         return fp ? { filePath: fp, name: (rec as { name?: string | null }).name ?? null } : null;
       };
-      // Ordenado por created_at desc → el primero por cliente+tipo es el más reciente.
       for (const c of consultsRes.data ?? []) {
         const clientId = (c as { client_id: string | null }).client_id;
         const type = (c as { consult_type: string }).consult_type;
@@ -141,7 +144,7 @@ export function useSatCoverage(year: number, month0: number) {
             projectId: projectIdByClient.get(clientId) ?? null,
             responsibleUserId,
             responsibleName: responsibleUserId ? profileName.get(responsibleUserId) ?? null : null,
-            hasCiec: ciecClientIds.has(clientId),
+            hasCiec: fielReadyIds.has(clientId),
             csfDownloaded: csfClientIds.has(clientId),
             opinionDownloaded: opinionClientIds.has(clientId),
             csfDoc: csfDocByClient.get(clientId) ?? null,

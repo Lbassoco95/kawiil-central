@@ -462,9 +462,9 @@ export function ClientEditDialog({ open, onOpenChange, client }: ClientEditDialo
               ) : null}
 
               <div className="md:col-span-2 rounded-md border border-border/60 p-4 space-y-4 bg-muted/10">
-                <p className="text-sm font-medium text-foreground">SAT — 69-B y RFC (Moffin)</p>
+                <p className="text-sm font-medium text-foreground">SAT — e.firma y consultas</p>
                 <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  Las consultas Moffin (69-B y RFC) se lanzan desde el proyecto de Contabilidad. Aquí solo registramos si la
+                  CSF y 32D se lanzan desde Contabilidad con la e.firma (SATgo). Aquí solo registramos si la
                   e.firma la tiene el despacho y una referencia interna (carpeta). No guardes contraseñas ni contenido de
                   llaves.
                 </p>

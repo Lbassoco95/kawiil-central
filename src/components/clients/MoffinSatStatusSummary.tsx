@@ -59,7 +59,7 @@ interface Props {
 
 export function MoffinSatStatusSummary({
   clientId,
-  title = "SAT (Moffin)",
+  title = "SAT (SATgo)",
   className,
   client,
   projects,
@@ -81,12 +81,16 @@ export function MoffinSatStatusSummary({
   const [syncBusy, setSyncBusy] = useState(false);
   const byType = pickLatestMoffinByType(rows);
 
-  const hasPendingSyncable = useMemo(() => rows.some((r) => moffinConsultNeedsApiSync(r)), [rows]);
+  const hasPendingSyncable = useMemo(
+    () => rows.some((r) => r.consult_type === "lista_69b" && moffinConsultNeedsApiSync(r)),
+    [rows],
+  );
 
   const stalePending = useMemo(
     () =>
       rows.some(
         (r) =>
+          r.consult_type === "lista_69b" &&
           r.status === "pending" &&
           r.moffin_query_id &&
           r.created_at &&
@@ -141,11 +145,11 @@ export function MoffinSatStatusSummary({
   }, [clientId, queryClient, user]);
   const r69 = lista69bHeadline(byType.get("lista_69b"));
   const constancia = certConsultLine(
-    "RFC · constancia (Moffin)",
+    "CSF · constancia (SATgo)",
     byType.get("constancia_situacion_fiscal")
   );
   const opinion = certConsultLine(
-    "RFC · opinión (Moffin)",
+    "32D · opinión (SATgo)",
     byType.get("opinion_cumplimiento")
   );
 
@@ -154,6 +158,7 @@ export function MoffinSatStatusSummary({
       ? format(new Date(iso), "dd MMM yyyy HH:mm", { locale: es })
       : "—";
 
+  // Solo 69-B sigue siendo asíncrono; CSF/32D con SATgo son PDF inmediato.
   return (
     <section className={cn("rounded-xl border border-border/60 bg-card/40 p-5 shadow-sm", className)}>
       <h2 className="text-sm font-medium text-muted-foreground mb-1 flex items-center gap-1.5">
@@ -161,20 +166,15 @@ export function MoffinSatStatusSummary({
         {title}
       </h2>
       <p className="text-[10px] text-muted-foreground leading-snug mb-3">
-        Constancia y opinión vía Moffin: si la API sigue devolviendo el mensaje de cola (p. ej. “Service query fetched
-        successfully”), el estado en Kawiil es <strong className="font-medium text-foreground/80">pendiente</strong> y
-        aún no hay PDF. Cuando Moffin termine de verde, el estado pasa a éxito y, si tu plan lo incluye, se sube el PDF.
-        Para actualizaciones automáticas hace falta que el webhook de Moffin (Svix) entregue el resultado; sin eso, usa
-        sincronizar cuando ya haya resultado listo. Si el producto no entrega PDF, obtén el documento por otro medio
-        (SAT u otro proveedor).
+        Constancia (CSF) y opinión 32D se descargan con la <strong className="font-medium text-foreground/80">e.firma</strong> del
+        cliente vía <strong className="font-medium text-foreground/80">SATgo</strong> (PDF al momento). Sube .cer, .key y
+        contraseña en Certificados SAT. Lista 69-B sigue aparte.
       </p>
       {!isLoading && hasPendingSyncable ? (
         <div className="flex flex-wrap items-center gap-2 mb-3">
           {stalePending ? (
             <p className="text-[11px] text-amber-900 dark:text-amber-100 rounded-md border border-amber-500/35 bg-amber-500/10 px-2 py-1.5 flex-1 min-w-[220px] leading-snug">
-              Llevan varios minutos en pendiente (cola Moffin). Confirma el webhook (Svix) para que llegue el estado
-              final; si no, pulsa el botón para leer la API cuando el resultado ya esté listo (hasta entonces seguirá
-              pendiente y sin PDF).
+              La lista 69-B lleva varios minutos en pendiente. Puedes sincronizar cuando el resultado ya esté listo.
             </p>
           ) : null}
           <Button
@@ -190,7 +190,7 @@ export function MoffinSatStatusSummary({
             ) : (
               <RefreshCw className="h-3.5 w-3.5" />
             )}
-            Sincronizar con Moffin
+            Sincronizar 69-B
           </Button>
         </div>
       ) : null}
@@ -219,7 +219,7 @@ export function MoffinSatStatusSummary({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2 mb-0.5">
-                  <span className="text-muted-foreground text-xs font-medium">RFC · opinión</span>
+                  <span className="text-muted-foreground text-xs font-medium">Opinión 32D (SATgo)</span>
                   <Badge
                     variant="outline"
                     className={toneClass[opinion.tone] ?? toneClass.muted}
@@ -249,7 +249,7 @@ export function MoffinSatStatusSummary({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2 mb-0.5">
-                  <span className="text-muted-foreground text-xs font-medium">RFC · constancia</span>
+                  <span className="text-muted-foreground text-xs font-medium">Constancia CSF (SATgo)</span>
                   <Badge
                     variant="outline"
                     className={toneClass[constancia.tone] ?? toneClass.muted}
