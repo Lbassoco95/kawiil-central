@@ -305,57 +305,108 @@ export function ClientSatgoPanel({
           )}
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          {SATGO_CONSULT_TYPES.map((key) => {
-            const meta = SATGO_CONSULT_META[key];
-            const Icon = meta.icon;
-            const disabled =
-              !!busy ||
-              !effectiveProjectId ||
-              (meta.needsFiel && !satgoReady);
-            return (
-              <Button
-                key={key}
-                type="button"
-                variant="outline"
-                size="sm"
-                className="gap-1.5"
-                disabled={disabled}
-                title={
-                  !effectiveProjectId
-                    ? "Falta proyecto contable"
-                    : meta.needsFiel && !satgoReady
-                      ? "Sube la e.firma primero"
-                      : meta.label
-                }
-                onClick={() => void runConsult(key)}
-              >
-                {busy === key ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Icon className="h-3.5 w-3.5" />
-                )}
-                {meta.short}
-              </Button>
-            );
-          })}
-          {hasPendingSync ? (
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              className="gap-1.5"
-              disabled={syncBusy}
-              onClick={() => void sync69b()}
-            >
-              {syncBusy ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <RefreshCw className="h-3.5 w-3.5" />
+        <div className="space-y-2.5">
+          <div>
+            <p className="text-[10px] font-medium text-muted-foreground mb-1.5">
+              Documentos / listas
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {(["lista_69b", "constancia_situacion_fiscal", "opinion_cumplimiento"] as SatgoConsultType[]).map(
+                (key) => {
+                  const meta = SATGO_CONSULT_META[key];
+                  const Icon = meta.icon;
+                  const disabled =
+                    !!busy ||
+                    !effectiveProjectId ||
+                    (meta.needsFiel && !satgoReady);
+                  return (
+                    <Button
+                      key={key}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5"
+                      disabled={disabled}
+                      title={
+                        !effectiveProjectId
+                          ? "Falta proyecto contable"
+                          : meta.needsFiel && !satgoReady
+                            ? "Sube la e.firma primero"
+                            : meta.label
+                      }
+                      onClick={() => void runConsult(key)}
+                    >
+                      {busy === key ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Icon className="h-3.5 w-3.5" />
+                      )}
+                      {meta.short}
+                    </Button>
+                  );
+                },
               )}
-              Sincronizar 69-B
-            </Button>
-          ) : null}
+              {hasPendingSync ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="gap-1.5"
+                  disabled={syncBusy}
+                  onClick={() => void sync69b()}
+                >
+                  {syncBusy ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-3.5 w-3.5" />
+                  )}
+                  Sincronizar 69-B
+                </Button>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="rounded-md border border-border/60 bg-muted/15 p-2.5 space-y-1.5">
+            <p className="text-[10px] font-medium text-foreground">
+              Buzón tributario
+            </p>
+            <p className="text-[10px] text-muted-foreground leading-snug">
+              Comunicados y notificaciones del portal SAT (misma e.firma JWE). El resultado queda
+              en el historial del cliente, igual para todos.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {(["buzon_comunicados", "buzon_notificaciones"] as SatgoConsultType[]).map((key) => {
+                const meta = SATGO_CONSULT_META[key];
+                const Icon = meta.icon;
+                const disabled = !!busy || !effectiveProjectId || !satgoReady;
+                return (
+                  <Button
+                    key={key}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                    disabled={disabled}
+                    title={
+                      !effectiveProjectId
+                        ? "Falta proyecto contable"
+                        : !satgoReady
+                          ? "Sube la e.firma primero"
+                          : meta.label
+                    }
+                    onClick={() => void runConsult(key)}
+                  >
+                    {busy === key ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Icon className="h-3.5 w-3.5" />
+                    )}
+                    {meta.short}
+                  </Button>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -367,54 +418,103 @@ export function ClientSatgoPanel({
             <Loader2 className="h-3.5 w-3.5 animate-spin" /> Cargando consultas…
           </p>
         ) : (
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-            {SATGO_CONSULT_TYPES.map((key) => {
-              const row = byType.get(key);
-              const meta = SATGO_CONSULT_META[key];
-              const st = statusDot(row?.status);
-              const doc = row?.documents as
-                | { file_path?: string | null; name?: string | null }
-                | null
-                | undefined;
-              const isErr = row?.status === "fail" || row?.status === "error";
-              const isOk = row?.status === "success";
-              return (
-                <div
-                  key={key}
-                  className="rounded-md border border-border/60 bg-background/40 p-2.5 space-y-1.5"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-semibold text-foreground">{meta.short}</span>
-                    <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                      <span className={`h-1.5 w-1.5 rounded-full ${st.className}`} />
-                      {st.label}
-                    </span>
+          <div className="space-y-2">
+            <p className="text-[10px] font-medium text-muted-foreground">Documentos / listas</p>
+            <div className="grid gap-2 sm:grid-cols-3">
+              {(["lista_69b", "constancia_situacion_fiscal", "opinion_cumplimiento"] as SatgoConsultType[]).map(
+                (key) => {
+                  const row = byType.get(key);
+                  const meta = SATGO_CONSULT_META[key];
+                  const st = statusDot(row?.status);
+                  const doc = row?.documents as
+                    | { file_path?: string | null; name?: string | null }
+                    | null
+                    | undefined;
+                  const isErr = row?.status === "fail" || row?.status === "error";
+                  const isOk = row?.status === "success";
+                  return (
+                    <div
+                      key={key}
+                      className="rounded-md border border-border/60 bg-background/40 p-2.5 space-y-1.5"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-semibold text-foreground">{meta.short}</span>
+                        <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                          <span className={`h-1.5 w-1.5 rounded-full ${st.className}`} />
+                          {st.label}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">
+                        {row?.created_at ? fmtDate(row.created_at) : "Aún sin consultar"}
+                      </p>
+                      {isOk && row?.summary ? (
+                        <p
+                          className="text-[10px] text-muted-foreground leading-tight line-clamp-3"
+                          title={row.summary}
+                        >
+                          {row.summary}
+                        </p>
+                      ) : null}
+                      {isErr && row?.error_message ? (
+                        <p
+                          className="text-[10px] text-destructive leading-tight line-clamp-2"
+                          title={row.error_message}
+                        >
+                          {row.error_message}
+                        </p>
+                      ) : null}
+                      {doc?.file_path ? (
+                        <MoffinPdfActions filePath={doc.file_path} fileName={doc.name} />
+                      ) : null}
+                    </div>
+                  );
+                },
+              )}
+            </div>
+
+            <p className="text-[10px] font-medium text-muted-foreground pt-1">Buzón tributario</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {(["buzon_comunicados", "buzon_notificaciones"] as SatgoConsultType[]).map((key) => {
+                const row = byType.get(key);
+                const meta = SATGO_CONSULT_META[key];
+                const st = statusDot(row?.status);
+                const isErr = row?.status === "fail" || row?.status === "error";
+                const isOk = row?.status === "success";
+                return (
+                  <div
+                    key={key}
+                    className="rounded-md border border-border/60 bg-background/40 p-2.5 space-y-1.5"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-foreground">{meta.short}</span>
+                      <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                        <span className={`h-1.5 w-1.5 rounded-full ${st.className}`} />
+                        {st.label}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      {row?.created_at ? fmtDate(row.created_at) : "Aún sin consultar"}
+                    </p>
+                    {isOk && row?.summary ? (
+                      <p
+                        className="text-[10px] text-muted-foreground leading-tight line-clamp-3"
+                        title={row.summary}
+                      >
+                        {row.summary}
+                      </p>
+                    ) : null}
+                    {isErr && row?.error_message ? (
+                      <p
+                        className="text-[10px] text-destructive leading-tight line-clamp-2"
+                        title={row.error_message}
+                      >
+                        {row.error_message}
+                      </p>
+                    ) : null}
                   </div>
-                  <p className="text-[10px] text-muted-foreground">
-                    {row?.created_at ? fmtDate(row.created_at) : "Aún sin consultar"}
-                  </p>
-                  {isOk && row?.summary ? (
-                    <p
-                      className="text-[10px] text-muted-foreground leading-tight line-clamp-3"
-                      title={row.summary}
-                    >
-                      {row.summary}
-                    </p>
-                  ) : null}
-                  {isErr && row?.error_message ? (
-                    <p
-                      className="text-[10px] text-destructive leading-tight line-clamp-2"
-                      title={row.error_message}
-                    >
-                      {row.error_message}
-                    </p>
-                  ) : null}
-                  {doc?.file_path ? (
-                    <MoffinPdfActions filePath={doc.file_path} fileName={doc.name} />
-                  ) : null}
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         )}
       </div>
