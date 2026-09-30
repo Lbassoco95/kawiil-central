@@ -40,3 +40,12 @@ deno.lock
 .env.*.local
 .vercel
 .tmp-deploy/
+.cursor-deploy*
+.cursor-mcp*
+.cursor-monthly*
+.cursor-invoke*
+.deploy-moffin*
+.final_health*
+.tmp-moffin*
+.tmp_health*
+tmp_deploy/
