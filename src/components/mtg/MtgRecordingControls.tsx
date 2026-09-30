@@ -1,10 +1,12 @@
 /**
  * Guardar grabación de la junta: audio, pantalla+audio, o subir archivo.
  * Tras guardar, puede pedir transcripción OpenAI (multiidioma → español).
+ * Muestra barra de progreso de la revisión (subida → transcripción).
  */
 
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import {
   Loader2,
   Mic,
@@ -13,8 +15,10 @@ import {
   Upload,
   CheckCircle2,
   Sparkles,
+  AlertCircle,
 } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import type { MtgMeetingRow, MtgSeriesRow } from "@/lib/mtg/db";
 import {
   canUploadRecording,
@@ -23,6 +27,46 @@ import {
 import { requestRecordingTranscription } from "@/lib/mtg/requestRecordingTranscription";
 
 type CaptureMode = "audio" | "av";
+
+/** Fases visibles de la revisión post-audio (independiente del status «En curso» de la junta). */
+type ReviewPhase =
+  | "idle"
+  | "recording"
+  | "uploading"
+  | "transcribing"
+  | "done"
+  | "error";
+
+const PHASE_META: Record<
+  Exclude<ReviewPhase, "idle">,
+  { label: string; detail: string; value: number }
+> = {
+  recording: {
+    label: "Grabando",
+    detail: "La junta sigue «En curso» hasta que pulses Terminar junta.",
+    value: 12,
+  },
+  uploading: {
+    label: "Subiendo grabación",
+    detail: "Audio detenido. Guardando el archivo en la junta…",
+    value: 40,
+  },
+  transcribing: {
+    label: "Transcribiendo con IA",
+    detail: "Revisando el audio (multiidioma → español). Esto puede tardar un minuto…",
+    value: 72,
+  },
+  done: {
+    label: "Revisión de audio lista",
+    detail: "Transcripción guardada. La junta sigue «En curso» hasta Terminar junta.",
+    value: 100,
+  },
+  error: {
+    label: "No se pudo completar la revisión",
+    detail: "Puedes reintentar «Transcribir IA» o subir un .vtt/.txt manualmente.",
+    value: 100,
+  },
+};
 
 async function buildCaptureStream(mode: CaptureMode): Promise<{
   stream: MediaStream;
@@ -65,7 +109,6 @@ async function buildCaptureStream(mode: CaptureMode): Promise<{
     });
   };
 
-  // Mezcla audio de pestaña + micrófono cuando ambos existen.
   const hasDisplayAudio = display.getAudioTracks().length > 0;
   const hasMic = !!mic && mic.getAudioTracks().length > 0;
   let outAudio: MediaStreamTrack[] = [];
@@ -96,6 +139,12 @@ async function buildCaptureStream(mode: CaptureMode): Promise<{
   };
 }
 
+function formatElapsed(sec: number): string {
+  const mm = String(Math.floor(sec / 60)).padStart(2, "0");
+  const ss = String(sec % 60).padStart(2, "0");
+  return `${mm}:${ss}`;
+}
+
 export function MtgRecordingControls(props: {
   organizationId: string;
   actorUserId: string;
@@ -110,17 +159,28 @@ export function MtgRecordingControls(props: {
   const mediaRef = useRef<MediaRecorder | null>(null);
   const stopExtrasRef = useRef<(() => void) | null>(null);
   const chunksRef = useRef<Blob[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [transcribing, setTranscribing] = useState(false);
-  const [recording, setRecording] = useState(false);
+  const [phase, setPhase] = useState<ReviewPhase>("idle");
+  const [phaseError, setPhaseError] = useState<string | null>(null);
   const [elapsedSec, setElapsedSec] = useState(0);
+  const [pulse, setPulse] = useState(0);
   const autoTranscribe = props.autoTranscribe !== false;
+
+  const recording = phase === "recording";
+  const processing = phase === "uploading" || phase === "transcribing";
+  const showPanel = phase !== "idle";
 
   useEffect(() => {
     if (!recording) return;
     const t = window.setInterval(() => setElapsedSec((s) => s + 1), 1000);
     return () => window.clearInterval(t);
   }, [recording]);
+
+  // Barra “viva” mientras sube/transcribe (sin % real del servidor).
+  useEffect(() => {
+    if (!processing) return;
+    const t = window.setInterval(() => setPulse((p) => p + 1), 800);
+    return () => window.clearInterval(t);
+  }, [processing]);
 
   useEffect(() => {
     return () => {
@@ -138,9 +198,25 @@ export function MtgRecordingControls(props: {
 
   if (!canUploadRecording(props.meeting.status)) return null;
 
+  const progressValue = (() => {
+    if (phase === "idle") return 0;
+    const base = PHASE_META[phase].value;
+    if (phase === "recording") {
+      return Math.min(28, 8 + Math.min(elapsedSec, 40) * 0.5);
+    }
+    if (phase === "uploading") {
+      return Math.min(55, base + (pulse % 8) * 1.5);
+    }
+    if (phase === "transcribing") {
+      return Math.min(94, base + (pulse % 12) * 1.8);
+    }
+    return base;
+  })();
+
   const runTranscription = async () => {
-    if (!autoTranscribe) return;
-    setTranscribing(true);
+    setPhase("transcribing");
+    setPhaseError(null);
+    setPulse(0);
     try {
       const res = await requestRecordingTranscription(props.meeting.id);
       const lang = res.language_detected ? ` (${res.language_detected})` : "";
@@ -149,16 +225,16 @@ export function MtgRecordingControls(props: {
           ? `Transcripción lista en español${lang}`
           : `Transcripción lista${lang}`,
       );
+      setPhase("done");
       props.onDone?.();
     } catch (e) {
-      toast.error(
+      const msg =
         e instanceof Error
           ? e.message
-          : "No se pudo transcribir. Puedes subir un .vtt/.txt manualmente.",
-        { duration: 10000 },
-      );
-    } finally {
-      setTranscribing(false);
+          : "No se pudo transcribir. Puedes subir un .vtt/.txt manualmente.";
+      setPhase("error");
+      setPhaseError(msg);
+      toast.error(msg, { duration: 10000 });
     }
   };
 
@@ -167,7 +243,9 @@ export function MtgRecordingControls(props: {
     fileName: string | undefined,
     origin: "manual_upload" | "browser_recorder",
   ) => {
-    setBusy(true);
+    setPhase("uploading");
+    setPhaseError(null);
+    setPulse(0);
     try {
       await uploadMeetingRecording({
         organizationId: props.organizationId,
@@ -184,11 +262,17 @@ export function MtgRecordingControls(props: {
           : "Grabación guardada en la junta",
       );
       props.onDone?.();
-      if (autoTranscribe) await runTranscription();
+      if (autoTranscribe) {
+        await runTranscription();
+      } else {
+        setPhase("done");
+      }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Error al guardar grabación");
+      const msg = e instanceof Error ? e.message : "Error al guardar grabación";
+      setPhase("error");
+      setPhaseError(msg);
+      toast.error(msg);
     } finally {
-      setBusy(false);
       if (inputRef.current) inputRef.current.value = "";
     }
   };
@@ -229,13 +313,13 @@ export function MtgRecordingControls(props: {
         const ext = type.includes("mp4") ? "mp4" : "webm";
         const name =
           preferVideo ? `grabacion-junta-av.${ext}` : `grabacion-junta.${ext}`;
+        // Fase uploading de inmediato (antes del await) para no volver a «idle».
+        setPhase("uploading");
+        setElapsedSec(0);
         void saveBlob(blob, name, "browser_recorder");
         mediaRef.current = null;
-        setRecording(false);
-        setElapsedSec(0);
       };
 
-      // Si el usuario deja de compartir pantalla, detener.
       stream.getVideoTracks().forEach((t) => {
         t.addEventListener("ended", () => {
           if (mediaRef.current && mediaRef.current.state !== "inactive") {
@@ -247,13 +331,15 @@ export function MtgRecordingControls(props: {
       mediaRef.current = recorder;
       recorder.start(1000);
       setElapsedSec(0);
-      setRecording(true);
+      setPhase("recording");
+      setPhaseError(null);
       if (mode === "av") {
         toast.message("Grabando pantalla + audio. Detén al terminar la junta.");
       }
     } catch (e) {
       stopExtrasRef.current?.();
       stopExtrasRef.current = null;
+      setPhase("idle");
       toast.error(
         e instanceof Error ? e.message : "No se pudo iniciar la grabación",
       );
@@ -263,109 +349,203 @@ export function MtgRecordingControls(props: {
   const stopRecording = () => {
     const rec = mediaRef.current;
     if (!rec || rec.state === "inactive") return;
+    // Feedback inmediato al pulsar Detener (antes de onstop/upload).
+    setPhase("uploading");
     rec.stop();
   };
 
-  const mm = String(Math.floor(elapsedSec / 60)).padStart(2, "0");
-  const ss = String(elapsedSec % 60).padStart(2, "0");
   const size = props.size ?? "sm";
-  const disabled = busy || transcribing;
+  const disabled = processing || recording;
+  const meta = phase !== "idle" ? PHASE_META[phase] : null;
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <input
-        ref={inputRef}
-        type="file"
-        accept="audio/*,video/*,.webm,.mp3,.m4a,.wav,.ogg,.mp4,.mov"
-        className="hidden"
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) void saveBlob(f, f.name, "manual_upload");
-        }}
-      />
-      {props.meeting.recording_path && !recording && (
-        <span className="inline-flex items-center gap-1 text-[11px] text-emerald-700 dark:text-emerald-400">
-          <CheckCircle2 className="h-3.5 w-3.5" />
-          Grabación guardada
-        </span>
-      )}
-      {props.meeting.transcript_status === "received" && (
-        <span className="inline-flex items-center gap-1 text-[11px] text-emerald-700 dark:text-emerald-400">
-          <Sparkles className="h-3.5 w-3.5" />
-          Transcripción lista
-        </span>
-      )}
-      {recording ? (
-        <Button
-          type="button"
-          size={size}
-          variant="destructive"
-          disabled={disabled}
-          onClick={stopRecording}
-        >
-          <Square className="h-3.5 w-3.5 mr-1" />
-          Detener {mm}:{ss}
-        </Button>
-      ) : (
-        <>
-          <Button
-            type="button"
-            size={size}
-            variant="outline"
-            disabled={disabled}
-            onClick={() => void startRecording("audio")}
-            title="Solo micrófono (mejor para Whisper ≤24 MB)"
-          >
-            {busy ? (
-              <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-            ) : (
-              <Mic className="h-3.5 w-3.5 mr-1" />
-            )}
-            Grabar audio
-          </Button>
-          <Button
-            type="button"
-            size={size}
-            variant="outline"
-            disabled={disabled}
-            onClick={() => void startRecording("av")}
-            title="Pestaña/pantalla + micrófono (archivo más pesado)"
-          >
-            <Monitor className="h-3.5 w-3.5 mr-1" />
-            Pantalla + audio
-          </Button>
-        </>
-      )}
-      <Button
-        type="button"
-        size={size}
-        variant="outline"
-        disabled={disabled || recording}
-        onClick={() => inputRef.current?.click()}
-      >
-        {busy ? (
-          <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-        ) : (
-          <Upload className="h-3.5 w-3.5 mr-1" />
+    <div className="space-y-2 w-full max-w-3xl">
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          ref={inputRef}
+          type="file"
+          accept="audio/*,video/*,.webm,.mp3,.m4a,.wav,.ogg,.mp4,.mov"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void saveBlob(f, f.name, "manual_upload");
+          }}
+        />
+        {props.meeting.recording_path && phase === "idle" && (
+          <span className="inline-flex items-center gap-1 text-[11px] text-emerald-700 dark:text-emerald-400">
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            Grabación guardada
+          </span>
         )}
-        Subir grabación
-      </Button>
-      {props.meeting.recording_path && !recording && (
+        {props.meeting.transcript_status === "received" && phase === "idle" && (
+          <span className="inline-flex items-center gap-1 text-[11px] text-emerald-700 dark:text-emerald-400">
+            <Sparkles className="h-3.5 w-3.5" />
+            Transcripción lista
+          </span>
+        )}
+        {recording ? (
+          <Button
+            type="button"
+            size={size}
+            variant="destructive"
+            onClick={stopRecording}
+          >
+            <Square className="h-3.5 w-3.5 mr-1" />
+            Detener {formatElapsed(elapsedSec)}
+          </Button>
+        ) : (
+          <>
+            <Button
+              type="button"
+              size={size}
+              variant="outline"
+              disabled={disabled}
+              onClick={() => void startRecording("audio")}
+              title="Solo micrófono (mejor para Whisper ≤24 MB)"
+            >
+              {phase === "uploading" ? (
+                <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+              ) : (
+                <Mic className="h-3.5 w-3.5 mr-1" />
+              )}
+              Grabar audio
+            </Button>
+            <Button
+              type="button"
+              size={size}
+              variant="outline"
+              disabled={disabled}
+              onClick={() => void startRecording("av")}
+              title="Pestaña/pantalla + micrófono (archivo más pesado)"
+            >
+              <Monitor className="h-3.5 w-3.5 mr-1" />
+              Pantalla + audio
+            </Button>
+          </>
+        )}
         <Button
           type="button"
           size={size}
-          variant="secondary"
+          variant="outline"
           disabled={disabled}
-          onClick={() => void runTranscription()}
-          title="Transcribir con OpenAI (multiidioma → español)"
+          onClick={() => inputRef.current?.click()}
         >
-          {transcribing ? (
+          {phase === "uploading" ? (
             <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
           ) : (
-            <Sparkles className="h-3.5 w-3.5 mr-1" />
+            <Upload className="h-3.5 w-3.5 mr-1" />
           )}
-          Transcribir IA
+          Subir grabación
         </Button>
+        {(props.meeting.recording_path || phase === "done" || phase === "error") &&
+          !recording && (
+            <Button
+              type="button"
+              size={size}
+              variant="secondary"
+              disabled={processing}
+              onClick={() => void runTranscription()}
+              title="Transcribir con OpenAI (multiidioma → español)"
+            >
+              {phase === "transcribing" ? (
+                <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+              ) : (
+                <Sparkles className="h-3.5 w-3.5 mr-1" />
+              )}
+              Transcribir IA
+            </Button>
+          )}
+      </div>
+
+      {showPanel && meta && (
+        <div
+          className={cn(
+            "rounded-lg border px-3 py-2.5 space-y-2",
+            phase === "error"
+              ? "border-destructive/40 bg-destructive/5"
+              : phase === "done"
+                ? "border-emerald-500/30 bg-emerald-500/5"
+                : "border-sky-500/30 bg-sky-500/5",
+          )}
+          role="status"
+          aria-live="polite"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              {phase === "error" ? (
+                <AlertCircle className="h-4 w-4 shrink-0 text-destructive" />
+              ) : phase === "done" ? (
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              ) : (
+                <Loader2 className="h-4 w-4 shrink-0 animate-spin text-sky-700 dark:text-sky-400" />
+              )}
+              <div className="min-w-0">
+                <p className="text-sm font-medium leading-tight">
+                  {meta.label}
+                  {recording ? ` · ${formatElapsed(elapsedSec)}` : ""}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {phaseError ?? meta.detail}
+                </p>
+              </div>
+            </div>
+            {(phase === "done" || phase === "error") && (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-7 text-xs"
+                onClick={() => {
+                  setPhase("idle");
+                  setPhaseError(null);
+                }}
+              >
+                Ocultar
+              </Button>
+            )}
+          </div>
+          <Progress
+            value={progressValue}
+            className={cn(
+              "h-2",
+              phase === "error" && "[&>div]:bg-destructive",
+              phase === "done" && "[&>div]:bg-emerald-500",
+            )}
+          />
+          <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+            <span className={cn(phase === "recording" && "text-foreground font-medium")}>
+              1. Grabar
+            </span>
+            <span
+              className={cn(
+                (phase === "uploading" ||
+                  phase === "transcribing" ||
+                  phase === "done") &&
+                  "text-foreground font-medium",
+              )}
+            >
+              2. Subir
+            </span>
+            <span
+              className={cn(
+                (phase === "transcribing" || phase === "done") &&
+                  "text-foreground font-medium",
+              )}
+            >
+              3. Transcribir
+            </span>
+            <span className={cn(phase === "done" && "text-emerald-700 dark:text-emerald-400 font-medium")}>
+              4. Listo
+            </span>
+          </div>
+          {(phase === "uploading" || phase === "transcribing" || phase === "done") &&
+            props.meeting.status === "in_progress" && (
+              <p className="text-[11px] text-muted-foreground border-t border-border/50 pt-2">
+                Detener el audio no cierra la sesión: el badge «En curso» cambia solo al pulsar{" "}
+                <strong className="text-foreground font-medium">Terminar junta</strong>.
+              </p>
+            )}
+        </div>
       )}
     </div>
   );
