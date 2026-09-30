@@ -34,6 +34,8 @@ import {
   Mail,
   ExternalLink,
   KeyRound,
+  Megaphone,
+  Inbox,
 } from "lucide-react";
 import { differenceInMinutes } from "date-fns";
 import { nowMX } from "@/lib/dateUtils";
@@ -74,7 +76,12 @@ import { MOFFIN_USE_SOLUTIONS } from "@/lib/moffinUseSolutions";
 import { ComposeEmailDialog } from "@/components/microsoft/ComposeEmailDialog";
 import { useAccountingEmailStepSync } from "@/hooks/useAccountingEmailStepSync";
 
-type MoffinConsultType = "lista_69b" | "constancia_situacion_fiscal" | "opinion_cumplimiento";
+type MoffinConsultType =
+  | "lista_69b"
+  | "constancia_situacion_fiscal"
+  | "opinion_cumplimiento"
+  | "buzon_comunicados"
+  | "buzon_notificaciones";
 
 function moffinNeedsFiel(consultType: MoffinConsultType): boolean {
   if (consultType === "lista_69b") return false;
@@ -83,9 +90,15 @@ function moffinNeedsFiel(consultType: MoffinConsultType): boolean {
   return true;
 }
 
-/** CSF/32D en modo Solutions: requiere e.firma JWE o CIEC. */
+/** CSF/32D/buzón en modo Solutions: requiere e.firma JWE (buzón no admite CIEC). */
 function moffinNeedsSatCreds(consultType: MoffinConsultType): boolean {
-  return MOFFIN_USE_SOLUTIONS && consultType !== "lista_69b";
+  return (
+    MOFFIN_USE_SOLUTIONS &&
+    (consultType === "constancia_situacion_fiscal" ||
+      consultType === "opinion_cumplimiento" ||
+      consultType === "buzon_comunicados" ||
+      consultType === "buzon_notificaciones")
+  );
 }
 
 const MOFFIN_CONSULT_META: Record<
@@ -106,6 +119,16 @@ const MOFFIN_CONSULT_META: Record<
     label: "Opinión de cumplimiento 32D (SAT · SATgo)",
     short: "32D",
     icon: FileCheck2,
+  },
+  buzon_comunicados: {
+    label: "Buzón tributario · Comunicados (SAT · SATgo)",
+    short: "Comunicados",
+    icon: Megaphone,
+  },
+  buzon_notificaciones: {
+    label: "Buzón tributario · Notificaciones (SAT · SATgo)",
+    short: "Notificaciones",
+    icon: Inbox,
   },
 };
 
@@ -992,7 +1015,7 @@ export function AccountingDashboard({
               </Button>
             </div>
           ) : null}
-          <div className="grid gap-2 sm:grid-cols-3">
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             {(Object.keys(MOFFIN_CONSULT_META) as MoffinConsultType[]).map((key) => {
               const row = latestMoffinByType.get(key);
               const doc = row?.documents as { file_path?: string | null; name?: string | null } | null;
@@ -1032,6 +1055,14 @@ export function AccountingDashboard({
                         })
                       : "Aún sin consultar"}
                   </p>
+                  {isOk && row?.summary ? (
+                    <p
+                      className="text-[10px] text-muted-foreground leading-tight line-clamp-3"
+                      title={row.summary}
+                    >
+                      {row.summary}
+                    </p>
+                  ) : null}
                   {isErr && row?.error_message ? (
                     <p
                       className="text-[10px] text-destructive leading-tight line-clamp-2"

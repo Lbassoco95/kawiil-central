@@ -36,11 +36,15 @@ const MOFFIN_TYPE_LABEL: Record<string, string> = MOFFIN_USE_SOLUTIONS
       lista_69b: "Lista 69-B",
       constancia_situacion_fiscal: "CSF (SAT)",
       opinion_cumplimiento: "32D (SAT)",
+      buzon_comunicados: "Comunicados",
+      buzon_notificaciones: "Notificaciones",
     }
   : {
       lista_69b: "Lista 69-B",
       constancia_situacion_fiscal: "RFC · constancia",
       opinion_cumplimiento: "RFC · opinión",
+      buzon_comunicados: "Comunicados",
+      buzon_notificaciones: "Notificaciones",
     };
 
 interface Props {
@@ -152,6 +156,14 @@ export function MoffinSatStatusSummary({
     "32D · opinión (SATgo)",
     byType.get("opinion_cumplimiento")
   );
+  const comunicados = certConsultLine(
+    "Buzón · comunicados (SATgo)",
+    byType.get("buzon_comunicados")
+  );
+  const notificaciones = certConsultLine(
+    "Buzón · notificaciones (SATgo)",
+    byType.get("buzon_notificaciones")
+  );
 
   const fmtDate = (iso: string | undefined) =>
     iso
@@ -166,9 +178,10 @@ export function MoffinSatStatusSummary({
         {title}
       </h2>
       <p className="text-[10px] text-muted-foreground leading-snug mb-3">
-        Constancia (CSF) y opinión 32D se descargan con la <strong className="font-medium text-foreground/80">e.firma</strong> del
-        cliente vía <strong className="font-medium text-foreground/80">SATgo</strong> (PDF al momento). Sube .cer, .key y
-        contraseña en Certificados SAT. Lista 69-B sigue aparte.
+        Constancia (CSF), opinión 32D y buzón tributario (comunicados / notificaciones) se consultan con la{" "}
+        <strong className="font-medium text-foreground/80">e.firma</strong> del cliente vía{" "}
+        <strong className="font-medium text-foreground/80">SATgo</strong>. Sube .cer, .key y contraseña en
+        Certificados SAT. Lista 69-B sigue aparte.
       </p>
       {!isLoading && hasPendingSyncable ? (
         <div className="flex flex-wrap items-center gap-2 mb-3">
@@ -272,6 +285,48 @@ export function MoffinSatStatusSummary({
                   filePath={byType.get("constancia_situacion_fiscal")!.documents!.file_path!}
                   fileName={byType.get("constancia_situacion_fiscal")?.documents?.name}
                 />
+              ) : null}
+            </div>
+          </li>
+          <li className="rounded-md border border-border/60 p-3 bg-background/40">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2 mb-0.5">
+                <span className="text-muted-foreground text-xs font-medium">Comunicados (buzón)</span>
+                <Badge
+                  variant="outline"
+                  className={toneClass[comunicados.tone] ?? toneClass.muted}
+                >
+                  {comunicados.title}
+                </Badge>
+              </div>
+              {comunicados.detail ? (
+                <p className="text-xs text-muted-foreground line-clamp-2">{comunicados.detail}</p>
+              ) : null}
+              {byType.get("buzon_comunicados")?.created_at ? (
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  {fmtDate(byType.get("buzon_comunicados")!.created_at)}
+                </p>
+              ) : null}
+            </div>
+          </li>
+          <li className="rounded-md border border-border/60 p-3 bg-background/40">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2 mb-0.5">
+                <span className="text-muted-foreground text-xs font-medium">Notificaciones (buzón)</span>
+                <Badge
+                  variant="outline"
+                  className={toneClass[notificaciones.tone] ?? toneClass.muted}
+                >
+                  {notificaciones.title}
+                </Badge>
+              </div>
+              {notificaciones.detail ? (
+                <p className="text-xs text-muted-foreground line-clamp-2">{notificaciones.detail}</p>
+              ) : null}
+              {byType.get("buzon_notificaciones")?.created_at ? (
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  {fmtDate(byType.get("buzon_notificaciones")!.created_at)}
+                </p>
               ) : null}
             </div>
           </li>
