@@ -199,24 +199,32 @@ Central → `portal-system-api`: `invoice.publish`, `fiscal_summary.publish`, `d
 
 ## 13. Corte 4 — entorno de demostración (espejo)
 
-Documentación: `docs/portal/DEMO.md` y guion `docs/portal/DEMO-GUION.md`. Dataset: `kawiil-os/demo/`.
+Documentación: `DEMO.md`, `DEMO-GUION.md`, `ARRANQUE-POLO.md`. Dataset: `kawiil-os/demo/`. Cerco operativo: `tools/portal/`.
 
 ### Requisitos
 
-- Proyecto Supabase **distinto** de central y del ensayo productivo.
+- Proyectos Supabase **`kawiil-os-ensayo`** y **`kawiil-os-demo`** (distintos de central).
 - `PORTAL_MIRROR_READ_ONLY=true`.
 - Build con `VITE_PORTAL_DEMO_MODE=true` (banner + chip DEMO).
 - Turnstile de prueba; sin secretos de producción ni PAC real.
+- El árbol `kawiil-os/` no contiene el project ref ni JWT de central (denylist de `test:kawiil-os-db` **sin excepciones**).
+
+### Bootstrap (un comando)
+
+```bash
+KAWIIL_OS_TARGET=kawiil-os-ensayo KAWIIL_OS_PROJECT_REF=… npm run kawiil-os:bootstrap-ensayo
+KAWIIL_OS_TARGET=kawiil-os-demo KAWIIL_OS_PROJECT_REF=… KAWIIL_OS_DB_URL=… npm run kawiil-os:bootstrap-demo
+```
 
 ### Sembrar o reiniciar (exacto)
 
 ```bash
-PORTAL_DEMO_ALLOW_RESET=1 DATABASE_URL='postgresql://…' npm run portal:demo-reset
-# Verificación automática de conteos canónicos incluida.
+PORTAL_DEMO_ALLOW_RESET=1 KAWIIL_OS_DB_URL='postgresql://…' npm run portal:demo-reset
 npm run test:kawiil-os-demo   # Postgres local/CI: siembra → muta → reinicia → compara hash
+npm run kawiil-os:verify-cross  # cruce real; NO VERIFICABLE sin env
 ```
 
-El script aborta sin `PORTAL_DEMO_ALLOW_RESET=1`, si el portal y central comparten la misma URL Vite, o si se pasa `PORTAL_DEMO_FORBID_PROJECT_REF` y aparece en la conexión. El ref de central no se embebe bajo `kawiil-os/` (lo exige `test:kawiil-os-db`).
+Los scripts en `tools/portal/` rechazan siempre el ref de central y un `KAWIIL_OS_TARGET` distinto del declarado.
 
 ### Contenido canónico (septiembre 2026)
 

@@ -26,8 +26,8 @@ for mig in "${MIGS[@]}"; do
   q --single-transaction -f "$mig" >/dev/null
 done
 
-# Primera siembra
-PORTAL_DEMO_ALLOW_RESET=1 PGDATABASE="$DB" bash "$DEMO_DIR/reset.sh" >/dev/null
+# Primera siembra (cerco en tools/portal; kawiil-os/demo no embebe ref de central)
+PORTAL_DEMO_ALLOW_RESET=1 PGDATABASE="$DB" bash "$ROOT/tools/portal/demo-reset.sh" >/dev/null
 HASH1="$(q -At -c "
 SELECT md5(string_agg(row_hash, '|' ORDER BY row_hash)) FROM (
   SELECT md5(c.uuid || c.direction || c.detail_status || c.total::text || c.is_test::text) AS row_hash
@@ -38,7 +38,7 @@ SELECT md5(string_agg(row_hash, '|' ORDER BY row_hash)) FROM (
 
 # Mutación deliberada + reinicio exacto
 q -c "UPDATE public.portal_cfdi SET total = 1 WHERE client_id = 'd0000000-0000-4000-8000-000000000001'" >/dev/null
-PORTAL_DEMO_ALLOW_RESET=1 PGDATABASE="$DB" bash "$DEMO_DIR/reset.sh" >/dev/null
+PORTAL_DEMO_ALLOW_RESET=1 PGDATABASE="$DB" bash "$ROOT/tools/portal/demo-reset.sh" >/dev/null
 HASH2="$(q -At -c "
 SELECT md5(string_agg(row_hash, '|' ORDER BY row_hash)) FROM (
   SELECT md5(c.uuid || c.direction || c.detail_status || c.total::text || c.is_test::text) AS row_hash

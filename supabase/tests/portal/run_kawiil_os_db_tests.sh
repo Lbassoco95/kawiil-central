@@ -14,7 +14,8 @@ ROLLBACK_DIR="$ROOT/kawiil-os/supabase/rollbacks"
 DB=kawiil_os_standalone_test
 q() { psql -X -v ON_ERROR_STOP=1 -q -d "$DB" "$@"; }
 
-# El conjunto de Kawiil OS no puede conocer el host de central ni ninguna credencial suya.
+# El conjunto de Kawiil OS (incl. demo/) no puede conocer el host de central ni
+# ninguna credencial suya. Denylist intacta: sin exclusiones ni excepciones.
 if grep -rEn "qppfampapbxdgednkofc|eyJhbGciOiJIUzI1Ni" "$ROOT/kawiil-os" >/dev/null 2>&1; then
   echo "FALLA: el conjunto standalone referencia el proyecto o llaves de central"
   exit 1

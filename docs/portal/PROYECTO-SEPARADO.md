@@ -2,20 +2,27 @@
 
 Este procedimiento no toca producción hasta que Polo ejecute expresamente cada paso. Use proyectos nuevos y datos sintéticos durante el ensayo.
 
+## 0. Separación de migraciones (confirmación)
+
+- El despliegue de **central a `main`** (workflow `deploy-supabase.yml`) aplica **solo** `supabase/migrations/**` del proyecto de central. **No** aplica `kawiil-os/supabase/migrations/`.
+- Las migraciones de **Kawiil OS** viven únicamente en `kawiil-os/supabase/migrations/` y **solo** llegan a un proyecto OS enlazado con `--workdir kawiil-os` (`npm run kawiil-os:db-push` o los bootstrap de §2b).
+- Mezclar ambas cadenas haría que central intentara crear tablas del portal y que OS heredara la cadena de central: por eso están separadas a propósito.
+- La suite `npm run test:kawiil-os-db` vigila que el árbol `kawiil-os/` no embuta el project ref ni JWT de central (**denylist intacta**, sin excepciones para demo).
+
+Guía corta para Polo: [ARRANQUE-POLO.md](ARRANQUE-POLO.md).
+
 ## 1. Crear el proyecto
 
 1. Entre a Supabase y seleccione **New project**.
-2. Nombre sugerido: `kawiil-os`.
+2. Nombres exactos: `kawiil-os-ensayo` (ensayo) y `kawiil-os-demo` (demostración).
 3. Genere una contraseña nueva y guárdela en el administrador de secretos; no la copie al repositorio.
 4. Seleccione la misma región que central para reducir latencia, sin enlazar las bases.
 5. En **Authentication → Providers → Email**, mantenga desactivado el registro público.
 6. En **Authentication → URL Configuration**, configure únicamente el dominio del portal y sus redirects de acceso.
 
-Repita con un proyecto independiente para demo o con una rama aislada que no contenga credenciales ni datos reales.
-
 ## 2. Aplicar la base de Kawiil OS
 
-Desde una copia limpia del repositorio:
+Desde una copia limpia del repositorio (manual):
 
 ```bash
 npx supabase login
@@ -26,9 +33,36 @@ npm run kawiil-os:db-push
 
 Antes del `db push`, confirme que `<REF_KAWIIL_OS>` no sea el project ref de central (`qppfampapbxdgednkofc`). El conjunto aplicado es exclusivamente `kawiil-os/supabase/migrations/`.
 
-El baseline vive en `kawiil-os/supabase/` (ruta estable del repo; salió de `.devin/`) y **no** en `supabase/migrations/` porque ese directorio es la cadena de migraciones del proyecto de central: mezclarlo haría que `supabase db push` de central intentara crear tablas del portal y que el portal heredara la cadena de central. Con `--workdir kawiil-os`, el CLI trata esa carpeta como un proyecto Supabase independiente con su propio `config.toml`, `migrations/` y `rollbacks/`.
+El baseline vive en `kawiil-os/supabase/` (ruta estable del repo; salió de `.devin/`) y **no** en `supabase/migrations/` porque ese directorio es la cadena de migraciones del proyecto de central. Con `--workdir kawiil-os`, el CLI trata esa carpeta como un proyecto Supabase independiente con su propio `config.toml`, `migrations/` y `rollbacks/`.
 
 La prueba automática de separación es `npm run test:kawiil-os-db` (también en CI, job `base-y-api`).
+
+## 2b. Bootstrap de un comando (ensayo / demo)
+
+Variables **solo en el entorno local** (nunca en el repositorio). Los scripts se niegan a correr si el ref es el de central o si `KAWIIL_OS_TARGET` no coincide con el destino.
+
+```bash
+# Ensayo: solo baseline (+ espejo)
+KAWIIL_OS_TARGET=kawiil-os-ensayo \
+KAWIIL_OS_PROJECT_REF=<ref-ensayo> \
+npm run kawiil-os:bootstrap-ensayo
+
+# Demo: baseline (+ espejo) + datos sintéticos
+KAWIIL_OS_TARGET=kawiil-os-demo \
+KAWIIL_OS_PROJECT_REF=<ref-demo> \
+KAWIIL_OS_DB_URL='postgresql://…' \
+npm run kawiil-os:bootstrap-demo
+```
+
+Cruce de llaves (cuando existan ambos proyectos):
+
+```bash
+CENTRAL_SUPABASE_URL=… CENTRAL_ANON_KEY=… \
+KAWIIL_OS_SUPABASE_URL=… KAWIIL_OS_ANON_KEY=… \
+npm run kawiil-os:verify-cross
+```
+
+Sin esas variables el verificador responde **NO VERIFICABLE** (no inventa llaves).
 
 Comprobación en SQL Editor del proyecto nuevo:
 
@@ -124,8 +158,7 @@ Si existen datos:
 - `npm run build:portal`
 - `npx vitest run src/test/portal/systemBoundary.test.ts`
 - En CI: `bash supabase/tests/portal/run_kawiil_os_db_tests.sh`
-- Confirmar que una llave de Kawiil OS recibe `401/403` contra Auth, REST, Storage y Functions de central.
-- Confirmar que una llave de central recibe `401/403` contra Kawiil OS.
+- Confirmar cruce de llaves: `npm run kawiil-os:verify-cross` (con env locales; sin env → NO VERIFICABLE).
 - Alterar cuerpo, operación, nonce y timestamp de una llamada firmada y comprobar rechazo.
 - Apagar temporalmente el receptor, crear un evento y comprobar que queda pendiente y se entrega una sola vez al restaurarlo.
 

@@ -10,6 +10,7 @@ Cara nueva de `kawiil-central` para los clientes de Kawiil: **espejo fiscal de s
 | [PAC.md](PAC.md) | Contrato espejo: PAC/Facturapi viven en central; OS no emite |
 | [DEMO.md](DEMO.md) | Entorno de demostración del espejo (D1–D7, reinicio exacto) |
 | [DEMO-GUION.md](DEMO-GUION.md) | Guion de sesión sin RH ni emisión |
+| [ARRANQUE-POLO.md](ARRANQUE-POLO.md) | Guía ≤10 pasos para crear ensayo/demo |
 | [API.md](API.md) | Contrato v1 entre la app y central |
 | [RUNBOOK.md](RUNBOOK.md) | Migraciones, variables, pasos manuales, cron |
 | [TIENDAS.md](TIENDAS.md) | Lo que falta para App Store y Google Play |

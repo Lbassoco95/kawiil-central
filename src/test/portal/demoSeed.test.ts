@@ -53,4 +53,13 @@ describe("demo espejo (Corte 4)", () => {
     expect(seed).toContain("'opinion_cumplimiento'");
     expect(seed).toContain("'declaracion'");
   });
+
+  it("el árbol kawiil-os (incl. demo) no embebe ref ni JWT de central", () => {
+    const { execSync } = require("node:child_process") as typeof import("node:child_process");
+    const out = execSync(
+      `rg -n "qppfampapbxdgednkofc|eyJhbGciOiJIUzI1Ni" kawiil-os || true`,
+      { cwd: root, encoding: "utf8" },
+    );
+    expect(out.trim()).toBe("");
+  });
 });
