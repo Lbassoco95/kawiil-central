@@ -15,12 +15,17 @@ import {
 } from "@/components/ui/select";
 import { MoffinPdfActions } from "@/components/clients/MoffinPdfActions";
 import { ClientSatCertificatesSection } from "@/components/clients/ClientSatCertificatesSection";
+import { SatgoBuzonDetailDialog } from "@/components/clients/SatgoBuzonDetailDialog";
 import { useMoffinConsultsByClient } from "@/hooks/useMoffinConsultsByClient";
 import { useClientSatCertificates } from "@/hooks/useClientSatCertificates";
 import {
   moffinConsultNeedsApiSync,
   pickLatestMoffinByType,
 } from "@/lib/moffinDisplay";
+import {
+  parseComunicadosFromRaw,
+  parseNotificacionesFromRaw,
+} from "@/lib/satgoBuzonParse";
 import {
   SATGO_CONSULT_META,
   satgoConsultLabel,
@@ -38,6 +43,7 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import {
   ChevronDown,
+  Eye,
   KeyRound,
   Landmark,
   Loader2,
@@ -98,6 +104,11 @@ export function ClientSatgoPanel({
   const { data: rows = [], isLoading } = useMoffinConsultsByClient(clientId);
   const [busy, setBusy] = useState<SatgoConsultType | null>(null);
   const [syncBusy, setSyncBusy] = useState(false);
+  const [buzonDetail, setBuzonDetail] = useState<{
+    kind: "buzon_comunicados" | "buzon_notificaciones";
+    raw: unknown;
+    at: string | null;
+  } | null>(null);
 
   const accountingProjects = useMemo(
     () => projects.filter(isAccountingProject),
@@ -473,12 +484,25 @@ export function ClientSatgoPanel({
 
             <p className="text-[10px] font-medium text-muted-foreground pt-1">Buzón tributario</p>
             <div className="grid gap-2 sm:grid-cols-2">
-              {(["buzon_comunicados", "buzon_notificaciones"] as SatgoConsultType[]).map((key) => {
+              {(["buzon_comunicados", "buzon_notificaciones"] as const).map((key) => {
                 const row = byType.get(key);
                 const meta = SATGO_CONSULT_META[key];
                 const st = statusDot(row?.status);
                 const isErr = row?.status === "fail" || row?.status === "error";
                 const isOk = row?.status === "success";
+                const comunicados =
+                  key === "buzon_comunicados" && isOk
+                    ? parseComunicadosFromRaw(row?.raw_response)
+                    : [];
+                const notifs =
+                  key === "buzon_notificaciones" && isOk
+                    ? parseNotificacionesFromRaw(row?.raw_response)
+                    : null;
+                const itemCount =
+                  key === "buzon_comunicados"
+                    ? comunicados.length
+                    : (notifs?.all.length ?? 0);
+
                 return (
                   <div
                     key={key}
@@ -493,15 +517,61 @@ export function ClientSatgoPanel({
                     </div>
                     <p className="text-[10px] text-muted-foreground">
                       {row?.created_at ? fmtDate(row.created_at) : "Aún sin consultar"}
+                      {isOk && itemCount > 0 ? ` · ${itemCount} ítem(s)` : null}
                     </p>
-                    {isOk && row?.summary ? (
-                      <p
-                        className="text-[10px] text-muted-foreground leading-tight line-clamp-3"
-                        title={row.summary}
-                      >
-                        {row.summary}
-                      </p>
+
+                    {key === "buzon_comunicados" && comunicados.length > 0 ? (
+                      <ul className="space-y-1 max-h-28 overflow-auto">
+                        {comunicados.slice(0, 5).map((c, i) => (
+                          <li
+                            key={c.id ?? `${c.titulo}-${i}`}
+                            className="text-[10px] leading-snug border-l-2 border-primary/30 pl-1.5"
+                          >
+                            <span className="text-foreground font-medium line-clamp-2">
+                              {c.titulo}
+                            </span>
+                            {c.fechaComunicado ? (
+                              <span className="block text-muted-foreground">{c.fechaComunicado}</span>
+                            ) : null}
+                          </li>
+                        ))}
+                        {comunicados.length > 5 ? (
+                          <li className="text-[10px] text-muted-foreground">
+                            +{comunicados.length - 5} más…
+                          </li>
+                        ) : null}
+                      </ul>
                     ) : null}
+
+                    {key === "buzon_notificaciones" && notifs && notifs.all.length > 0 ? (
+                      <ul className="space-y-1 max-h-28 overflow-auto">
+                        {notifs.all.slice(0, 5).map((n, i) => (
+                          <li
+                            key={`${n.grupo}-${n.folio ?? i}`}
+                            className="text-[10px] leading-snug border-l-2 border-primary/30 pl-1.5"
+                          >
+                            <span className="text-foreground font-medium line-clamp-2">
+                              {n.acto || n.folio || "Notificación"}
+                            </span>
+                            <span className="block text-muted-foreground">
+                              {[n.folio, n.fecha, n.grupo === "pendientes" ? "pendiente" : "notificada"]
+                                .filter(Boolean)
+                                .join(" · ")}
+                            </span>
+                          </li>
+                        ))}
+                        {notifs.all.length > 5 ? (
+                          <li className="text-[10px] text-muted-foreground">
+                            +{notifs.all.length - 5} más…
+                          </li>
+                        ) : null}
+                      </ul>
+                    ) : null}
+
+                    {isOk && itemCount === 0 ? (
+                      <p className="text-[10px] text-muted-foreground">Sin ítems en esta consulta.</p>
+                    ) : null}
+
                     {isErr && row?.error_message ? (
                       <p
                         className="text-[10px] text-destructive leading-tight line-clamp-2"
@@ -510,6 +580,25 @@ export function ClientSatgoPanel({
                         {row.error_message}
                       </p>
                     ) : null}
+
+                    {isOk && itemCount > 0 ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-[11px] gap-1.5"
+                        onClick={() =>
+                          setBuzonDetail({
+                            kind: key,
+                            raw: row?.raw_response,
+                            at: row?.created_at ?? null,
+                          })
+                        }
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                        Ver detalle
+                      </Button>
+                    ) : null}
                   </div>
                 );
               })}
@@ -517,6 +606,18 @@ export function ClientSatgoPanel({
           </div>
         )}
       </div>
+
+      {buzonDetail ? (
+        <SatgoBuzonDetailDialog
+          open={!!buzonDetail}
+          onOpenChange={(open) => {
+            if (!open) setBuzonDetail(null);
+          }}
+          kind={buzonDetail.kind}
+          rawResponse={buzonDetail.raw}
+          consultedAt={buzonDetail.at}
+        />
+      ) : null}
 
       {/* 4. Historial */}
       {rows.length > 0 ? (
@@ -540,7 +641,7 @@ export function ClientSatgoPanel({
                   <th className="p-2 font-medium">Estado</th>
                   <th className="p-2 font-medium">Resumen</th>
                   <th className="p-2 font-medium">Fecha</th>
-                  <th className="p-2 font-medium min-w-[120px]">PDF</th>
+                  <th className="p-2 font-medium min-w-[120px]">Detalle / PDF</th>
                 </tr>
               </thead>
               <tbody>
@@ -576,7 +677,31 @@ export function ClientSatgoPanel({
                         {fmtDate(hist.created_at)}
                       </td>
                       <td className="p-2 align-top">
-                        {hdoc?.file_path ? (
+                        {hist.consult_type === "buzon_comunicados" ||
+                        hist.consult_type === "buzon_notificaciones" ? (
+                          hist.status === "success" ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-[10px] gap-1"
+                              onClick={() =>
+                                setBuzonDetail({
+                                  kind: hist.consult_type as
+                                    | "buzon_comunicados"
+                                    | "buzon_notificaciones",
+                                  raw: hist.raw_response,
+                                  at: hist.created_at,
+                                })
+                              }
+                            >
+                              <Eye className="h-3 w-3" />
+                              Ver
+                            </Button>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )
+                        ) : hdoc?.file_path ? (
                           <MoffinPdfActions
                             filePath={hdoc.file_path}
                             fileName={hdoc.name}
