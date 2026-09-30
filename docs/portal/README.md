@@ -1,10 +1,12 @@
 # Portal del cliente de Kawiil OS
 
-Cara nueva de `kawiil-central` para los clientes de Kawiil: tablero de gasto, facturas emitidas y recibidas, creación de facturas de ingreso, documentos publicados, tickets y mensajes con el equipo. **No guarda datos propios**: lee y escribe en la misma base de Supabase con permisos de cliente (RLS).
+Cara nueva de `kawiil-central` para los clientes de Kawiil: tablero de gasto, facturas emitidas y recibidas, creación de facturas de ingreso, documentos publicados, tickets y mensajes con el equipo. En la fase actual (espejo) vive en un **proyecto Supabase independiente** (`kawiil-os/`); el navegador solo habla Auth + `portal-api`.
 
 | Documento | Para qué |
 |---|---|
 | [RECONOCIMIENTO.md](RECONOCIMIENTO.md) | Qué había en el repo y qué se decidió |
+| [PROYECTO-SEPARADO.md](PROYECTO-SEPARADO.md) | Crear el proyecto OS, aplicar baseline (`npm run kawiil-os:db-push`) y secretos |
+| [FRONTERA-API.md](FRONTERA-API.md) | Frontera entre proyectos, capas y riesgo residual |
 | [API.md](API.md) | Contrato v1 entre la app y central |
 | [RUNBOOK.md](RUNBOOK.md) | Migraciones, variables, pasos manuales, cron |
 | [TIENDAS.md](TIENDAS.md) | Lo que falta para App Store y Google Play |
@@ -26,11 +28,12 @@ supabase/functions/_shared/portal/    lógica pura compartida por Edge, portal y
 supabase/functions/portal-api/        API v1 (Storage, Auth admin, cifrado, emisor, XML)
 supabase/functions/portal-notify/     avisos a Slack (sin contenido) y correos al cliente
 supabase/functions/portal-dropbox-sync/  Dropbox → bucket privado `portal`
-supabase/migrations/2026092911*_portal_*.sql, 2026092912*_portal_*.sql   14 migraciones; rollback en migrations/2026-09-28_portal_*.rollback.sql
+supabase/migrations/2026092911*_portal_*.sql, 2026092912*_portal_*.sql   migraciones del portal en la cadena de central (ensayo previo a la separación)
+kawiil-os/supabase/                   proyecto standalone: config.toml + baseline + rollback (NO mezclar con supabase/migrations/)
 src/pages/portal-admin/PortalClientes.tsx       central → «Portal de clientes» (/portal-clientes), incl. «Baja y resguardo»
 src/pages/portal-admin/BandejaClientes.tsx      central → Comunicación → «Clientes» (/comunicacion/clientes)
 tools/portal/build-sat-catalogs.mjs   genera los catálogos del SAT desde el catCFDI oficial
-supabase/tests/portal/                pruebas de base (SQL) y de API (PostgREST)
+supabase/tests/portal/                pruebas de base (SQL), separación OS y API (PostgREST)
 ```
 
 ## Correrlo
@@ -49,9 +52,14 @@ Sin cuentas del portal en Supabase solo se puede ver el acceso y el registro. Pa
 ```bash
 npm run test              # incluye src/test/portal/* (Dropbox con carpeta local, CFDI, emisión, tickets, catálogos, frontera del build, openclaw)
 
-# Base (Postgres local ≥15 con superusuario; el stub imita Auth/Storage/Vault/cron de Supabase):
+# Separación Kawiil OS (baseline en base vacía; CI lo corre en Postgres efímero):
+PGHOST=localhost PGPORT=5432 PGUSER=postgres PGPASSWORD=… npm run test:kawiil-os-db
+# Aplicar baseline a un proyecto OS enlazado (nunca al de central):
+npm run kawiil-os:db-push
+
+# Base portal en cadena de central (Postgres local ≥15; stub Auth/Storage/Vault/cron):
 PGHOST=/ruta/socket PGPORT=5432 PGUSER=postgres npm run test:portal-db
-#  → base vacía, rollback + reaplicación, base con datos previos, idempotencia; 217 verificaciones por corrida
+#  → base vacía, rollback + reaplicación, base con datos previos, idempotencia
 
 # API (Postgres local + Docker con postgrest/postgrest:v12.2.3):
 PGHOST=… PGPORT=… PGUSER=postgres npm run test:portal-api   # orquesta todo (bases, PostgREST en Docker, aislamiento, regresión del equipo, cerco y su negativo, B5 sin contenido en claro)

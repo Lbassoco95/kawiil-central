@@ -22,8 +22,10 @@
     "build:portal": "vite build --config vite.config.portal.ts",
     "preview:portal": "vite preview --config vite.config.portal.ts",
     "test:portal-db": "bash supabase/tests/portal/run_portal_db_tests.sh",
+    "test:kawiil-os-db": "bash supabase/tests/portal/run_kawiil_os_db_tests.sh",
     "test:portal-api": "bash supabase/tests/portal/run_portal_api_tests.sh",
     "test:portal-edge": "bash supabase/tests/portal/edge_auth_test.sh",
+    "kawiil-os:db-push": "npx supabase db push --workdir kawiil-os",
     "portal:verificar-cerco": "node tools/portal/verify-route-guard.mjs"
   },
   "dependencies": {
