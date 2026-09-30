@@ -462,9 +462,9 @@ Deno.serve(async (req) => {
         .select(selectCols)
         .maybeSingle();
       if (upErr) {
-        console.error("client_sat_certificates update:", upErr.message);
-        return jsonResponse({ error: upErr.message }, 500);
-      }
+      console.error("client_sat_certificates update:", upErr.message);
+      return jsonResponse({ error: upErr.message }, 500);
+    }
       upserted = (data as CertRow | null) ?? null;
     } else {
       const { data, error: insErr } = await admin
@@ -477,6 +477,18 @@ Deno.serve(async (req) => {
         return jsonResponse({ error: insErr.message }, 500);
       }
       upserted = (data as CertRow | null) ?? null;
+    }
+
+    // Si el cliente no tenía RFC en ficha, tomar el del .cer
+    if (
+      certType === "fiel" &&
+      parsed.subjectRfc &&
+      !client?.rfc?.trim()
+    ) {
+      await admin
+        .from("clients")
+        .update({ rfc: parsed.subjectRfc.trim().toUpperCase().replace(/\s/g, "") })
+        .eq("id", clientId!);
     }
 
     return jsonResponse({

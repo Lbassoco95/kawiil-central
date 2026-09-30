@@ -636,10 +636,7 @@ export function AccountingDashboard({
       }
       setMoffinBusy(consultType);
       try {
-        const fnName =
-          consultType === "constancia_situacion_fiscal" || consultType === "opinion_cumplimiento"
-            ? "satgo-query"
-            : "moffin-query";
+        const fnName = "satgo-query";
         const { data, error } = await invokeFunctionWithSession(fnName, {
           projectId,
           consultType,
@@ -805,8 +802,8 @@ export function AccountingDashboard({
           ) : null}
           {clientId ? (
             <p className="text-[10px] text-muted-foreground leading-snug">
-              CSF y 32D usan la <strong className="font-medium">e.firma</strong> del cliente
-              (cifrada a JWE hacia SATgo). Lista 69-B es independiente.
+              CSF, 32D y 69-B van por <strong className="font-medium">SATgo</strong>. CSF/32D usan la
+              e.firma (JWE); 69-B solo necesita el RFC.
             </p>
           ) : null}
           {clientId ? (
