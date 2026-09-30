@@ -39,3 +39,4 @@ deno.lock
 .env.local
 .env.*.local
 .vercel
+.tmp-deploy/

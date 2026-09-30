@@ -103,6 +103,10 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = false
   [functions.moffin-monthly-sat]
     verify_jwt = false
+  [functions.satgo-query]
+    verify_jwt = true
+  [functions.satgo-monthly]
+    verify_jwt = false
   [functions.analyze-improvement-suggestions]
     verify_jwt = true
   [functions.ai-chat]

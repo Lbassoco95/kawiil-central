@@ -603,7 +603,11 @@ export function AccountingDashboard({
       }
       setMoffinBusy(consultType);
       try {
-        const { data, error } = await invokeFunctionWithSession("moffin-query", {
+        const fnName =
+          consultType === "constancia_situacion_fiscal" || consultType === "opinion_cumplimiento"
+            ? "satgo-query"
+            : "moffin-query";
+        const { data, error } = await invokeFunctionWithSession(fnName, {
           projectId,
           consultType,
           ...(moffinNeedsFiel(consultType)
