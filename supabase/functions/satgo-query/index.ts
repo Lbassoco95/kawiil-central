@@ -1,16 +1,20 @@
 /**
- * SATgo — 69-B (Efos), CSF y opinión 32D.
+ * SATgo — 69-B (Efos), CSF, opinión 32D y buzón tributario.
  * Preferencia CSF/32D: e.firma JWE (POST csffiel/ocfiel) → fallback CIEC (GET csf/oc).
+ * Buzón: POST comunicadosfiel / notificacionesfiel (solo e.firma JWE).
  * 69-B: GET /api/v2/Efos/rfc/{rfc} (solo Bearer + RFC; 404 = no aparece en lista).
  *
  * Secrets: SATGO_API_KEY (o SATGO_ACCESS_TOKEN), MOFFIN_FIEL_SECRET (≥32) para
- * desencriptar .cer en reposo; CIEC opcional como respaldo.
+ * desencriptar .cer en reposo; CIEC opcional como respaldo (CSF/32D).
  * Docs: https://sat-go.com/cifrar-efirma · https://api.sat-go.com/scalar/v2
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { decryptFielSecret } from "../_shared/moffinFielCrypto.ts";
 import { base64FileToBytes } from "../_shared/satgoFielJwe.ts";
-import { fetchSatgoPdfWithFielJwe } from "../_shared/satgoFielClient.ts";
+import {
+  fetchSatgoBuzonWithFielJwe,
+  fetchSatgoPdfWithFielJwe,
+} from "../_shared/satgoFielClient.ts";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -21,7 +25,100 @@ const corsHeaders: Record<string, string> = {
 type ConsultType =
   | "lista_69b"
   | "constancia_situacion_fiscal"
-  | "opinion_cumplimiento";
+  | "opinion_cumplimiento"
+  | "buzon_comunicados"
+  | "buzon_notificaciones";
+
+function isBuzonConsult(t: ConsultType): boolean {
+  return t === "buzon_comunicados" || t === "buzon_notificaciones";
+}
+
+function summarizeComunicados(json: Record<string, unknown>): string {
+  const total =
+    typeof json.totalComunicados === "number"
+      ? json.totalComunicados
+      : Array.isArray(json.comunicados)
+        ? json.comunicados.length
+        : 0;
+  const list = Array.isArray(json.comunicados) ? json.comunicados : [];
+  const unread = list.filter((c) => {
+    if (!c || typeof c !== "object") return false;
+    return (c as Record<string, unknown>).esLeido === false;
+  }).length;
+  const titles = list
+    .slice(0, 3)
+    .map((c) => {
+      if (!c || typeof c !== "object") return null;
+      const t = (c as Record<string, unknown>).titulo;
+      return typeof t === "string" ? t.trim() : null;
+    })
+    .filter(Boolean) as string[];
+  const head = `Buzón comunicados (SATgo): ${total} comunicado(s)${
+    unread ? ` · ${unread} sin leer` : ""
+  }`;
+  return titles.length ? `${head}. ${titles.join(" · ")}` : head;
+}
+
+function summarizeNotificaciones(payload: {
+  pendientes: Record<string, unknown> | null;
+  notificadas: Record<string, unknown> | null;
+}): string {
+  const count = (j: Record<string, unknown> | null) => {
+    if (!j) return 0;
+    if (typeof j.totalRegistros === "number") return j.totalRegistros;
+    return Array.isArray(j.notificaciones) ? j.notificaciones.length : 0;
+  };
+  const nPend = count(payload.pendientes);
+  const nNotif = count(payload.notificadas);
+  const sample = (j: Record<string, unknown> | null) => {
+    const list = Array.isArray(j?.notificaciones) ? j!.notificaciones : [];
+    return list
+      .slice(0, 2)
+      .map((n) => {
+        if (!n || typeof n !== "object") return null;
+        const o = n as Record<string, unknown>;
+        const acto = typeof o.acto === "string" ? o.acto.trim() : "";
+        const folio = typeof o.folio === "string" ? o.folio.trim() : "";
+        return acto || folio || null;
+      })
+      .filter(Boolean) as string[];
+  };
+  const titles = [...sample(payload.pendientes), ...sample(payload.notificadas)].slice(0, 3);
+  const head = `Buzón notificaciones (SATgo): ${nPend} pendiente(s) · ${nNotif} notificada(s)`;
+  return titles.length ? `${head}. ${titles.join(" · ")}` : head;
+}
+
+/** Evita guardar blobs enormes si SATgo embebe PDFs en base64. */
+function sanitizeBuzonJson(json: Record<string, unknown>): Record<string, unknown> {
+  const clone = JSON.parse(JSON.stringify(json)) as Record<string, unknown>;
+  const stripHeavy = (arrKey: string) => {
+    const arr = clone[arrKey];
+    if (!Array.isArray(arr)) return;
+    clone[arrKey] = arr.map((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return item;
+      const o = { ...(item as Record<string, unknown>) };
+      for (const k of Object.keys(o)) {
+        const v = o[k];
+        if (typeof v === "string" && v.length > 2000) {
+          o[k] = `[omitido ${v.length} chars]`;
+        } else if (v && typeof v === "object" && !Array.isArray(v)) {
+          const nested = { ...(v as Record<string, unknown>) };
+          for (const nk of Object.keys(nested)) {
+            const nv = nested[nk];
+            if (typeof nv === "string" && nv.length > 2000) {
+              nested[nk] = `[omitido ${nv.length} chars]`;
+            }
+          }
+          o[k] = nested;
+        }
+      }
+      return o;
+    });
+  };
+  stripHeavy("comunicados");
+  stripHeavy("notificaciones");
+  return clone;
+}
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -281,12 +378,14 @@ Deno.serve(async (req) => {
     "lista_69b",
     "constancia_situacion_fiscal",
     "opinion_cumplimiento",
+    "buzon_comunicados",
+    "buzon_notificaciones",
   ];
   if (!projectId || !consultType || !allowed.includes(consultType)) {
     return json(
       {
         error:
-          "projectId y consultType (lista_69b|constancia_situacion_fiscal|opinion_cumplimiento) requeridos",
+          "projectId y consultType (lista_69b|constancia_situacion_fiscal|opinion_cumplimiento|buzon_comunicados|buzon_notificaciones) requeridos",
       },
       400,
     );
@@ -456,12 +555,218 @@ Deno.serve(async (req) => {
     });
   }
 
-  // ---- CSF / 32D ----
+  // ---- FIEL JWE / CIEC (CSF, 32D, buzón) ----
   const hasFielJwe = !!(
     fielRow?.satgo_key_jwe?.trim() &&
     fielRow?.satgo_password_jwe?.trim() &&
     fielRow?.cert_ciphertext
   );
+
+  // Buzón tributario exige e.firma JWE (comunicadosfiel / notificacionesfiel).
+  if (isBuzonConsult(consultType)) {
+    if (!hasFielJwe) {
+      return json(
+        {
+          error: "sat_credentials_required",
+          message:
+            "El buzón tributario requiere e.firma (.cer/.key + contraseña) guardada como JWE en la ficha del cliente.",
+        },
+        400,
+      );
+    }
+    if (fielSecret.length < 32) {
+      return json(
+        {
+          error: "fiel_not_configured",
+          message: "MOFFIN_FIEL_SECRET (≥32) requerido para leer el .cer en reposo.",
+        },
+        503,
+      );
+    }
+
+    let certBytes: Uint8Array;
+    try {
+      const certB64 = await decryptFielSecret(fielRow!.cert_ciphertext, fielSecret);
+      certBytes = base64FileToBytes(certB64);
+    } catch (e) {
+      return json(
+        {
+          error: "fiel_decrypt_failed",
+          message: e instanceof Error ? e.message : String(e),
+        },
+        500,
+      );
+    }
+
+    const keyJwe = fielRow!.satgo_key_jwe!.trim();
+    const passwordJwe = fielRow!.satgo_password_jwe!.trim();
+    const fielOpts = {
+      bearer: satAuth.bearer,
+      rfc: rfcRaw,
+      certBytes,
+      keyJwe,
+      passwordJwe,
+    };
+
+    if (consultType === "buzon_comunicados") {
+      const res = await fetchSatgoBuzonWithFielJwe({
+        ...fielOpts,
+        kind: "comunicados",
+        descargar: false,
+      });
+      if (!res.ok) {
+        const { data: rowErr } = await admin
+          .from("moffin_consults")
+          .insert({
+            organization_id: project.organization_id,
+            project_id: projectId,
+            client_id: project.client_id,
+            rfc: rfcRaw,
+            consult_type: consultType,
+            moffin_service: "satgo-comunicadosfiel",
+            status: "error",
+            error_message: `Origen: SATgo (fiel_jwe). ${res.message}`.slice(0, 500),
+            raw_response: {
+              provider: "satgo",
+              kind: "comunicados",
+              authMode: "fiel_jwe",
+              httpStatus: res.httpStatus,
+              message: res.message,
+            },
+            requested_by: userId,
+          })
+          .select("id")
+          .single();
+        return json(
+          {
+            error: "satgo_api_error",
+            message: res.message,
+            statusCode: res.httpStatus,
+            consultId: rowErr?.id,
+            provider: "satgo",
+            authMode: "fiel_jwe",
+          },
+          422,
+        );
+      }
+      const clean = sanitizeBuzonJson(res.json);
+      const summary = summarizeComunicados(clean);
+      const { data: inserted, error: insErr } = await admin
+        .from("moffin_consults")
+        .insert({
+          organization_id: project.organization_id,
+          project_id: projectId,
+          client_id: project.client_id,
+          rfc: rfcRaw,
+          consult_type: consultType,
+          moffin_service: "satgo-comunicadosfiel",
+          status: "success",
+          summary,
+          raw_response: {
+            provider: "satgo",
+            kind: "comunicados",
+            authMode: "fiel_jwe",
+            result: clean,
+          },
+          requested_by: userId,
+        })
+        .select("id, status, summary, document_id, created_at")
+        .single();
+      if (insErr) return json({ error: insErr.message }, 500);
+      return json({ consult: inserted, provider: "satgo", authMode: "fiel_jwe" });
+    }
+
+    // buzon_notificaciones: pendientes + notificadas (reusa requestId)
+    const pendRes = await fetchSatgoBuzonWithFielJwe({
+      ...fielOpts,
+      kind: "notificaciones",
+      tipoNotificacion: "pendientes",
+      descargarNotificaciones: false,
+    });
+    if (!pendRes.ok) {
+      const { data: rowErr } = await admin
+        .from("moffin_consults")
+        .insert({
+          organization_id: project.organization_id,
+          project_id: projectId,
+          client_id: project.client_id,
+          rfc: rfcRaw,
+          consult_type: consultType,
+          moffin_service: "satgo-notificacionesfiel",
+          status: "error",
+          error_message: `Origen: SATgo (fiel_jwe). ${pendRes.message}`.slice(0, 500),
+          raw_response: {
+            provider: "satgo",
+            kind: "notificaciones",
+            authMode: "fiel_jwe",
+            httpStatus: pendRes.httpStatus,
+            message: pendRes.message,
+          },
+          requested_by: userId,
+        })
+        .select("id")
+        .single();
+      return json(
+        {
+          error: "satgo_api_error",
+          message: pendRes.message,
+          statusCode: pendRes.httpStatus,
+          consultId: rowErr?.id,
+          provider: "satgo",
+          authMode: "fiel_jwe",
+        },
+        422,
+      );
+    }
+
+    let notifRes = await fetchSatgoBuzonWithFielJwe({
+      ...fielOpts,
+      kind: "notificaciones",
+      tipoNotificacion: "notificadas",
+      descargarNotificaciones: false,
+      requestId: pendRes.requestId,
+    });
+    // Si el requestId expiró, reintentar sin él
+    if (!notifRes.ok && notifRes.httpStatus === 404) {
+      notifRes = await fetchSatgoBuzonWithFielJwe({
+        ...fielOpts,
+        kind: "notificaciones",
+        tipoNotificacion: "notificadas",
+        descargarNotificaciones: false,
+      });
+    }
+
+    const pendientes = sanitizeBuzonJson(pendRes.json);
+    const notificadas = notifRes.ok ? sanitizeBuzonJson(notifRes.json) : null;
+    const summary = summarizeNotificaciones({ pendientes, notificadas });
+    const { data: inserted, error: insErr } = await admin
+      .from("moffin_consults")
+      .insert({
+        organization_id: project.organization_id,
+        project_id: projectId,
+        client_id: project.client_id,
+        rfc: rfcRaw,
+        consult_type: consultType,
+        moffin_service: "satgo-notificacionesfiel",
+        status: "success",
+        summary,
+        raw_response: {
+          provider: "satgo",
+          kind: "notificaciones",
+          authMode: "fiel_jwe",
+          pendientes,
+          notificadas,
+          notificadasError: notifRes.ok
+            ? null
+            : { httpStatus: notifRes.httpStatus, message: notifRes.message },
+        },
+        requested_by: userId,
+      })
+      .select("id, status, summary, document_id, created_at")
+      .single();
+    if (insErr) return json({ error: insErr.message }, 500);
+    return json({ consult: inserted, provider: "satgo", authMode: "fiel_jwe" });
+  }
 
   let authMode: "fiel_jwe" | "ciec" | null = hasFielJwe ? "fiel_jwe" : null;
   let ciecPlain: string | null = null;

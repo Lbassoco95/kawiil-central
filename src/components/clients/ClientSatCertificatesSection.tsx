@@ -37,6 +37,9 @@ import {
 interface ClientSatCertificatesSectionProps {
   clientId: string;
   clientRfc: string | null;
+  /** Dentro del panel SATgo unificado: sin glass-card externo. */
+  embedded?: boolean;
+  className?: string;
 }
 
 interface ExpiryStyle {
@@ -190,6 +193,8 @@ interface UploadDialogState {
 export function ClientSatCertificatesSection({
   clientId,
   clientRfc,
+  embedded = false,
+  className,
 }: ClientSatCertificatesSectionProps) {
   const { data, isLoading, isError, refetch } = useClientSatCertificates(clientId);
   const saveMutation = useSaveClientSatCertificate(clientId);
@@ -302,7 +307,12 @@ export function ClientSatCertificatesSection({
   return (
     <section
       id="sat-certificates"
-      className="glass-card p-5 md:col-span-2"
+      className={cn(
+        embedded
+          ? "rounded-md border border-border/60 bg-background/30 p-4"
+          : "glass-card p-5 md:col-span-2",
+        className,
+      )}
     >
       <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
         <div>

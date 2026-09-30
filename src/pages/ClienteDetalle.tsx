@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useState, useMemo, useEffect } from "react";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { useClientDetail } from "@/hooks/useClientDetail";
 import { Badge } from "@/components/ui/badge";
@@ -14,9 +14,8 @@ import { ClientMeetingsTab } from "@/components/clients/ClientMeetingsTab";
 import { ClientOffboardingSection } from "@/components/clients/ClientOffboardingSection";
 import { ClientEditDialog } from "@/components/clients/ClientEditDialog";
 import { ClientHealthScoreCard } from "@/components/clients/ClientHealthScoreCard";
-import { ClientSatCertificatesSection } from "@/components/clients/ClientSatCertificatesSection";
+import { ClientSatgoPanel } from "@/components/clients/ClientSatgoPanel";
 import { ClientTaxProfilesSection } from "@/components/clients/ClientTaxProfilesSection";
-import { MoffinSatStatusSummary } from "@/components/clients/MoffinSatStatusSummary";
 import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
 import { ComplianceClientSection } from "@/components/compliance/ComplianceClientSection";
 import { DropboxFolderBrowser } from "@/components/clients/DropboxFolderBrowser";
@@ -86,8 +85,32 @@ const ClienteDetalle = () => {
   const { client, isLoadingClient, projects, tasks, documents } = useClientDetail(id);
   const { data: clientGroupsList } = useClientGroupsForClient(id);
   const [editOpen, setEditOpen] = useState(false);
-  const [tab, setTab] = useState<string>("general");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabFromUrl = searchParams.get("tab");
+  const [tab, setTab] = useState<string>(tabFromUrl || "general");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (tabFromUrl && tabFromUrl !== tab) setTab(tabFromUrl);
+  }, [tabFromUrl]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (tab !== "general") return;
+    const hash = window.location.hash?.replace(/^#/, "");
+    if (!hash) return;
+    const t = window.setTimeout(() => {
+      document.getElementById(hash)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 120);
+    return () => clearTimeout(t);
+  }, [tab, client?.id]);
+
+  const selectTab = (key: string) => {
+    setTab(key);
+    const next = new URLSearchParams(searchParams);
+    if (key === "general") next.delete("tab");
+    else next.set("tab", key);
+    setSearchParams(next, { replace: true });
+  };
   const { hasFinanceAccess, isLoading: financeAccessLoading } = useFinanceAccess();
   const { data: canViewSavioIncome = false, isLoading: savioIncomeLoading } = useSavioIncomeAccess();
   const showSavioTab =
@@ -293,7 +316,7 @@ const ClienteDetalle = () => {
             return (
               <button
                 key={t.key}
-                onClick={() => setTab(t.key)}
+                onClick={() => selectTab(t.key)}
                 className={`tab-pill ${tab === t.key ? "tab-pill-active" : "tab-pill-inactive"} inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap`}
               >
                 {t.icon && <t.icon className="h-3 w-3" />}
@@ -315,7 +338,7 @@ const ClienteDetalle = () => {
                 documents={documents as any}
               />
             </div>
-            <MoffinSatStatusSummary
+            <ClientSatgoPanel
               clientId={client.id}
               client={client}
               projects={projects}
@@ -389,11 +412,6 @@ const ClienteDetalle = () => {
                 </p>
               )}
             </section>
-
-            <ClientSatCertificatesSection
-              clientId={client.id}
-              clientRfc={client.rfc ?? null}
-            />
 
             <ClientTaxProfilesSection clientId={client.id} clientRfc={client.rfc ?? null} />
 
