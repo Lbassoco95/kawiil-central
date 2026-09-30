@@ -23,7 +23,6 @@ import {
 } from "@/lib/moffinDisplay";
 import {
   SATGO_CONSULT_META,
-  SATGO_CONSULT_TYPES,
   satgoConsultLabel,
   type SatgoConsultType,
 } from "@/lib/satgoConsultMeta";
