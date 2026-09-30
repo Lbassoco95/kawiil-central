@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { AlertTriangle, FileText, FolderOpen, Home, LogOut, MessageSquare, UserCircle } from "lucide-react";
 import { usePortal } from "../lib/session";
+import { DEMO_FISCAL_MARK, isPortalDemoMode } from "../lib/demo";
 import { db } from "../lib/supabase";
 import { cn } from "@/lib/utils";
 
@@ -8,6 +9,7 @@ export default function Layout() {
   const { me, active, setActive } = usePortal();
   const navigate = useNavigate();
   const premier = me?.tier === "premier";
+  const demo = isPortalDemoMode();
   const nav = [
     { to: "/", label: "Inicio", Icon: Home, show: active?.role !== "operativo" },
     { to: "/facturas", label: "Facturas", Icon: FileText, show: true },
@@ -22,9 +24,15 @@ export default function Layout() {
       <a href="#contenido" className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded focus:bg-white focus:p-2">
         Saltar al contenido
       </a>
+      {demo && (
+        <div className="kw-demo-banner" role="status">
+          Entorno de demostración · {DEMO_FISCAL_MARK}
+        </div>
+      )}
       <header className="sticky top-0 z-30 bg-accent text-accent-foreground" style={{ paddingTop: "env(safe-area-inset-top)" }}>
         <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-3">
           <span className="text-2xl font-bold" style={{ fontFamily: "Rajdhani" }} aria-label="Kawiil">KAWIIL</span>
+          {demo && <span className="rounded border border-white/50 px-2 py-0.5 text-[11px] font-semibold tracking-wide">DEMO</span>}
           <div className="ml-auto flex items-center gap-2">
             {(me?.clients?.length ?? 0) > 1 ? (
               <label className="flex items-center gap-2 text-sm">

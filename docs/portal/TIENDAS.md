@@ -32,7 +32,7 @@ Estado hoy: el portal es una PWA instalable (`portal/public/manifest.webmanifest
 | «Es solo un sitio web empaquetado» (Guideline 4.2) | Apple | Cámara nativa, push, biometría y archivos nativos antes de enviar. |
 | Textos legales marcadores | Ambas | Sustituir los cuatro marcadores (`portal_legal_documents`) antes de enviar. |
 | El revisor no puede entrar (cuenta pendiente de vinculación) | Ambas | Cuenta de prueba ya vinculada; explicar en notas que el registro público queda pendiente hasta que Kawiil vincula. |
-| Facturas «de prueba» visibles como si fueran reales | Ambas | Ya se marcan «Prueba sin validez fiscal»; en la cuenta del revisor, dejarlo explícito en las notas. |
+| Facturas «de prueba» visibles como si fueran reales | Ambas | En Corte 4 se marcan «DEMO — sin validez fiscal» y el build demo lleva banner; en la cuenta del revisor, dejarlo explícito en las notas. |
 | Funciones de pago dentro de la app (nivel básico «contratar») | Apple (3.1.1) | El portal no cobra: «contratar» abre un hilo con Kawiil. No agregar pagos dentro de la app sin revisar reglas de compras integradas. |
 | Falta la URL web de eliminación de cuenta | Google | Publicarla (ver §3). |
 | Permisos sin explicación | Ambas | Textos de §2 en `Info.plist` / `AndroidManifest`. |

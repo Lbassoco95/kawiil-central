@@ -196,3 +196,41 @@ Central → `portal-system-api`: `invoice.publish`, `fiscal_summary.publish`, `d
 - Publicar un resumen de periodo y comprobar que el tablero prioriza ese payload.
 - Publicar alerta EFOS y notificación SAT; deben aparecer en `/alertas`.
 - Confirmar que no hay botones de «Cargar XML» ni «Crear factura» en la UI espejo.
+
+## 13. Corte 4 — entorno de demostración (espejo)
+
+Documentación: `docs/portal/DEMO.md` y guion `docs/portal/DEMO-GUION.md`. Dataset: `kawiil-os/demo/`.
+
+### Requisitos
+
+- Proyecto Supabase **distinto** de central y del ensayo productivo.
+- `PORTAL_MIRROR_READ_ONLY=true`.
+- Build con `VITE_PORTAL_DEMO_MODE=true` (banner + chip DEMO).
+- Turnstile de prueba; sin secretos de producción ni PAC real.
+
+### Sembrar o reiniciar (exacto)
+
+```bash
+PORTAL_DEMO_ALLOW_RESET=1 DATABASE_URL='postgresql://…' npm run portal:demo-reset
+# Verificación automática de conteos canónicos incluida.
+npm run test:kawiil-os-demo   # Postgres local/CI: siembra → muta → reinicia → compara hash
+```
+
+El script aborta sin `PORTAL_DEMO_ALLOW_RESET=1` y si la cadena de conexión menciona el project ref de central.
+
+### Contenido canónico (septiembre 2026)
+
+| Pieza | Cantidad |
+|---|---|
+| CFDI `is_test` (emitidas/recibidas, PUE/PPD, una solo metadatos) | 4 |
+| Resumen fiscal publicado | 1 |
+| Documentos (constancia, opinión, declaración) | 3 |
+| Alertas (EFOS + cancelación) | 2 |
+| Notificación SAT | 1 |
+| RH / emisión | apagados |
+
+### Qué no hacer
+
+- No aplicar `seed.sql` en central ni en un proyecto con datos reales de clientes.
+- No desactivar el espejo (`PORTAL_MIRROR_READ_ONLY=false`) en el demo de Corte 4.
+- No demostrar emisión, CSD ni RH en este entorno.

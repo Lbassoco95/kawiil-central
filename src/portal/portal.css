@@ -49,4 +49,13 @@
   .kw-critical { background: hsl(var(--kw-critical)); color: hsl(var(--kw-critical-foreground)); font-weight: 600; }
   .kw-critical:hover { filter: brightness(0.95); }
   .kw-placeholder { border: 2px dashed hsl(var(--warning)); background: hsl(40 100% 96%); }
+  .kw-demo-banner {
+    background: hsl(32 95% 34%);
+    color: #fff;
+    text-align: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    padding: 0.35rem 0.75rem;
+  }
 }

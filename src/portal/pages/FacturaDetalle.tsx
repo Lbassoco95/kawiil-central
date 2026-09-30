@@ -5,6 +5,7 @@ import { usePortal } from "../lib/session";
 import { callApi, openFile, PortalApiError } from "../lib/api";
 import { fmtDate, fmtMoney } from "../lib/format";
 import { Empty, Notice, PageTitle, StatusPill } from "../components/ui";
+import { DEMO_FISCAL_MARK } from "../lib/demo";
 
 interface Detalle {
   factura: {
@@ -56,6 +57,7 @@ export default function FacturaDetalle() {
               <div className="text-right">
                 <p className="kw-mono text-2xl">{fmtMoney(f.total)}</p>
                 <StatusPill tone={f.detail_status === "complete" ? "ok" : "warn"}>{f.calidad === "completa" ? "Detalle completo" : "Solo metadatos"}</StatusPill>
+                {f.is_test && <div className="mt-1"><StatusPill tone="warn">{DEMO_FISCAL_MARK}</StatusPill></div>}
               </div>
             </div>
             <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-3">

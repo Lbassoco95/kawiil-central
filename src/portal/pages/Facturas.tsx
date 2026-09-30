@@ -79,7 +79,7 @@ export default function Facturas() {
                 <div className="text-right">
                   <p className="kw-mono text-lg">{fmtMoney(c.total)}</p>
                   <StatusPill tone={SAT[c.sat_status]?.tone ?? "wait"}>{SAT[c.sat_status]?.label ?? c.sat_status}</StatusPill>
-                  {c.is_test && <span className="ml-1"><StatusPill tone="warn">Prueba sin validez fiscal</StatusPill></span>}
+                  {c.is_test && <span className="ml-1"><StatusPill tone="warn">DEMO — sin validez fiscal</StatusPill></span>}
                 </div>
               </div>
               {c.flags?.map((f) => <p key={f.code} className="mt-1 text-xs"><StatusPill tone="warn">Atención</StatusPill> {f.reason}</p>)}

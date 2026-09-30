@@ -108,3 +108,12 @@ Antes de confirmar, la pantalla de «Cuenta» muestra **exactamente** qué se el
 2. Si las constancias de aceptación bastan seudonimizadas durante el resguardo o si se requiere identidad plena por el plazo de prescripción.
 3. Qué pasa con la ficha del cliente básico en el CRM (razón social y RFC) cuando vence el resguardo. Hoy se conserva la ficha, sin datos de contacto, y se eliminan sus datos fiscales del portal.
 4. En la baja de un cliente premier, qué hacer con los datos de contacto del cliente en el CRM de central y con la e.firma que usa Moffin. Esta política cubre el portal; esos datos son de la relación de servicio de Kawiil y de Moffin, y no se tocan.
+
+## 10. Entorno de demostración (Corte 4)
+
+Los datos del proyecto **demo del espejo** (`demo-espejo-fiscal`, ver `docs/portal/DEMO.md`) son **sintéticos** y están marcados «DEMO — sin validez fiscal».
+
+- **No** son comprobantes fiscales de un cliente real: no sustituyen la obligación de resguardo del §1.
+- Se pueden **borrar y recrear** con el reinicio exacto documentado; el reinicio no es una «baja» de cliente ni dispara resguardo a 5/10 años.
+- El proyecto demo **no** debe contener CSD, e.firma, CIEC ni secretos de producción.
+- Si un día el mismo proyecto hospeda un cliente real, deja de ser demo: aplica esta política completa y se retira `demo_mode` / la semilla.
