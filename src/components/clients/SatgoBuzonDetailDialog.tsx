@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { MoffinPdfActions } from "@/components/clients/MoffinPdfActions";
 import {
   parseComunicadosFromRaw,
   parseNotificacionesFromRaw,
@@ -48,21 +49,33 @@ function ComunicadoRow({ item }: { item: SatgoComunicadoItem }) {
           </span>
         ) : null}
       </div>
-      {item.enlace ? (
-        <Button type="button" variant="outline" size="sm" className="h-7 text-[11px] gap-1.5" asChild>
-          <a href={item.enlace} target="_blank" rel="noopener noreferrer">
-            Abrir acuse en SAT
-            <ExternalLink className="h-3 w-3" />
-          </a>
-        </Button>
-      ) : (
-        <p className="text-[10px] text-muted-foreground">Sin enlace de acuse en la respuesta SATgo.</p>
-      )}
+      <div className="flex flex-wrap items-center gap-2">
+        {item.kawiilFilePath ? (
+          <MoffinPdfActions
+            filePath={item.kawiilFilePath}
+            fileName={item.kawiilFileName ?? item.fileName}
+          />
+        ) : null}
+        {item.enlace ? (
+          <Button type="button" variant="outline" size="sm" className="h-7 text-[11px] gap-1.5" asChild>
+            <a href={item.enlace} target="_blank" rel="noopener noreferrer">
+              Abrir acuse en SAT
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          </Button>
+        ) : null}
+        {!item.kawiilFilePath && !item.enlace ? (
+          <p className="text-[10px] text-muted-foreground">
+            Sin PDF ni enlace en esta consulta. Vuelve a pulsar Comunicados para reconsultar con descarga.
+          </p>
+        ) : null}
+      </div>
     </li>
   );
 }
 
 function NotificacionRow({ item }: { item: SatgoNotificacionItem }) {
+  const hasAnyPdf = !!(item.kawiilFilePath || item.acuseFilePath || item.actoFilePath);
   return (
     <li className="rounded-md border border-border/60 bg-background/50 p-3 space-y-1.5">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -95,16 +108,44 @@ function NotificacionRow({ item }: { item: SatgoNotificacionItem }) {
             <dd className="inline">{item.autoridad}</dd>
           </div>
         ) : null}
-        {item.pdfFileName ? (
-          <div className="sm:col-span-2">
-            <dt className="inline text-muted-foreground/80">PDF: </dt>
-            <dd className="inline">
-              {item.pdfFileName}
-              {item.pdfDescargado ? " · descargado" : " · metadata (sin PDF en esta consulta)"}
-            </dd>
-          </div>
-        ) : null}
       </dl>
+      {hasAnyPdf ? (
+        <div className="space-y-1.5 pt-0.5">
+          {item.kawiilFilePath ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[10px] text-muted-foreground">Notificación:</span>
+              <MoffinPdfActions
+                filePath={item.kawiilFilePath}
+                fileName={item.kawiilFileName ?? item.pdfFileName}
+              />
+            </div>
+          ) : null}
+          {item.actoFilePath ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[10px] text-muted-foreground">Acto administrativo:</span>
+              <MoffinPdfActions
+                filePath={item.actoFilePath}
+                fileName={item.actoFileName}
+              />
+            </div>
+          ) : null}
+          {item.acuseFilePath ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[10px] text-muted-foreground">Acuse:</span>
+              <MoffinPdfActions
+                filePath={item.acuseFilePath}
+                fileName={item.acuseFileName}
+              />
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <p className="text-[10px] text-amber-800 dark:text-amber-200 leading-snug">
+          {item.pdfFileName
+            ? `PDF referenciado (${item.pdfFileName}) pero no descargado. Vuelve a pulsar Notificaciones para traer el archivo.`
+            : "Sin PDF en esta consulta. Vuelve a consultar Notificaciones para intentar descargarlo."}
+        </p>
+      )}
     </li>
   );
 }
@@ -137,8 +178,7 @@ export function SatgoBuzonDetailDialog({
             {consultedAt
               ? ` · ${new Date(consultedAt).toLocaleString("es-MX")}`
               : ""}
-            . Cada ítem muestra lo que devolvió el SAT (título, fechas, folio, autoridad
-            {isComunicados ? " y enlace al acuse" : ""}).
+            . Título, fechas, folio, autoridad y PDF cuando SATgo lo entrega.
           </DialogDescription>
         </DialogHeader>
 
