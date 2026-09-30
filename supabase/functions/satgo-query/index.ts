@@ -120,6 +120,176 @@ function sanitizeBuzonJson(json: Record<string, unknown>): Record<string, unknow
   return clone;
 }
 
+type BuzonStoredPdf = {
+  documentId: string;
+  filePath: string;
+  fileName: string;
+  kind: string;
+  folioOrId?: string | null;
+};
+
+function decodePossiblyBase64Pdf(raw: unknown): Uint8Array | null {
+  if (typeof raw !== "string" || !raw.trim()) return null;
+  let s = raw.trim();
+  const dataUri = /^data:application\/pdf;base64,/i.exec(s);
+  if (dataUri) s = s.slice(dataUri[0].length);
+  // Quitar whitespace/newlines comunes en base64
+  s = s.replace(/\s/g, "");
+  try {
+    const bytes = base64ToBytes(s);
+    const head = new TextDecoder().decode(bytes.slice(0, 5));
+    if (bytes.length >= 5 && head.startsWith("%PDF")) return bytes;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function pickPdfBytesFromObj(o: Record<string, unknown>): {
+  bytes: Uint8Array | null;
+  fileName: string | null;
+} {
+  const fileName =
+    (typeof o.pdfFileName === "string" && o.pdfFileName.trim()) ||
+    (typeof o.fileName === "string" && o.fileName.trim()) ||
+    null;
+  const candidates = [o.pdfContent, o.fileContent, o.content, o.pdfBase64, o.archivo];
+  for (const c of candidates) {
+    const bytes = decodePossiblyBase64Pdf(c);
+    if (bytes) return { bytes, fileName };
+  }
+  return { bytes: null, fileName };
+}
+
+async function uploadBuzonPdf(opts: {
+  admin: ReturnType<typeof createClient>;
+  orgId: string;
+  clientId: string;
+  projectId: string;
+  userId: string | null;
+  consultType: string;
+  fileBase: string;
+  displayName: string;
+  buf: Uint8Array;
+}): Promise<BuzonStoredPdf | null> {
+  const path = storagePath(opts.orgId, opts.clientId, opts.fileBase);
+  const { error: upErr } = await opts.admin.storage.from("documents").upload(path, opts.buf, {
+    contentType: "application/pdf",
+    upsert: false,
+  });
+  if (upErr) {
+    console.error("[satgo-query] buzon pdf upload", upErr.message);
+    return null;
+  }
+  const { data: doc, error: docErr } = await opts.admin
+    .from("documents")
+    .insert({
+      name: opts.displayName,
+      file_path: path,
+      file_size: opts.buf.length,
+      mime_type: "application/pdf",
+      source: "supabase",
+      organization_id: opts.orgId,
+      project_id: opts.projectId,
+      client_id: opts.clientId,
+      document_type: opts.consultType,
+      uploaded_by: opts.userId,
+    })
+    .select("id")
+    .single();
+  if (docErr || !doc) {
+    console.error("[satgo-query] buzon pdf document insert", docErr?.message);
+    return null;
+  }
+  return {
+    documentId: doc.id,
+    filePath: path,
+    fileName: opts.displayName,
+    kind: opts.consultType,
+  };
+}
+
+/**
+ * Extrae PDFs embebidos en comunicados/notificaciones, los sube a storage
+ * y deja referencias en el JSON (sin base64).
+ */
+async function persistBuzonPdfs(opts: {
+  admin: ReturnType<typeof createClient>;
+  orgId: string;
+  clientId: string;
+  projectId: string;
+  userId: string | null;
+  consultType: "buzon_comunicados" | "buzon_notificaciones";
+  json: Record<string, unknown>;
+}): Promise<{ json: Record<string, unknown>; pdfs: BuzonStoredPdf[]; primaryDocumentId: string | null }> {
+  const clone = JSON.parse(JSON.stringify(opts.json)) as Record<string, unknown>;
+  const pdfs: BuzonStoredPdf[] = [];
+
+  const saveOne = async (
+    item: Record<string, unknown>,
+    kindLabel: string,
+    idHint: string,
+  ) => {
+    const { bytes, fileName } = pickPdfBytesFromObj(item);
+    // Limpiar blobs siempre
+    for (const k of ["pdfContent", "fileContent", "content", "pdfBase64", "archivo"]) {
+      if (typeof item[k] === "string" && (item[k] as string).length > 200) {
+        item[k] = `[omitido ${(item[k] as string).length} chars]`;
+      }
+    }
+    if (!bytes) return;
+    const display =
+      (fileName && fileName.endsWith(".pdf") ? fileName : null) ||
+      `${kindLabel}_${idHint || Date.now()}.pdf`;
+    const stored = await uploadBuzonPdf({
+      admin: opts.admin,
+      orgId: opts.orgId,
+      clientId: opts.clientId,
+      projectId: opts.projectId,
+      userId: opts.userId,
+      consultType: opts.consultType,
+      fileBase: `${kindLabel}_${idHint || "doc"}`,
+      displayName: display.slice(0, 120),
+      buf: bytes,
+    });
+    if (stored) {
+      item.kawiilDocumentId = stored.documentId;
+      item.kawiilFilePath = stored.filePath;
+      item.kawiilFileName = stored.fileName;
+      item.pdfDescargado = true;
+      pdfs.push({ ...stored, folioOrId: idHint || null });
+    }
+  };
+
+  const listKey =
+    opts.consultType === "buzon_comunicados" ? "comunicados" : "notificaciones";
+  const list = Array.isArray(clone[listKey]) ? (clone[listKey] as unknown[]) : [];
+  for (let i = 0; i < list.length; i++) {
+    const item = list[i];
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const o = item as Record<string, unknown>;
+    const idHint = String(
+      o.folio ?? o.id ?? o.titulo ?? o.acto ?? i,
+    ).replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 40);
+    await saveOne(o, listKey === "comunicados" ? "comunicado" : "notif", idHint);
+
+    // Nested PDFs en notificaciones (acto administrativo / acuse)
+    for (const nestedKey of ["actoAdministrativoRow", "acuseRow"]) {
+      const nested = o[nestedKey];
+      if (!nested || typeof nested !== "object" || Array.isArray(nested)) continue;
+      const n = nested as Record<string, unknown>;
+      await saveOne(n, nestedKey.replace(/Row$/, ""), `${idHint}_${nestedKey}`);
+    }
+  }
+  clone[listKey] = list;
+
+  return {
+    json: sanitizeBuzonJson(clone),
+    pdfs,
+    primaryDocumentId: pdfs[0]?.documentId ?? null,
+  };
+}
+
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -612,7 +782,7 @@ Deno.serve(async (req) => {
       const res = await fetchSatgoBuzonWithFielJwe({
         ...fielOpts,
         kind: "comunicados",
-        descargar: false,
+        descargar: true,
       });
       if (!res.ok) {
         const { data: rowErr } = await admin
@@ -649,8 +819,20 @@ Deno.serve(async (req) => {
           422,
         );
       }
-      const clean = sanitizeBuzonJson(res.json);
-      const summary = summarizeComunicados(clean);
+      const persisted = await persistBuzonPdfs({
+        admin,
+        orgId: project.organization_id,
+        clientId: project.client_id,
+        projectId,
+        userId,
+        consultType: "buzon_comunicados",
+        json: res.json,
+      });
+      const summary = summarizeComunicados(persisted.json);
+      const withPdfNote =
+        persisted.pdfs.length > 0
+          ? `${summary} · ${persisted.pdfs.length} PDF(s) guardado(s)`
+          : summary;
       const { data: inserted, error: insErr } = await admin
         .from("moffin_consults")
         .insert({
@@ -661,27 +843,34 @@ Deno.serve(async (req) => {
           consult_type: consultType,
           moffin_service: "satgo-comunicadosfiel",
           status: "success",
-          summary,
+          summary: withPdfNote,
+          document_id: persisted.primaryDocumentId,
           raw_response: {
             provider: "satgo",
             kind: "comunicados",
             authMode: "fiel_jwe",
-            result: clean,
+            result: persisted.json,
+            pdfs: persisted.pdfs,
           },
           requested_by: userId,
         })
         .select("id, status, summary, document_id, created_at")
         .single();
       if (insErr) return json({ error: insErr.message }, 500);
-      return json({ consult: inserted, provider: "satgo", authMode: "fiel_jwe" });
+      return json({
+        consult: inserted,
+        provider: "satgo",
+        authMode: "fiel_jwe",
+        pdfCount: persisted.pdfs.length,
+      });
     }
 
-    // buzon_notificaciones: pendientes + notificadas (reusa requestId)
+    // buzon_notificaciones: pendientes + notificadas con PDFs (reusa requestId)
     const pendRes = await fetchSatgoBuzonWithFielJwe({
       ...fielOpts,
       kind: "notificaciones",
       tipoNotificacion: "pendientes",
-      descargarNotificaciones: false,
+      descargarNotificaciones: true,
     });
     if (!pendRes.ok) {
       const { data: rowErr } = await admin
@@ -723,7 +912,7 @@ Deno.serve(async (req) => {
       ...fielOpts,
       kind: "notificaciones",
       tipoNotificacion: "notificadas",
-      descargarNotificaciones: false,
+      descargarNotificaciones: true,
       requestId: pendRes.requestId,
     });
     // Si el requestId expiró, reintentar sin él
@@ -732,13 +921,44 @@ Deno.serve(async (req) => {
         ...fielOpts,
         kind: "notificaciones",
         tipoNotificacion: "notificadas",
-        descargarNotificaciones: false,
+        descargarNotificaciones: true,
       });
     }
 
-    const pendientes = sanitizeBuzonJson(pendRes.json);
-    const notificadas = notifRes.ok ? sanitizeBuzonJson(notifRes.json) : null;
-    const summary = summarizeNotificaciones({ pendientes, notificadas });
+    const pendPersisted = await persistBuzonPdfs({
+      admin,
+      orgId: project.organization_id,
+      clientId: project.client_id,
+      projectId,
+      userId,
+      consultType: "buzon_notificaciones",
+      json: pendRes.json,
+    });
+    const notifPersisted = notifRes.ok
+      ? await persistBuzonPdfs({
+          admin,
+          orgId: project.organization_id,
+          clientId: project.client_id,
+          projectId,
+          userId,
+          consultType: "buzon_notificaciones",
+          json: notifRes.json,
+        })
+      : null;
+
+    const allPdfs = [
+      ...pendPersisted.pdfs,
+      ...(notifPersisted?.pdfs ?? []),
+    ];
+    const summaryBase = summarizeNotificaciones({
+      pendientes: pendPersisted.json,
+      notificadas: notifPersisted?.json ?? null,
+    });
+    const summary =
+      allPdfs.length > 0
+        ? `${summaryBase} · ${allPdfs.length} PDF(s) guardado(s)`
+        : summaryBase;
+
     const { data: inserted, error: insErr } = await admin
       .from("moffin_consults")
       .insert({
@@ -750,12 +970,14 @@ Deno.serve(async (req) => {
         moffin_service: "satgo-notificacionesfiel",
         status: "success",
         summary,
+        document_id: allPdfs[0]?.documentId ?? null,
         raw_response: {
           provider: "satgo",
           kind: "notificaciones",
           authMode: "fiel_jwe",
-          pendientes,
-          notificadas,
+          pendientes: pendPersisted.json,
+          notificadas: notifPersisted?.json ?? null,
+          pdfs: allPdfs,
           notificadasError: notifRes.ok
             ? null
             : { httpStatus: notifRes.httpStatus, message: notifRes.message },
@@ -765,7 +987,12 @@ Deno.serve(async (req) => {
       .select("id, status, summary, document_id, created_at")
       .single();
     if (insErr) return json({ error: insErr.message }, 500);
-    return json({ consult: inserted, provider: "satgo", authMode: "fiel_jwe" });
+    return json({
+      consult: inserted,
+      provider: "satgo",
+      authMode: "fiel_jwe",
+      pdfCount: allPdfs.length,
+    });
   }
 
   let authMode: "fiel_jwe" | "ciec" | null = hasFielJwe ? "fiel_jwe" : null;

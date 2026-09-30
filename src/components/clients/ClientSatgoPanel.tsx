@@ -582,22 +582,36 @@ export function ClientSatgoPanel({
                     ) : null}
 
                     {isOk && itemCount > 0 ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-[11px] gap-1.5"
-                        onClick={() =>
-                          setBuzonDetail({
-                            kind: key,
-                            raw: row?.raw_response,
-                            at: row?.created_at ?? null,
-                          })
-                        }
-                      >
-                        <Eye className="h-3.5 w-3.5" />
-                        Ver detalle
-                      </Button>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {(row?.documents as { file_path?: string | null; name?: string | null } | null)
+                          ?.file_path ? (
+                          <MoffinPdfActions
+                            filePath={
+                              (row!.documents as { file_path: string; name?: string | null })
+                                .file_path
+                            }
+                            fileName={
+                              (row!.documents as { file_path: string; name?: string | null }).name
+                            }
+                          />
+                        ) : null}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-[11px] gap-1.5"
+                          onClick={() =>
+                            setBuzonDetail({
+                              kind: key,
+                              raw: row?.raw_response,
+                              at: row?.created_at ?? null,
+                            })
+                          }
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                          Ver detalle
+                        </Button>
+                      </div>
                     ) : null}
                   </div>
                 );

@@ -8,6 +8,8 @@ export type SatgoComunicadoItem = {
   enlace: string | null;
   fileName: string | null;
   descargaExitosa: boolean | null;
+  kawiilFilePath: string | null;
+  kawiilFileName: string | null;
 };
 
 export type SatgoNotificacionItem = {
@@ -18,6 +20,12 @@ export type SatgoNotificacionItem = {
   pdfFileName: string | null;
   pdfDescargado: boolean | null;
   grupo: "pendientes" | "notificadas";
+  kawiilFilePath: string | null;
+  kawiilFileName: string | null;
+  acuseFilePath: string | null;
+  acuseFileName: string | null;
+  actoFilePath: string | null;
+  actoFileName: string | null;
 };
 
 function asRecord(v: unknown): Record<string, unknown> | null {
@@ -52,6 +60,8 @@ export function parseComunicadosFromRaw(raw: unknown): SatgoComunicadoItem[] {
         enlace: str(o.enlace),
         fileName: str(o.fileName),
         descargaExitosa: bool(o.descargaExitosa),
+        kawiilFilePath: str(o.kawiilFilePath),
+        kawiilFileName: str(o.kawiilFileName) ?? str(o.fileName),
       };
     })
     .filter(Boolean) as SatgoComunicadoItem[];
@@ -76,6 +86,12 @@ function parseNotifList(
         pdfFileName: str(n.pdfFileName),
         pdfDescargado: bool(n.pdfDescargado),
         grupo,
+        kawiilFilePath: str(n.kawiilFilePath),
+        kawiilFileName: str(n.kawiilFileName) ?? str(n.pdfFileName),
+        acuseFilePath: str(asRecord(n.acuseRow)?.kawiilFilePath),
+        acuseFileName: str(asRecord(n.acuseRow)?.kawiilFileName),
+        actoFilePath: str(asRecord(n.actoAdministrativoRow)?.kawiilFilePath),
+        actoFileName: str(asRecord(n.actoAdministrativoRow)?.kawiilFileName),
       };
     })
     .filter(Boolean) as SatgoNotificacionItem[];
