@@ -578,13 +578,9 @@ export function useUpdateCalendarEvent() {
           queryClient.setQueryData(key, data);
         }
       }
-<<<<<<< HEAD
       toast.error("Error al actualizar evento: " + formatMicrosoftIntegrationError(err), {
         duration: 10000,
       });
-=======
-      toast.error("Error al actualizar evento: " + err.message, { duration: 10000 });
->>>>>>> origin/cursor/calendario-update-event-f64e
     },
     onSuccess: (data, vars) => {
       toast.success("Evento actualizado");
