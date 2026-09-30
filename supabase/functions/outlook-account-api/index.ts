@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { classifyMicrosoftOAuthError } from "../_shared/microsoftOAuthErrors.ts";
+// PRODUCTION: deploy as plain Deno.serve TypeScript — never gzip/base64 bootstrap (causes WORKER_ERROR).
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

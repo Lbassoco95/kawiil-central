@@ -103,6 +103,11 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = false
   [functions.moffin-monthly-sat]
     verify_jwt = false
+  [functions.satgo-query]
+    # Auth en código: JWT de usuario o x-cron-secret (smoke/ops)
+    verify_jwt = false
+  [functions.satgo-monthly]
+    verify_jwt = false
   [functions.analyze-improvement-suggestions]
     verify_jwt = true
   [functions.ai-chat]

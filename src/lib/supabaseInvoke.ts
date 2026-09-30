@@ -50,13 +50,23 @@ export function functionInvokeUserMessage(data: unknown, invokeError: unknown): 
     if (payload.error === "ciec_not_configured") {
       return (
         "Falta MOFFIN_SAT_CIEC_SECRET o MOFFIN_FIEL_SECRET (≥32 caracteres) en Edge Functions para cifrar la CIEC " +
-        "del cliente (Moffin Solutions)."
+        "del cliente (consultas SAT / SATgo)."
       );
     }
     if (payload.error === "ciec_required") {
       return typeof payload.message === "string" && payload.message.trim()
         ? payload.message
-        : "Guarda la CIEC del cliente antes de ejecutar consultas CSF u opinión (Moffin Solutions).";
+        : "Guarda la CIEC del cliente antes de ejecutar consultas CSF u opinión (SATgo).";
+    }
+    if (payload.error === "satgo_not_configured" || payload.error === "satgo_token_exchange_failed") {
+      return typeof payload.message === "string" && payload.message.trim()
+        ? payload.message
+        : "Configura SATGO_API_KEY en Supabase → Edge Functions → Secrets (Createkey en SATgo).";
+    }
+    if (payload.error === "satgo_api_error") {
+      return typeof payload.message === "string" && payload.message.trim()
+        ? `SATgo: ${payload.message.trim()}`
+        : "Error al consultar CSF/32D en SATgo.";
     }
     if (payload.error === "moffin_profile_failed") {
       const rawMsg =

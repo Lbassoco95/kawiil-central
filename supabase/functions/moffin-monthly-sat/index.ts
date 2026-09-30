@@ -3,14 +3,12 @@
  * cumplimiento (32D) para todos los clientes con CIEC registrada — "desde sistema",
  * sin que los contadores tengan que dispararla a mano.
  *
- * Diseño 100% aditivo: NO modifica el flujo de moffin-query. Inserta filas en
- * moffin_consults (status pending/success/error) reutilizando los mismos helpers
- * Solutions; el cron existente (moffin-query refreshAllPending, cada 10 min) finaliza
- * el PDF y el estatus de las filas pending.
+ * Preferencia: SATgo (PDF síncrono) si SATGO_API_KEY / SATGO_ACCESS_TOKEN están
+ * configurados; si no, Moffin Solutions (async + refreshAllPending).
  *
  * Disparo: pg_cron mensual (días 1-5) con cabecera x-cron-secret = CRON_SECRET.
  * Idempotente: si un cliente ya tiene una consulta success/pending del tipo en el mes
- * en curso, se omite (así puede correr varios días sin duplicar).
+ * en curso, se omite.
  */
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { decryptFielSecret } from "../_shared/moffinFielCrypto.ts";
@@ -32,6 +30,13 @@ import {
   mapMoffinStatus,
   moffinMessageImpliesSatStillProcessing,
 } from "../_shared/moffinReportStatus.ts";
+import { resolveSatgoBearer, useSatgoForCsf32d } from "../_shared/satgoAuth.ts";
+import {
+  satgoFetchPdf,
+  satgoKindFromConsultType,
+  satgoServiceName,
+} from "../_shared/satgoClient.ts";
+import { uploadMoffinPdfFromBytes } from "../_shared/moffinPdfDownload.ts";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -84,7 +89,6 @@ async function ensureProfileId(
     { rfc, ciec: ciecPlain },
     scheme,
   );
-  // ciecPlain no se registra en logs.
   if (!profRes.ok) return { ok: false, message: `Perfil SAT falló: ${profRes.message}` };
   const profileId = extractMoffinProfileId(profRes.json);
   if (profileId == null) return { ok: false, message: "Moffin no devolvió profileId." };
@@ -99,15 +103,18 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return jsonResponse({ error: "Method not allowed" }, 405);
 
-  // ── Auth solo por CRON_SECRET (disparo de sistema) ──
   const cronSecret = Deno.env.get("CRON_SECRET")?.trim() ?? "";
   const incoming = req.headers.get("x-cron-secret")?.trim() ?? "";
   if (!cronSecret || !incoming || cronSecret !== incoming) {
     return jsonResponse({ error: "No autorizado" }, 401);
   }
 
-  if (getMoffinApiFlavor() !== "solutions") {
-    return jsonResponse({ error: "requires_solutions", message: "Requiere Moffin Solutions." }, 503);
+  const useSatgo = useSatgoForCsf32d();
+  if (!useSatgo && getMoffinApiFlavor() !== "solutions") {
+    return jsonResponse(
+      { error: "requires_solutions_or_satgo", message: "Requiere SATgo o Moffin Solutions." },
+      503,
+    );
   }
 
   const ciecSecret =
@@ -122,13 +129,27 @@ Deno.serve(async (req) => {
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const admin = createClient(supabaseUrl, serviceKey);
 
-  const solutionsBase = moffinSolutionsBaseUrl();
-  const solAuth = await resolveMoffinSolutionsBearer(solutionsBase);
-  if (!solAuth.ok) return jsonResponse({ error: "moffin_solutions_auth", message: solAuth.message }, 503);
-  const solutionsBearer = solAuth.bearer;
-  const scheme = solAuth.scheme;
+  let solutionsBase = "";
+  let solutionsBearer = "";
+  let scheme: MoffinSolutionsAuthScheme = "Bearer";
+  let satgoBearer = "";
 
-  // ── Clientes con CIEC registrada ──
+  if (useSatgo) {
+    const satAuth = await resolveSatgoBearer();
+    if (!satAuth.ok) {
+      return jsonResponse({ error: satAuth.code, message: satAuth.message }, 503);
+    }
+    satgoBearer = satAuth.bearer;
+  } else {
+    solutionsBase = moffinSolutionsBaseUrl();
+    const solAuth = await resolveMoffinSolutionsBearer(solutionsBase);
+    if (!solAuth.ok) {
+      return jsonResponse({ error: "moffin_solutions_auth", message: solAuth.message }, 503);
+    }
+    solutionsBearer = solAuth.bearer;
+    scheme = solAuth.scheme;
+  }
+
   const { data: ciecRows, error: ciecErr } = await admin
     .from("moffin_client_sat_ciec")
     .select("organization_id, client_id, ciec_ciphertext, moffin_profile_id, clients(rfc)")
@@ -138,6 +159,7 @@ Deno.serve(async (req) => {
   const monthStart = firstDayOfMonthIso();
   const results: Array<Record<string, unknown>> = [];
   let consultsDone = 0;
+  const provider = useSatgo ? "satgo" : "moffin";
 
   for (const row of (ciecRows ?? []) as Array<{
     organization_id: string;
@@ -153,7 +175,6 @@ Deno.serve(async (req) => {
       continue;
     }
 
-    // Un proyecto cualquiera del cliente (moffin_consults.project_id es NOT NULL).
     const { data: projRow } = await admin
       .from("projects")
       .select("id")
@@ -167,11 +188,11 @@ Deno.serve(async (req) => {
     const projectId = projRow.id;
 
     let profileId = row.moffin_profile_id ?? null;
+    let ciecPlainCached: string | null = null;
 
     for (const consultType of AUTO_CONSULT_TYPES) {
       if (consultsDone >= MAX_CONSULTS_PER_RUN) break;
 
-      // Idempotencia: ¿ya hay success/pending este mes para este cliente+tipo?
       const { count: existing } = await admin
         .from("moffin_consults")
         .select("id", { count: "exact", head: true })
@@ -181,6 +202,123 @@ Deno.serve(async (req) => {
         .gte("created_at", monthStart);
       if ((existing ?? 0) > 0) {
         results.push({ clientId: row.client_id, consultType, skipped: "ya_consultado_este_mes" });
+        continue;
+      }
+
+      if (useSatgo) {
+        if (!ciecPlainCached) {
+          try {
+            ciecPlainCached = await decryptFielSecret(row.ciec_ciphertext, ciecSecret);
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            await admin.from("moffin_consults").insert({
+              organization_id: row.organization_id,
+              project_id: projectId,
+              client_id: row.client_id,
+              rfc,
+              consult_type: consultType,
+              moffin_service: satgoServiceName(satgoKindFromConsultType(consultType)),
+              status: "error",
+              error_message: `Origen: descarga mensual automática (SATgo). CIEC ilegible: ${msg}`.slice(
+                0,
+                500,
+              ),
+              raw_response: { _error: msg, _auto: true, provider: "satgo" },
+              requested_by: null,
+            });
+            results.push({ clientId: row.client_id, consultType, status: "error", message: msg });
+            consultsDone += 1;
+            continue;
+          }
+        }
+
+        const kind = satgoKindFromConsultType(consultType);
+        const serviceName = satgoServiceName(kind);
+        const pdfRes = await satgoFetchPdf({
+          bearer: satgoBearer,
+          rfc,
+          ciec: ciecPlainCached!,
+          kind,
+        });
+
+        if (!pdfRes.ok) {
+          await admin.from("moffin_consults").insert({
+            organization_id: row.organization_id,
+            project_id: projectId,
+            client_id: row.client_id,
+            rfc,
+            consult_type: consultType,
+            moffin_service: serviceName,
+            status: "error",
+            error_message: `Origen: descarga mensual automática (SATgo). ${pdfRes.message}`.slice(
+              0,
+              500,
+            ),
+            raw_response: {
+              provider: "satgo",
+              kind,
+              httpStatus: pdfRes.httpStatus,
+              message: pdfRes.message,
+              _auto: true,
+            },
+            requested_by: null,
+          });
+          results.push({
+            clientId: row.client_id,
+            consultType,
+            status: "error",
+            statusCode: pdfRes.httpStatus,
+            provider: "satgo",
+          });
+          consultsDone += 1;
+          continue;
+        }
+
+        const up = await uploadMoffinPdfFromBytes({
+          admin,
+          orgId: row.organization_id,
+          projectId,
+          clientId: row.client_id,
+          uploadedBy: null,
+          buf: pdfRes.buf,
+          fileBase: consultType,
+          documentDisplayName: `${consultType}_monthly_${Date.now()}`,
+          documentType: consultType,
+        });
+
+        await admin.from("moffin_consults").insert({
+          organization_id: row.organization_id,
+          project_id: projectId,
+          client_id: row.client_id,
+          rfc,
+          consult_type: consultType,
+          moffin_service: serviceName,
+          status: up.documentId ? "success" : "error",
+          error_message: up.documentId
+            ? null
+            : `PDF SATgo sin guardar: ${up.failureReason ?? "desconocido"}`.slice(0, 500),
+          summary: up.documentId
+            ? `Descarga mensual SATgo · PDF listo (${pdfRes.buf.length} bytes)`
+            : "Descarga mensual SATgo · error al guardar PDF",
+          raw_response: {
+            provider: "satgo",
+            kind,
+            httpStatus: pdfRes.httpStatus,
+            pdfBytes: pdfRes.buf.length,
+            _auto: true,
+            storageFailure: up.failureReason,
+          },
+          document_id: up.documentId,
+          requested_by: null,
+        });
+        results.push({
+          clientId: row.client_id,
+          consultType,
+          status: up.documentId ? "success" : "error",
+          provider: "satgo",
+          documentId: up.documentId,
+        });
+        consultsDone += 1;
         continue;
       }
 
@@ -216,7 +354,13 @@ Deno.serve(async (req) => {
 
       const satPath = moffinSolutionsQueryPathForConsult(consultType);
       const moffinService = moffinQueryServiceSegment(satPath);
-      const satRes = await moffinSolutionsPostJson(solutionsBase, solutionsBearer, satPath, { rfc }, scheme);
+      const satRes = await moffinSolutionsPostJson(
+        solutionsBase,
+        solutionsBearer,
+        satPath,
+        { rfc },
+        scheme,
+      );
 
       if (!satRes.ok) {
         await admin.from("moffin_consults").insert({
@@ -240,7 +384,11 @@ Deno.serve(async (req) => {
       let status = mapMoffinStatus(String(json.status ?? ""));
       const queryId = extractSolutionsQueryId(json);
       if (moffinMessageImpliesSatStillProcessing(json)) status = "pending";
-      else if (queryId && status === "error" && (json.status === undefined || String(json.status ?? "").trim() === "")) {
+      else if (
+        queryId &&
+        status === "error" &&
+        (json.status === undefined || String(json.status ?? "").trim() === "")
+      ) {
         status = "pending";
       }
       const errorMessage =
@@ -266,10 +414,8 @@ Deno.serve(async (req) => {
     }
   }
 
-  console.log(`moffin-monthly-sat: ${consultsDone} consultas disparadas, ${results.length} resultados.`);
+  console.log(`moffin-monthly-sat (${provider}): ${consultsDone} consultas, ${results.length} resultados.`);
 
-  // ── Clientes SIN CIEC: avisar al contador responsable (in-app, 1 vez por mes) ──
-  // Para que el responsable capture la CIEC y el cliente entre a la descarga automática.
   const ciecClientIds = new Set((ciecRows ?? []).map((r) => r.client_id));
   const { data: projClientRows } = await admin
     .from("projects")
@@ -295,10 +441,9 @@ Deno.serve(async (req) => {
       organization_id: string;
       responsible_user_id: string;
     }>) {
-      if (ciecClientIds.has(c.id)) continue; // ya tiene CIEC
-      if (!clientIdsWithProject.has(c.id)) continue; // sin proyecto → fuera de alcance
+      if (ciecClientIds.has(c.id)) continue;
+      if (!clientIdsWithProject.has(c.id)) continue;
 
-      // Idempotencia: ¿ya se notificó este mes para este cliente?
       const { count: already } = await admin
         .from("notifications")
         .select("id", { count: "exact", head: true })
@@ -332,10 +477,10 @@ Deno.serve(async (req) => {
       missingResults.push({ clientId: c.id, notified: c.responsible_user_id });
     }
   }
-  console.log(`moffin-monthly-sat: ${ciecMissingNotified} avisos de CIEC faltante enviados.`);
 
   return jsonResponse({
     source: "cron-monthly",
+    provider,
     triggered: consultsDone,
     clientsWithCiec: ciecRows?.length ?? 0,
     ciecMissingNotified,
