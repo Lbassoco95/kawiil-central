@@ -107,8 +107,8 @@ export function MoffinSatCiecSection({ clientId }: { clientId: string }) {
           <span className="text-[11px] font-medium text-foreground">CIEC (SATgo · portal SAT)</span>
         </div>
         <p className="text-[10px] text-muted-foreground">
-          Necesaria para descargar constancia (CSF) y opinión (32D) vía SATgo. Se guarda cifrada en Kawiil; no
-          la mostramos de nuevo.
+          Opcional como respaldo si no hay e.firma JWE. Preferimos subir .cer/.key + contraseña en la
+          ficha del cliente (cifrado SATgo). La CIEC se guarda cifrada; no la mostramos de nuevo.
         </p>
         {isLoading ? (
           <p className="text-[10px] text-muted-foreground flex items-center gap-1">

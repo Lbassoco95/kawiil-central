@@ -1,11 +1,15 @@
 /**
  * SATgo — CSF y opinión 32D (PDF síncrono).
- * POST JSON: { projectId, consultType: "constancia_situacion_fiscal" | "opinion_cumplimiento" }
+ * Preferencia: e.firma JWE (POST csffiel/ocfiel) → fallback CIEC (GET csf/oc).
  *
- * Secrets: SATGO_API_KEY (o SATGO_ACCESS_TOKEN), MOFFIN_SAT_CIEC_SECRET|MOFFIN_FIEL_SECRET (≥32).
- * Docs: https://api.sat-go.com/scalar/v2
+ * Secrets: SATGO_API_KEY (o SATGO_ACCESS_TOKEN), MOFFIN_FIEL_SECRET (≥32) para
+ * desencriptar .cer en reposo; CIEC opcional como respaldo.
+ * Docs: https://sat-go.com/cifrar-efirma · https://api.sat-go.com/scalar/v2
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { decryptFielSecret } from "../_shared/moffinFielCrypto.ts";
+import { base64FileToBytes } from "../_shared/satgoFielJwe.ts";
+import { fetchSatgoPdfWithFielJwe } from "../_shared/satgoFielClient.ts";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -24,10 +28,6 @@ function json(body: unknown, status = 200): Response {
 
 function satgoBaseUrl(): string {
   return (Deno.env.get("SATGO_BASE_URL") ?? "https://api.sat-go.com").replace(/\/$/, "");
-}
-
-function isSatgoEnvConfigured(): boolean {
-  return !!(Deno.env.get("SATGO_API_KEY")?.trim() || Deno.env.get("SATGO_ACCESS_TOKEN")?.trim());
 }
 
 let cachedBearer: { token: string; expMs: number } | null = null;
@@ -68,7 +68,6 @@ async function resolveSatgoBearer(
   let apiKey = Deno.env.get("SATGO_API_KEY")?.trim() ?? "";
   let access = Deno.env.get("SATGO_ACCESS_TOKEN")?.trim() ?? "";
 
-  // Fallback: Vault (cuando no hay Edge Secrets vía Management API / CLI)
   if (!apiKey && !access) {
     try {
       const { data: vaultKey } = await admin.rpc("kawiil_vault_secret", {
@@ -171,7 +170,7 @@ function storagePath(orgId: string, clientId: string | null, fileBase: string): 
   return `${orgId}/satgo/clientes/${clientSeg}/${y}/${m}/${Date.now()}_${safeBase}.pdf`;
 }
 
-async function fetchSatgoPdf(opts: {
+async function fetchSatgoPdfCiec(opts: {
   bearer: string;
   rfc: string;
   ciec: string;
@@ -223,19 +222,9 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
+  const fielSecret = Deno.env.get("MOFFIN_FIEL_SECRET")?.trim() ?? "";
   const ciecSecret =
-    Deno.env.get("MOFFIN_SAT_CIEC_SECRET")?.trim() ||
-    Deno.env.get("MOFFIN_FIEL_SECRET")?.trim() ||
-    "";
-  if (ciecSecret.length < 32) {
-    return json(
-      {
-        error: "ciec_not_configured",
-        message: "MOFFIN_SAT_CIEC_SECRET o MOFFIN_FIEL_SECRET (≥32) requerido.",
-      },
-      503,
-    );
-  }
+    Deno.env.get("MOFFIN_SAT_CIEC_SECRET")?.trim() || fielSecret || "";
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const anon = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -249,9 +238,7 @@ Deno.serve(async (req) => {
   let userId: string | null = null;
   let orgId: string | null = null;
 
-  if (cronOk) {
-    // Smoke / ops: autenticado por CRON_SECRET (sin JWT de usuario)
-  } else {
+  if (!cronOk) {
     const rawAuth = req.headers.get("Authorization") ?? req.headers.get("authorization") ?? "";
     const accessToken = rawAuth.match(/^Bearer\s+(\S+)/i)?.[1];
     if (!accessToken) return json({ error: "No autorizado" }, 401);
@@ -286,7 +273,8 @@ Deno.serve(async (req) => {
   if (!projectId || !consultType || !allowed.includes(consultType)) {
     return json(
       {
-        error: "projectId y consultType (constancia_situacion_fiscal|opinion_cumplimiento) requeridos",
+        error:
+          "projectId y consultType (constancia_situacion_fiscal|opinion_cumplimiento) requeridos",
       },
       400,
     );
@@ -314,28 +302,68 @@ Deno.serve(async (req) => {
     return json({ error: "El cliente no tiene RFC configurado" }, 400);
   }
 
-  const { data: ciecRow } = await admin
-    .from("moffin_client_sat_ciec")
-    .select("ciec_ciphertext")
+  const { data: fielRow } = await admin
+    .from("client_sat_certificates")
+    .select("cert_ciphertext, satgo_key_jwe, satgo_password_jwe")
     .eq("client_id", project.client_id)
+    .eq("cert_type", "fiel")
     .maybeSingle();
-  if (!ciecRow?.ciec_ciphertext) {
+
+  const hasFielJwe = !!(
+    fielRow?.satgo_key_jwe?.trim() &&
+    fielRow?.satgo_password_jwe?.trim() &&
+    fielRow?.cert_ciphertext
+  );
+
+  let authMode: "fiel_jwe" | "ciec" | null = hasFielJwe ? "fiel_jwe" : null;
+  let ciecPlain: string | null = null;
+
+  if (!hasFielJwe) {
+    const { data: ciecRow } = await admin
+      .from("moffin_client_sat_ciec")
+      .select("ciec_ciphertext")
+      .eq("client_id", project.client_id)
+      .maybeSingle();
+    if (ciecRow?.ciec_ciphertext) {
+      if (ciecSecret.length < 32) {
+        return json(
+          {
+            error: "ciec_not_configured",
+            message: "MOFFIN_SAT_CIEC_SECRET o MOFFIN_FIEL_SECRET (≥32) requerido.",
+          },
+          503,
+        );
+      }
+      try {
+        ciecPlain = await decryptCiec(ciecRow.ciec_ciphertext, ciecSecret);
+        authMode = "ciec";
+      } catch (e) {
+        return json(
+          { error: "ciec_decrypt_failed", message: e instanceof Error ? e.message : String(e) },
+          500,
+        );
+      }
+    }
+  }
+
+  if (!authMode) {
     return json(
       {
-        error: "ciec_required",
-        message: "Guarda la CIEC del cliente antes de CSF/32D (SATgo).",
+        error: "sat_credentials_required",
+        message:
+          "Sube la e.firma (.cer/.key + contraseña) en la ficha del cliente (se guarda como JWE para SATgo), o registra la CIEC como respaldo.",
       },
       400,
     );
   }
 
-  let ciecPlain: string;
-  try {
-    ciecPlain = await decryptCiec(ciecRow.ciec_ciphertext, ciecSecret);
-  } catch (e) {
+  if (authMode === "fiel_jwe" && fielSecret.length < 32) {
     return json(
-      { error: "ciec_decrypt_failed", message: e instanceof Error ? e.message : String(e) },
-      500,
+      {
+        error: "fiel_not_configured",
+        message: "MOFFIN_FIEL_SECRET (≥32) requerido para leer el .cer en reposo.",
+      },
+      503,
     );
   }
 
@@ -343,13 +371,48 @@ Deno.serve(async (req) => {
   if (!satAuth.ok) return json({ error: satAuth.code, message: satAuth.message }, 503);
 
   const kind = consultType === "constancia_situacion_fiscal" ? "csf" : "oc";
-  const serviceName = kind === "csf" ? "satgo-csf" : "satgo-oc";
-  const pdfRes = await fetchSatgoPdf({
-    bearer: satAuth.bearer,
-    rfc: rfcRaw,
-    ciec: ciecPlain,
-    kind,
-  });
+  const serviceName =
+    authMode === "fiel_jwe"
+      ? kind === "csf"
+        ? "satgo-csffiel"
+        : "satgo-ocfiel"
+      : kind === "csf"
+        ? "satgo-csf"
+        : "satgo-oc";
+
+  let pdfRes:
+    | { ok: true; buf: Uint8Array }
+    | { ok: false; message: string; httpStatus: number };
+
+  if (authMode === "fiel_jwe") {
+    let certB64: string;
+    try {
+      certB64 = await decryptFielSecret(fielRow!.cert_ciphertext, fielSecret);
+    } catch (e) {
+      return json(
+        {
+          error: "fiel_decrypt_failed",
+          message: e instanceof Error ? e.message : String(e),
+        },
+        500,
+      );
+    }
+    pdfRes = await fetchSatgoPdfWithFielJwe({
+      bearer: satAuth.bearer,
+      rfc: rfcRaw,
+      kind,
+      certBytes: base64FileToBytes(certB64),
+      keyJwe: fielRow!.satgo_key_jwe!.trim(),
+      passwordJwe: fielRow!.satgo_password_jwe!.trim(),
+    });
+  } else {
+    pdfRes = await fetchSatgoPdfCiec({
+      bearer: satAuth.bearer,
+      rfc: rfcRaw,
+      ciec: ciecPlain!,
+      kind,
+    });
+  }
 
   if (!pdfRes.ok) {
     const { data: rowErr } = await admin
@@ -362,10 +425,11 @@ Deno.serve(async (req) => {
         consult_type: consultType,
         moffin_service: serviceName,
         status: "error",
-        error_message: `Origen: SATgo. ${pdfRes.message}`.slice(0, 500),
+        error_message: `Origen: SATgo (${authMode}). ${pdfRes.message}`.slice(0, 500),
         raw_response: {
           provider: "satgo",
           kind,
+          authMode,
           httpStatus: pdfRes.httpStatus,
           message: pdfRes.message,
         },
@@ -380,6 +444,7 @@ Deno.serve(async (req) => {
         statusCode: pdfRes.httpStatus,
         consultId: rowErr?.id,
         provider: "satgo",
+        authMode,
       },
       422,
     );
@@ -430,10 +495,11 @@ Deno.serve(async (req) => {
       consult_type: consultType,
       moffin_service: serviceName,
       status: "success",
-      summary: `${label} · PDF listo (${pdfRes.buf.length} bytes)`,
+      summary: `${label} · PDF listo (${pdfRes.buf.length} bytes · ${authMode})`,
       raw_response: {
         provider: "satgo",
         kind,
+        authMode,
         pdfBytes: pdfRes.buf.length,
       },
       document_id: doc.id,
@@ -444,5 +510,5 @@ Deno.serve(async (req) => {
 
   if (insErr) return json({ error: insErr.message }, 500);
 
-  return json({ consult: inserted, provider: "satgo" });
+  return json({ consult: inserted, provider: "satgo", authMode });
 });

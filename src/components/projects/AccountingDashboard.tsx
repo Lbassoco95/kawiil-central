@@ -79,11 +79,13 @@ type MoffinConsultType = "lista_69b" | "constancia_situacion_fiscal" | "opinion_
 
 function moffinNeedsFiel(consultType: MoffinConsultType): boolean {
   if (consultType === "lista_69b") return false;
+  // SATgo Solutions path: e.firma JWE es el flujo preferido; CIEC queda como respaldo.
   if (MOFFIN_USE_SOLUTIONS) return false;
   return true;
 }
 
-function moffinNeedsCiec(consultType: MoffinConsultType): boolean {
+/** CSF/32D en modo Solutions: requiere e.firma JWE o CIEC. */
+function moffinNeedsSatCreds(consultType: MoffinConsultType): boolean {
   return MOFFIN_USE_SOLUTIONS && consultType !== "lista_69b";
 }
 
@@ -444,6 +446,37 @@ export function AccountingDashboard({
     enabled: !!user && !!session?.access_token && !!clientId && MOFFIN_USE_SOLUTIONS,
   });
 
+  const { data: satgoFielStatus } = useQuery({
+    queryKey: ["client-sat-certs", clientId],
+    queryFn: async () => {
+      const { data, error } = await invokeFunctionWithSession("client-sat-certificates", {
+        action: "status",
+        clientId: clientId!,
+      });
+      if (error) {
+        throw new Error(await functionInvokeUserMessageAsync(data, error));
+      }
+      const payload = (data ?? {}) as {
+        configured?: boolean;
+        satgoJweReady?: boolean;
+        fiel?: { satgoJweReady?: boolean } | null;
+        error?: string;
+        message?: string;
+      };
+      if (payload.error) {
+        throw new Error(typeof payload.message === "string" ? payload.message : payload.error);
+      }
+      return {
+        configured: !!payload.configured,
+        satgoJweReady: !!(payload.satgoJweReady || payload.fiel?.satgoJweReady),
+      };
+    },
+    enabled: !!user && !!session?.access_token && !!clientId && MOFFIN_USE_SOLUTIONS,
+  });
+
+  const hasSatgoCreds =
+    !!satgoFielStatus?.satgoJweReady || !!moffinCiecStatus?.configured;
+
   useEffect(() => {
     if (!clientId || MOFFIN_USE_SOLUTIONS) {
       setFielPassword("");
@@ -578,9 +611,11 @@ export function AccountingDashboard({
 
   const runMoffinConsult = useCallback(
     async (consultType: MoffinConsultType) => {
-      if (moffinNeedsCiec(consultType)) {
-        if (!moffinCiecStatus?.configured) {
-          toast.error("Primero guarda la CIEC del cliente en el bloque de credenciales SAT.");
+      if (moffinNeedsSatCreds(consultType)) {
+        if (!hasSatgoCreds) {
+          toast.error(
+            "Sube la e.firma (.cer/.key + contraseña) en la ficha del cliente, o guarda la CIEC como respaldo.",
+          );
           return;
         }
       }
@@ -626,9 +661,10 @@ export function AccountingDashboard({
           const scrollCiec =
             MOFFIN_USE_SOLUTIONS &&
             clientId &&
-            ["moffin_profile_failed", "moffin_profile_invalid", "ciec_decrypt_failed"].includes(errCode);
+            ["moffin_profile_failed", "moffin_profile_invalid", "ciec_decrypt_failed", "sat_credentials_required"].includes(errCode);
           if (scrollCiec) {
             queryClient.invalidateQueries({ queryKey: ["moffin-sat-ciec-status", clientId] });
+            queryClient.invalidateQueries({ queryKey: ["client-sat-certs", clientId] });
             requestAnimationFrame(() => {
               document.getElementById("moffin-sat-ciec-section")?.scrollIntoView({
                 behavior: "smooth",
@@ -658,7 +694,16 @@ export function AccountingDashboard({
         setMoffinBusy(null);
       }
     },
-    [projectId, clientId, queryClient, moffinFielStatus?.configured, moffinCiecStatus?.configured, fielPassword]
+    [
+      projectId,
+      clientId,
+      queryClient,
+      moffinFielStatus?.configured,
+      moffinCiecStatus?.configured,
+      satgoFielStatus?.satgoJweReady,
+      hasSatgoCreds,
+      fielPassword,
+    ]
   );
 
   useEffect(() => {
@@ -762,14 +807,57 @@ export function AccountingDashboard({
           ) : null}
           {clientId ? (
             <p className="text-[10px] text-muted-foreground leading-snug">
-              CSF y opinión 32D se descargan con la CIEC del cliente vía SATgo (PDF síncrono). La descarga
-              mensual automática (días 1-5) cubre a los clientes con CIEC registrada. Lista 69-B sigue en Moffin.
+              CSF y 32D usan la <strong className="font-medium">e.firma</strong> del cliente (JWE
+              hacia SATgo). La CIEC queda como respaldo. Lista 69-B sigue en Moffin.
             </p>
           ) : null}
           {clientId ? (
             <div className="space-y-3">
               {MOFFIN_USE_SOLUTIONS ? (
-                <MoffinSatCiecSection clientId={clientId} />
+                <>
+                  <div className="rounded-md border border-border/50 bg-muted/20 p-3 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <KeyRound className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="text-[11px] font-medium text-foreground">
+                        e.firma (FIEL) → SATgo JWE
+                      </span>
+                      {satgoFielStatus?.satgoJweReady ? (
+                        <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-medium">
+                          Lista para CSF/32D
+                        </span>
+                      ) : satgoFielStatus?.configured ? (
+                        <span className="text-[10px] text-amber-700 dark:text-amber-400">
+                          e.firma sin contraseña JWE — vuelve a subirla con contraseña
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-amber-700 dark:text-amber-400">
+                          Sin e.firma
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      En la ficha del cliente sube .cer, .key y contraseña. Kawiil cifra llave y
+                      contraseña a JWE con la llave pública de SATgo (
+                      <a
+                        href="https://sat-go.com/cifrar-efirma"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline"
+                      >
+                        cifrar-efirma
+                      </a>
+                      ).
+                    </p>
+                    <a
+                      href={`/clientes/${clientId}?tab=general#sat-certificates`}
+                      className="inline-flex items-center gap-1.5 text-[10px] font-medium text-primary hover:underline"
+                    >
+                      Ir a certificados SAT del cliente
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </div>
+                  <MoffinSatCiecSection clientId={clientId} />
+                </>
               ) : (
                 <div className="rounded-md border border-border/50 bg-muted/20 p-3 space-y-2">
                   <div className="flex flex-wrap items-center gap-2">
@@ -853,7 +941,7 @@ export function AccountingDashboard({
                 const meta = MOFFIN_CONSULT_META[key];
                 const Icon = meta.icon;
                 const needsCert = moffinNeedsFiel(key);
-                const needsCiecSat = moffinNeedsCiec(key);
+                const needsSatCreds = moffinNeedsSatCreds(key);
                 return (
                   <Button
                     key={key}
@@ -864,11 +952,11 @@ export function AccountingDashboard({
                     disabled={
                       !!moffinBusy ||
                       (needsCert && !moffinFielStatus?.configured) ||
-                      (needsCiecSat && !moffinCiecStatus?.configured)
+                      (needsSatCreds && !hasSatgoCreds)
                     }
                     title={
-                      needsCiecSat && !moffinCiecStatus?.configured
-                        ? "Guarda la CIEC del cliente antes de consultar"
+                      needsSatCreds && !hasSatgoCreds
+                        ? "Sube la e.firma (con contraseña) o la CIEC del cliente"
                         : needsCert && !moffinFielStatus?.configured
                           ? "Carga .cer y .key antes de consultar"
                           : undefined

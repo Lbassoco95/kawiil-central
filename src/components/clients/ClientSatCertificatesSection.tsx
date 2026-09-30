@@ -115,6 +115,23 @@ function CertRow({
               <Icon className="h-3 w-3" />
               {style.label}
             </Badge>
+            {cert.certType === "fiel" ? (
+              cert.satgoJweReady ? (
+                <Badge
+                  variant="outline"
+                  className="text-[10px] font-normal bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
+                >
+                  Lista para SATgo (JWE)
+                </Badge>
+              ) : (
+                <Badge
+                  variant="outline"
+                  className="text-[10px] font-normal bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30"
+                >
+                  Falta contraseña (reemplazar e.firma)
+                </Badge>
+              )
+            ) : null}
           </div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
             {cert.certSubjectRfc ? (
@@ -185,6 +202,7 @@ export function ClientSatCertificatesSection({
   });
   const [cerFile, setCerFile] = useState<File | null>(null);
   const [keyFile, setKeyFile] = useState<File | null>(null);
+  const [keyPassword, setKeyPassword] = useState("");
   const [label, setLabel] = useState<string>("");
   const [forceRfc, setForceRfc] = useState<boolean>(false);
   const [pendingMismatch, setPendingMismatch] = useState<{
@@ -203,6 +221,7 @@ export function ClientSatCertificatesSection({
     setDialog({ open: true, certType, replacingId });
     setCerFile(null);
     setKeyFile(null);
+    setKeyPassword("");
     setLabel(initialLabel ?? "");
     setForceRfc(false);
     setPendingMismatch(null);
@@ -212,6 +231,7 @@ export function ClientSatCertificatesSection({
     setDialog({ open: false, certType: dialog.certType, replacingId: null });
     setCerFile(null);
     setKeyFile(null);
+    setKeyPassword("");
     setLabel("");
     setForceRfc(false);
     setPendingMismatch(null);
@@ -222,6 +242,10 @@ export function ClientSatCertificatesSection({
       toast.error("Selecciona el archivo .cer y el .key");
       return;
     }
+    if (dialog.certType === "fiel" && !keyPassword.trim()) {
+      toast.error("Indica la contraseña de la e.firma (se cifra a JWE para SATgo)");
+      return;
+    }
     try {
       const certificateBase64 = await fileToBase64(cerFile);
       const privateKeyBase64 = await fileToBase64(keyFile);
@@ -230,12 +254,14 @@ export function ClientSatCertificatesSection({
         certType: dialog.certType,
         certificateBase64,
         privateKeyBase64,
+        privateKeyPassword:
+          dialog.certType === "fiel" ? keyPassword.trim() : undefined,
         label: dialog.certType === "csd_sello" ? label.trim() || null : null,
         forceRfcMismatch: forceRfc,
       });
       toast.success(
         dialog.certType === "fiel"
-          ? "e.firma guardada (cifrada). La contrasena no se almacena."
+          ? "e.firma guardada. Llave y contraseña cifradas (JWE) para SATgo."
           : "Sello digital guardado (cifrado).",
       );
       closeUpload();
@@ -285,9 +311,9 @@ export function ClientSatCertificatesSection({
             Certificados SAT del cliente
           </h2>
           <p className="text-[11px] text-muted-foreground mt-1">
-            Sube la e.firma (FIEL) y los sellos digitales (CSD). Se guardan cifrados y avisamos antes de
-            que venzan: aviso al cumplir 60 y 30 dias, semanal entre 30 y 16 dias, y diario en los
-            ultimos 15 dias.
+            Sube la e.firma (FIEL) con su contraseña: la llave y la contraseña se cifran a JWE
+            con la llave pública de SATgo (solo ellos pueden abrirlas) para CSF y 32D. Los sellos
+            digitales (CSD) se guardan cifrados en Kawiil y avisamos antes de que venzan.
           </p>
         </div>
         {!isLoading && !isError ? (
@@ -438,10 +464,35 @@ export function ClientSatCertificatesSection({
                 onChange={(e) => setKeyFile(e.target.files?.[0] ?? null)}
               />
             </div>
-            <p className="text-[10px] text-muted-foreground">
-              La contrasena de la llave NO se guarda en el servidor. La vigencia se extrae del
-              certificado para programar avisos automaticos.
-            </p>
+            {dialog.certType === "fiel" ? (
+              <div className="space-y-1.5">
+                <Label className="text-xs">Contraseña de la e.firma</Label>
+                <Input
+                  type="password"
+                  autoComplete="new-password"
+                  value={keyPassword}
+                  onChange={(e) => setKeyPassword(e.target.value)}
+                  placeholder="Contraseña del .key"
+                  className="text-xs h-9"
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  Se cifra a JWE con la llave pública de SATgo (
+                  <a
+                    href="https://sat-go.com/cifrar-efirma"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline"
+                  >
+                    cifrar-efirma
+                  </a>
+                  ). No se guarda en claro en Kawiil.
+                </p>
+              </div>
+            ) : (
+              <p className="text-[10px] text-muted-foreground">
+                La contraseña del sello no se guarda. La vigencia se extrae del certificado.
+              </p>
+            )}
             {clientRfc ? (
               <p className="text-[10px] text-muted-foreground">
                 RFC del cliente:{" "}
@@ -486,6 +537,7 @@ export function ClientSatCertificatesSection({
                 saveMutation.isPending ||
                 !cerFile ||
                 !keyFile ||
+                (dialog.certType === "fiel" && !keyPassword.trim()) ||
                 (!!pendingMismatch && !forceRfc)
               }
               onClick={handleSubmit}

@@ -7,6 +7,11 @@ import {
   parseSatCertificate,
   rfcBasesMatch,
 } from "../_shared/satCertificateParser.ts";
+import {
+  base64FileToBytes,
+  encryptFielMaterialToSatgoJwe,
+  fetchSatgoFielEncryptionKey,
+} from "../_shared/satgoFielJwe.ts";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -24,6 +29,8 @@ interface RequestBody {
   certType?: CertType;
   certificateBase64?: string;
   privateKeyBase64?: string;
+  /** Contraseña de la e.firma: se cifra a JWE SATgo (no se guarda en claro). */
+  privateKeyPassword?: string;
   label?: string | null;
   certificateId?: string;
   /** Si true, ignora la validacion de RFC contra clients.rfc (por sucursales con homoclave distinta). */
@@ -40,6 +47,10 @@ interface CertRow {
   cert_not_after: string | null;
   cert_fingerprint_sha256: string | null;
   updated_at: string;
+  satgo_key_jwe?: string | null;
+  satgo_password_jwe?: string | null;
+  satgo_jwe_kid?: string | null;
+  satgo_jwe_updated_at?: string | null;
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -57,6 +68,9 @@ function daysLeft(notAfter: string | null): number | null {
 }
 
 function summarizeRow(row: CertRow) {
+  const satgoJweReady = !!(
+    row.satgo_key_jwe?.trim() && row.satgo_password_jwe?.trim()
+  );
   return {
     id: row.id,
     certType: row.cert_type,
@@ -68,7 +82,64 @@ function summarizeRow(row: CertRow) {
     certFingerprint: row.cert_fingerprint_sha256,
     updatedAt: row.updated_at,
     daysLeft: daysLeft(row.cert_not_after),
+    satgoJweReady,
+    satgoJweKid: row.satgo_jwe_kid ?? null,
+    satgoJweUpdatedAt: row.satgo_jwe_updated_at ?? null,
   };
+}
+
+function pickAccessToken(jsonBody: Record<string, unknown>): string | null {
+  const nested = jsonBody.tokens;
+  if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+    const access = (nested as Record<string, unknown>).access;
+    if (access && typeof access === "object" && !Array.isArray(access)) {
+      const v = (access as Record<string, unknown>).value;
+      if (typeof v === "string" && v.trim()) return v.trim();
+    }
+  }
+  if (typeof jsonBody.token === "string" && jsonBody.token.trim()) return jsonBody.token.trim();
+  if (typeof jsonBody.accessToken === "string" && jsonBody.accessToken.trim()) {
+    return jsonBody.accessToken.trim();
+  }
+  return null;
+}
+
+async function resolveSatgoBearerForJwe(
+  admin: ReturnType<typeof createClient>,
+): Promise<string | null> {
+  let apiKey = Deno.env.get("SATGO_API_KEY")?.trim() ?? "";
+  let access = Deno.env.get("SATGO_ACCESS_TOKEN")?.trim() ?? "";
+  if (!apiKey && !access) {
+    try {
+      const { data } = await admin.rpc("kawiil_vault_secret", {
+        secret_name: "satgo_api_key",
+      });
+      if (typeof data === "string" && data.trim()) apiKey = data.trim();
+    } catch {
+      /* ignore */
+    }
+  }
+  if (apiKey) {
+    const base = (Deno.env.get("SATGO_BASE_URL") ?? "https://api.sat-go.com").replace(
+      /\/$/,
+      "",
+    );
+    const res = await fetch(`${base}/api/Auth/token-json`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ key: apiKey }),
+    });
+    const text = await res.text();
+    let parsed: Record<string, unknown> = {};
+    try {
+      parsed = text ? (JSON.parse(text) as Record<string, unknown>) : {};
+    } catch {
+      /* ignore */
+    }
+    if (!res.ok) return null;
+    return pickAccessToken(parsed);
+  }
+  return access || null;
 }
 
 Deno.serve(async (req) => {
@@ -159,7 +230,7 @@ Deno.serve(async (req) => {
     const { data: rows, error } = await admin
       .from("client_sat_certificates")
       .select(
-        "id, cert_type, label, cert_serial, cert_subject_rfc, cert_not_before, cert_not_after, cert_fingerprint_sha256, updated_at",
+        "id, cert_type, label, cert_serial, cert_subject_rfc, cert_not_before, cert_not_after, cert_fingerprint_sha256, updated_at, satgo_key_jwe, satgo_password_jwe, satgo_jwe_kid, satgo_jwe_updated_at",
       )
       .eq("client_id", clientId!)
       .order("cert_type", { ascending: true })
@@ -180,6 +251,7 @@ Deno.serve(async (req) => {
       csds,
       // Compat con la UI antigua de moffin-fiel:
       configured: !!fiel,
+      satgoJweReady: !!fiel?.satgoJweReady,
       certFingerprint: fiel?.certFingerprint ?? null,
       updatedAt: fiel?.updatedAt ?? null,
     });
@@ -231,6 +303,10 @@ Deno.serve(async (req) => {
   const certB64 = body.certificateBase64?.trim() ?? "";
   const keyB64 = body.privateKeyBase64?.trim() ?? "";
   const label = body.label?.trim() || null;
+  const privateKeyPassword =
+    typeof body.privateKeyPassword === "string"
+      ? body.privateKeyPassword.trim()
+      : "";
 
   if (!certB64 || !keyB64) {
     return jsonResponse(
@@ -238,6 +314,17 @@ Deno.serve(async (req) => {
         error: "certificate_required",
         message:
           "Envia certificateBase64 y privateKeyBase64 (archivos .cer y .key en base64).",
+      },
+      400,
+    );
+  }
+
+  if (certType === "fiel" && !privateKeyPassword) {
+    return jsonResponse(
+      {
+        error: "fiel_password_required",
+        message:
+          "Para CSF/32D con SATgo, indica la contraseña de la e.firma: se cifra a JWE y no se guarda en claro.",
       },
       400,
     );
@@ -277,33 +364,79 @@ Deno.serve(async (req) => {
     const keyEnc = await encryptFielSecret(keyB64, fielSecret);
     const fp = await sha256HexFromBase64File(certB64);
 
+    let satgoKeyJwe: string | null = null;
+    let satgoPasswordJwe: string | null = null;
+    let satgoJweKid: string | null = null;
+    let satgoJweUpdatedAt: string | null = null;
+
+    if (certType === "fiel" && privateKeyPassword) {
+      const bearer = await resolveSatgoBearerForJwe(admin);
+      if (!bearer) {
+        return jsonResponse(
+          {
+            error: "satgo_not_configured",
+            message:
+              "Configura SATGO_API_KEY para cifrar la e.firma a JWE (SATgo).",
+          },
+          503,
+        );
+      }
+      try {
+        const encKey = await fetchSatgoFielEncryptionKey(bearer);
+        const jwe = await encryptFielMaterialToSatgoJwe(
+          base64FileToBytes(keyB64),
+          privateKeyPassword,
+          encKey,
+        );
+        satgoKeyJwe = jwe.keyJwe;
+        satgoPasswordJwe = jwe.passwordJwe;
+        satgoJweKid = jwe.kid;
+        satgoJweUpdatedAt = new Date().toISOString();
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return jsonResponse(
+          {
+            error: "satgo_jwe_encrypt_failed",
+            message: `No se pudo cifrar la e.firma para SATgo: ${msg}`,
+          },
+          502,
+        );
+      }
+    }
+
     const conflictTarget =
       certType === "fiel" ? "client_id" : "client_id,cert_serial";
 
+    const upsertRow: Record<string, unknown> = {
+      organization_id: client!.organization_id,
+      client_id: clientId!,
+      cert_type: certType,
+      label,
+      cert_ciphertext: certEnc,
+      key_ciphertext: keyEnc,
+      cert_serial: parsed.serialNumber,
+      cert_subject_rfc: parsed.subjectRfc,
+      cert_not_before: parsed.notBefore,
+      cert_not_after: parsed.notAfter,
+      cert_fingerprint_sha256: fp,
+      last_reminder_bucket: null,
+      last_reminder_at: null,
+      updated_at: new Date().toISOString(),
+      updated_by: user.id,
+    };
+
+    if (certType === "fiel") {
+      upsertRow.satgo_key_jwe = satgoKeyJwe;
+      upsertRow.satgo_password_jwe = satgoPasswordJwe;
+      upsertRow.satgo_jwe_kid = satgoJweKid;
+      upsertRow.satgo_jwe_updated_at = satgoJweUpdatedAt;
+    }
+
     const { data: upserted, error: upErr } = await admin
       .from("client_sat_certificates")
-      .upsert(
-        {
-          organization_id: client!.organization_id,
-          client_id: clientId!,
-          cert_type: certType,
-          label,
-          cert_ciphertext: certEnc,
-          key_ciphertext: keyEnc,
-          cert_serial: parsed.serialNumber,
-          cert_subject_rfc: parsed.subjectRfc,
-          cert_not_before: parsed.notBefore,
-          cert_not_after: parsed.notAfter,
-          cert_fingerprint_sha256: fp,
-          last_reminder_bucket: null,
-          last_reminder_at: null,
-          updated_at: new Date().toISOString(),
-          updated_by: user.id,
-        },
-        { onConflict: conflictTarget },
-      )
+      .upsert(upsertRow, { onConflict: conflictTarget })
       .select(
-        "id, cert_type, label, cert_serial, cert_subject_rfc, cert_not_before, cert_not_after, cert_fingerprint_sha256, updated_at",
+        "id, cert_type, label, cert_serial, cert_subject_rfc, cert_not_before, cert_not_after, cert_fingerprint_sha256, updated_at, satgo_key_jwe, satgo_password_jwe, satgo_jwe_kid, satgo_jwe_updated_at",
       )
       .maybeSingle();
 

@@ -18,6 +18,10 @@ export interface SatCertificateSummary {
   certFingerprint: string | null;
   updatedAt: string;
   daysLeft: number | null;
+  /** e.firma lista para CSF/32D vía SATgo (JWE de .key + contraseña). */
+  satgoJweReady?: boolean;
+  satgoJweKid?: string | null;
+  satgoJweUpdatedAt?: string | null;
 }
 
 export interface SatCertificatesListResponse {
@@ -25,6 +29,7 @@ export interface SatCertificatesListResponse {
   fiel: SatCertificateSummary | null;
   csds: SatCertificateSummary[];
   configured: boolean;
+  satgoJweReady?: boolean;
   certFingerprint: string | null;
   updatedAt: string | null;
 }
@@ -34,6 +39,8 @@ export interface SaveCertificateInput {
   certType: SatCertType;
   certificateBase64: string;
   privateKeyBase64: string;
+  /** Requerida para FIEL: se cifra a JWE SATgo y no se guarda en claro. */
+  privateKeyPassword?: string;
   label?: string | null;
   forceRfcMismatch?: boolean;
 }
@@ -89,6 +96,7 @@ export function useClientSatCertificates(clientId: string) {
         fiel: payload.fiel ?? null,
         csds: payload.csds ?? [],
         configured: payload.configured ?? false,
+        satgoJweReady: payload.satgoJweReady ?? payload.fiel?.satgoJweReady ?? false,
         certFingerprint: payload.certFingerprint ?? null,
         updatedAt: payload.updatedAt ?? null,
       };
@@ -108,6 +116,7 @@ export function useSaveClientSatCertificate(clientId: string) {
           certType: input.certType,
           certificateBase64: input.certificateBase64,
           privateKeyBase64: input.privateKeyBase64,
+          privateKeyPassword: input.privateKeyPassword ?? undefined,
           label: input.label ?? null,
           forceRfcMismatch: input.forceRfcMismatch ?? false,
         },
