@@ -69,7 +69,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { MoffinSatCiecSection } from "./MoffinSatCiecSection";
 import { MoffinFacturasDialog } from "./MoffinFacturasDialog";
 import { MOFFIN_USE_SOLUTIONS } from "@/lib/moffinUseSolutions";
 import { ComposeEmailDialog } from "@/components/microsoft/ComposeEmailDialog";
@@ -474,8 +473,7 @@ export function AccountingDashboard({
     enabled: !!user && !!session?.access_token && !!clientId && MOFFIN_USE_SOLUTIONS,
   });
 
-  const hasSatgoCreds =
-    !!satgoFielStatus?.satgoJweReady || !!moffinCiecStatus?.configured;
+  const hasSatgoCreds = !!satgoFielStatus?.satgoJweReady;
 
   useEffect(() => {
     if (!clientId || MOFFIN_USE_SOLUTIONS) {
@@ -614,7 +612,7 @@ export function AccountingDashboard({
       if (moffinNeedsSatCreds(consultType)) {
         if (!hasSatgoCreds) {
           toast.error(
-            "Sube la e.firma (.cer/.key + contraseña) en la ficha del cliente, o guarda la CIEC como respaldo.",
+            "Sube la e.firma (.cer/.key + contraseña) en Certificados SAT del cliente.",
           );
           return;
         }
@@ -631,7 +629,7 @@ export function AccountingDashboard({
       }
       if (
         !window.confirm(
-          "Cada consulta puede generar un cargo según tu plan con SATgo/Moffin. ¿Deseas continuar?"
+          "Cada consulta puede generar un cargo según tu plan con SATgo. ¿Deseas continuar?"
         )
       ) {
         return;
@@ -807,57 +805,45 @@ export function AccountingDashboard({
           ) : null}
           {clientId ? (
             <p className="text-[10px] text-muted-foreground leading-snug">
-              CSF y 32D usan la <strong className="font-medium">e.firma</strong> del cliente (JWE
-              hacia SATgo). La CIEC queda como respaldo. Lista 69-B sigue en Moffin.
+              CSF y 32D usan la <strong className="font-medium">e.firma</strong> del cliente
+              (cifrada a JWE hacia SATgo). Lista 69-B es independiente.
             </p>
           ) : null}
           {clientId ? (
             <div className="space-y-3">
               {MOFFIN_USE_SOLUTIONS ? (
-                <>
-                  <div className="rounded-md border border-border/50 bg-muted/20 p-3 space-y-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <KeyRound className="h-3.5 w-3.5 text-muted-foreground" />
-                      <span className="text-[11px] font-medium text-foreground">
-                        e.firma (FIEL) → SATgo JWE
+                <div className="rounded-md border border-border/50 bg-muted/20 p-3 space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <KeyRound className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="text-[11px] font-medium text-foreground">
+                      e.firma (FIEL) → SATgo
+                    </span>
+                    {satgoFielStatus?.satgoJweReady ? (
+                      <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-medium">
+                        Lista para CSF/32D
                       </span>
-                      {satgoFielStatus?.satgoJweReady ? (
-                        <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-medium">
-                          Lista para CSF/32D
-                        </span>
-                      ) : satgoFielStatus?.configured ? (
-                        <span className="text-[10px] text-amber-700 dark:text-amber-400">
-                          e.firma sin contraseña JWE — vuelve a subirla con contraseña
-                        </span>
-                      ) : (
-                        <span className="text-[10px] text-amber-700 dark:text-amber-400">
-                          Sin e.firma
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[10px] text-muted-foreground">
-                      En la ficha del cliente sube .cer, .key y contraseña. Kawiil cifra llave y
-                      contraseña a JWE con la llave pública de SATgo (
-                      <a
-                        href="https://sat-go.com/cifrar-efirma"
-                        target="_blank"
-                        rel="noreferrer"
-                        className="underline"
-                      >
-                        cifrar-efirma
-                      </a>
-                      ).
-                    </p>
-                    <a
-                      href={`/clientes/${clientId}?tab=general#sat-certificates`}
-                      className="inline-flex items-center gap-1.5 text-[10px] font-medium text-primary hover:underline"
-                    >
-                      Ir a certificados SAT del cliente
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
+                    ) : satgoFielStatus?.configured ? (
+                      <span className="text-[10px] text-amber-700 dark:text-amber-400">
+                        e.firma sin contraseña — vuelve a subirla con contraseña
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-amber-700 dark:text-amber-400">
+                        Sin e.firma
+                      </span>
+                    )}
                   </div>
-                  <MoffinSatCiecSection clientId={clientId} />
-                </>
+                  <p className="text-[10px] text-muted-foreground">
+                    En la ficha del cliente sube .cer, .key y contraseña. Se cifra a JWE con la llave
+                    pública de SATgo; no pedimos CIEC ni Moffin para CSF/32D.
+                  </p>
+                  <a
+                    href={`/clientes/${clientId}?tab=general#sat-certificates`}
+                    className="inline-flex items-center gap-1.5 text-[10px] font-medium text-primary hover:underline"
+                  >
+                    Ir a certificados SAT del cliente
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
               ) : (
                 <div className="rounded-md border border-border/50 bg-muted/20 p-3 space-y-2">
                   <div className="flex flex-wrap items-center gap-2">
@@ -876,8 +862,7 @@ export function AccountingDashboard({
                     )}
                   </div>
                   <p className="text-[10px] text-muted-foreground">
-                    Los certificados SAT se administran desde la ficha del cliente (pestaña General). Ahí se
-                    registran la e.firma y los sellos digitales con su vigencia y avisos automáticos.
+                    Los certificados SAT se administran desde la ficha del cliente (pestaña General).
                   </p>
                   <a
                     href={`/clientes/${clientId}?tab=general#sat-certificates`}
@@ -956,7 +941,7 @@ export function AccountingDashboard({
                     }
                     title={
                       needsSatCreds && !hasSatgoCreds
-                        ? "Sube la e.firma (con contraseña) o la CIEC del cliente"
+                        ? "Sube la e.firma (.cer/.key + contraseña) del cliente"
                         : needsCert && !moffinFielStatus?.configured
                           ? "Carga .cer y .key antes de consultar"
                           : undefined
@@ -978,7 +963,7 @@ export function AccountingDashboard({
                   disabled={!!moffinBusy || !moffinCiecStatus?.configured}
                   disabledReason={
                     !moffinCiecStatus?.configured
-                      ? "Guarda la CIEC del cliente antes de consultar facturas"
+                      ? "Las facturas CFDI aún usan CIEC (flujo aparte de CSF/32D)"
                       : undefined
                   }
                 />
@@ -987,8 +972,8 @@ export function AccountingDashboard({
           )}
           {clientId && moffinStalePending ? (
             <p className="text-[11px] text-amber-900 dark:text-amber-100 rounded-md border border-amber-500/35 bg-amber-500/10 px-2 py-1.5 leading-snug">
-              Hay consultas en <strong className="font-medium">pendiente</strong> (en cola de Moffin). Usa «Sincronizar
-              pendientes» cuando ya haya resultado.
+              Hay consultas 69-B en <strong className="font-medium">pendiente</strong>. Usa «Sincronizar
+              pendientes» cuando ya haya resultado. CSF/32D con SATgo no requieren sincronizar.
             </p>
           ) : null}
           {clientId && hasPendingMoffinSync ? (

@@ -54,7 +54,7 @@ export function KnowledgeKawiilCard({ activeTab, onGoToTab }: Props) {
       case "sugerencias":
         return "Sugerencias automáticas para enriquecer el conocimiento: documentos pendientes de indexar, fichas incompletas y patrones detectados.";
       case "sat":
-        return "Cobertura SAT (Moffin): qué clientes activos con contabilidad tienen acceso a CSF y opinión 32D, cuántos tienen responsable y CIEC, y si ya se descargaron sus documentos del mes.";
+        return "Cobertura SAT (SATgo): clientes con contabilidad, e.firma lista y CSF/32D del mes.";
       default:
         return "Dashboard de inteligencia de Kawiil: explora qué está aprendiendo el sistema por cliente, proyecto y célula.";
     }

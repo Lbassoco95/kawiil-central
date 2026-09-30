@@ -89,7 +89,7 @@ function ConsultCell({
       className="h-7 px-2 text-[11px] gap-1"
       disabled={!canRequest || busy}
       onClick={onRequest}
-      title={canRequest ? "Solicitar a Moffin" : "Requiere CIEC registrada y proyecto de contabilidad"}
+      title={canRequest ? "Solicitar a SATgo" : "Requiere e.firma (JWE) y proyecto de contabilidad"}
     >
       {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
       Solicitar
@@ -165,19 +165,19 @@ export function SatCoverageTab() {
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <ShieldCheck className="h-4 w-4 text-muted-foreground" />
-            Cobertura SAT (Moffin)
+            Cobertura SAT (SATgo)
           </CardTitle>
           <p className="text-xs text-muted-foreground">
-            Clientes activos con proyecto de contabilidad/softlanding (con acceso a CSF y opinión 32D).
-            La descarga automática corre los primeros 5 días de cada mes para los que tienen CIEC.
+            Clientes activos con proyecto de contabilidad/softlanding (CSF y opinión 32D vía e.firma + SATgo).
+            La descarga automática corre los primeros 5 días del mes para quienes tienen e.firma lista.
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             <StatCard icon={ShieldCheck} label="Con acceso a SAT" value={totals?.withAccess ?? 0} />
             <StatCard icon={UserCheck} label="Con responsable" value={totals?.withResponsible ?? 0} />
-            <StatCard icon={KeyRound} label="Con CIEC" value={totals?.withCiec ?? 0} tone="ok" hint={`${coveragePct}% cobertura`} />
-            <StatCard icon={AlertTriangle} label="Sin CIEC" value={totals?.withoutCiec ?? 0} tone="warn" />
+            <StatCard icon={KeyRound} label="Con e.firma" value={totals?.withCiec ?? 0} tone="ok" hint={`${coveragePct}% cobertura`} />
+            <StatCard icon={AlertTriangle} label="Sin e.firma" value={totals?.withoutCiec ?? 0} tone="warn" />
             <StatCard icon={FileText} label="CSF este mes" value={totals?.csfDownloaded ?? 0} tone="ok" />
             <StatCard icon={FileText} label="32D este mes" value={totals?.opinionDownloaded ?? 0} tone="ok" />
           </div>
@@ -217,7 +217,7 @@ export function SatCoverageTab() {
                   <tr className="border-b border-border/50 text-left text-xs text-muted-foreground">
                     <th className="px-4 py-2 font-medium">Cliente</th>
                     <th className="px-4 py-2 font-medium">Responsable</th>
-                    <th className="px-4 py-2 font-medium">CIEC</th>
+                    <th className="px-4 py-2 font-medium">e.firma</th>
                     <th className="px-4 py-2 font-medium">CSF ({MONTHS_ES[month0].slice(0, 3)})</th>
                     <th className="px-4 py-2 font-medium">32D ({MONTHS_ES[month0].slice(0, 3)})</th>
                   </tr>
@@ -238,7 +238,7 @@ export function SatCoverageTab() {
                         )}
                       </td>
                       <td className="px-4 py-2">
-                        <YesNo ok={c.hasCiec} okLabel="Registrada" noLabel="Falta" />
+                        <YesNo ok={c.hasCiec} okLabel="Lista" noLabel="Falta" />
                       </td>
                       <td className="px-4 py-2">
                         <ConsultCell

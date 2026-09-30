@@ -466,26 +466,19 @@ export function ClientSatCertificatesSection({
             </div>
             {dialog.certType === "fiel" ? (
               <div className="space-y-1.5">
-                <Label className="text-xs">Contraseña de la e.firma</Label>
+                <Label className="text-xs">
+                  Contraseña de la e.firma <span className="text-destructive">*</span>
+                </Label>
                 <Input
                   type="password"
                   autoComplete="new-password"
                   value={keyPassword}
                   onChange={(e) => setKeyPassword(e.target.value)}
-                  placeholder="Contraseña del .key"
+                  placeholder="Obligatoria — se cifra a JWE para SATgo"
                   className="text-xs h-9"
                 />
                 <p className="text-[10px] text-muted-foreground">
-                  Se cifra a JWE con la llave pública de SATgo (
-                  <a
-                    href="https://sat-go.com/cifrar-efirma"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="underline"
-                  >
-                    cifrar-efirma
-                  </a>
-                  ). No se guarda en claro en Kawiil.
+                  Requerida para CSF/32D. Se cifra con la llave pública de SATgo y no se guarda en claro.
                 </p>
               </div>
             ) : (
@@ -544,6 +537,8 @@ export function ClientSatCertificatesSection({
             >
               {saveMutation.isPending ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : dialog.certType === "fiel" ? (
+                "Guardar para SATgo"
               ) : (
                 "Guardar cifrado"
               )}
