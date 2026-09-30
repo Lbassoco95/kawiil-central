@@ -1,9 +1,10 @@
 /**
  * Junta ad hoc (Múuch'): sin serie, status 'planned'.
  * Puede crearse con cliente o sin él (prospecto / interna).
+ * Por defecto crea también el evento en Outlook + reunión Teams.
  */
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -30,10 +31,15 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import type { Tables } from "@/integrations/supabase/types";
 import { useProfiles } from "@/hooks/useTasks";
 import { useCreateAdhocMeeting } from "@/hooks/useMtgMeetings";
+import { useMicrosoftConnection } from "@/hooks/useMicrosoft";
+import { createOutlookTeamsEventForMeeting } from "@/lib/mtg/createOutlookEventForMeeting";
+import { useQueryClient } from "@tanstack/react-query";
 
 const adhocSchema = z.object({
   title: z.string().optional(),
@@ -61,6 +67,10 @@ export function MtgAdhocMeetingDialog({
 }: MtgAdhocMeetingDialogProps) {
   const { data: profiles = [] } = useProfiles();
   const createMeeting = useCreateAdhocMeeting(client?.id ?? null);
+  const { isConnected, isLoading: msLoading } = useMicrosoftConnection();
+  const queryClient = useQueryClient();
+  const [createOutlookTeams, setCreateOutlookTeams] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
 
   const form = useForm<AdhocSchemaValues>({
     resolver: zodResolver(adhocSchema),
@@ -80,24 +90,90 @@ export function MtgAdhocMeetingDialog({
         duration_min: 60,
         facilitator_user_id: client?.responsible_user_id ?? null,
       });
+      setCreateOutlookTeams(true);
     }
   }, [open, client?.responsible_user_id, form]);
 
   const onSubmit = async (v: AdhocSchemaValues) => {
+    const title =
+      v.title?.trim() || (client ? `Junta · ${client.name}` : "Junta");
+    setSubmitting(true);
     try {
+      let outlook_event_id: string | null = null;
+      let teams_join_url: string | null = null;
+      let teams_online_meeting_id: string | null = null;
+
+      if (createOutlookTeams) {
+        if (msLoading) {
+          toast.error("Espera un momento: comprobando la conexión con Microsoft…");
+          return;
+        }
+        if (!isConnected) {
+          toast.error(
+            "Conecta Microsoft 365 en Calendario para crear el evento y la reunión de Teams.",
+            { duration: 9000 },
+          );
+          return;
+        }
+        const link = await createOutlookTeamsEventForMeeting({
+          subject: title,
+          scheduledLocal: v.scheduled_at,
+          durationMin: v.duration_min,
+          bodyText: client
+            ? `Junta Múuch' · ${client.name}`
+            : "Junta Múuch' (prospecto / interna). Cliente por asignar.",
+        });
+        outlook_event_id = link.outlook_event_id;
+        teams_join_url = link.teams_join_url;
+        teams_online_meeting_id = link.teams_online_meeting_id;
+        queryClient.invalidateQueries({ queryKey: ["calendar-events"] });
+        if (link.onlineMeetingFallback) {
+          toast.warning(
+            "Evento creado en Outlook, pero sin enlace de Teams (licencia o tenant). La junta se guardó igual.",
+            { duration: 9000 },
+          );
+        }
+      }
+
       const meeting = await createMeeting.mutateAsync({
-        title: v.title?.trim() || (client ? `Junta · ${client.name}` : "Junta"),
+        title,
         scheduled_at: new Date(v.scheduled_at).toISOString(),
         duration_min: v.duration_min,
         facilitator_user_id: v.facilitator_user_id || null,
+        outlook_event_id,
+        teams_join_url,
+        teams_online_meeting_id,
       });
-      toast.success(client ? "Junta creada" : "Junta creada (sin cliente; puedes asignarlo después)");
+
+      if (createOutlookTeams && teams_join_url) {
+        toast.success(
+          client
+            ? "Junta creada en calendario + Teams"
+            : "Junta creada (sin cliente) en calendario + Teams",
+        );
+      } else if (createOutlookTeams && outlook_event_id) {
+        toast.success(
+          client
+            ? "Junta creada y evento en Outlook"
+            : "Junta creada (sin cliente) y evento en Outlook",
+        );
+      } else {
+        toast.success(
+          client
+            ? "Junta creada"
+            : "Junta creada (sin cliente; puedes asignarlo después)",
+        );
+      }
       onOpenChange(false);
       onCreated?.(meeting.id);
     } catch (e) {
-      toast.error("Error: " + (e as Error).message);
+      toast.error("Error: " + (e as Error).message, { duration: 10000 });
+    } finally {
+      setSubmitting(false);
     }
   };
+
+  const busy = submitting || createMeeting.isPending;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -169,7 +245,7 @@ export function MtgAdhocMeetingDialog({
                   <FormLabel>Facilitador</FormLabel>
                   <Select
                     value={field.value ?? ""}
-                    onValueChange={(v) => field.onChange(v || null)}
+                    onValueChange={(val) => field.onChange(val || null)}
                   >
                     <FormControl>
                       <SelectTrigger>
@@ -188,12 +264,39 @@ export function MtgAdhocMeetingDialog({
                 </FormItem>
               )}
             />
+
+            <div className="flex items-start justify-between gap-3 rounded-md border border-border/60 px-3 py-2.5">
+              <div className="space-y-0.5 min-w-0">
+                <Label htmlFor="mtg-outlook-teams" className="text-sm font-medium">
+                  Crear en Outlook + Teams
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Deja el evento en tu calendario y genera el enlace para entrar a la reunión.
+                  {!isConnected && !msLoading && (
+                    <span className="block text-amber-700 dark:text-amber-400 mt-0.5">
+                      Microsoft no está conectado: conéctalo en Calendario antes de crear.
+                    </span>
+                  )}
+                </p>
+              </div>
+              <Switch
+                id="mtg-outlook-teams"
+                checked={createOutlookTeams}
+                onCheckedChange={setCreateOutlookTeams}
+                disabled={busy}
+              />
+            </div>
+
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={createMeeting.isPending}>
-                {createMeeting.isPending ? "Creando..." : "Crear junta"}
+              <Button type="submit" disabled={busy}>
+                {busy
+                  ? createOutlookTeams
+                    ? "Creando evento…"
+                    : "Creando..."
+                  : "Crear junta"}
               </Button>
             </div>
           </form>
