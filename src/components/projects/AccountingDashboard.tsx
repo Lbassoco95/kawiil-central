@@ -1,6 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -25,22 +24,10 @@ import {
   ChevronDown,
   ChevronRight,
   Layers,
-  ShieldAlert,
-  AlertTriangle,
-  FileBadge,
-  FileCheck2,
-  Loader2,
-  RefreshCw,
   Mail,
-  ExternalLink,
-  KeyRound,
-  Megaphone,
-  Inbox,
 } from "lucide-react";
-import { differenceInMinutes } from "date-fns";
 import { nowMX } from "@/lib/dateUtils";
-import { MoffinPdfActions } from "@/components/clients/MoffinPdfActions";
-import { moffinConsultNeedsApiSync, type MoffinConsultRow } from "@/lib/moffinDisplay";
+import { ClientSatgoPanel } from "@/components/clients/ClientSatgoPanel";
 import {
   useAccountingPeriods,
   useCreateAccountingPeriod,
@@ -64,73 +51,10 @@ import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { PhaseTaskRow } from "./PhaseManager";
 import { isTaskClosedStatus } from "@/lib/taskStatusGroups";
 import { toast } from "sonner";
-import {
-  functionInvokeUserMessageAsync,
-  invokeFunctionWithSession,
-} from "@/lib/supabaseInvoke";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import { MoffinFacturasDialog } from "./MoffinFacturasDialog";
 import { MOFFIN_USE_SOLUTIONS } from "@/lib/moffinUseSolutions";
 import { ComposeEmailDialog } from "@/components/microsoft/ComposeEmailDialog";
 import { useAccountingEmailStepSync } from "@/hooks/useAccountingEmailStepSync";
-
-type MoffinConsultType =
-  | "lista_69b"
-  | "constancia_situacion_fiscal"
-  | "opinion_cumplimiento"
-  | "buzon_comunicados"
-  | "buzon_notificaciones";
-
-function moffinNeedsFiel(consultType: MoffinConsultType): boolean {
-  if (consultType === "lista_69b") return false;
-  // SATgo Solutions path: e.firma JWE es el flujo preferido; CIEC queda como respaldo.
-  if (MOFFIN_USE_SOLUTIONS) return false;
-  return true;
-}
-
-/** CSF/32D/buzón en modo Solutions: requiere e.firma JWE (buzón no admite CIEC). */
-function moffinNeedsSatCreds(consultType: MoffinConsultType): boolean {
-  return (
-    MOFFIN_USE_SOLUTIONS &&
-    (consultType === "constancia_situacion_fiscal" ||
-      consultType === "opinion_cumplimiento" ||
-      consultType === "buzon_comunicados" ||
-      consultType === "buzon_notificaciones")
-  );
-}
-
-const MOFFIN_CONSULT_META: Record<
-  MoffinConsultType,
-  { label: string; short: string; icon: typeof ShieldAlert }
-> = {
-  lista_69b: {
-    label: "Lista 69-B (SAT)",
-    short: "69-B",
-    icon: ShieldAlert,
-  },
-  constancia_situacion_fiscal: {
-    label: "Constancia de situación fiscal (SAT · SATgo)",
-    short: "CSF",
-    icon: FileBadge,
-  },
-  opinion_cumplimiento: {
-    label: "Opinión de cumplimiento 32D (SAT · SATgo)",
-    short: "32D",
-    icon: FileCheck2,
-  },
-  buzon_comunicados: {
-    label: "Buzón tributario · Comunicados (SAT · SATgo)",
-    short: "Comunicados",
-    icon: Megaphone,
-  },
-  buzon_notificaciones: {
-    label: "Buzón tributario · Notificaciones (SAT · SATgo)",
-    short: "Notificaciones",
-    icon: Inbox,
-  },
-};
 
 const STATUS_CONFIG: Record<string, { label: string; icon: typeof Clock; className: string }> = {
   pendiente: { label: "Pendiente", icon: Clock, className: "bg-muted text-muted-foreground" },
@@ -160,10 +84,6 @@ Pendientes (${pending.length}):
 ${pending.map((s) => `- ⬜ ${s.label}`).join("\n") || "Ninguno"}
 
 Incluye: resumen de avance, tiempos invertidos si hay datos, alertas de pasos atrasados o bloqueados, y recomendaciones. Usa Markdown con bullets.`;
-}
-
-function moffinFielPwSessionKey(clientId: string) {
-  return `kawiil_moffin_fiel_pw_${clientId}`;
 }
 
 function buildGeneralPrompt(periods: AccountingPeriod[]) {
@@ -358,7 +278,7 @@ export function AccountingDashboard({
   /** Área del proyecto para el alta rápida de tareas (p. ej. contabilidad / softlanding). */
   projectArea?: string;
 }) {
-  const { user, session } = useAuth();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const { canDeleteTasks } = useUserRole();
   const deleteTask = useDeleteTask();
@@ -386,7 +306,7 @@ export function AccountingDashboard({
       if (!clientId) return null;
       const { data, error } = await supabase
         .from("clients")
-        .select("name, email")
+        .select("id, name, email, rfc, sat_fiel_managed_by_firm, sat_fiel_location_hint")
         .eq("id", clientId)
         .maybeSingle();
       if (error) throw error;
@@ -405,323 +325,19 @@ export function AccountingDashboard({
     enabled: !!user && !!projectId,
   });
 
-  const [moffinBusy, setMoffinBusy] = useState<MoffinConsultType | null>(null);
-  const [fielPassword, setFielPassword] = useState("");
-  const [rememberFielPwSession, setRememberFielPwSession] = useState(false);
-  const [moffinRefreshing, setMoffinRefreshing] = useState(false);
-
-  const { data: moffinFielStatus } = useQuery({
-    queryKey: ["moffin-fiel-status", clientId],
-    queryFn: async () => {
-      const { data, error } = await invokeFunctionWithSession("moffin-fiel", {
-        action: "status",
-        clientId: clientId!,
-      });
-      if (error) {
-        throw new Error(await functionInvokeUserMessageAsync(data, error));
-      }
-      const payload = (data ?? {}) as {
-        configured?: boolean;
-        certFingerprint?: string | null;
-        updatedAt?: string | null;
-        error?: string;
-        message?: string;
-      };
-      if (payload.error) {
-        throw new Error(typeof payload.message === "string" ? payload.message : payload.error);
-      }
-      return {
-        configured: !!payload.configured,
-        certFingerprint: payload.certFingerprint ?? null,
-        updatedAt: payload.updatedAt ?? null,
-      };
-    },
-    enabled: !!user && !!session?.access_token && !!clientId && !MOFFIN_USE_SOLUTIONS,
-  });
-
-  const { data: moffinCiecStatus } = useQuery({
-    queryKey: ["moffin-sat-ciec-status", clientId],
-    queryFn: async () => {
-      const { data, error } = await invokeFunctionWithSession("moffin-sat-ciec", {
-        action: "status",
-        clientId: clientId!,
-      });
-      if (error) {
-        throw new Error(await functionInvokeUserMessageAsync(data, error));
-      }
-      const payload = (data ?? {}) as {
-        configured?: boolean;
-        profileId?: number | null;
-        updatedAt?: string | null;
-        error?: string;
-        message?: string;
-      };
-      if (payload.error) {
-        throw new Error(typeof payload.message === "string" ? payload.message : payload.error);
-      }
-      return {
-        configured: !!payload.configured,
-        profileId: payload.profileId ?? null,
-        updatedAt: payload.updatedAt ?? null,
-      };
-    },
-    enabled: !!user && !!session?.access_token && !!clientId && MOFFIN_USE_SOLUTIONS,
-  });
-
-  const { data: satgoFielStatus } = useQuery({
-    queryKey: ["client-sat-certs", clientId],
-    queryFn: async () => {
-      const { data, error } = await invokeFunctionWithSession("client-sat-certificates", {
-        action: "status",
-        clientId: clientId!,
-      });
-      if (error) {
-        throw new Error(await functionInvokeUserMessageAsync(data, error));
-      }
-      const payload = (data ?? {}) as {
-        configured?: boolean;
-        satgoJweReady?: boolean;
-        fiel?: { satgoJweReady?: boolean } | null;
-        error?: string;
-        message?: string;
-      };
-      if (payload.error) {
-        throw new Error(typeof payload.message === "string" ? payload.message : payload.error);
-      }
-      return {
-        configured: !!payload.configured,
-        satgoJweReady: !!(payload.satgoJweReady || payload.fiel?.satgoJweReady),
-      };
-    },
-    enabled: !!user && !!session?.access_token && !!clientId && MOFFIN_USE_SOLUTIONS,
-  });
-
-  const hasSatgoCreds = !!satgoFielStatus?.satgoJweReady;
-
-  useEffect(() => {
-    if (!clientId || MOFFIN_USE_SOLUTIONS) {
-      setFielPassword("");
-      setRememberFielPwSession(false);
-      return;
-    }
-    try {
-      const stored = sessionStorage.getItem(moffinFielPwSessionKey(clientId));
-      if (stored !== null && stored !== "") {
-        setFielPassword(stored);
-        setRememberFielPwSession(true);
-      } else {
-        setFielPassword("");
-        setRememberFielPwSession(false);
-      }
-    } catch {
-      setFielPassword("");
-      setRememberFielPwSession(false);
-    }
-  }, [clientId]);
-
-  useEffect(() => {
-    if (!clientId || !rememberFielPwSession || MOFFIN_USE_SOLUTIONS) return;
-    try {
-      if (fielPassword) sessionStorage.setItem(moffinFielPwSessionKey(clientId), fielPassword);
-      else sessionStorage.removeItem(moffinFielPwSessionKey(clientId));
-    } catch {
-      /* ignore */
-    }
-  }, [clientId, rememberFielPwSession, fielPassword]);
-
-  const { data: moffinRows = [] } = useQuery({
-    queryKey: ["moffin-consults", projectId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("moffin_consults")
-        .select(
-          "id, consult_type, status, summary, created_at, document_id, error_message, moffin_query_id, documents(file_path, name)"
-        )
-        .eq("project_id", projectId)
-        .order("created_at", { ascending: false })
-        .limit(60);
-      if (error) throw error;
-      return (data ?? []) as MoffinConsultRow[];
-    },
-    enabled: !!user && !!projectId,
-    refetchInterval: false,
-  });
-
-  const latestMoffinByType = useMemo(() => {
-    const map = new Map<string, MoffinConsultRow>();
-    for (const row of moffinRows) {
-      if (!map.has(row.consult_type)) map.set(row.consult_type, row);
-    }
-    return map;
-  }, [moffinRows]);
-
-  const hasPendingMoffinSync = useMemo(
-    () => moffinRows.some((r) => moffinConsultNeedsApiSync(r)),
-    [moffinRows],
-  );
-
-  useEffect(() => {
-    if (!user || !projectId || !hasPendingMoffinSync) return;
-    const id = window.setInterval(() => {
-      void queryClient.invalidateQueries({ queryKey: ["moffin-consults", projectId] });
-    }, 55_000);
-    return () => clearInterval(id);
-  }, [user, projectId, hasPendingMoffinSync, queryClient]);
-
-  const moffinStalePending = useMemo(() => {
-    const keys = Object.keys(MOFFIN_CONSULT_META) as MoffinConsultType[];
-    return keys.some((key) => {
-      const row = latestMoffinByType.get(key);
-      return (
-        !!row &&
-        row.status === "pending" &&
-        !!row.moffin_query_id &&
-        !!row.created_at &&
-        differenceInMinutes(new Date(), new Date(row.created_at)) >= 10
-      );
-    });
-  }, [latestMoffinByType]);
-
-  const syncMoffinPending = useCallback(async () => {
-    setMoffinRefreshing(true);
-    try {
-      const { data, error } = await invokeFunctionWithSession("moffin-query", {
-        refreshPendingForProjectId: projectId,
-      });
-      const payload = (data ?? {}) as {
-        refresh?: boolean;
-        results?: Array<{ ok: boolean; error?: string; newStatus?: string }>;
-        pendingFound?: number;
-        error?: string;
-        message?: string;
-      };
-      if (payload.error || error) {
-        toast.error(await functionInvokeUserMessageAsync(data, error));
-        return;
-      }
-      const failed = payload.results?.filter((r) => !r.ok) ?? [];
-      const okRows = payload.results?.filter((r) => r.ok) ?? [];
-      const stillPending = okRows.filter((r) => r.newStatus === "pending").length;
-      if (failed.length) {
-        toast.warning(`Sincronización parcial: ${failed[0]?.error ?? "revisa respuesta de Moffin"}`);
-      } else if (payload.pendingFound === 0) {
-        toast.success("No había filas que requieran sincronizar con Moffin.");
-      } else if (stillPending > 0) {
-        toast("Sincronización lista — Moffin en cola", {
-          description: `Es el comportamiento esperado: ${stillPending} consulta(s) siguen en cola en Moffin, la tabla en pendiente y sin PDF hasta que pasen a éxito. No es un error. Si el webhook (Svix) está configurado, se actualizará solo; si no, vuelve a sincronizar más tarde.`,
-        });
-      } else {
-        toast.success("Consultas actualizadas desde Moffin (resultado listo; si tu plan entrega PDF, se sube al pasar a éxito).");
-      }
-      await Promise.all([
-        queryClient.refetchQueries({ queryKey: ["moffin-consults", projectId] }),
-        clientId
-          ? queryClient.refetchQueries({ queryKey: ["moffin-consults-client", clientId] })
-          : Promise.resolve(),
-      ]);
-      if (clientId) {
-        void queryClient.invalidateQueries({ queryKey: ["client-documents", clientId] });
-      }
-      void queryClient.invalidateQueries({ queryKey: ["documents"] });
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Error al sincronizar Moffin");
-    } finally {
-      setMoffinRefreshing(false);
-    }
-  }, [projectId, clientId, queryClient]);
-
-  const runMoffinConsult = useCallback(
-    async (consultType: MoffinConsultType) => {
-      if (moffinNeedsSatCreds(consultType)) {
-        if (!hasSatgoCreds) {
-          toast.error(
-            "Sube la e.firma (.cer/.key + contraseña) en Certificados SAT del cliente.",
-          );
-          return;
-        }
-      }
-      if (moffinNeedsFiel(consultType)) {
-        if (!moffinFielStatus?.configured) {
-          toast.error("Primero carga el .cer y el .key del cliente en el bloque de e.firma.");
-          return;
-        }
-        if (!fielPassword.trim()) {
-          toast.error("Ingresa la contraseña de la e.firma para esta consulta.");
-          return;
-        }
-      }
-      if (
-        !window.confirm(
-          "Cada consulta puede generar un cargo según tu plan con SATgo. ¿Deseas continuar?"
-        )
-      ) {
-        return;
-      }
-      setMoffinBusy(consultType);
-      try {
-        const fnName = "satgo-query";
-        const { data, error } = await invokeFunctionWithSession(fnName, {
-          projectId,
-          consultType,
-          ...(moffinNeedsFiel(consultType)
-            ? { fielPassword: fielPassword.trim() }
-            : {}),
-        });
-        const payload = (data ?? {}) as {
-          error?: string;
-          message?: string;
-          consult?: unknown;
-          statusCode?: number;
-        };
-        if (payload.error || error) {
-          toast.error(await functionInvokeUserMessageAsync(data, error));
-          const errCode = String((payload as { error?: string }).error ?? "");
-          const scrollCiec =
-            MOFFIN_USE_SOLUTIONS &&
-            clientId &&
-            ["moffin_profile_failed", "moffin_profile_invalid", "ciec_decrypt_failed", "sat_credentials_required"].includes(errCode);
-          if (scrollCiec) {
-            queryClient.invalidateQueries({ queryKey: ["moffin-sat-ciec-status", clientId] });
-            queryClient.invalidateQueries({ queryKey: ["client-sat-certs", clientId] });
-            requestAnimationFrame(() => {
-              document.getElementById("moffin-sat-ciec-section")?.scrollIntoView({
-                behavior: "smooth",
-                block: "nearest",
-              });
-            });
-          }
-          if (payload.consult) {
-            queryClient.invalidateQueries({ queryKey: ["moffin-consults", projectId] });
-            if (clientId) {
-              queryClient.invalidateQueries({ queryKey: ["moffin-consults-client", clientId] });
-              queryClient.invalidateQueries({ queryKey: ["client-documents", clientId] });
-            }
-          }
-          return;
-        }
-        toast.success("Consulta SAT registrada");
-        queryClient.invalidateQueries({ queryKey: ["moffin-consults", projectId] });
-        if (clientId) {
-          queryClient.invalidateQueries({ queryKey: ["moffin-consults-client", clientId] });
-          queryClient.invalidateQueries({ queryKey: ["client-documents", clientId] });
-        }
-        queryClient.invalidateQueries({ queryKey: ["documents"] });
-      } catch (e: unknown) {
-        toast.error(e instanceof Error ? e.message : "Error al consultar Moffin");
-      } finally {
-        setMoffinBusy(null);
-      }
-    },
-    [
-      projectId,
-      clientId,
-      queryClient,
-      moffinFielStatus?.configured,
-      moffinCiecStatus?.configured,
-      satgoFielStatus?.satgoJweReady,
-      hasSatgoCreds,
-      fielPassword,
-    ]
+  const accountingProjectForSatgo = useMemo(
+    () =>
+      projectId
+        ? [
+            {
+              id: projectId,
+              name: "Este proyecto",
+              area: (projectArea as "contabilidad" | "softlanding" | null) ?? "contabilidad",
+              status: "activo" as const,
+            },
+          ]
+        : [],
+    [projectId, projectArea],
   );
 
   useEffect(() => {
@@ -800,369 +416,29 @@ export function AccountingDashboard({
       ) : null}
       <CriticalityDelayCard projectId={projectId} />
 
-      <Card className="border-border/80">
-        <CardContent className="p-4 space-y-3">
-          <h3 className="text-sm font-semibold text-foreground">Consultas SAT (SATgo)</h3>
-          {!MOFFIN_USE_SOLUTIONS ? (
-            <Alert variant="default" className="border-amber-500/40 bg-amber-500/5 py-3 [&>svg]:top-3.5">
-              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-              <AlertTitle className="text-xs font-semibold">Modo legacy explícito (FIEL)</AlertTitle>
-              <AlertDescription className="text-[11px] leading-snug text-muted-foreground space-y-1.5">
-                <p>
-                  Este build tiene <code className="rounded bg-muted px-1 py-0.5 text-[10px]">VITE_MOFFIN_API_FLAVOR=legacy</code>
-                  : CSF y 32D usan e.firma (.cer/.key) y <code className="rounded bg-muted px-1 py-0.5 text-[10px]">sat_rfc</code>, no
-                  la API Moffin Solutions con CIEC.
-                </p>
-                <p>
-                  Para volver al flujo predeterminado (CIEC + Solutions): quita{" "}
-                  <code className="rounded bg-muted px-1 py-0.5 text-[10px]">VITE_MOFFIN_API_FLAVOR=legacy</code> del entorno de
-                  build (por defecto la app ya usa Solutions). En Supabase elimina{" "}
-                  <code className="rounded bg-muted px-1 py-0.5 text-[10px]">MOFFIN_API_FLAVOR=legacy</code> y configura los
-                  secretos de Solutions (ver <code className="rounded bg-muted px-1 py-0.5 text-[10px]">.env.example</code>).
-                </p>
-              </AlertDescription>
-            </Alert>
-          ) : null}
-          {clientId ? (
-            <p className="text-[10px] text-muted-foreground leading-snug">
-              CSF, 32D y 69-B van por <strong className="font-medium">SATgo</strong>. CSF/32D usan la
-              e.firma (JWE); 69-B solo necesita el RFC.
-            </p>
-          ) : null}
-          {clientId ? (
-            <div className="space-y-3">
-              {MOFFIN_USE_SOLUTIONS ? (
-                <div className="rounded-md border border-border/50 bg-muted/20 p-3 space-y-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <KeyRound className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span className="text-[11px] font-medium text-foreground">
-                      e.firma (FIEL) → SATgo
-                    </span>
-                    {satgoFielStatus?.satgoJweReady ? (
-                      <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-medium">
-                        Lista para CSF/32D
-                      </span>
-                    ) : satgoFielStatus?.configured ? (
-                      <span className="text-[10px] text-amber-700 dark:text-amber-400">
-                        e.firma sin contraseña — vuelve a subirla con contraseña
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-amber-700 dark:text-amber-400">
-                        Sin e.firma
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[10px] text-muted-foreground">
-                    En la ficha del cliente sube .cer, .key y contraseña. Se cifra a JWE con la llave
-                    pública de SATgo; no pedimos CIEC ni Moffin para CSF/32D.
-                  </p>
-                  <a
-                    href={`/clientes/${clientId}?tab=general#sat-certificates`}
-                    className="inline-flex items-center gap-1.5 text-[10px] font-medium text-primary hover:underline"
-                  >
-                    Ir a certificados SAT del cliente
-                    <ExternalLink className="h-3 w-3" />
-                  </a>
-                </div>
-              ) : (
-                <div className="rounded-md border border-border/50 bg-muted/20 p-3 space-y-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <KeyRound className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span className="text-[11px] font-medium text-foreground">
-                      e.firma (FIEL) y sellos digitales
-                    </span>
-                    {moffinFielStatus?.configured ? (
-                      <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-medium">
-                        FIEL registrada
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-amber-700 dark:text-amber-400">
-                        Sin FIEL cargada
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[10px] text-muted-foreground">
-                    Los certificados SAT se administran desde la ficha del cliente (pestaña General).
-                  </p>
-                  <a
-                    href={`/clientes/${clientId}?tab=general#sat-certificates`}
-                    className="inline-flex items-center gap-1.5 text-[10px] font-medium text-primary hover:underline"
-                  >
-                    Ir a la ficha del cliente
-                    <ExternalLink className="h-3 w-3" />
-                  </a>
-                </div>
-              )}
-              {!MOFFIN_USE_SOLUTIONS && moffinFielStatus?.configured ? (
-                <div className="space-y-2 max-w-sm">
-                  <Label htmlFor="moffin-fiel-password" className="text-[10px] text-muted-foreground">
-                    Contraseña de la llave (.key) para esta consulta
-                  </Label>
-                  <Input
-                    id="moffin-fiel-password"
-                    type="password"
-                    autoComplete="new-password"
-                    className="h-8 text-xs"
-                    placeholder="Requerida para las consultas RFC (constancia / opinión)"
-                    value={fielPassword}
-                    onChange={(e) => setFielPassword(e.target.value)}
-                  />
-                  <div className="flex items-start gap-2">
-                    <Checkbox
-                      id="moffin-fiel-remember-session"
-                      checked={rememberFielPwSession}
-                      onCheckedChange={(c) => {
-                        const on = c === true;
-                        setRememberFielPwSession(on);
-                        if (!on && clientId) {
-                          try {
-                            sessionStorage.removeItem(moffinFielPwSessionKey(clientId));
-                          } catch {
-                            /* ignore */
-                          }
-                        }
-                      }}
-                      className="mt-0.5"
-                    />
-                    <Label
-                      htmlFor="moffin-fiel-remember-session"
-                      className="text-[10px] text-muted-foreground font-normal leading-snug cursor-pointer"
-                    >
-                      Recordar contraseña en esta sesión del navegador (solo en tu equipo; al cerrar la pestaña suele
-                      borrarse)
-                    </Label>
-                  </div>
-                </div>
-              ) : null}
+      {clientId ? (
+        <div className="space-y-3">
+          <ClientSatgoPanel
+            clientId={clientId}
+            client={clientInfo ?? undefined}
+            projects={accountingProjectForSatgo}
+            className="border-border/80"
+          />
+          {MOFFIN_USE_SOLUTIONS ? (
+            <div className="flex justify-end">
+              <MoffinFacturasDialog projectId={projectId} />
             </div>
           ) : null}
-          {!clientId ? (
+        </div>
+      ) : (
+        <Card className="border-border/80">
+          <CardContent className="p-4">
             <p className="text-xs text-amber-700 dark:text-amber-400">
-              Asocia un cliente con RFC al proyecto para usar estas consultas.
+              Asocia un cliente al proyecto para consultar SAT (SATgo) desde la ficha del cliente.
             </p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {(Object.keys(MOFFIN_CONSULT_META) as MoffinConsultType[]).map((key) => {
-                const meta = MOFFIN_CONSULT_META[key];
-                const Icon = meta.icon;
-                const needsCert = moffinNeedsFiel(key);
-                const needsSatCreds = moffinNeedsSatCreds(key);
-                return (
-                  <Button
-                    key={key}
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="gap-1.5"
-                    disabled={
-                      !!moffinBusy ||
-                      (needsCert && !moffinFielStatus?.configured) ||
-                      (needsSatCreds && !hasSatgoCreds)
-                    }
-                    title={
-                      needsSatCreds && !hasSatgoCreds
-                        ? "Sube la e.firma (.cer/.key + contraseña) del cliente"
-                        : needsCert && !moffinFielStatus?.configured
-                          ? "Carga .cer y .key antes de consultar"
-                          : undefined
-                    }
-                    onClick={() => runMoffinConsult(key)}
-                  >
-                    {moffinBusy === key ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Icon className="h-3.5 w-3.5" />
-                    )}
-                    {meta.short}
-                  </Button>
-                );
-              })}
-              {MOFFIN_USE_SOLUTIONS ? (
-                <MoffinFacturasDialog
-                  projectId={projectId}
-                  disabled={!!moffinBusy || !moffinCiecStatus?.configured}
-                  disabledReason={
-                    !moffinCiecStatus?.configured
-                      ? "Las facturas CFDI aún usan CIEC (flujo aparte de CSF/32D)"
-                      : undefined
-                  }
-                />
-              ) : null}
-            </div>
-          )}
-          {clientId && moffinStalePending ? (
-            <p className="text-[11px] text-amber-900 dark:text-amber-100 rounded-md border border-amber-500/35 bg-amber-500/10 px-2 py-1.5 leading-snug">
-              Hay consultas 69-B en <strong className="font-medium">pendiente</strong>. Usa «Sincronizar
-              pendientes» cuando ya haya resultado. CSF/32D con SATgo no requieren sincronizar.
-            </p>
-          ) : null}
-          {clientId && hasPendingMoffinSync ? (
-            <div className="flex flex-col items-end gap-1.5">
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                className="h-8 text-xs gap-1"
-                disabled={moffinRefreshing}
-                onClick={syncMoffinPending}
-              >
-                {moffinRefreshing ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-3.5 w-3.5" />
-                )}
-                Sincronizar pendientes
-              </Button>
-            </div>
-          ) : null}
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-            {(Object.keys(MOFFIN_CONSULT_META) as MoffinConsultType[]).map((key) => {
-              const row = latestMoffinByType.get(key);
-              const doc = row?.documents as { file_path?: string | null; name?: string | null } | null;
-              const st = row?.status;
-              const isOk = st === "success";
-              const isErr = st === "fail" || st === "error";
-              const isPending = st === "pending";
-              const dotClass = isOk
-                ? "bg-emerald-500"
-                : isErr
-                  ? "bg-destructive"
-                  : isPending
-                    ? "bg-amber-500"
-                    : "bg-muted-foreground/40";
-              const stLabel = isOk
-                ? "Listo"
-                : isErr
-                  ? "Error"
-                  : isPending
-                    ? "Pendiente"
-                    : "Sin consultar";
-              return (
-                <div key={key} className="rounded-md border border-border/60 bg-background/40 p-2.5 space-y-1.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-semibold text-foreground">{MOFFIN_CONSULT_META[key].short}</span>
-                    <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                      <span className={`h-1.5 w-1.5 rounded-full ${dotClass}`} />
-                      {stLabel}
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground">
-                    {row?.created_at
-                      ? new Date(row.created_at).toLocaleDateString("es-MX", {
-                          day: "2-digit",
-                          month: "short",
-                          year: "numeric",
-                        })
-                      : "Aún sin consultar"}
-                  </p>
-                  {isOk && row?.summary ? (
-                    <p
-                      className="text-[10px] text-muted-foreground leading-tight line-clamp-3"
-                      title={row.summary}
-                    >
-                      {row.summary}
-                    </p>
-                  ) : null}
-                  {isErr && row?.error_message ? (
-                    <p
-                      className="text-[10px] text-destructive leading-tight line-clamp-2"
-                      title={row.error_message}
-                    >
-                      {row.error_message}
-                    </p>
-                  ) : null}
-                  {doc?.file_path ? (
-                    <MoffinPdfActions filePath={doc.file_path} fileName={doc.name} />
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-          {clientId && moffinRows.length > 0 ? (
-            <Collapsible className="space-y-1.5">
-              <CollapsibleTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2 text-[11px] text-muted-foreground gap-1"
-                >
-                  <ChevronDown className="h-3.5 w-3.5" />
-                  Ver historial completo ({moffinRows.length})
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="rounded-md border border-border/60 max-h-72 overflow-auto">
-                <table className="w-full text-left text-[11px]">
-                  <thead className="bg-muted/40 text-muted-foreground sticky top-0 z-[1]">
-                    <tr>
-                      <th className="p-2 font-medium">Tipo</th>
-                      <th className="p-2 font-medium">Estado</th>
-                      <th className="p-2 font-medium">Resumen</th>
-                      <th className="p-2 font-medium">Fecha</th>
-                      <th className="p-2 font-medium min-w-[140px]">PDF</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {moffinRows.map((hist) => {
-                      const hdoc = hist.documents as {
-                        file_path?: string | null;
-                        name?: string | null;
-                      } | null;
-                      const histLabel =
-                        MOFFIN_CONSULT_META[hist.consult_type as MoffinConsultType]?.label ??
-                        hist.consult_type;
-                      const histBadgeVariant =
-                        hist.status === "success"
-                          ? "default"
-                          : hist.status === "fail" || hist.status === "error"
-                            ? "destructive"
-                            : "secondary";
-                      return (
-                        <tr key={hist.id} className="border-t border-border/50">
-                          <td className="p-2 font-medium align-top">{histLabel}</td>
-                          <td className="p-2 align-top">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <Badge variant={histBadgeVariant} className="text-[10px]">
-                                {hist.status}
-                              </Badge>
-                              {(hist.status === "fail" || hist.status === "error") &&
-                              hist.error_message?.trim().startsWith("Origen:") ? (
-                                <span className="text-[9px] font-medium text-muted-foreground rounded border border-border/60 px-1 py-0">
-                                  Moffin
-                                </span>
-                              ) : null}
-                            </div>
-                          </td>
-                          <td className="p-2 text-muted-foreground max-w-[220px] align-top">
-                            <div className="line-clamp-2" title={hist.summary ?? undefined}>
-                              {hist.summary ?? "—"}
-                            </div>
-                            {hist.error_message ? (
-                              <div className="text-[10px] text-destructive mt-0.5 leading-tight line-clamp-2">
-                                {hist.error_message}
-                              </div>
-                            ) : null}
-                          </td>
-                          <td className="p-2 text-muted-foreground whitespace-nowrap align-top">
-                            {hist.created_at ? new Date(hist.created_at).toLocaleString("es-MX") : "—"}
-                          </td>
-                          <td className="p-2 align-top">
-                            {hdoc?.file_path ? (
-                              <MoffinPdfActions filePath={hdoc.file_path} fileName={hdoc.name} />
-                            ) : (
-                              <span className="text-muted-foreground">—</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </CollapsibleContent>
-            </Collapsible>
-          ) : null}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-[11px] text-muted-foreground">
         Cada periodo mensual tiene su propia fase en el tab <strong className="text-foreground font-medium">Tareas</strong>: puedes crear varias tareas por mes y arrastrarlas entre fases allí.
