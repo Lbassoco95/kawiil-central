@@ -30,6 +30,11 @@ import { useMtgMeetingsForOrg, type OrgMtgMeeting } from "@/hooks/useMtgMeetings
 import { useClients, type Client } from "@/hooks/useClients";
 import { MtgAdhocMeetingDialog } from "@/components/clients/MtgAdhocMeetingDialog";
 import {
+  MtgMeetingEntryChooser,
+  type MtgMeetingEntryMode,
+} from "@/components/mtg/MtgMeetingEntryChooser";
+import { parseMeetingJoinLink } from "@/lib/mtg/joinLink";
+import {
   CalendarClock,
   CheckSquare,
   ExternalLink,
@@ -42,6 +47,15 @@ import {
 } from "lucide-react";
 
 type StatusFilter = "all" | "upcoming" | "live" | "minutes" | "closed";
+
+function joinProviderLabel(url: string | null | undefined): string {
+  if (!url) return "Llamada";
+  try {
+    return parseMeetingJoinLink(url).label;
+  } catch {
+    return "Llamada";
+  }
+}
 
 function matchesFilter(m: OrgMtgMeeting, filter: StatusFilter): boolean {
   if (filter === "all") return true;
@@ -69,8 +83,22 @@ export default function Juntas() {
   const [filter, setFilter] = useState<StatusFilter>("all");
   const [pickClientOpen, setPickClientOpen] = useState(false);
   const [clientQuery, setClientQuery] = useState("");
+  const [chooserOpen, setChooserOpen] = useState(false);
+  const [chooserClient, setChooserClient] = useState<Client | null>(null);
   const [adhocClient, setAdhocClient] = useState<Client | null>(null);
-  const [unassignedOpen, setUnassignedOpen] = useState(false);
+  const [adhocOpen, setAdhocOpen] = useState(false);
+  const [entryMode, setEntryMode] = useState<MtgMeetingEntryMode>("create");
+
+  const openEntryChooser = (client: Client | null) => {
+    setChooserClient(client);
+    setChooserOpen(true);
+  };
+
+  const onEntryChosen = (mode: MtgMeetingEntryMode) => {
+    setEntryMode(mode);
+    setAdhocClient(chooserClient);
+    setAdhocOpen(true);
+  };
 
   const heroStats: PageHeaderStat[] = useMemo(() => {
     const upcoming = meetings.filter((m) => m.status === "planned").length;
@@ -127,13 +155,7 @@ export default function Juntas() {
           stats={heroStats}
           actions={
             <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                onClick={() => {
-                  setAdhocClient(null);
-                  setUnassignedOpen(true);
-                }}
-              >
+              <Button size="sm" onClick={() => openEntryChooser(null)}>
                 <Plus className="h-4 w-4 mr-1" />
                 Nueva junta
               </Button>
@@ -178,16 +200,10 @@ export default function Juntas() {
             <CalendarClock className="h-10 w-10 mx-auto text-muted-foreground/60" />
             <p className="text-muted-foreground max-w-md mx-auto">
               {meetings.length === 0
-                ? "Aún no hay juntas. Crea una junta ad hoc o una serie desde la ficha del cliente."
+                ? "Aún no hay juntas. Invita con el link de una llamada en curso o genera una junta nueva."
                 : "Ninguna junta coincide con el filtro."}
             </p>
-            <Button
-              size="sm"
-              onClick={() => {
-                setAdhocClient(null);
-                setUnassignedOpen(true);
-              }}
-            >
+            <Button size="sm" onClick={() => openEntryChooser(null)}>
               <Plus className="h-4 w-4 mr-1" />
               Nueva junta
             </Button>
@@ -246,7 +262,7 @@ export default function Juntas() {
                         className="inline-flex items-center gap-1 text-sky-700 dark:text-sky-400 hover:underline"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <Video className="h-3.5 w-3.5" /> Teams
+                        <Video className="h-3.5 w-3.5" /> {joinProviderLabel(m.teams_join_url)}
                         <ExternalLink className="h-3 w-3" />
                       </a>
                     )}
@@ -322,7 +338,7 @@ export default function Juntas() {
                   className="w-full text-left px-3 py-2.5 text-sm hover:bg-muted/50"
                   onClick={() => {
                     setPickClientOpen(false);
-                    setAdhocClient(c);
+                    openEntryChooser(c);
                   }}
                 >
                   {c.name}
@@ -333,21 +349,21 @@ export default function Juntas() {
         </DialogContent>
       </Dialog>
 
-      {adhocClient && (
-        <MtgAdhocMeetingDialog
-          open={!!adhocClient}
-          onOpenChange={(o) => {
-            if (!o) setAdhocClient(null);
-          }}
-          client={adhocClient}
-          onCreated={(id) => navigate(`/juntas/${id}`)}
-        />
-      )}
+      <MtgMeetingEntryChooser
+        open={chooserOpen}
+        onOpenChange={setChooserOpen}
+        clientName={chooserClient?.name ?? null}
+        onChoose={onEntryChosen}
+      />
 
       <MtgAdhocMeetingDialog
-        open={unassignedOpen}
-        onOpenChange={setUnassignedOpen}
-        client={null}
+        open={adhocOpen}
+        onOpenChange={(o) => {
+          setAdhocOpen(o);
+          if (!o) setAdhocClient(null);
+        }}
+        client={adhocClient}
+        entryMode={entryMode}
         onCreated={(id) => navigate(`/juntas/${id}`)}
       />
     </AppLayout>
