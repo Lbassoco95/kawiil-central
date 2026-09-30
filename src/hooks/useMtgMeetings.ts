@@ -131,10 +131,14 @@ export interface AdhocMeetingValues {
   scheduled_at: string;
   duration_min: number | null;
   facilitator_user_id: string | null;
+  title?: string | null;
+  outlook_event_id?: string | null;
+  teams_join_url?: string | null;
+  teams_online_meeting_id?: string | null;
 }
 
-/** Junta ad hoc: sin serie, status planned. */
-export function useCreateAdhocMeeting(clientId: string) {
+/** Junta ad hoc: sin serie, status planned. `clientId` null = prospecto/interna. */
+export function useCreateAdhocMeeting(clientId: string | null) {
   const queryClient = useQueryClient();
   const { user } = useAuth();
 
@@ -145,9 +149,13 @@ export function useCreateAdhocMeeting(clientId: string) {
         organization_id: orgId,
         series_id: null,
         client_id: clientId,
+        title: values.title?.trim() || null,
         scheduled_at: values.scheduled_at,
         duration_min: values.duration_min,
         facilitator_user_id: values.facilitator_user_id,
+        outlook_event_id: values.outlook_event_id ?? null,
+        teams_join_url: values.teams_join_url ?? null,
+        teams_online_meeting_id: values.teams_online_meeting_id ?? null,
         created_by: user!.id,
       };
       const { data, error } = await mtgDb.from("mtg_meetings").insert(row).select().single();
@@ -160,14 +168,14 @@ export function useCreateAdhocMeeting(clientId: string) {
         entityType: "meeting",
         entityId: meeting.id,
         action: MTG_AUDIT_ACTION.MEETING_CREATED,
+        details: { unassigned: !clientId },
         snapshot: meeting as unknown as Record<string, unknown>,
       });
       return meeting;
     },
-    onSuccess: (meeting) => {
-      queryClient.invalidateQueries({ queryKey: KEY(clientId) });
+    onSuccess: () => {
+      if (clientId) queryClient.invalidateQueries({ queryKey: KEY(clientId) });
       queryClient.invalidateQueries({ queryKey: ["mtg-meetings-org"] });
-      return meeting;
     },
   });
 }

@@ -15,7 +15,8 @@ export interface CaptureAgreementInput {
   organizationId: string;
   actorUserId: string;
   meetingId: string;
-  clientId: string;
+  /** Null mientras la junta no tenga cliente asignado. */
+  clientId: string | null;
   entityKey?: string | null;
   topicId?: string | null;
   projectId?: string | null;
@@ -67,12 +68,18 @@ export async function captureAgreement(input: CaptureAgreementInput): Promise<Mt
   const withProject = !!input.projectId;
 
   let taskId: string | null = null;
-  if (shouldCreateTask({ status, projectId: input.projectId })) {
+  if (
+    shouldCreateTask({
+      status,
+      projectId: input.projectId,
+      clientId: input.clientId,
+    })
+  ) {
     taskId = await createTaskForAgreement({
       organizationId: input.organizationId,
       actorUserId: input.actorUserId,
       meetingId: input.meetingId,
-      clientId: input.clientId,
+      clientId: input.clientId!,
       projectId: input.projectId!,
       title: input.text.slice(0, 200),
       dueDate: input.dueDate,
@@ -130,6 +137,8 @@ export async function assignProjectAndCreateTask(opts: {
   const a = opts.agreement;
   if (a.status !== "confirmed") throw new Error("Sólo acuerdos confirmados");
   if (a.task_id) throw new Error("Ya tiene tarea");
+
+  if (!a.client_id) throw new Error("Asigna un cliente a la junta antes de crear la tarea");
 
   const taskId = await createTaskForAgreement({
     organizationId: opts.organizationId,

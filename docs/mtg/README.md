@@ -69,6 +69,25 @@ Para que `kawiil-agents` (en `nexo-louis/cloud/hetzner/docker-compose.yml`) alca
       OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN}
 ```
 
+## Juntas sin cliente + Calendario
+
+Puedes crear una junta **sin cliente** (prospecto / interna) desde `/juntas` o con **Grabar en Juntas** en el detalle de un evento del Calendario. Ahí grabas audio, subes transcripción y generas minuta. Después, **Asignar cliente** migra:
+
+- **Junta completa** — reunión + minuta + grabación + acuerdos en la ficha del cliente, o
+- **Solo tareas / seguimientos** — prioriza acuerdos→tareas (la junta también se vincula para no perder contexto).
+
+### Cuentas Teams / Outlook — qué funciona con qué
+
+| Capacidad | Cualquier cuenta conectada (Outlook/Google del usuario) | Tenant Kawiil (`kawiil.mx`) |
+|---|---|---|
+| Crear junta desde calendario + tablero | Sí | Sí |
+| Grabar audio en el navegador / subir archivo | Sí | Sí |
+| Subir transcripción manual (.vtt/.txt/.docx) | Sí | Sí |
+| Unirse al Meet/Teams del evento | Sí (el enlace del evento) | Sí |
+| Traer **automáticamente** grabación/transcripción de Teams vía Graph | No | Sí, con admin consent + app permissions + organizador en el tenant |
+
+Para la demo de mañana a las 9 (sin cliente): Calendario → evento → **Grabar en Juntas** → iniciar → grabar/notas → terminar → minuta → más tarde **Asignar cliente**.
+
 ## Roadmap / fuera de v1
 
 - Side panel de Teams
@@ -76,6 +95,7 @@ Para que `kawiil-agents` (en `nexo-louis/cloud/hetzner/docker-compose.yml`) alca
 - Recall.ai (grabación/transcripción alternativa)
 - Propuesta de avance desde Slack o correo
 - Webhook saliente Donna/Cerebro (contrato abajo; **no implementado**)
+- Pull automático de recording/transcript Graph en cuentas no-Kawiil (delegado)
 
 ## Contrato webhook saliente (Donna / Cerebro) — no implementado
 

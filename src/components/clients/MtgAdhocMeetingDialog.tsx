@@ -1,5 +1,6 @@
 /**
  * Junta ad hoc (Múuch'): sin serie, status 'planned'.
+ * Puede crearse con cliente o sin él (prospecto / interna).
  */
 
 import { useEffect } from "react";
@@ -35,6 +36,7 @@ import { useProfiles } from "@/hooks/useTasks";
 import { useCreateAdhocMeeting } from "@/hooks/useMtgMeetings";
 
 const adhocSchema = z.object({
+  title: z.string().optional(),
   scheduled_at: z.string().min(1, "Captura fecha y hora de la junta."),
   duration_min: z.coerce.number().int().min(5, "Mínimo 5 minutos."),
   facilitator_user_id: z.string().nullable().optional(),
@@ -45,7 +47,8 @@ type AdhocSchemaValues = z.infer<typeof adhocSchema>;
 interface MtgAdhocMeetingDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  client: Tables<"clients">;
+  /** Null = junta sin cliente (se asigna después). */
+  client: Tables<"clients"> | null;
   /** Si se define, se llama tras crear (p. ej. navegar al tablero). */
   onCreated?: (meetingId: string) => void;
 }
@@ -57,35 +60,38 @@ export function MtgAdhocMeetingDialog({
   onCreated,
 }: MtgAdhocMeetingDialogProps) {
   const { data: profiles = [] } = useProfiles();
-  const createMeeting = useCreateAdhocMeeting(client.id);
+  const createMeeting = useCreateAdhocMeeting(client?.id ?? null);
 
   const form = useForm<AdhocSchemaValues>({
     resolver: zodResolver(adhocSchema),
     defaultValues: {
+      title: "",
       scheduled_at: "",
       duration_min: 60,
-      facilitator_user_id: client.responsible_user_id ?? null,
+      facilitator_user_id: client?.responsible_user_id ?? null,
     },
   });
 
   useEffect(() => {
     if (open) {
       form.reset({
+        title: "",
         scheduled_at: "",
         duration_min: 60,
-        facilitator_user_id: client.responsible_user_id ?? null,
+        facilitator_user_id: client?.responsible_user_id ?? null,
       });
     }
-  }, [open, client.responsible_user_id, form]);
+  }, [open, client?.responsible_user_id, form]);
 
   const onSubmit = async (v: AdhocSchemaValues) => {
     try {
       const meeting = await createMeeting.mutateAsync({
+        title: v.title?.trim() || (client ? `Junta · ${client.name}` : "Junta"),
         scheduled_at: new Date(v.scheduled_at).toISOString(),
         duration_min: v.duration_min,
         facilitator_user_id: v.facilitator_user_id || null,
       });
-      toast.success("Junta creada");
+      toast.success(client ? "Junta creada" : "Junta creada (sin cliente; puedes asignarlo después)");
       onOpenChange(false);
       onCreated?.(meeting.id);
     } catch (e) {
@@ -100,10 +106,35 @@ export function MtgAdhocMeetingDialog({
           <DialogTitle>Nueva junta</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
-          Junta ad hoc de <strong>{client.name}</strong>, sin serie.
+          {client ? (
+            <>
+              Junta ad hoc de <strong>{client.name}</strong>, sin serie.
+            </>
+          ) : (
+            <>
+              Junta sin cliente (prospecto o interna). Luego puedes asignar el cliente y migrar
+              la reunión o solo las tareas.
+            </>
+          )}
         </p>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormField
+              control={form.control}
+              name="title"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Título {client ? "(opcional)" : "*"}</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder={client ? `Junta · ${client.name}` : "Ej. Llamada prospecto 9:00"}
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <FormField
               control={form.control}
               name="scheduled_at"

@@ -43,9 +43,10 @@ describe("canPrepareBoard / shouldCreateTask", () => {
     expect(canPrepareBoard("in_progress", 0)).toBe(false);
   });
   it("tarea solo confirmada con proyecto", () => {
-    expect(shouldCreateTask({ status: "confirmed", projectId: "p1" })).toBe(true);
-    expect(shouldCreateTask({ status: "confirmed", projectId: null })).toBe(false);
-    expect(shouldCreateTask({ status: "proposed", projectId: "p1" })).toBe(false);
+    expect(shouldCreateTask({ status: "confirmed", projectId: "p1", clientId: "c1" })).toBe(true);
+    expect(shouldCreateTask({ status: "confirmed", projectId: "p1", clientId: null })).toBe(false);
+    expect(shouldCreateTask({ status: "confirmed", projectId: null, clientId: "c1" })).toBe(false);
+    expect(shouldCreateTask({ status: "proposed", projectId: "p1", clientId: "c1" })).toBe(false);
   });
 });
 

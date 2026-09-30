@@ -43,6 +43,7 @@ import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, Loader2, Projector 
 import { toast } from "sonner";
 import { MtgUploadTranscriptButton } from "@/components/mtg/MtgUploadTranscriptButton";
 import { MtgRecordingControls } from "@/components/mtg/MtgRecordingControls";
+import { MtgAssignClientDialog } from "@/components/mtg/MtgAssignClientDialog";
 import { MtgTopicHistoryDrawer } from "@/components/mtg/MtgTopicHistoryDrawer";
 import { MtgArchiveSection } from "@/components/mtg/MtgArchiveSection";
 
@@ -64,6 +65,7 @@ export default function JuntaDetalle() {
   });
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [historyTopic, setHistoryTopic] = useState<{ id: string; title: string } | null>(null);
+  const [assignClientOpen, setAssignClientOpen] = useState(false);
   const [agreementDraft, setAgreementDraft] = useState({
     text: "",
     entityKey: "",
@@ -159,36 +161,45 @@ export default function JuntaDetalle() {
       toast.error("Junta en solo lectura");
       return;
     }
-    if (!user || !agreementDraft.text.trim() || !agreementDraft.clientId) {
-      toast.error("Texto y entidad/cliente son obligatorios");
+    if (!user || !agreementDraft.text.trim()) {
+      toast.error("Escribe el acuerdo");
       return;
     }
+    const clientId = agreementDraft.clientId || meeting.client_id || null;
+    const projectId = agreementDraft.projectId || null;
+    const willCreateTask = !!(clientId && projectId);
+    // Sin cliente/proyecto: se guarda el acuerdo; la tarea se crea al asignar cliente + proyecto.
     board.addAgreement.mutate(
       {
         organizationId: orgId,
         actorUserId: user.id,
         meetingId: meeting.id,
-        clientId: agreementDraft.clientId,
+        clientId,
         entityKey: agreementDraft.entityKey || null,
-        projectId: agreementDraft.projectId || null,
+        projectId,
         text: agreementDraft.text.trim(),
         ownerUserId: agreementDraft.ownerUserId || null,
         ownerName: agreementDraft.ownerName || null,
         dueDate: agreementDraft.dueDate || null,
         ownerSide: agreementDraft.ownerUserId ? "kawiil" : agreementDraft.ownerName ? "client" : null,
+        confirm: willCreateTask,
       },
       {
         onSuccess: () => {
           setAgreementDraft({
             text: "",
             entityKey: "",
-            clientId: "",
+            clientId: meeting.client_id ?? "",
             projectId: "",
             ownerUserId: "",
             ownerName: "",
             dueDate: "",
           });
-          toast.success("Acuerdo capturado");
+          toast.success(
+            willCreateTask
+              ? "Acuerdo capturado → tarea"
+              : "Acuerdo guardado (asigna cliente/proyecto para crear tarea)",
+          );
         },
         onError: (e: Error) => toast.error(e.message),
       },
@@ -225,13 +236,18 @@ export default function JuntaDetalle() {
               </Button>
               <div className="min-w-0">
                 <h1 className="text-xl font-bold tracking-tight truncate">
-                  {series?.title ?? "Junta"}
+                  {series?.title ?? meeting.title ?? "Junta"}
                 </h1>
                 <p className="text-sm text-muted-foreground">
                   {formatDateMX(meeting.scheduled_at)} ·{" "}
                   <Badge variant="outline" className={cn("text-[10px] border-0", statusCfg.color)}>
                     {statusCfg.label}
                   </Badge>
+                  {!meeting.client_id && (
+                    <Badge variant="secondary" className="ml-2 text-[10px]">
+                      Sin cliente
+                    </Badge>
+                  )}
                   {!liveEditable && (
                     <Badge variant="secondary" className="ml-2 text-[10px]">
                       Solo lectura
@@ -333,7 +349,7 @@ export default function JuntaDetalle() {
               )}
             </div>
           </div>
-          {user && orgId && (
+            {user && orgId && (
             <MtgRecordingControls
               organizationId={orgId}
               actorUserId={user.id}
@@ -341,6 +357,25 @@ export default function JuntaDetalle() {
               series={series}
               onDone={() => board.invalidate()}
             />
+          )}
+
+          {!meeting.client_id && user && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm">
+              <p className="text-muted-foreground">
+                Esta junta aún no tiene cliente. Puedes grabar, tomar notas y generar minuta; al final
+                asignas el cliente para migrar el contexto o las tareas.
+              </p>
+              <Button size="sm" variant="secondary" onClick={() => setAssignClientOpen(true)}>
+                Asignar cliente
+              </Button>
+            </div>
+          )}
+          {meeting.client_id && user && (
+            <div className="flex justify-end">
+              <Button size="sm" variant="ghost" onClick={() => setAssignClientOpen(true)}>
+                Cambiar / reasignar cliente
+              </Button>
+            </div>
           )}
 
           {entities.length > 1 && (
@@ -644,6 +679,18 @@ export default function JuntaDetalle() {
           if (!o) setHistoryTopic(null);
         }}
       />
+
+      {user && (
+        <MtgAssignClientDialog
+          open={assignClientOpen}
+          onOpenChange={setAssignClientOpen}
+          organizationId={orgId}
+          actorUserId={user.id}
+          meetingId={meeting.id}
+          currentClientId={meeting.client_id}
+          onDone={() => board.invalidate()}
+        />
+      )}
     </AppLayout>
   );
 }

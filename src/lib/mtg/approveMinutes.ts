@@ -26,6 +26,9 @@ export async function confirmProposedAgreement(opts: {
     ownerName: opts.ownerName,
   });
   if (!req.ok) throw new Error(req.reason);
+  if (!opts.agreement.client_id) {
+    throw new Error("Asigna un cliente a la junta antes de confirmar acuerdos → tareas");
+  }
 
   const taskId = await createTaskForAgreement({
     organizationId: opts.organizationId,

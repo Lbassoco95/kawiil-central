@@ -70,8 +70,9 @@ export function canPrepareBoard(status: MtgMeetingStatus, existingUpdateCount: n
 export function shouldCreateTask(opts: {
   status: "proposed" | "confirmed" | "rejected";
   projectId: string | null | undefined;
+  clientId?: string | null | undefined;
 }): boolean {
-  return opts.status === "confirmed" && !!opts.projectId;
+  return opts.status === "confirmed" && !!opts.projectId && !!opts.clientId;
 }
 
 export type PreparedUpdateSeed = {

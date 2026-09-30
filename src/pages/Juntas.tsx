@@ -68,6 +68,7 @@ export default function Juntas() {
   const [pickClientOpen, setPickClientOpen] = useState(false);
   const [clientQuery, setClientQuery] = useState("");
   const [adhocClient, setAdhocClient] = useState<Client | null>(null);
+  const [unassignedOpen, setUnassignedOpen] = useState(false);
 
   const heroStats: PageHeaderStat[] = useMemo(() => {
     const upcoming = meetings.filter((m) => m.status === "planned").length;
@@ -124,9 +125,18 @@ export default function Juntas() {
           stats={heroStats}
           actions={
             <div className="flex flex-wrap gap-2">
-              <Button size="sm" onClick={() => setPickClientOpen(true)}>
+              <Button
+                size="sm"
+                onClick={() => {
+                  setAdhocClient(null);
+                  setUnassignedOpen(true);
+                }}
+              >
                 <Plus className="h-4 w-4 mr-1" />
                 Nueva junta
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => setPickClientOpen(true)}>
+                Con cliente
               </Button>
               <Button asChild variant="outline" size="sm">
                 <Link to="/clientes">Series desde cliente</Link>
@@ -169,7 +179,13 @@ export default function Juntas() {
                 ? "Aún no hay juntas. Crea una junta ad hoc o una serie desde la ficha del cliente."
                 : "Ninguna junta coincide con el filtro."}
             </p>
-            <Button size="sm" onClick={() => setPickClientOpen(true)}>
+            <Button
+              size="sm"
+              onClick={() => {
+                setAdhocClient(null);
+                setUnassignedOpen(true);
+              }}
+            >
               <Plus className="h-4 w-4 mr-1" />
               Nueva junta
             </Button>
@@ -190,7 +206,7 @@ export default function Juntas() {
                   <div className="min-w-0 flex-1 space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-semibold truncate">
-                        {m.seriesTitle ?? "Junta ad hoc"}
+                        {m.seriesTitle ?? m.title ?? "Junta ad hoc"}
                       </span>
                       <Badge
                         variant="outline"
@@ -198,14 +214,21 @@ export default function Juntas() {
                       >
                         {statusCfg.label}
                       </Badge>
+                      {!m.client_id && (
+                        <Badge variant="secondary" className="text-[10px]">
+                          Sin cliente
+                        </Badge>
+                      )}
                     </div>
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                       <span>{formatDateMX(m.scheduled_at)}</span>
-                      {m.clientName && (
+                      {m.clientName ? (
                         <span className="inline-flex items-center gap-1">
                           <Users className="h-3 w-3" />
                           {m.clientName}
                         </span>
+                      ) : (
+                        <span className="text-amber-700 dark:text-amber-400">Prospecto / interna</span>
                       )}
                       <span className={cn("inline-flex items-center gap-1 rounded px-1.5 py-0.5", transcriptCfg.color)}>
                         Transcripción: {transcriptCfg.label}
@@ -301,6 +324,13 @@ export default function Juntas() {
           onCreated={(id) => navigate(`/juntas/${id}`)}
         />
       )}
+
+      <MtgAdhocMeetingDialog
+        open={unassignedOpen}
+        onOpenChange={setUnassignedOpen}
+        client={null}
+        onCreated={(id) => navigate(`/juntas/${id}`)}
+      />
     </AppLayout>
   );
 }

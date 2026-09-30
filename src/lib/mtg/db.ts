@@ -61,6 +61,8 @@ export type MtgMeetingRow = {
   organization_id: string;
   series_id: string | null;
   client_id: string | null;
+  /** Título ad hoc / calendario; si hay serie, el UI puede preferir series.title. */
+  title: string | null;
   scheduled_at: string;
   duration_min: number | null;
   started_at: string | null;
@@ -230,7 +232,7 @@ export type MtgAgreementRow = {
   id: string;
   organization_id: string;
   meeting_id: string;
-  client_id: string;
+  client_id: string | null;
   entity_key: string | null;
   topic_id: string | null;
   project_id: string | null;
@@ -255,7 +257,7 @@ export type MtgAgreementRow = {
 };
 
 export type MtgAgreementInsert = Partial<Omit<MtgAgreementRow, "id" | "created_at" | "updated_at">> &
-  Pick<MtgAgreementRow, "organization_id" | "meeting_id" | "client_id" | "text" | "origin">;
+  Pick<MtgAgreementRow, "organization_id" | "meeting_id" | "text" | "origin">;
 
 export type MtgAgreementUpdate = Partial<Omit<MtgAgreementRow, "id" | "created_at">>;
 

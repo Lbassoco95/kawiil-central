@@ -86,3 +86,9 @@ Rama `cursor/mtg-juntas-modulo-b107` (= `feat/mtg-juntas-b2` + merge `main`):
 - Confirmado en prod (MCP): tablas `mtg_*` + `job_queue` + bucket `mtg` + `tasks.mtg_meeting_id`.
 - **Edges desplegadas en prod (2026-09-30):** `job-queue-dispatch`, `mtg-outlook`, `mtg-graph-admin`, `mtg-graph-webhook`, `mtg-minutes-draft`, `slack-notify` (v64 con `mtg_minutes_approved`).
 
+## Continuación 2026-09-30 (sin cliente + calendario)
+
+- Migración `mtg_unassigned_meetings`: `mtg_meetings.title` + `mtg_agreements.client_id` nullable (aplicada en prod).
+- Crear junta sin cliente; **Asignar cliente** (`meeting` | `tasks_only`).
+- Calendario → **Grabar en Juntas** (cualquier cuenta conectada; auto-Teams Graph sigue siendo tenant Kawiil).
+
