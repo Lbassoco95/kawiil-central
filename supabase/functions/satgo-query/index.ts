@@ -10,7 +10,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "authorization, x-client-info, apikey, content-type, x-cron-secret, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 type ConsultType = "constancia_situacion_fiscal" | "opinion_cumplimiento";
@@ -26,7 +26,7 @@ function satgoBaseUrl(): string {
   return (Deno.env.get("SATGO_BASE_URL") ?? "https://api.sat-go.com").replace(/\/$/, "");
 }
 
-function isSatgoConfigured(): boolean {
+function isSatgoEnvConfigured(): boolean {
   return !!(Deno.env.get("SATGO_API_KEY")?.trim() || Deno.env.get("SATGO_ACCESS_TOKEN")?.trim());
 }
 
@@ -62,11 +62,34 @@ function pickAccessToken(jsonBody: Record<string, unknown>): string | null {
   return null;
 }
 
-async function resolveSatgoBearer(): Promise<
-  { ok: true; bearer: string } | { ok: false; message: string; code: string }
-> {
-  const apiKey = Deno.env.get("SATGO_API_KEY")?.trim() ?? "";
-  const access = Deno.env.get("SATGO_ACCESS_TOKEN")?.trim() ?? "";
+async function resolveSatgoBearer(
+  admin: ReturnType<typeof createClient>,
+): Promise<{ ok: true; bearer: string } | { ok: false; message: string; code: string }> {
+  let apiKey = Deno.env.get("SATGO_API_KEY")?.trim() ?? "";
+  let access = Deno.env.get("SATGO_ACCESS_TOKEN")?.trim() ?? "";
+
+  // Fallback: Vault (cuando no hay Edge Secrets vía Management API / CLI)
+  if (!apiKey && !access) {
+    try {
+      const { data: vaultKey } = await admin.rpc("kawiil_vault_secret", {
+        secret_name: "satgo_api_key",
+      });
+      if (typeof vaultKey === "string" && vaultKey.trim()) apiKey = vaultKey.trim();
+    } catch {
+      /* ignore */
+    }
+    if (!apiKey) {
+      try {
+        const { data: vaultTok } = await admin.rpc("kawiil_vault_secret", {
+          secret_name: "satgo_access_token",
+        });
+        if (typeof vaultTok === "string" && vaultTok.trim()) access = vaultTok.trim();
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
   if (apiKey) {
     if (cachedBearer && cachedBearer.expMs > Date.now() + 60_000) {
       return { ok: true, bearer: cachedBearer.token };
@@ -117,7 +140,8 @@ async function resolveSatgoBearer(): Promise<
   return {
     ok: false,
     code: "satgo_not_configured",
-    message: "Configura SATGO_API_KEY o SATGO_ACCESS_TOKEN en Edge Secrets.",
+    message:
+      "Configura SATGO_API_KEY en Edge Secrets o vault.create_secret(..., 'satgo_api_key').",
   };
 }
 
@@ -199,16 +223,6 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
-  if (!isSatgoConfigured()) {
-    return json(
-      {
-        error: "satgo_not_configured",
-        message: "Configura SATGO_API_KEY en Supabase → Edge Functions → Secrets.",
-      },
-      503,
-    );
-  }
-
   const ciecSecret =
     Deno.env.get("MOFFIN_SAT_CIEC_SECRET")?.trim() ||
     Deno.env.get("MOFFIN_FIEL_SECRET")?.trim() ||
@@ -223,20 +237,41 @@ Deno.serve(async (req) => {
     );
   }
 
-  const rawAuth = req.headers.get("Authorization") ?? req.headers.get("authorization") ?? "";
-  const accessToken = rawAuth.match(/^Bearer\s+(\S+)/i)?.[1];
-  if (!accessToken) return json({ error: "No autorizado" }, 401);
-
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const anon = Deno.env.get("SUPABASE_ANON_KEY")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const admin = createClient(supabaseUrl, serviceKey);
 
-  const userClient = createClient(supabaseUrl, anon, {
-    global: { headers: { Authorization: `Bearer ${accessToken}` } },
-  });
-  const { data: userData, error: authErr } = await userClient.auth.getUser(accessToken);
-  const user = userData?.user;
-  if (authErr || !user) return json({ error: "No autorizado" }, 401);
+  const cronSecret = Deno.env.get("CRON_SECRET")?.trim() ?? "";
+  const incomingCron = req.headers.get("x-cron-secret")?.trim() ?? "";
+  const cronOk = !!(cronSecret && incomingCron && cronSecret === incomingCron);
+
+  let userId: string | null = null;
+  let orgId: string | null = null;
+
+  if (cronOk) {
+    // Smoke / ops: autenticado por CRON_SECRET (sin JWT de usuario)
+  } else {
+    const rawAuth = req.headers.get("Authorization") ?? req.headers.get("authorization") ?? "";
+    const accessToken = rawAuth.match(/^Bearer\s+(\S+)/i)?.[1];
+    if (!accessToken) return json({ error: "No autorizado" }, 401);
+
+    const userClient = createClient(supabaseUrl, anon, {
+      global: { headers: { Authorization: `Bearer ${accessToken}` } },
+    });
+    const { data: userData, error: authErr } = await userClient.auth.getUser(accessToken);
+    const user = userData?.user;
+    if (authErr || !user) return json({ error: "No autorizado" }, 401);
+    userId = user.id;
+
+    const { data: profile } = await userClient
+      .from("profiles")
+      .select("organization_id")
+      .eq("user_id", user.id)
+      .single();
+    if (!profile?.organization_id) return json({ error: "Perfil no encontrado" }, 403);
+    orgId = profile.organization_id;
+  }
 
   let body: { projectId?: string; consultType?: string };
   try {
@@ -257,20 +292,15 @@ Deno.serve(async (req) => {
     );
   }
 
-  const { data: profile } = await userClient
-    .from("profiles")
-    .select("organization_id")
-    .eq("user_id", user.id)
-    .single();
-  if (!profile?.organization_id) return json({ error: "Perfil no encontrado" }, 403);
-
-  const admin = createClient(supabaseUrl, serviceKey);
   const { data: project, error: projErr } = await admin
     .from("projects")
     .select("id, organization_id, client_id, clients(rfc)")
     .eq("id", projectId)
     .single();
-  if (projErr || !project || project.organization_id !== profile.organization_id) {
+  if (projErr || !project) {
+    return json({ error: "Proyecto no encontrado" }, 404);
+  }
+  if (!cronOk && project.organization_id !== orgId) {
     return json({ error: "Proyecto no encontrado" }, 404);
   }
   if (!project.client_id) {
@@ -309,7 +339,7 @@ Deno.serve(async (req) => {
     );
   }
 
-  const satAuth = await resolveSatgoBearer();
+  const satAuth = await resolveSatgoBearer(admin);
   if (!satAuth.ok) return json({ error: satAuth.code, message: satAuth.message }, 503);
 
   const kind = consultType === "constancia_situacion_fiscal" ? "csf" : "oc";
@@ -339,7 +369,7 @@ Deno.serve(async (req) => {
           httpStatus: pdfRes.httpStatus,
           message: pdfRes.message,
         },
-        requested_by: user.id,
+        requested_by: userId,
       })
       .select("id")
       .single();
@@ -377,7 +407,7 @@ Deno.serve(async (req) => {
       project_id: projectId,
       client_id: project.client_id,
       document_type: consultType,
-      uploaded_by: user.id,
+      uploaded_by: userId,
     })
     .select("id")
     .single();
@@ -407,7 +437,7 @@ Deno.serve(async (req) => {
         pdfBytes: pdfRes.buf.length,
       },
       document_id: doc.id,
-      requested_by: user.id,
+      requested_by: userId,
     })
     .select("id, status, summary, document_id, created_at")
     .single();

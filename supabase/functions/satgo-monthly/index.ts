@@ -42,9 +42,17 @@ function pickAccessToken(jsonBody: Record<string, unknown>): string | null {
   return null;
 }
 
-async function resolveBearer(): Promise<string | null> {
-  const apiKey = Deno.env.get("SATGO_API_KEY")?.trim() ?? "";
-  const access = Deno.env.get("SATGO_ACCESS_TOKEN")?.trim() ?? "";
+async function resolveBearer(admin?: ReturnType<typeof createClient>): Promise<string | null> {
+  let apiKey = Deno.env.get("SATGO_API_KEY")?.trim() ?? "";
+  let access = Deno.env.get("SATGO_ACCESS_TOKEN")?.trim() ?? "";
+  if (!apiKey && !access && admin) {
+    try {
+      const { data } = await admin.rpc("kawiil_vault_secret", { secret_name: "satgo_api_key" });
+      if (typeof data === "string" && data.trim()) apiKey = data.trim();
+    } catch {
+      /* ignore */
+    }
+  }
   if (apiKey) {
     if (cachedBearer && cachedBearer.expMs > Date.now() + 60_000) return cachedBearer.token;
     const res = await fetch(`${satgoBaseUrl()}/api/Auth/token-json`, {
@@ -134,7 +142,12 @@ Deno.serve(async (req) => {
     return json({ error: "No autorizado" }, 401);
   }
 
-  const bearer = await resolveBearer();
+  const admin = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  );
+
+  const bearer = await resolveBearer(admin);
   if (!bearer) return json({ error: "satgo_not_configured" }, 503);
 
   const ciecSecret =
@@ -142,11 +155,6 @@ Deno.serve(async (req) => {
     Deno.env.get("MOFFIN_FIEL_SECRET")?.trim() ||
     "";
   if (ciecSecret.length < 32) return json({ error: "ciec_not_configured" }, 503);
-
-  const admin = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-  );
 
   const { data: ciecRows, error: ciecErr } = await admin
     .from("moffin_client_sat_ciec")
