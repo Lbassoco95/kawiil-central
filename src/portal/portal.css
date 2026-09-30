@@ -1,0 +1,52 @@
+/* Portal del cliente — línea visual de Kawiil.
+   Azul #0075EF (primario), azul profundo #0000A1 (marca), verde #00FFA1 SOLO para acciones críticas.
+   Tipografías: Rajdhani (títulos), Space Grotesk (texto), JetBrains Mono (cifras e identificadores). */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 33% 98%;
+    --foreground: 232 60% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 232 60% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 232 60% 12%;
+    --primary: 211 100% 47%;          /* #0075EF */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 100% 97%;
+    --secondary-foreground: 240 100% 32%;
+    --muted: 220 20% 95%;
+    --muted-foreground: 225 15% 38%;  /* 7:1 sobre blanco */
+    --accent: 240 100% 32%;           /* #0000A1 */
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 72% 42%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 225 20% 86%;
+    --input: 225 20% 78%;
+    --ring: 240 100% 32%;
+    --radius: 0.625rem;
+    --kw-critical: 157 100% 50%;      /* #00FFA1 */
+    --kw-critical-foreground: 240 100% 18%;
+    --success: 157 72% 28%;
+    --warning: 32 95% 34%;
+  }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: "Space Grotesk", system-ui, sans-serif;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  h1, h2, h3 { font-family: "Rajdhani", "Space Grotesk", sans-serif; font-weight: 700; letter-spacing: 0.01em; }
+  .kw-mono, .font-mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
+  /* Foco visible siempre, también con teclado en móvil. */
+  :focus-visible { outline: 3px solid hsl(var(--ring)); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+}
+
+@layer components {
+  .kw-critical { background: hsl(var(--kw-critical)); color: hsl(var(--kw-critical-foreground)); font-weight: 600; }
+  .kw-critical:hover { filter: brightness(0.95); }
+  .kw-placeholder { border: 2px dashed hsl(var(--warning)); background: hsl(40 100% 96%); }
+}

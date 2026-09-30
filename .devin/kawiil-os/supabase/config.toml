@@ -1,0 +1,31 @@
+project_id = "kawiil-os-local"
+
+[api]
+enabled = true
+port = 55321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 55322
+major_version = 15
+
+[studio]
+enabled = true
+port = 55323
+
+[auth]
+enabled = true
+site_url = "http://localhost:8081"
+additional_redirect_urls = ["http://localhost:8081/**"]
+enable_signup = false
+
+[functions.portal-api]
+verify_jwt = false
+
+[functions.portal-system-api]
+verify_jwt = false
+
+[functions.portal-system-dispatch]
+verify_jwt = false

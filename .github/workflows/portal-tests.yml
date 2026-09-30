@@ -1,0 +1,81 @@
+name: Pruebas del portal del cliente
+
+# Corre en cada PR y push que toque el portal. No despliega nada ni usa secretos:
+# todo es local al runner (Postgres del servicio + PostgREST en Docker + Deno), con
+# datos sintéticos. El despliegue sigue en deploy-supabase.yml.
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "portal/**"
+      - "supabase/**"
+      - "migrations/**"
+      - "tools/portal/**"
+      - "package.json"
+      - "package-lock.json"
+      - "vite.config.portal.ts"
+      - "vitest.config.ts"
+      - ".github/workflows/portal-tests.yml"
+  push:
+    branches-ignore: [main]
+    paths:
+      - "src/portal/**"
+      - "supabase/functions/_shared/portal/**"
+      - "supabase/functions/portal-*/**"
+      - "supabase/migrations/2026092911*"
+      - "supabase/migrations/2026092912*"
+      - "supabase/tests/portal/**"
+
+jobs:
+  unitarias:
+    name: Vitest y build del portal
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm ci
+      - run: npm run portal:verificar-cerco
+        env: { PORTAL_STATIC_ONLY: "1" }
+      - run: npx vitest run
+      - run: npm run build:portal
+
+  base-y-api:
+    name: Migraciones (vacía / con datos / rollback) y API por HTTP
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env: { POSTGRES_PASSWORD: postgres }
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PG_TCP_HOST: 127.0.0.1
+      AUTHENTICATOR_PASSWORD: authenticator-ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm ci
+      - run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - run: bash supabase/tests/portal/run_kawiil_os_db_tests.sh
+      - run: bash supabase/tests/portal/run_portal_db_tests.sh
+      - run: docker pull postgrest/postgrest:v12.2.3
+      # B5 revisa también el log del servidor Postgres (el del contenedor del servicio).
+      - run: bash supabase/tests/portal/run_portal_api_tests.sh
+        env:
+          PG_LOG_CMD: docker logs $(docker ps -q --filter ancestor=pgvector/pgvector:pg16) 2>&1
+
+  edge:
+    name: Funciones sin verify_jwt rechazan sin credencial
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with: { deno-version: v2.x }
+      - run: bash supabase/tests/portal/edge_auth_test.sh
