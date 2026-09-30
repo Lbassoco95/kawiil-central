@@ -154,3 +154,17 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = true
   [functions.update-user-email]
     verify_jwt = true
+  # Conmutador (telefonía) — tools/webhooks de ElevenLabs. Se validan con
+  # SWITCHBOARD_WEBHOOK_SECRET, por eso verify_jwt = false.
+  [functions.sw-classify]
+    verify_jwt = false
+  [functions.sw-urgency]
+    verify_jwt = false
+  [functions.sw-transfer-target]
+    verify_jwt = false
+  [functions.sw-extension-target]
+    verify_jwt = false
+  [functions.sw-folio]
+    verify_jwt = false
+  [functions.sw-brief]
+    verify_jwt = false

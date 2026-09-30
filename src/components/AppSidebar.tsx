@@ -11,6 +11,7 @@ import {
   Mail,
   MessageSquare,
   Bell,
+  PhoneCall,
   PanelLeftClose,
   PanelLeftOpen,
   PartyPopper,
@@ -79,6 +80,7 @@ const NAV_GROUPS: NavGroup[] = [
       { title: "Recursos Humanos", url: "/rh", icon: UserCog, view: "rh", moduleKey: "hub", tooltip: "Jornada, expediente, reclutamiento, cuestionarios y tablero CHRO" },
       { title: "Documentos", url: "/documentos", icon: FileText, view: "documentos" },
       { title: "Finanzas", url: "/finanzas", icon: Wallet, view: "finanzas", moduleKey: "finanzas" },
+      { title: "Conmutador", url: "/conmutador", icon: PhoneCall, view: "conmutador", moduleKey: "conmutador", tooltip: "Secretario IA telefónico: bandeja de llamadas y configuración por célula" },
     ],
   },
   {
