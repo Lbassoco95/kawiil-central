@@ -9,6 +9,11 @@ CENTRAL_PROJECT_REF="qppfampapbxdgednkofc"
 KAWIIL_OS_TARGET_ENSAYO="kawiil-os-ensayo"
 KAWIIL_OS_TARGET_DEMO="kawiil-os-demo"
 
+# Project refs públicos (no son secretos): destino declarado por ambiente.
+# Impiden db-push/bootstrap si el env declara un target con el ref del otro.
+KAWIIL_OS_REF_ENSAYO="tglhceuszxcgkxmskdkl"
+KAWIIL_OS_REF_DEMO="ehtmlkvmiipmtcidsffk"
+
 kawiil_os_connection_blob() {
   printf '%s' "${KAWIIL_OS_PROJECT_REF:-} ${KAWIIL_OS_DB_URL:-} ${DATABASE_URL:-} ${SUPABASE_URL:-} ${VITE_PORTAL_SUPABASE_URL:-} ${VITE_SUPABASE_URL:-} ${PGHOST:-}"
 }
@@ -51,6 +56,16 @@ kawiil_os_require_target() {
   fi
   if [[ "$ref" == *"/"* || "$ref" == *":"* || "$ref" == *" "* ]]; then
     echo "ABORT: KAWIIL_OS_PROJECT_REF parece inválido."
+    exit 1
+  fi
+  # Emparejamiento estricto target ↔ ref declarado (org Yoltik).
+  local expected_ref=""
+  case "$expected" in
+    "$KAWIIL_OS_TARGET_ENSAYO") expected_ref="$KAWIIL_OS_REF_ENSAYO" ;;
+    "$KAWIIL_OS_TARGET_DEMO")   expected_ref="$KAWIIL_OS_REF_DEMO" ;;
+  esac
+  if [[ -n "$expected_ref" && "$ref" != "$expected_ref" ]]; then
+    echo "ABORT: KAWIIL_OS_PROJECT_REF no coincide con el ref declarado de $expected."
     exit 1
   fi
   kawiil_os_abort_if_central

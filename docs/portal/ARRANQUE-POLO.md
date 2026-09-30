@@ -1,25 +1,31 @@
 # Arranque de Kawiil OS — guía para Polo (≤10 pasos)
 
-Nombres exactos. No usa producción. Las llaves y project refs van **solo** en variables de su máquina, nunca en el repositorio.
+Nombres exactos. No usa producción. Las **llaves** van solo en variables de su máquina (nunca en el repositorio). Los **project refs** de destino son públicos y quedan fijados abajo.
+
+| Destino | Nombre | Project ref |
+|---|---|---|
+| Ensayo | `kawiil-os-ensayo` | `tglhceuszxcgkxmskdkl` |
+| Demo | `kawiil-os-demo` | `ehtmlkvmiipmtcidsffk` |
+| Central (prohibido) | — | `qppfampapbxdgednkofc` |
 
 ## Pasos
 
-1. En Supabase, cree dos proyectos nuevos llamados exactamente **`kawiil-os-ensayo`** y **`kawiil-os-demo`**. Apague el registro público de Auth en ambos. Anote de cada uno: project ref, URL, llave anon y cadena Postgres (Settings → Database).
+1. Confirme en Supabase (org Yoltik) los proyectos **`kawiil-os-ensayo`** y **`kawiil-os-demo`** con los refs de la tabla. Apague el registro público de Auth en ambos. Anote de cada uno: URL, llave anon y cadena Postgres (Settings → Database) — solo en su entorno local.
 
 2. En su terminal, en la carpeta del repo y en la rama del PR de Corte 4, inicie sesión de Supabase CLI: `npx supabase login`.
 
 3. Arranque el **ensayo** (solo base, sin datos demo):
    ```bash
    KAWIIL_OS_TARGET=kawiil-os-ensayo \
-   KAWIIL_OS_PROJECT_REF=<ref-de-kawiil-os-ensayo> \
+   KAWIIL_OS_PROJECT_REF=tglhceuszxcgkxmskdkl \
    npm run kawiil-os:bootstrap-ensayo
    ```
-   Si el ref es el de central o el nombre no coincide, el comando se detiene a propósito.
+   Si el ref es el de central, no coincide con el destino, o se cruza ensayo/demo, el comando se detiene a propósito.
 
 4. Arranque el **demo** (base + datos sintéticos del espejo):
    ```bash
    KAWIIL_OS_TARGET=kawiil-os-demo \
-   KAWIIL_OS_PROJECT_REF=<ref-de-kawiil-os-demo> \
+   KAWIIL_OS_PROJECT_REF=ehtmlkvmiipmtcidsffk \
    KAWIIL_OS_DB_URL='<cadena-postgres-del-demo>' \
    npm run kawiil-os:bootstrap-demo
    ```
@@ -31,7 +37,7 @@ Nombres exactos. No usa producción. Las llaves y project refs van **solo** en v
 7. Publique el front del portal apuntando **solo** al demo:
    ```bash
    VITE_PORTAL_DEMO_MODE=true \
-   VITE_PORTAL_SUPABASE_URL=https://<ref-demo>.supabase.co \
+   VITE_PORTAL_SUPABASE_URL=https://ehtmlkvmiipmtcidsffk.supabase.co \
    VITE_PORTAL_SUPABASE_PUBLISHABLE_KEY=<anon-demo> \
    VITE_PORTAL_PUBLIC_URL=<url-publica-demo> \
    VITE_TURNSTILE_SITE_KEY=1x00000000000000000000AA \
@@ -40,15 +46,15 @@ Nombres exactos. No usa producción. Las llaves y project refs van **solo** en v
 
 8. Compruebe el cruce de llaves (central ↔ OS):
    ```bash
-   CENTRAL_SUPABASE_URL=<url-central> CENTRAL_ANON_KEY=<anon-central> \
-   KAWIIL_OS_SUPABASE_URL=<url-demo-u-ensayo> KAWIIL_OS_ANON_KEY=<anon-os> \
+   CENTRAL_SUPABASE_URL=https://qppfampapbxdgednkofc.supabase.co CENTRAL_ANON_KEY=<anon-central> \
+   KAWIIL_OS_SUPABASE_URL=https://ehtmlkvmiipmtcidsffk.supabase.co KAWIIL_OS_ANON_KEY=<anon-demo> \
    npm run kawiil-os:verify-cross
    ```
-   Debe decir **cumplido**. Sin variables: **NO VERIFICABLE**.
+   Debe decir **cumplido**. Sin llaves: **NO VERIFICABLE**.
 
 9. Recorra el guion `docs/portal/DEMO-GUION.md` (tablero → facturas → documentos → alertas). Sin RH ni «Crear factura». Tras la sesión: `PORTAL_DEMO_ALLOW_RESET=1 KAWIIL_OS_DB_URL=… npm run portal:demo-reset`.
 
-10. No fusione los PR de Corte 0 / 3 / 4 hasta marcar las casillas de cada lista. El despliegue a `main` de central **no** aplica migraciones de Kawiil OS.
+10. No fusione los PR de Corte 0 / 3 / 4 hasta marcar las casillas de cada lista. El despliegue a `main` de central **no** aplica migraciones de Kawiil OS (`deploy-supabase.yml` solo mira `supabase/migrations/**`).
 
 ## Comandos de referencia
 

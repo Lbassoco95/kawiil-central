@@ -4,10 +4,11 @@ Este procedimiento no toca producción hasta que Polo ejecute expresamente cada 
 
 ## 0. Separación de migraciones (confirmación)
 
-- El despliegue de **central a `main`** (workflow `deploy-supabase.yml`) aplica **solo** `supabase/migrations/**` del proyecto de central. **No** aplica `kawiil-os/supabase/migrations/`.
-- Las migraciones de **Kawiil OS** viven únicamente en `kawiil-os/supabase/migrations/` y **solo** llegan a un proyecto OS enlazado con `--workdir kawiil-os` (`npm run kawiil-os:db-push` o los bootstrap de §2b).
+- El despliegue de **central a `main`** (workflow `deploy-supabase.yml`) aplica **solo** `supabase/migrations/**` del proyecto de central (`paths` del workflow: `supabase/functions/**`, `supabase/migrations/**`, `supabase/config.toml`). **No** lista ni aplica `kawiil-os/supabase/migrations/`.
+- Las migraciones de **Kawiil OS** viven únicamente en `kawiil-os/supabase/migrations/` y **solo** llegan a un proyecto OS enlazado con `--workdir kawiil-os` (`npm run kawiil-os:db-push` o los bootstrap de §2b). El inverso también: un bootstrap/db-push OS **jamás** debe apuntar a central.
 - Mezclar ambas cadenas haría que central intentara crear tablas del portal y que OS heredara la cadena de central: por eso están separadas a propósito.
 - La suite `npm run test:kawiil-os-db` vigila que el árbol `kawiil-os/` no embuta el project ref ni JWT de central (**denylist intacta**, sin excepciones para demo).
+- Destinos declarados (refs públicos, no secretos; org Yoltik): `kawiil-os-ensayo` → `tglhceuszxcgkxmskdkl`; `kawiil-os-demo` → `ehtmlkvmiipmtcidsffk`; central (prohibido) → `qppfampapbxdgednkofc`. Los scripts de `tools/portal/` se niegan si el emparejamiento target/ref no coincide o si el ref es central.
 
 Guía corta para Polo: [ARRANQUE-POLO.md](ARRANQUE-POLO.md).
 

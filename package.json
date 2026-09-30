@@ -30,7 +30,7 @@
     "kawiil-os:verify-cross": "bash tools/portal/verify-kawiil-os-cross.sh",
     "test:portal-api": "bash supabase/tests/portal/run_portal_api_tests.sh",
     "test:portal-edge": "bash supabase/tests/portal/edge_auth_test.sh",
-    "kawiil-os:db-push": "npx supabase db push --workdir kawiil-os",
+    "kawiil-os:db-push": "bash tools/portal/kawiil-os-db-push.sh",
     "portal:verificar-cerco": "node tools/portal/verify-route-guard.mjs"
   },
   "dependencies": {
