@@ -13,9 +13,9 @@ import Pendiente from "./pages/Pendiente";
 import AceptarTextos from "./pages/AceptarTextos";
 import Inicio from "./pages/Inicio";
 import Facturas from "./pages/Facturas";
-import NuevaFactura from "./pages/NuevaFactura";
+import FacturaDetalle from "./pages/FacturaDetalle";
 import Documentos from "./pages/Documentos";
-import Tickets from "./pages/Tickets";
+import Alertas from "./pages/Alertas";
 import Mensajes from "./pages/Mensajes";
 import Cuenta from "./pages/Cuenta";
 import { db } from "./lib/supabase";
@@ -76,9 +76,11 @@ export default function App() {
           <Route element={<Gate><ActiveOnly><Layout /></ActiveOnly></Gate>}>
             <Route index element={<Inicio />} />
             <Route path="facturas" element={<Facturas />} />
-            <Route path="facturas/nueva" element={<NuevaFactura />} />
+            <Route path="facturas/nueva" element={<Navigate to="/facturas" replace />} />
+            <Route path="facturas/:id" element={<FacturaDetalle />} />
             <Route path="documentos" element={<Documentos />} />
-            <Route path="tickets" element={<Tickets />} />
+            <Route path="alertas" element={<Alertas />} />
+            <Route path="tickets" element={<Navigate to="/" replace />} />
             <Route path="mensajes" element={<Mensajes />} />
             <Route path="cuenta" element={<Cuenta />} />
           </Route>
