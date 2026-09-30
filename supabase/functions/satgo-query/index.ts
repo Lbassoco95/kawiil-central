@@ -1,6 +1,7 @@
 /**
- * SATgo — CSF y opinión 32D (PDF síncrono).
- * Preferencia: e.firma JWE (POST csffiel/ocfiel) → fallback CIEC (GET csf/oc).
+ * SATgo — 69-B (Efos), CSF y opinión 32D.
+ * Preferencia CSF/32D: e.firma JWE (POST csffiel/ocfiel) → fallback CIEC (GET csf/oc).
+ * 69-B: GET /api/v2/Efos/rfc/{rfc} (solo Bearer + RFC; 404 = no aparece en lista).
  *
  * Secrets: SATGO_API_KEY (o SATGO_ACCESS_TOKEN), MOFFIN_FIEL_SECRET (≥32) para
  * desencriptar .cer en reposo; CIEC opcional como respaldo.
@@ -17,7 +18,10 @@ const corsHeaders: Record<string, string> = {
     "authorization, x-client-info, apikey, content-type, x-cron-secret, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-type ConsultType = "constancia_situacion_fiscal" | "opinion_cumplimiento";
+type ConsultType =
+  | "lista_69b"
+  | "constancia_situacion_fiscal"
+  | "opinion_cumplimiento";
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -28,6 +32,10 @@ function json(body: unknown, status = 200): Response {
 
 function satgoBaseUrl(): string {
   return (Deno.env.get("SATGO_BASE_URL") ?? "https://api.sat-go.com").replace(/\/$/, "");
+}
+
+function normalizeRfc(raw: string | null | undefined): string {
+  return (raw ?? "").trim().toUpperCase().replace(/\s/g, "");
 }
 
 let cachedBearer: { token: string; expMs: number } | null = null;
@@ -269,12 +277,16 @@ Deno.serve(async (req) => {
 
   const projectId = body.projectId?.trim() ?? "";
   const consultType = body.consultType as ConsultType | undefined;
-  const allowed: ConsultType[] = ["constancia_situacion_fiscal", "opinion_cumplimiento"];
+  const allowed: ConsultType[] = [
+    "lista_69b",
+    "constancia_situacion_fiscal",
+    "opinion_cumplimiento",
+  ];
   if (!projectId || !consultType || !allowed.includes(consultType)) {
     return json(
       {
         error:
-          "projectId y consultType (constancia_situacion_fiscal|opinion_cumplimiento) requeridos",
+          "projectId y consultType (lista_69b|constancia_situacion_fiscal|opinion_cumplimiento) requeridos",
       },
       400,
     );
@@ -295,20 +307,156 @@ Deno.serve(async (req) => {
     return json({ error: "client_required", message: "El proyecto debe tener cliente." }, 400);
   }
 
-  const rfcRaw =
-    (project.clients as { rfc: string | null } | null)?.rfc?.trim().toUpperCase().replace(/\s/g, "") ??
-    "";
-  if (!rfcRaw) {
-    return json({ error: "El cliente no tiene RFC configurado" }, 400);
-  }
-
   const { data: fielRow } = await admin
     .from("client_sat_certificates")
-    .select("cert_ciphertext, satgo_key_jwe, satgo_password_jwe")
+    .select(
+      "cert_ciphertext, satgo_key_jwe, satgo_password_jwe, cert_subject_rfc",
+    )
     .eq("client_id", project.client_id)
     .eq("cert_type", "fiel")
     .maybeSingle();
 
+  let rfcRaw = normalizeRfc(
+    (project.clients as { rfc: string | null } | null)?.rfc,
+  );
+  if (!rfcRaw) {
+    rfcRaw = normalizeRfc(fielRow?.cert_subject_rfc);
+  }
+  if (!rfcRaw) {
+    return json(
+      {
+        error: "rfc_required",
+        message:
+          "El cliente no tiene RFC. Agrégalo en la ficha o sube la e.firma (.cer) para tomarlo del certificado.",
+      },
+      400,
+    );
+  }
+
+  // Si la ficha no tenía RFC pero el .cer sí, sincronizar a clients.rfc
+  const clientRfcOnFile = normalizeRfc(
+    (project.clients as { rfc: string | null } | null)?.rfc,
+  );
+  if (!clientRfcOnFile && rfcRaw) {
+    await admin.from("clients").update({ rfc: rfcRaw }).eq("id", project.client_id);
+  }
+
+  const satAuth = await resolveSatgoBearer(admin);
+  if (!satAuth.ok) return json({ error: satAuth.code, message: satAuth.message }, 503);
+
+  // ---- 69-B vía SATgo Efos (solo Bearer + RFC; no requiere FIEL) ----
+  if (consultType === "lista_69b") {
+    const url = `${satgoBaseUrl()}/api/v2/Efos/rfc/${encodeURIComponent(rfcRaw)}`;
+    let httpStatus = 0;
+    let bodyText = "";
+    try {
+      const res = await fetch(url, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${satAuth.bearer}`,
+          Accept: "application/json",
+        },
+      });
+      httpStatus = res.status;
+      bodyText = await res.text();
+    } catch (e) {
+      return json(
+        {
+          error: "satgo_api_error",
+          message: e instanceof Error ? e.message : String(e),
+        },
+        502,
+      );
+    }
+
+    let parsed: unknown = null;
+    try {
+      parsed = bodyText ? JSON.parse(bodyText) : null;
+    } catch {
+      parsed = bodyText;
+    }
+
+    // 404 "RFC No encontrado" = limpio (no está en 69-B)
+    const notOnList =
+      httpStatus === 404 ||
+      (typeof parsed === "string" && /no encontrado/i.test(parsed));
+    const onList = httpStatus === 200 && Array.isArray(parsed);
+
+    if (!notOnList && !onList) {
+      const { data: rowErr } = await admin
+        .from("moffin_consults")
+        .insert({
+          organization_id: project.organization_id,
+          project_id: projectId,
+          client_id: project.client_id,
+          rfc: rfcRaw,
+          consult_type: consultType,
+          moffin_service: "satgo-efos",
+          status: "error",
+          error_message: `Origen: SATgo Efos. HTTP ${httpStatus}: ${bodyText.slice(0, 300)}`.slice(
+            0,
+            500,
+          ),
+          raw_response: {
+            provider: "satgo",
+            kind: "efos",
+            httpStatus,
+            body: typeof parsed === "string" ? parsed.slice(0, 500) : parsed,
+          },
+          requested_by: userId,
+        })
+        .select("id")
+        .single();
+      return json(
+        {
+          error: "satgo_api_error",
+          message: bodyText.slice(0, 300) || `SATgo Efos HTTP ${httpStatus}`,
+          statusCode: httpStatus,
+          consultId: rowErr?.id,
+          provider: "satgo",
+        },
+        422,
+      );
+    }
+
+    const hits = onList ? (parsed as unknown[]) : [];
+    const summary = notOnList
+      ? `69-B (SATgo): RFC ${rfcRaw} no aparece en la lista negra.`
+      : `69-B (SATgo): RFC ${rfcRaw} aparece en la lista (${hits.length} registro(s)).`;
+
+    const { data: inserted, error: insErr } = await admin
+      .from("moffin_consults")
+      .insert({
+        organization_id: project.organization_id,
+        project_id: projectId,
+        client_id: project.client_id,
+        rfc: rfcRaw,
+        consult_type: consultType,
+        moffin_service: "satgo-efos",
+        status: "success",
+        summary,
+        raw_response: {
+          provider: "satgo",
+          kind: "efos",
+          onList: !notOnList,
+          hits,
+          httpStatus,
+        },
+        requested_by: userId,
+      })
+      .select("id, status, summary, document_id, created_at")
+      .single();
+
+    if (insErr) return json({ error: insErr.message }, 500);
+    return json({
+      consult: inserted,
+      provider: "satgo",
+      authMode: "efos",
+      onList: !notOnList,
+    });
+  }
+
+  // ---- CSF / 32D ----
   const hasFielJwe = !!(
     fielRow?.satgo_key_jwe?.trim() &&
     fielRow?.satgo_password_jwe?.trim() &&
@@ -366,9 +514,6 @@ Deno.serve(async (req) => {
       503,
     );
   }
-
-  const satAuth = await resolveSatgoBearer(admin);
-  if (!satAuth.ok) return json({ error: satAuth.code, message: satAuth.message }, 503);
 
   const kind = consultType === "constancia_situacion_fiscal" ? "csf" : "oc";
   const serviceName =
