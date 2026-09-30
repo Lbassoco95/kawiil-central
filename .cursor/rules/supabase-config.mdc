@@ -30,9 +30,10 @@ Las siguientes funciones DEBEN desplegarse con `--no-verify-jwt`:
 - savio-webhook, slack-events, calendly-webhook, moffin-webhook
 - slack-user-callback (redirect OAuth de Slack; sin JWT)
 - slack-user-auth, slack-api, push-subscribe (verify_jwt false en config; validan sesión con getUser + Authorization en código, igual que microsoft-api)
+- satgo-query, satgo-monthly (auth JWT o x-cron-secret en código)
 
 Otras con JWT en gateway (por defecto):
-- savio-api-health, savio-finance-api, moffin-query, moffin-fiel, moffin-sat-ciec, moffin-health, index-chat-attachment, etc. según `supabase/config.toml`
+- savio-api-health, savio-finance-api, moffin-fiel, moffin-sat-ciec, moffin-health, index-chat-attachment, etc. según `supabase/config.toml`
 
 Si el cliente muestra "Failed to send a request to the Edge Function", suele ser función no desplegada en ese proyecto o `VITE_SUPABASE_URL` apuntando a otro Supabase que no tiene esa función.
 
@@ -46,7 +47,7 @@ Si el cliente muestra "Failed to send a request to the Edge Function", suele ser
 
 **CIEC (`moffin-sat-ciec`, CIEC cifrada para SATgo/Moffin):** mismo patrón que FIEL; usa **`MOFFIN_SAT_CIEC_SECRET`** (≥32) si quieres secreto dedicado, o cae en **`MOFFIN_FIEL_SECRET`**. Sin secreto válido: **503** `ciec_not_configured`. Tabla **`public.moffin_client_sat_ciec`**: migraciones `20260413120000_moffin_client_sat_ciec.sql` y `20260414100000_moffin_client_sat_ciec_if_missing.sql`.
 
-**Checklist operativo CSF/32D (SATgo):** `SATGO_API_KEY`; CIEC secret ≥32; tabla `moffin_client_sat_ciec`; desplegar **`moffin-query`**, **`moffin-monthly-sat`**, **`moffin-health`**, **`moffin-sat-ciec`**. Resumen: [`.env.example`](../../.env.example).
+**Checklist operativo CSF/32D (SATgo):** `SATGO_API_KEY` (o Vault `satgo_api_key`); CIEC secret ≥32; tabla `moffin_client_sat_ciec`; desplegar **`satgo-query`**, **`satgo-monthly`**, **`moffin-query`** (69-B), **`moffin-sat-ciec`**. Resumen: [`.env.example`](../../.env.example).
 
 OAuth Slack por usuario (`slack-user-auth` / `slack-user-callback`): en **Project Settings → Edge Functions → Secrets** del proyecto Supabase deben existir al menos `SLACK_CLIENT_ID` y `SLACK_CLIENT_SECRET` (de la app en [api.slack.com/apps](https://api.slack.com/apps)). Sin `SLACK_CLIENT_ID`, la función responde 500 con `Slack OAuth not configured`. Opcional: `SLACK_USER_SCOPES` (si no, usa los del código).
 
