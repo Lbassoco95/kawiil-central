@@ -1157,12 +1157,27 @@ Deno.serve(async (req) => {
 
       case "update-event": {
         const encodedEventId = encodeURIComponent(params.eventId);
+        const cdmxPrefer = {
+          Prefer: 'outlook.timezone="America/Mexico_City"',
+        };
+        // Normaliza "2026-09-30T10:00:00.0000000" → "2026-09-30T10:00:00" para comparar.
+        const normDt = (s?: string | null) => {
+          if (!s || typeof s !== "string") return "";
+          const m = s.trim().match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})/);
+          return m ? m[1] : s.trim().slice(0, 19);
+        };
+        const sameDt = (desired?: string, applied?: string) => {
+          if (!desired) return true;
+          const d = normDt(desired);
+          const a = normDt(applied);
+          return !!a && (a === d || a.startsWith(d) || d.startsWith(a));
+        };
 
         // Snapshot previo para fallback en ocurrencias recurrentes
         let beforeEvent: any = null;
         try {
           const beforeRes = await graphMailFetchWithRetry(accessToken, `/me/events/${encodedEventId}`, {
-            headers: {},
+            headers: { ...cdmxPrefer },
           });
           beforeEvent = await beforeRes.json();
         } catch (be) {
@@ -1182,11 +1197,11 @@ Deno.serve(async (req) => {
         const patchText = await res.text();
         const patchEvent: any = patchText ? JSON.parse(patchText) : null;
 
-        // Verifica estado persistido (no confiar solo en respuesta del PATCH)
+        // Verifica estado persistido en la misma TZ que enviamos (no UTC por defecto)
         let persistedEvent: any = null;
         try {
           const verifyRes = await graphMailFetchWithRetry(accessToken, `/me/events/${encodedEventId}`, {
-            headers: {},
+            headers: { ...cdmxPrefer },
           });
           persistedEvent = await verifyRes.json();
         } catch (ve) {
@@ -1197,34 +1212,41 @@ Deno.serve(async (req) => {
 
         const desiredStart = params?.payload?.start?.dateTime as string | undefined;
         const desiredEnd = params?.payload?.end?.dateTime as string | undefined;
+        const desiredSubject = params?.payload?.subject as string | undefined;
         const appliedStart = persistedEvent?.start?.dateTime as string | undefined;
         const appliedEnd = persistedEvent?.end?.dateTime as string | undefined;
+        const appliedSubject = persistedEvent?.subject as string | undefined;
 
-        // Si el evento ya no existe por ese ID, asumimos que Graph lo convirtió/reidentificó y sí aplicó
-        const updateApplied = !verifyOk
-          ? true
-          : (!desiredStart || (appliedStart && appliedStart.startsWith(desiredStart))) &&
-            (!desiredEnd || (appliedEnd && appliedEnd.startsWith(desiredEnd)));
+        const timesOk = sameDt(desiredStart, appliedStart) && sameDt(desiredEnd, appliedEnd);
+        const subjectOk =
+          desiredSubject == null ||
+          String(appliedSubject ?? "") === String(desiredSubject);
+        const updateApplied = !verifyOk ? true : timesOk && subjectOk;
 
-        // Fallback para ocurrencias que no aceptan PATCH directo: clonar en nuevo horario y eliminar ocurrencia original
         if (!updateApplied && beforeEvent?.type === "occurrence") {
           const clonePayload: Record<string, any> = {
-            subject: beforeEvent.subject,
+            subject: params?.payload?.subject ?? beforeEvent.subject,
             start: params?.payload?.start || beforeEvent.start,
             end: params?.payload?.end || beforeEvent.end,
-            body: beforeEvent.body,
-            attendees: beforeEvent.attendees,
-            categories: beforeEvent.categories,
+            body: params?.payload?.body || beforeEvent.body,
+            attendees: params?.payload?.attendees || beforeEvent.attendees,
+            categories: params?.payload?.categories ?? beforeEvent.categories,
             isOnlineMeeting: !!beforeEvent.isOnlineMeeting,
             onlineMeetingProvider: beforeEvent.isOnlineMeeting ? "teamsForBusiness" : undefined,
-            location: beforeEvent?.location?.displayName
-              ? { displayName: beforeEvent.location.displayName }
-              : undefined,
+            location: params?.payload?.location ||
+              (beforeEvent?.location?.displayName
+                ? { displayName: beforeEvent.location.displayName }
+                : undefined),
+            sensitivity: params?.payload?.sensitivity,
           };
+          Object.keys(clonePayload).forEach((k) => clonePayload[k] === undefined && delete clonePayload[k]);
 
           const createRes = await graphMailFetchWithRetry(accessToken, `/me/events`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              Prefer: 'outlook.timezone="America/Mexico_City", return=representation',
+            },
             body: JSON.stringify(clonePayload),
           });
 
@@ -1243,9 +1265,23 @@ Deno.serve(async (req) => {
             ...createdEvent,
             migratedFromOccurrence: true,
             previousEventId: params.eventId,
+            updateApplied: true,
           };
+        } else if (!updateApplied) {
+          throw new Error(
+            `UPDATE_NOT_APPLIED: Microsoft Graph no persistió el cambio` +
+              (desiredStart || desiredEnd
+                ? ` (start ${normDt(appliedStart) || "?"}≠${normDt(desiredStart) || "?"}, end ${normDt(appliedEnd) || "?"}≠${normDt(desiredEnd) || "?"})`
+                : desiredSubject != null
+                  ? ` (subject)`
+                  : ""),
+          );
         } else {
-          result = persistedEvent || patchEvent || { success: true };
+          result = {
+            ...(persistedEvent || patchEvent || {}),
+            success: true,
+            updateApplied: true,
+          };
         }
 
         break;

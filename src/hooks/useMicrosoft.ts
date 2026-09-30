@@ -522,8 +522,12 @@ export function useUpdateCalendarEvent() {
       }
       if (res.error) {
         const msg = res.error?.message || String(res.error);
-        if (msg.includes("Unexpected end of JSON") || msg.includes("json")) {
-          return { success: true, eventId, payload };
+        // Solo cuerpo vacío 2xx: Graph a veces responde sin JSON. No enmascarar WORKER_ERROR.
+        const emptyOk =
+          !errBody &&
+          (msg.includes("Unexpected end of JSON") || /failed to parse/i.test(msg));
+        if (emptyOk) {
+          return { success: true, eventId, payload, updateApplied: true };
         }
         throw new Error(formatMicrosoftIntegrationError(res.error, errBody));
       }
@@ -531,6 +535,9 @@ export function useUpdateCalendarEvent() {
         throw new Error("El evento no fue encontrado. Puede que haya sido eliminado o modificado.");
       }
       if (res.data?.error) throw new Error(formatMicrosoftIntegrationError(new Error(String(res.data.error))));
+      if (res.data?.updateApplied === false) {
+        throw new Error("Microsoft no guardó el cambio del evento. Intenta de nuevo o reconecta Microsoft 365.");
+      }
       return { ...(res.data || {}), success: true, eventId, payload };
     },
     onMutate: async ({ eventId, payload }) => {
@@ -555,6 +562,7 @@ export function useUpdateCalendarEvent() {
               ...(payload.start ? { start: payload.start } : {}),
               ...(payload.end ? { end: payload.end } : {}),
               ...(payload.categories ? { categories: payload.categories } : {}),
+              ...(payload.location ? { location: payload.location } : {}),
             };
           });
           return old?.value ? { ...old, value: updated } : updated;
@@ -570,24 +578,41 @@ export function useUpdateCalendarEvent() {
           queryClient.setQueryData(key, data);
         }
       }
+<<<<<<< HEAD
       toast.error("Error al actualizar evento: " + formatMicrosoftIntegrationError(err), {
         duration: 10000,
       });
+=======
+      toast.error("Error al actualizar evento: " + err.message, { duration: 10000 });
+>>>>>>> origin/cursor/calendario-update-event-f64e
     },
-    onSuccess: (_data, vars) => {
-      // Mantener el cambio visual inmediato y sincronizar después
+    onSuccess: (data, vars) => {
       toast.success("Evento actualizado");
 
-      // Refetch diferido para evitar que Graph devuelva estado viejo inmediato
+      const newId = data?.migratedFromOccurrence && data?.id && data.id !== vars.eventId
+        ? String(data.id)
+        : null;
+      if (newId) {
+        queryClient.setQueriesData({ queryKey: ["calendar-events"] }, (old: any) => {
+          if (!old?.value && !Array.isArray(old)) return old;
+          const events = old?.value || old;
+          if (!Array.isArray(events)) return old;
+          const updated = events.map((ev: any) =>
+            ev.id === vars.eventId ? { ...ev, ...data, id: newId } : ev
+          );
+          return old?.value ? { ...old, value: updated } : updated;
+        });
+      }
+
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ["calendar-events"] });
-      }, 2500);
+      }, 1500);
 
-      // Segundo refetch de seguridad por consistencia eventual
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ["calendar-events"] });
         queryClient.invalidateQueries({ queryKey: ["calendar-event-detail", vars.eventId] });
-      }, 7000);
+        if (newId) queryClient.invalidateQueries({ queryKey: ["calendar-event-detail", newId] });
+      }, 5000);
     },
     onSettled: () => {
       // no-op: invalidación diferida en onSuccess

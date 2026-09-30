@@ -166,12 +166,32 @@ const TIME_SLOTS = Array.from(
 );
 const SLOT_HEIGHT = 32;
 
+/**
+ * Graph con Prefer CDMX devuelve dateTime "flotante" (sin Z): hora de pared México.
+ * parseISO lo trataría como hora local del navegador; al guardar, el evento “no cambia”.
+ */
 function parseEventTime(dt: string, fallback = new Date()): Date {
   if (!dt || typeof dt !== "string") return fallback;
   try {
-    const d = parseISO(dt);
+    const trimmed = dt.trim();
+    const floating = trimmed.match(
+      /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?)?$/,
+    );
+    if (floating && !/[zZ]|[+\-]\d{2}:?\d{2}$/.test(trimmed)) {
+      return new Date(
+        Number(floating[1]),
+        Number(floating[2]) - 1,
+        Number(floating[3]),
+        Number(floating[4] || 0),
+        Number(floating[5] || 0),
+        Number(floating[6] || 0),
+      );
+    }
+    const d = parseISO(trimmed);
     return isNaN(d.getTime()) ? fallback : d;
-  } catch { return fallback; }
+  } catch {
+    return fallback;
+  }
 }
 
 function safeDescription(content: unknown): string {
@@ -911,10 +931,14 @@ export function CalendarView({
       const parsedStart = parseEventTime(start, new Date());
       const parsedEnd = parseEventTime(end, new Date(parsedStart.getTime() + 60 * 60 * 1000));
       const attendeesStr = (source.attendees || []).map((a: any) => a.emailAddress?.address).filter(Boolean).join(", ");
+      // Hora de pared CDMX: `format`, no formatMX (evita doble conversión).
       setEditForm({
-        subject: source.subject ?? "", startDate: formatMX(parsedStart, "yyyy-MM-dd"),
-        startTime: formatMX(parsedStart, "HH:mm"), endDate: formatMX(parsedEnd, "yyyy-MM-dd"),
-        endTime: formatMX(parsedEnd, "HH:mm"), location: source.location?.displayName ?? "",
+        subject: source.subject ?? "",
+        startDate: format(parsedStart, "yyyy-MM-dd"),
+        startTime: format(parsedStart, "HH:mm"),
+        endDate: format(parsedEnd, "yyyy-MM-dd"),
+        endTime: format(parsedEnd, "HH:mm"),
+        location: source.location?.displayName ?? "",
         description: safeDescription(source.body?.content),
         categories: Array.isArray(source.categories) ? [...source.categories] : [],
         attendees: attendeesStr,
@@ -962,7 +986,7 @@ export function CalendarView({
         if (!rawStart) return;
         const parsedStart = parseEventTime(rawStart);
         if (isNaN(parsedStart.getTime())) return;
-        const dateKey = formatMX(parsedStart, "yyyy-MM-dd");
+        const dateKey = format(parsedStart, "yyyy-MM-dd");
         const isAllDay = e.isAllDay === true || (!!e.start?.date && !e.start?.dateTime);
         if (!map.has(dateKey)) map.set(dateKey, []);
         map.get(dateKey)!.push({ ...e, _parsedStart: parsedStart, _isAllDay: isAllDay, _type: "outlook" });
