@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { FileText, FolderOpen, Home, LogOut, MessageSquare, Receipt, UserCircle } from "lucide-react";
+import { AlertTriangle, FileText, FolderOpen, Home, LogOut, MessageSquare, UserCircle } from "lucide-react";
 import { usePortal } from "../lib/session";
 import { db } from "../lib/supabase";
 import { cn } from "@/lib/utils";
@@ -12,7 +12,7 @@ export default function Layout() {
     { to: "/", label: "Inicio", Icon: Home, show: active?.role !== "operativo" },
     { to: "/facturas", label: "Facturas", Icon: FileText, show: true },
     { to: "/documentos", label: "Documentos", Icon: FolderOpen, show: premier },
-    { to: "/tickets", label: "Tickets", Icon: Receipt, show: !!active?.tickets_enabled },
+    { to: "/alertas", label: "Alertas", Icon: AlertTriangle, show: true },
     { to: "/mensajes", label: "Mensajes", Icon: MessageSquare, show: true },
     { to: "/cuenta", label: "Cuenta", Icon: UserCircle, show: true },
   ].filter((n) => n.show);
