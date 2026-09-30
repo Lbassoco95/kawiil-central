@@ -87,11 +87,37 @@ Central recibe únicamente incidencias agregadas y autorizadas para nómina. El 
 
 ## Pruebas
 
-- `run_kawiil_os_db_tests.sh`: crea una base vacía, aplica solo el baseline, verifica ausencia de tablas de central, prueba aislamiento entre dos empresas y ejecuta rollback.
+- `run_kawiil_os_db_tests.sh` (CI, Postgres efímero del job `base-y-api`): crea una base vacía, aplica solo `kawiil-os/supabase/migrations/` (sin la cadena de central), falla si el árbol embebe host/JWT de central, verifica ausencia de tablas de central, prueba aislamiento entre dos empresas y ejecuta rollback limpio.
+- Aplicación manual del baseline: `npx supabase db push --workdir kawiil-os` (ver `PROYECTO-SEPARADO.md`).
 - `systemBoundary.test.ts`: firma válida, secreto de sentido incorrecto, alteración, expiración y operación alterada.
 - `portal:verificar-cerco`: búsqueda estática obligatoria de accesos directos.
 - La suite HTTP existente mantiene pruebas de papel, empresa y operación desconocida.
+- El rechazo cruzado 401/403 con llaves reales de ambos proyectos queda a Polo (proyectos de ensayo); CI no puede inventar esos proyectos.
 
 ## Riesgo residual
 
-La separación evita alcance cruzado de base, pero una publicación legítimamente firmada podría contener datos incorrectos por un error de central. Se reduce con catálogo cerrado, listas de tipos, payload mínimo, idempotencia, bitácora y revisión del productor. La disponibilidad depende de dos proyectos; las colas desacoplan sus caídas. Polo debe rotar ambos secretos de firma de manera coordinada y supervisar eventos fallidos.
+### Qué protege cada capa
+
+| Capa | Protege | No protege |
+|---|---|---|
+| Proyectos separados | Una credencial de Kawiil OS no es aceptada por central ni viceversa | Nada si se comparte el mismo secreto entre proyectos |
+| `service_role` por proyecto | Cada función administrativa solo alcanza su propia base | Una `service_role` filtrada sigue leyendo todo su propio proyecto |
+| RLS por empresa | Una cuenta del portal no ve otras empresas aunque consulte la API | No restringe al backend con `service_role` |
+| Catálogo cerrado | Rechaza operaciones fuera de lista y consultas libres | No valida que el contenido publicado sea correcto |
+| Firma HMAC + nonce + timestamp | Rechaza alteración, repetición y mensajes viejos | Si el secreto se pierde, un atacante firma llamadas válidas |
+| Idempotency key + outbox | Repetición no duplica efectos; caída no pierde eventos | No impide que un evento legítimo sea semánticamente erróneo |
+| Bitácora | Deja rastro de cada operación administrativa y de sistema | No bloquea; solo evidencia |
+
+### Si se pierde un secreto entre sistemas
+
+- **`CENTRAL_TO_OS_SIGNING_SECRET`**: un atacante puede publicar documentos, activar módulos y dar de baja empresas en Kawiil OS. No obtiene lectura de base ni respuestas de clima; todo queda en bitácora y el nonce impide reutilizar una llamada capturada. Respuesta: rotar el secreto en ambos lados y revisar `portal_audit_log`.
+- **`OS_TO_CENTRAL_SIGNING_SECRET`**: un atacante puede inyectar tickets, solicitudes de cancelación, incidencias y mensajes falsos en central. Respuesta idéntica, más revisión de la bandeja durante la ventana de exposición.
+- **`service_role` de Kawiil OS**: compromete solo Kawiil OS; central permanece inalcanzable. Rotar desde el panel de Supabase y revisar la bitácora.
+- **`service_role` de central**: no compromete Kawiil OS, pero es riesgo interno de central, fuera del alcance de esta frontera.
+
+### Riesgos abiertos
+
+- Una publicación legítimamente firmada puede contener datos incorrectos por un error de central; se reduce con listas de tipos, payload mínimo e idempotencia.
+- La disponibilidad depende de dos proyectos; las colas desacoplan caídas pero no eliminan la dependencia operativa.
+- La rotación actual acepta una sola versión de secreto, así que requiere despliegue coordinado; soportar versión siguiente durante una ventana queda como mejora pendiente.
+- Polo debe rotar ambos secretos de manera coordinada y supervisar eventos fallidos del despachador.

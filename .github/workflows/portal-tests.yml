@@ -10,6 +10,7 @@ on:
       - "portal/**"
       - "supabase/**"
       - "migrations/**"
+      - "kawiil-os/**"
       - "tools/portal/**"
       - "package.json"
       - "package-lock.json"
@@ -25,6 +26,7 @@ on:
       - "supabase/migrations/2026092911*"
       - "supabase/migrations/2026092912*"
       - "supabase/tests/portal/**"
+      - "kawiil-os/**"
 
 jobs:
   unitarias:
