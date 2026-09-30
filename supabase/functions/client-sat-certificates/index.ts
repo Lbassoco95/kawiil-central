@@ -404,9 +404,6 @@ Deno.serve(async (req) => {
       }
     }
 
-    const conflictTarget =
-      certType === "fiel" ? "client_id" : "client_id,cert_serial";
-
     const upsertRow: Record<string, unknown> = {
       organization_id: client!.organization_id,
       client_id: clientId!,
@@ -432,22 +429,59 @@ Deno.serve(async (req) => {
       upsertRow.satgo_jwe_updated_at = satgoJweUpdatedAt;
     }
 
-    const { data: upserted, error: upErr } = await admin
-      .from("client_sat_certificates")
-      .upsert(upsertRow, { onConflict: conflictTarget })
-      .select(
-        "id, cert_type, label, cert_serial, cert_subject_rfc, cert_not_before, cert_not_after, cert_fingerprint_sha256, updated_at, satgo_key_jwe, satgo_password_jwe, satgo_jwe_kid, satgo_jwe_updated_at",
-      )
-      .maybeSingle();
+    // Índices UNIQUE son parciales (WHERE cert_type='fiel' / cert_serial IS NOT NULL);
+    // PostgREST no puede ON CONFLICT sobre ellos → update/insert manual.
+    let existingId: string | null = null;
+    if (certType === "fiel") {
+      const { data: existing } = await admin
+        .from("client_sat_certificates")
+        .select("id")
+        .eq("client_id", clientId!)
+        .eq("cert_type", "fiel")
+        .maybeSingle();
+      existingId = existing?.id ?? null;
+    } else if (parsed.serialNumber) {
+      const { data: existing } = await admin
+        .from("client_sat_certificates")
+        .select("id")
+        .eq("client_id", clientId!)
+        .eq("cert_serial", parsed.serialNumber)
+        .maybeSingle();
+      existingId = existing?.id ?? null;
+    }
 
-    if (upErr) {
-      console.error("client_sat_certificates upsert:", upErr.message);
-      return jsonResponse({ error: upErr.message }, 500);
+    const selectCols =
+      "id, cert_type, label, cert_serial, cert_subject_rfc, cert_not_before, cert_not_after, cert_fingerprint_sha256, updated_at, satgo_key_jwe, satgo_password_jwe, satgo_jwe_kid, satgo_jwe_updated_at";
+
+    let upserted: CertRow | null = null;
+    if (existingId) {
+      const { data, error: upErr } = await admin
+        .from("client_sat_certificates")
+        .update(upsertRow)
+        .eq("id", existingId)
+        .select(selectCols)
+        .maybeSingle();
+      if (upErr) {
+        console.error("client_sat_certificates update:", upErr.message);
+        return jsonResponse({ error: upErr.message }, 500);
+      }
+      upserted = (data as CertRow | null) ?? null;
+    } else {
+      const { data, error: insErr } = await admin
+        .from("client_sat_certificates")
+        .insert(upsertRow)
+        .select(selectCols)
+        .maybeSingle();
+      if (insErr) {
+        console.error("client_sat_certificates insert:", insErr.message);
+        return jsonResponse({ error: insErr.message }, 500);
+      }
+      upserted = (data as CertRow | null) ?? null;
     }
 
     return jsonResponse({
       ok: true,
-      certificate: upserted ? summarizeRow(upserted as CertRow) : null,
+      certificate: upserted ? summarizeRow(upserted) : null,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
