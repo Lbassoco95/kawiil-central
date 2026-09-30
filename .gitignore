@@ -11,7 +11,6 @@ node_modules
 dist
 dist-ssr
 *.local
-
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -25,26 +24,22 @@ dist-ssr
 backups/
 scripts/
 supabase/.temp/
-
 # TypeScript build info
 *.tsbuildinfo
-
 # Deno cache
 .deno/
 .deno_cache/
 deno.lock
-
 # Environment files
 .env
 .env.local
 .env.*.local
 .vercel
-
 # Múuch': JSON/datos reales de clientes — nunca se versionan.
 # Los scripts .ts del loader sí se versionan (sin pegar el JSON).
 tools/mtg/seed/**
 !tools/mtg/seed/*.ts
 !tools/mtg/seed/README.md
-
 # Capturas de aceptación con datos reales (Sylon, etc.)
 docs/mtg/acceptance/
+.tmp-mtg-deploy/

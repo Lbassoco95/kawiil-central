@@ -80,8 +80,9 @@ total 31 · vizum 13 / sylon 10 / rivium 8 · resolved 9 / advanced 9 / unchange
 
 Rama `cursor/mtg-juntas-modulo-b107` (= `feat/mtg-juntas-b2` + merge `main`):
 
-- Hub **`/juntas`**: listado org-wide (estado, transcripción, grabación, acuerdos, tareas abiertas, link a minuta).
+- Hub **`/juntas`**: listado org-wide (estado, transcripción, grabación, acuerdos, tareas abiertas, link a minuta) + **Nueva junta** ad hoc.
 - Sidebar + command palette: entrada **Juntas**.
 - Grabación: `uploadRecording` + `MtgRecordingControls` (micrófono en navegador o subir audio/video) → bucket `mtg`/`recordings` + `mtg_meetings.recording_path`.
-- Confirmado en prod (MCP): tablas `mtg_*` + `job_queue` ya existen con datos seed (series 1, meetings 3, topics 31). Front aún no estaba en `main`.
+- Confirmado en prod (MCP): tablas `mtg_*` + `job_queue` + bucket `mtg` + `tasks.mtg_meeting_id`.
+- **Edges desplegadas en prod (2026-09-30):** `job-queue-dispatch`, `mtg-outlook`, `mtg-graph-admin`, `mtg-graph-webhook`, `mtg-minutes-draft`, `slack-notify` (v64 con `mtg_minutes_approved`).
 

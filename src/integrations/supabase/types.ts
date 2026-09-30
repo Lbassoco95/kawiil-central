@@ -5089,6 +5089,7 @@ export type Database = {
           id: string
           is_recurring: boolean
           is_subtask: boolean
+          mtg_meeting_id: string | null
           organization_id: string
           parent_task_id: string | null
           phase_key: string | null
@@ -5125,6 +5126,7 @@ export type Database = {
           id?: string
           is_recurring?: boolean
           is_subtask?: boolean
+          mtg_meeting_id?: string | null
           organization_id: string
           parent_task_id?: string | null
           phase_key?: string | null
@@ -5161,6 +5163,7 @@ export type Database = {
           id?: string
           is_recurring?: boolean
           is_subtask?: boolean
+          mtg_meeting_id?: string | null
           organization_id?: string
           parent_task_id?: string | null
           phase_key?: string | null

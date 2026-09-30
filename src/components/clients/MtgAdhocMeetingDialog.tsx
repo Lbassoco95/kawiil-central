@@ -46,9 +46,16 @@ interface MtgAdhocMeetingDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   client: Tables<"clients">;
+  /** Si se define, se llama tras crear (p. ej. navegar al tablero). */
+  onCreated?: (meetingId: string) => void;
 }
 
-export function MtgAdhocMeetingDialog({ open, onOpenChange, client }: MtgAdhocMeetingDialogProps) {
+export function MtgAdhocMeetingDialog({
+  open,
+  onOpenChange,
+  client,
+  onCreated,
+}: MtgAdhocMeetingDialogProps) {
   const { data: profiles = [] } = useProfiles();
   const createMeeting = useCreateAdhocMeeting(client.id);
 
@@ -73,13 +80,14 @@ export function MtgAdhocMeetingDialog({ open, onOpenChange, client }: MtgAdhocMe
 
   const onSubmit = async (v: AdhocSchemaValues) => {
     try {
-      await createMeeting.mutateAsync({
+      const meeting = await createMeeting.mutateAsync({
         scheduled_at: new Date(v.scheduled_at).toISOString(),
         duration_min: v.duration_min,
         facilitator_user_id: v.facilitator_user_id || null,
       });
       toast.success("Junta creada");
       onOpenChange(false);
+      onCreated?.(meeting.id);
     } catch (e) {
       toast.error("Error: " + (e as Error).message);
     }

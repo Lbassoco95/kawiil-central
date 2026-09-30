@@ -164,8 +164,10 @@ export function useCreateAdhocMeeting(clientId: string) {
       });
       return meeting;
     },
-    onSuccess: () => {
+    onSuccess: (meeting) => {
       queryClient.invalidateQueries({ queryKey: KEY(clientId) });
+      queryClient.invalidateQueries({ queryKey: ["mtg-meetings-org"] });
+      return meeting;
     },
   });
 }

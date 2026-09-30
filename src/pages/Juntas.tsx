@@ -17,15 +17,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { formatDateMX } from "@/lib/dateUtils";
 import { MEETING_STATUS, TRANSCRIPT_STATUS, type MtgMeetingStatus } from "@/lib/mtg/constants";
 import { useMtgMeetingsForOrg, type OrgMtgMeeting } from "@/hooks/useMtgMeetingsOrg";
+import { useClients, type Client } from "@/hooks/useClients";
+import { MtgAdhocMeetingDialog } from "@/components/clients/MtgAdhocMeetingDialog";
 import {
   CalendarClock,
   CheckSquare,
   FileText,
   Mic,
+  Plus,
   Search,
   Users,
 } from "lucide-react";
@@ -53,8 +62,12 @@ function matchesFilter(m: OrgMtgMeeting, filter: StatusFilter): boolean {
 export default function Juntas() {
   const navigate = useNavigate();
   const { data: meetings = [], isLoading } = useMtgMeetingsForOrg({ limit: 150 });
+  const { data: clients = [] } = useClients();
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<StatusFilter>("all");
+  const [pickClientOpen, setPickClientOpen] = useState(false);
+  const [clientQuery, setClientQuery] = useState("");
+  const [adhocClient, setAdhocClient] = useState<Client | null>(null);
 
   const heroStats: PageHeaderStat[] = useMemo(() => {
     const upcoming = meetings.filter((m) => m.status === "planned").length;
@@ -90,6 +103,14 @@ export default function Juntas() {
     });
   }, [meetings, q, filter]);
 
+  const filteredClients = useMemo(() => {
+    const needle = clientQuery.trim().toLowerCase();
+    if (!needle) return clients.slice(0, 40);
+    return clients
+      .filter((c) => (c.name ?? "").toLowerCase().includes(needle))
+      .slice(0, 40);
+  }, [clients, clientQuery]);
+
   return (
     <AppLayout>
       <div className="kwv24 space-y-6 animate-fade-in">
@@ -102,9 +123,15 @@ export default function Juntas() {
           description="Múuch': tablero de sesiones, grabaciones, minutas con IA y acuerdos que se convierten en tareas del proyecto."
           stats={heroStats}
           actions={
-            <Button asChild variant="outline" size="sm">
-              <Link to="/clientes">Abrir desde un cliente</Link>
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" onClick={() => setPickClientOpen(true)}>
+                <Plus className="h-4 w-4 mr-1" />
+                Nueva junta
+              </Button>
+              <Button asChild variant="outline" size="sm">
+                <Link to="/clientes">Series desde cliente</Link>
+              </Button>
+            </div>
           }
         />
 
@@ -139,11 +166,12 @@ export default function Juntas() {
             <CalendarClock className="h-10 w-10 mx-auto text-muted-foreground/60" />
             <p className="text-muted-foreground max-w-md mx-auto">
               {meetings.length === 0
-                ? "Aún no hay juntas en la organización. Crea una serie o junta ad hoc desde la ficha del cliente (pestaña Juntas)."
+                ? "Aún no hay juntas. Crea una junta ad hoc o una serie desde la ficha del cliente."
                 : "Ninguna junta coincide con el filtro."}
             </p>
-            <Button asChild variant="outline" size="sm">
-              <Link to="/clientes">Ir a clientes</Link>
+            <Button size="sm" onClick={() => setPickClientOpen(true)}>
+              <Plus className="h-4 w-4 mr-1" />
+              Nueva junta
             </Button>
           </div>
         ) : (
@@ -224,6 +252,55 @@ export default function Juntas() {
           </div>
         )}
       </div>
+
+      <Dialog
+        open={pickClientOpen}
+        onOpenChange={(o) => {
+          setPickClientOpen(o);
+          if (!o) setClientQuery("");
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Elegir cliente para la junta</DialogTitle>
+          </DialogHeader>
+          <Input
+            placeholder="Buscar cliente…"
+            value={clientQuery}
+            onChange={(e) => setClientQuery(e.target.value)}
+          />
+          <div className="max-h-72 overflow-y-auto divide-y rounded-md border">
+            {filteredClients.length === 0 ? (
+              <p className="p-4 text-sm text-muted-foreground text-center">Sin clientes</p>
+            ) : (
+              filteredClients.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className="w-full text-left px-3 py-2.5 text-sm hover:bg-muted/50"
+                  onClick={() => {
+                    setPickClientOpen(false);
+                    setAdhocClient(c);
+                  }}
+                >
+                  {c.name}
+                </button>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {adhocClient && (
+        <MtgAdhocMeetingDialog
+          open={!!adhocClient}
+          onOpenChange={(o) => {
+            if (!o) setAdhocClient(null);
+          }}
+          client={adhocClient}
+          onCreated={(id) => navigate(`/juntas/${id}`)}
+        />
+      )}
     </AppLayout>
   );
 }
