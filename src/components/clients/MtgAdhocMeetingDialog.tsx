@@ -39,6 +39,7 @@ import { useProfiles } from "@/hooks/useTasks";
 import { useCreateAdhocMeeting } from "@/hooks/useMtgMeetings";
 import { useMicrosoftConnection } from "@/hooks/useMicrosoft";
 import { createOutlookTeamsEventForMeeting } from "@/lib/mtg/createOutlookEventForMeeting";
+import { parseMeetingJoinLink } from "@/lib/mtg/joinLink";
 import { useQueryClient } from "@tanstack/react-query";
 
 const adhocSchema = z.object({
@@ -46,6 +47,8 @@ const adhocSchema = z.object({
   scheduled_at: z.string().min(1, "Captura fecha y hora de la junta."),
   duration_min: z.coerce.number().int().min(5, "Mínimo 5 minutos."),
   facilitator_user_id: z.string().nullable().optional(),
+  /** Link de llamada ya en curso (solo si no se crea Outlook+Teams). */
+  join_link: z.string().optional(),
 });
 
 type AdhocSchemaValues = z.infer<typeof adhocSchema>;
@@ -79,6 +82,7 @@ export function MtgAdhocMeetingDialog({
       scheduled_at: "",
       duration_min: 60,
       facilitator_user_id: client?.responsible_user_id ?? null,
+      join_link: "",
     },
   });
 
@@ -89,6 +93,7 @@ export function MtgAdhocMeetingDialog({
         scheduled_at: "",
         duration_min: 60,
         facilitator_user_id: client?.responsible_user_id ?? null,
+        join_link: "",
       });
       setCreateOutlookTeams(true);
     }
@@ -133,6 +138,12 @@ export function MtgAdhocMeetingDialog({
             { duration: 9000 },
           );
         }
+      } else if (v.join_link?.trim()) {
+        const parsed = parseMeetingJoinLink(v.join_link);
+        teams_join_url = parsed.url;
+        if (parsed.teamsOnlineMeetingId) {
+          teams_online_meeting_id = parsed.teamsOnlineMeetingId;
+        }
       }
 
       const meeting = await createMeeting.mutateAsync({
@@ -156,6 +167,12 @@ export function MtgAdhocMeetingDialog({
           client
             ? "Junta creada y evento en Outlook"
             : "Junta creada (sin cliente) y evento en Outlook",
+        );
+      } else if (teams_join_url) {
+        toast.success(
+          client
+            ? "Junta creada con link de llamada"
+            : "Junta creada (sin cliente) con link de llamada",
         );
       } else {
         toast.success(
@@ -286,6 +303,29 @@ export function MtgAdhocMeetingDialog({
                 disabled={busy}
               />
             </div>
+
+            {!createOutlookTeams && (
+              <FormField
+                control={form.control}
+                name="join_link"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Link de llamada (opcional)</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="https://teams.microsoft.com/l/meetup-join/…"
+                        {...field}
+                      />
+                    </FormControl>
+                    <p className="text-xs text-muted-foreground">
+                      Si ya estás en la llamada, pega el enlace (Teams, Meet o Zoom) para entrar
+                      desde la junta.
+                    </p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

@@ -39,13 +39,15 @@ import {
   resolvedThisMeeting,
 } from "@/lib/mtg/boardArchive";
 import { unreviewedCount } from "@/lib/mtg/meetingLifecycle";
-import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, Loader2, Projector } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, Link2, Loader2, Projector, Video } from "lucide-react";
 import { toast } from "sonner";
 import { MtgUploadTranscriptButton } from "@/components/mtg/MtgUploadTranscriptButton";
 import { MtgRecordingControls } from "@/components/mtg/MtgRecordingControls";
 import { MtgAssignClientDialog } from "@/components/mtg/MtgAssignClientDialog";
 import { MtgTopicHistoryDrawer } from "@/components/mtg/MtgTopicHistoryDrawer";
 import { MtgArchiveSection } from "@/components/mtg/MtgArchiveSection";
+import { MtgJoinLinkDialog } from "@/components/mtg/MtgJoinLinkDialog";
+import { parseMeetingJoinLink } from "@/lib/mtg/joinLink";
 
 const PROJECTION_KEY = "mtg-projection-mode";
 
@@ -66,6 +68,7 @@ export default function JuntaDetalle() {
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [historyTopic, setHistoryTopic] = useState<{ id: string; title: string } | null>(null);
   const [assignClientOpen, setAssignClientOpen] = useState(false);
+  const [joinLinkOpen, setJoinLinkOpen] = useState(false);
   const [agreementDraft, setAgreementDraft] = useState({
     text: "",
     entityKey: "",
@@ -304,11 +307,40 @@ export default function JuntaDetalle() {
               >
                 <Projector className="h-3.5 w-3.5 mr-1" /> Modo proyección
               </Button>
-              {meeting.teams_join_url && (
-                <Button asChild variant="outline" size="sm">
-                  <a href={meeting.teams_join_url} target="_blank" rel="noreferrer">
-                    Teams <ExternalLink className="h-3 w-3 ml-1" />
-                  </a>
+              {meeting.teams_join_url ? (
+                <>
+                  <Button asChild size="sm">
+                    <a href={meeting.teams_join_url} target="_blank" rel="noreferrer">
+                      <Video className="h-3.5 w-3.5 mr-1" />
+                      {(() => {
+                        try {
+                          return `Unirse · ${parseMeetingJoinLink(meeting.teams_join_url).label}`;
+                        } catch {
+                          return "Unirse a la llamada";
+                        }
+                      })()}
+                      <ExternalLink className="h-3 w-3 ml-1" />
+                    </a>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setJoinLinkOpen(true)}
+                  >
+                    <Link2 className="h-3.5 w-3.5 mr-1" />
+                    Cambiar link
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setJoinLinkOpen(true)}
+                >
+                  <Link2 className="h-3.5 w-3.5 mr-1" />
+                  Pegar link de llamada
                 </Button>
               )}
               {liveEditable && meeting.status === "planned" && (
@@ -688,6 +720,17 @@ export default function JuntaDetalle() {
           actorUserId={user.id}
           meetingId={meeting.id}
           currentClientId={meeting.client_id}
+          onDone={() => board.invalidate()}
+        />
+      )}
+
+      {user && (
+        <MtgJoinLinkDialog
+          open={joinLinkOpen}
+          onOpenChange={setJoinLinkOpen}
+          organizationId={orgId}
+          actorUserId={user.id}
+          meeting={meeting}
           onDone={() => board.invalidate()}
         />
       )}
