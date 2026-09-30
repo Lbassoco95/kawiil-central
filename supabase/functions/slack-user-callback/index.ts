@@ -280,6 +280,8 @@ Deno.serve(async (req) => {
         refresh_token: null,
         token_expires_at: tokenExpiresAt,
         scopes: tokenData.authed_user.scope as string || null,
+        // Reconexión exitosa: el estado de Slack vuelve a poder actualizarse.
+        slack_status_broken_at: null,
       },
       { onConflict: "user_id,slack_team_id" },
     );

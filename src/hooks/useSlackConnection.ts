@@ -27,7 +27,7 @@ export function useSlackConnection() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("user_slack_connections")
-        .select("id, slack_team_id, slack_user_id, updated_at")
+        .select("id, slack_team_id, slack_user_id, updated_at, slack_status_broken_at")
         .eq("user_id", user!.id)
         .order("updated_at", { ascending: false })
         .limit(1)
@@ -106,6 +106,8 @@ export function useSlackConnection() {
   return {
     connection: connectionQuery.data,
     isConnected: !!connectionQuery.data,
+    /** El token existe pero Slack lo rechaza (revocado): hay que reconectar. */
+    statusBroken: !!connectionQuery.data?.slack_status_broken_at,
     isLoading: connectionQuery.isLoading,
     connect: () => connectMutation.mutate(),
     isConnecting: connectMutation.isPending,

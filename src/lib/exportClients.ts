@@ -2,6 +2,7 @@ import type { Client } from "@/hooks/useClients";
 
 const SERVICE_LABELS: Record<string, string> = {
   contabilidad: "Contabilidad",
+  nomina: "Nómina",
   legal: "Legal",
   pld_ft: "PLD/FT",
   cumplimiento: "Cumplimiento",

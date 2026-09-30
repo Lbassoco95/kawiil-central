@@ -97,12 +97,17 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = false
   [functions.moffin-health]
     verify_jwt = true
+  [functions.integration-health]
+    verify_jwt = true
   [functions.moffin-facturas]
     verify_jwt = false
   [functions.moffin-monthly-sat]
     verify_jwt = false
   [functions.analyze-improvement-suggestions]
     verify_jwt = true
+  [functions.ai-chat]
+    # Auth en código (getUser + Authorization); gateway sin JWT igual que microsoft-api.
+    verify_jwt = false
   [functions.ai-finance-insights]
     verify_jwt = true
   [functions.extract-ai-memories]

@@ -43,6 +43,8 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { formatDateMX } from "@/lib/dateUtils";
+import { extractPdfPagesClient } from "@/lib/extractPdfTextClient";
+import { parseCsfText } from "@/lib/juun/csfParser";
 import {
   C_REGIMEN_FISCAL,
   C_USO_CFDI,
@@ -257,6 +259,8 @@ export function ClientTaxProfilesSection({ clientId, clientRfc }: ClientTaxProfi
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<TaxProfile | null>(null);
   const [csfFile, setCsfFile] = useState<File | null>(null);
+  const [csfReading, setCsfReading] = useState(false);
+  const [csfReadFields, setCsfReadFields] = useState<string[]>([]);
 
   const form = useForm<TaxProfileSchemaValues>({
     resolver: zodResolver(taxProfileSchema),
@@ -285,6 +289,8 @@ export function ClientTaxProfilesSection({ clientId, clientRfc }: ClientTaxProfi
         : TAX_PROFILE_DEFAULTS
     );
     setCsfFile(null);
+    setCsfReading(false);
+    setCsfReadFields([]);
     // `form` es estable entre renders (useForm); no entra en las dependencias.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dialogOpen, editing]);
@@ -299,12 +305,46 @@ export function ClientTaxProfilesSection({ clientId, clientRfc }: ClientTaxProfi
     setDialogOpen(true);
   };
 
-  const elegirCsf = (file: File | null) => {
-    if (file && file.size > CSF_MAX_BYTES) {
+  const elegirCsf = async (file: File | null) => {
+    setCsfReadFields([]);
+    if (!file) {
+      setCsfFile(null);
+      return;
+    }
+    if (file.size > CSF_MAX_BYTES) {
       toast.error("La constancia no puede pesar más de 10 MB.");
       return;
     }
+
     setCsfFile(file);
+    setCsfReading(true);
+    try {
+      const { pages } = await extractPdfPagesClient(file);
+      const extracted = parseCsfText(pages.join("\n"));
+      const fields: string[] = [];
+      if (extracted.rfc) {
+        form.setValue("rfc", extracted.rfc, { shouldDirty: true, shouldValidate: true });
+        fields.push("RFC");
+      }
+      if (extracted.razon_social) {
+        form.setValue("razon_social", extracted.razon_social, { shouldDirty: true, shouldValidate: true });
+        fields.push("razón social");
+      }
+      if (extracted.cp_fiscal) {
+        form.setValue("cp_fiscal", extracted.cp_fiscal, { shouldDirty: true, shouldValidate: true });
+        fields.push("código postal");
+      }
+      if (extracted.regimen_fiscal) {
+        form.setValue("regimen_fiscal", extracted.regimen_fiscal, { shouldDirty: true, shouldValidate: true });
+        fields.push("régimen fiscal");
+      }
+      setCsfReadFields(fields);
+      if (!fields.length) toast.warning("No se pudieron identificar datos fiscales en este PDF. Puedes capturarlos manualmente.");
+    } catch {
+      toast.error("No se pudo leer la constancia. Puedes completar los datos manualmente y guardar el PDF.");
+    } finally {
+      setCsfReading(false);
+    }
   };
 
   const onSubmit = async (values: TaxProfileSchemaValues) => {
@@ -620,11 +660,19 @@ export function ClientTaxProfilesSection({ clientId, clientRfc }: ClientTaxProfi
                   onChange={(e) => elegirCsf(e.target.files?.[0] ?? null)}
                 />
                 <p className="text-[10px] text-muted-foreground flex items-center gap-1">
-                  <Upload className="h-3 w-3" />
-                  {editing?.csf_file_path && !csfFile
-                    ? "Ya hay una constancia guardada. Sube otra solo si quieres reemplazarla."
-                    : "Se guarda en el almacenamiento privado del módulo y solo se abre con enlaces de 5 minutos."}
+                  {csfReading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                  {csfReading
+                    ? "Leyendo la constancia y extrayendo los datos fiscales…"
+                    : editing?.csf_file_path && !csfFile
+                      ? "Ya hay una constancia guardada. Sube otra solo si quieres reemplazarla."
+                      : "Al seleccionar la CSF se llenan automáticamente los datos identificados."}
                 </p>
+                {csfReadFields.length > 0 && !csfReading && (
+                  <p className="text-[10px] text-emerald-700 dark:text-emerald-300 flex items-start gap-1">
+                    <BadgeCheck className="h-3 w-3 mt-0.5 shrink-0" />
+                    Se completaron {csfReadFields.join(", ")}. Revísalos antes de guardar.
+                  </p>
+                )}
               </div>
 
               <DialogFooter className="gap-2">
@@ -633,12 +681,12 @@ export function ClientTaxProfilesSection({ clientId, clientRfc }: ClientTaxProfi
                   variant="outline"
                   size="sm"
                   onClick={() => setDialogOpen(false)}
-                  disabled={guardando}
+                  disabled={guardando || csfReading}
                 >
                   Cancelar
                 </Button>
-                <Button type="submit" size="sm" disabled={guardando} className="gap-1">
-                  {guardando && <Loader2 className="h-3 w-3 animate-spin" />}
+                <Button type="submit" size="sm" disabled={guardando || csfReading} className="gap-1">
+                  {(guardando || csfReading) && <Loader2 className="h-3 w-3 animate-spin" />}
                   {editing ? "Guardar cambios" : "Guardar"}
                 </Button>
               </DialogFooter>

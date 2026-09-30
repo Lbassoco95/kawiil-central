@@ -151,6 +151,10 @@ export function useCreateClient() {
           projectsToCreate.push({ name: `Legal - ${data.name}`, area: "legal" });
         }
 
+        if (services.includes("nomina")) {
+          projectsToCreate.push({ name: `Nómina - ${data.name}`, area: "nomina" });
+        }
+
         // PLD/FT project
         if (services.includes("pld_ft")) {
           projectsToCreate.push({ name: `Cumplimiento PLD/FT - ${data.name}`, area: "pld_ft" });
@@ -412,6 +416,10 @@ export function useUpdateClient() {
 
         if (addedServices.includes("legal") && !existingAreas.includes("legal")) {
           projectsToCreate.push({ name: `Legal - ${data.name}`, area: "legal" });
+        }
+
+        if (addedServices.includes("nomina") && !existingAreas.includes("nomina")) {
+          projectsToCreate.push({ name: `Nómina - ${data.name}`, area: "nomina" });
         }
 
         if (addedServices.includes("pld_ft") && !existingAreas.includes("pld_ft")) {

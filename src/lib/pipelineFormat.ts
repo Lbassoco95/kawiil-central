@@ -218,7 +218,14 @@ export function avatarBgFromName(name: string | null | undefined): string {
 
 // ─── CTA contextual por etapa (tablero) ──────────────────────────────────────
 
+import { isWonPipelineStageSlug } from "@/lib/pipelineWonStage";
+
+/**
+ * CTA contextual por etapa (tablero / ficha).
+ * En etapa ganada (Cerrado / convertido) apunta al onboarding de contrato (D1 / D13).
+ */
 export function stageCta(slug: string | null | undefined): string {
+  if (isWonPipelineStageSlug(slug)) return "Iniciar onboarding";
   switch (slug) {
     case "registrado":
       return "Saludar por correo";
@@ -234,9 +241,18 @@ export function stageCta(slug: string | null | undefined): string {
       return "Reactivar";
     case "perdido":
       return "Revisar motivo";
-    case "convertido":
-      return "Iniciar onboarding";
     default:
       return "Siguiente acción";
   }
+}
+
+/** Ruta de la CTA de etapa cuando aplica (null = solo copy). */
+export function stageCtaHref(
+  slug: string | null | undefined,
+  leadId: string | null | undefined,
+): string | null {
+  if (!leadId) return null;
+  // Ancla al panel de contrato en la ficha (ahí se inicia Softlanding/Backoffice).
+  if (isWonPipelineStageSlug(slug)) return `/pipeline/leads/${leadId}#contrato`;
+  return null;
 }

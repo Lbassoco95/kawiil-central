@@ -11,6 +11,7 @@ import {
   useAssignLead,
   useMoveLeadStage,
   pipelineQueryKeys,
+  useReferralClients,
 } from "@/hooks/usePipeline";
 import { LeadEmailPanel } from "@/components/pipeline/LeadEmailPanel";
 import { useProfiles } from "@/hooks/useTasks";
@@ -38,15 +39,27 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { ArrowLeft, Sparkles, Plane, Landmark, User, StickyNote, Info, Handshake } from "lucide-react";
+import {
+  ArrowLeft,
+  Sparkles,
+  Plane,
+  Landmark,
+  User,
+  StickyNote,
+  Info,
+  Handshake,
+  UserRoundCheck,
+} from "lucide-react";
 import { KAWIIL_AI_GRADIENT, KAWIIL_AI_HEADER_BG } from "@/lib/kawiilAi";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { LeadActivityPanel } from "@/components/pipeline/LeadActivityPanel";
 import { LeadActivityTimeline } from "@/components/pipeline/LeadActivityTimeline";
 import { LeadFollowUpNotes } from "@/components/pipeline/LeadFollowUpNotes";
 import { LeadSavioPromotionCard } from "@/components/pipeline/LeadSavioPromotionCard";
-import { formatMxnShort } from "@/lib/pipelineFormat";
+import { LeadContractPanel } from "@/components/contracts/LeadContractPanel";
+import { formatMxnShort, stageCta, stageCtaHref } from "@/lib/pipelineFormat";
+import { isWonPipelineStage } from "@/lib/pipelineWonStage";
 import { SERVICE_LABELS } from "@/lib/serviceLabels";
 import { LeadServicesPicker } from "@/components/pipeline/LeadServicesPicker";
 import { LeadValueFields } from "@/components/pipeline/LeadValueFields";
@@ -128,6 +141,7 @@ const schema = z.object({
   contact_role: z.string().optional().nullable(),
   // Atribución a partner / convenio
   partner_id: z.string().optional().nullable(),
+  referred_by_client_id: z.string().optional().nullable(),
   partner_notes: z.string().optional().nullable(),
   // Softlanding fields
   country_origin: z.string().optional().nullable(),
@@ -174,7 +188,7 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>;
 
 /** Columnas que sólo existen tras aplicar la migración de partners. */
-const PARTNER_COLUMNS = ["partner_id", "partner_notes"] as const;
+const PARTNER_COLUMNS = ["partner_id", "referred_by_client_id", "partner_notes"] as const;
 
 /** Columnas que sólo existen tras aplicar la migración de tipo de persona. */
 const PERSON_COLUMNS = ["person_type", "contact_role"] as const;
@@ -208,7 +222,7 @@ const CONSTITUCION_COLUMNS = [
 ] as const;
 
 function isMissingColumnError(message: string): boolean {
-  return /service_type|service_types|constitucion_|partner_id|partner_notes|person_type|contact_role|estimated_value_|estimated_months|schema cache|column .* does not exist/i.test(
+  return /service_type|service_types|constitucion_|partner_id|referred_by_client_id|partner_notes|person_type|contact_role|estimated_value_|estimated_months|schema cache|column .* does not exist/i.test(
     message,
   );
 }
@@ -479,6 +493,7 @@ export default function LeadDetailPage() {
   const updateLead = useUpdateLead();
   const assignLead = useAssignLead();
   const moveStage = useMoveLeadStage();
+  const [originType, setOriginType] = useState<"own" | "partner" | "client">("own");
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -495,12 +510,25 @@ export default function LeadDetailPage() {
 
   useEffect(() => {
     if (!lead) return;
+    // Scroll al panel de contrato cuando la CTA usa #contrato
+    if (typeof window !== "undefined" && window.location.hash === "#contrato") {
+      requestAnimationFrame(() => {
+        document.getElementById("contrato")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
+  }, [lead?.id]);
+
+  useEffect(() => {
+    if (!lead) return;
     const leadAny = lead as Record<string, unknown>;
     const numOrNull = (v: unknown) => {
       if (v === null || v === undefined || v === "") return null;
       const n = Number(v);
       return Number.isFinite(n) ? n : null;
     };
+    setOriginType(
+      leadAny.partner_id ? "partner" : leadAny.referred_by_client_id ? "client" : "own",
+    );
     form.reset({
       full_name: lead.full_name,
       email: lead.email,
@@ -518,6 +546,7 @@ export default function LeadDetailPage() {
       person_type: (leadAny.person_type as string) || null,
       contact_role: (leadAny.contact_role as string) || null,
       partner_id: (leadAny.partner_id as string) || null,
+      referred_by_client_id: (leadAny.referred_by_client_id as string) || null,
       partner_notes: (leadAny.partner_notes as string) || null,
       country_origin: (leadAny.country_origin as string) || null,
       entity_type: (leadAny.entity_type as string) || null,
@@ -551,8 +580,10 @@ export default function LeadDetailPage() {
   }, [lead, form]);
 
   const { data: partners = [] } = usePipelinePartners();
+  const { data: referralClients = [] } = useReferralClients();
   const serviceTypes = normalizeServices(form.watch("service_types"));
   const partnerId = form.watch("partner_id");
+  const referringClientId = form.watch("referred_by_client_id");
   const personType = form.watch("person_type");
   const isMoral = personType === "moral";
   const selectedPartner = useMemo(
@@ -597,6 +628,14 @@ export default function LeadDetailPage() {
 
   const onSave = form.handleSubmit(async (vals) => {
     if (!id) return;
+    if (originType === "partner" && !vals.partner_id) {
+      toast.error("Selecciona el partner o convenio que refirió al prospecto");
+      return;
+    }
+    if (originType === "client" && !vals.referred_by_client_id) {
+      toast.error("Selecciona el cliente que hizo la recomendación");
+      return;
+    }
     const base = {
       id,
       full_name: vals.full_name,
@@ -623,6 +662,7 @@ export default function LeadDetailPage() {
       person_type: vals.person_type || null,
       contact_role: vals.contact_role || null,
       partner_id: vals.partner_id || null,
+      referred_by_client_id: vals.referred_by_client_id || null,
       partner_notes: vals.partner_notes || null,
       estimated_value_one_time: vals.estimated_value_one_time ?? null,
       estimated_value_monthly: vals.estimated_value_monthly ?? null,
@@ -730,10 +770,17 @@ export default function LeadDetailPage() {
     }
   };
 
-  const currentStageSlug = useMemo(() => {
+  const currentStage = useMemo(() => {
     if (!lead) return undefined;
-    return stages.find((s) => s.id === lead.stage_id)?.slug;
+    return stages.find((s) => s.id === lead.stage_id);
   }, [stages, lead]);
+
+  const currentStageSlug = currentStage?.slug;
+  const isWonStage = isWonPipelineStage({
+    slug: currentStage?.slug,
+    name: currentStage?.name,
+    is_terminal: currentStage?.is_terminal,
+  });
 
   const ownerName = useMemo(() => {
     if (!lead?.owner_id) return null;
@@ -810,6 +857,22 @@ export default function LeadDetailPage() {
               {formatMxnShort(estimatedCloseMxn)} MXN estim.
             </Badge>
           ) : null}
+          {isWonStage ? (
+            <Button
+              size="sm"
+              asChild
+              className="h-8 bg-white text-slate-900 hover:bg-white/90"
+            >
+              <Link
+                to={
+                  stageCtaHref(currentStageSlug, lead.id) ||
+                  `/pipeline/leads/${lead.id}#contrato`
+                }
+              >
+                {stageCta(currentStageSlug)}
+              </Link>
+            </Button>
+          ) : null}
         </div>
       </header>
 
@@ -835,6 +898,15 @@ export default function LeadDetailPage() {
           </p>
         </div>
       </div>
+
+      {/* Contrato primero: no depende de Savio/RFC (D13 / D14). */}
+      <LeadContractPanel
+        leadId={lead.id}
+        stageSlug={currentStageSlug}
+        stageName={currentStage?.name}
+        stageIsTerminal={currentStage?.is_terminal}
+        serviceTypes={serviceTypes}
+      />
 
       <LeadSavioPromotionCard
         leadId={lead.id}
@@ -956,34 +1028,75 @@ export default function LeadDetailPage() {
                       </div>
                     </div>
 
-                    {/* Atribución: ¿llegó por un partner o convenio? */}
                     <div className="space-y-2 rounded-lg border border-border/60 bg-muted/20 p-2.5">
-                      <Label className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        <Handshake className="h-3.5 w-3.5" />
-                        Viene de (partner / convenio)
+                      <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        ¿Cómo llegó este prospecto?
                       </Label>
                       <Select
-                        value={partnerId || "__none__"}
-                        onValueChange={(v) =>
-                          form.setValue("partner_id", v === "__none__" ? null : v, {
-                            shouldDirty: true,
-                          })
-                        }
+                        value={originType}
+                        onValueChange={(v: "own" | "partner" | "client") => {
+                          setOriginType(v);
+                          form.setValue("partner_id", null, { shouldDirty: true });
+                          form.setValue("referred_by_client_id", null, { shouldDirty: true });
+                          if (v !== "partner") form.setValue("partner_notes", null, { shouldDirty: true });
+                        }}
                       >
                         <SelectTrigger className="bg-background">
-                          <SelectValue placeholder="Canal propio (sin partner)" />
+                          <SelectValue />
                         </SelectTrigger>
-                        <SelectContent className="max-h-72">
-                          <SelectItem value="__none__">Canal propio (sin partner)</SelectItem>
-                          {partners.map((p) => (
-                            <SelectItem key={p.id} value={p.id}>
-                              {p.name}
-                              {p.status !== "activo" ? ` (${p.status})` : ""}
-                            </SelectItem>
-                          ))}
+                        <SelectContent>
+                          <SelectItem value="own">Canal propio</SelectItem>
+                          <SelectItem value="partner">Partner / convenio</SelectItem>
+                          <SelectItem value="client">Recomendación de cliente</SelectItem>
                         </SelectContent>
                       </Select>
-                      {selectedPartner ? (
+                      {originType === "partner" ? (
+                        <div>
+                          <Label className="flex items-center gap-1.5 text-xs">
+                            <Handshake className="h-3.5 w-3.5" />
+                            Partner / convenio
+                          </Label>
+                          <Select
+                            value={partnerId || undefined}
+                            onValueChange={(v) => form.setValue("partner_id", v, { shouldDirty: true })}
+                          >
+                            <SelectTrigger className="bg-background">
+                              <SelectValue placeholder="Selecciona quién lo refirió" />
+                            </SelectTrigger>
+                            <SelectContent className="max-h-72">
+                              {partners.map((p) => (
+                                <SelectItem key={p.id} value={p.id}>
+                                  {p.name}{p.status !== "activo" ? ` (${p.status})` : ""}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      ) : null}
+                      {originType === "client" ? (
+                        <div>
+                          <Label className="flex items-center gap-1.5 text-xs">
+                            <UserRoundCheck className="h-3.5 w-3.5" />
+                            Cliente que recomendó
+                          </Label>
+                          <Select
+                            value={referringClientId || undefined}
+                            onValueChange={(v) =>
+                              form.setValue("referred_by_client_id", v, { shouldDirty: true })
+                            }
+                          >
+                            <SelectTrigger className="bg-background">
+                              <SelectValue placeholder="Selecciona un cliente" />
+                            </SelectTrigger>
+                            <SelectContent className="max-h-72">
+                              {referralClients.map((client) => (
+                                <SelectItem key={client.id} value={client.id}>{client.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      ) : null}
+                      {originType === "partner" && selectedPartner ? (
                         <>
                           <div className="flex flex-wrap items-center gap-1.5">
                             <Badge className="bg-primary/10 text-primary hover:bg-primary/15">
@@ -1013,12 +1126,12 @@ export default function LeadDetailPage() {
                             “Cerrado”; se administra en la pestaña <strong>Partners</strong>.
                           </p>
                         </>
-                      ) : (
+                      ) : originType === "partner" ? (
                         <p className="text-[11px] text-muted-foreground">
                           Si no aparece el partner, regístralo primero en la pestaña{" "}
                           <strong>Partners</strong> del módulo.
                         </p>
-                      )}
+                      ) : null}
                     </div>
                     <div>
                       <Label>Valor estimado al cierre</Label>

@@ -29,7 +29,7 @@ export type LeadSavioPromotionCardProps = {
   companyName: string | null;
   email: string | null;
   phone: string | null;
-  /** Slug de la etapa actual (`convertido` = trato ganado). */
+  /** Slug de la etapa actual (Cerrado / convertido = trato ganado). */
   stageSlug: string | undefined;
   billingLegalName: string | null;
   billingRfc: string | null;
@@ -228,7 +228,7 @@ export function LeadSavioPromotionCard({
         <p className="min-w-0">
           <strong className="font-medium text-foreground">Facturación y Savio</strong> se habilita cuando muevas el lead a{" "}
           <strong className="font-medium text-foreground">Cerrado</strong> (trato ganado). Ahí pediremos razón social, RFC y
-          monto; durante el seguimiento no hacen falta.
+          monto solo para Savio; el contrato Softlanding/Backoffice se inicia aparte y no exige RFC al abrir.
         </p>
       </div>
     );
@@ -284,8 +284,9 @@ export function LeadSavioPromotionCard({
           ) : null}
         </div>
         <p className="text-xs text-muted-foreground font-normal">
-          El trato está en <strong className="text-foreground font-medium">cerrado ganado</strong>. Revisa datos y RFC
-          (requeridos para SAT) y crea cliente y cargo en Savio cuando estés listo.
+          El trato está en <strong className="text-foreground font-medium">cerrado ganado</strong>.
+          Datos fiscales y RFC aquí son solo para <strong className="text-foreground font-medium">Savio / facturación</strong>
+          — no bloquean el onboarding de contrato (Softlanding puede iniciar sin RFC).
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -299,7 +300,7 @@ export function LeadSavioPromotionCard({
           <Input value={legalName} onChange={(e) => setLegalName(e.target.value)} placeholder="Empresa o nombre fiscal" />
         </div>
         <div>
-          <Label>RFC (obligatorio para SAT)</Label>
+          <Label>RFC (requerido solo para Savio / SAT)</Label>
           <Input value={rfc} onChange={(e) => setRfc(e.target.value)} placeholder="Ej. XAXX010101000" />
         </div>
         <div>

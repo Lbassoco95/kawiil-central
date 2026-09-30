@@ -20,6 +20,7 @@ import {
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { MoffinIntegrationCard } from "@/components/admin/MoffinIntegrationCard";
+import { IntegrationHealthCard } from "@/components/admin/IntegrationHealthCard";
 import { AdminKawiilCard } from "@/components/admin/AdminKawiilCard";
 import { KAWIIL_AI_GRADIENT, KAWIIL_AI_HEADER_BG } from "@/lib/kawiilAi";
 import { AppearanceAccessibilityPanel } from "@/components/preferences/AppearanceAccessibilityPanel";
@@ -152,6 +153,7 @@ const Configuracion = () => {
                   <MoffinIntegrationCard />
                 </div>
               </section>
+              <IntegrationHealthCard />
             </div>
           )}
           {tab === "apariencia" && <AppearanceAccessibilityPanel />}

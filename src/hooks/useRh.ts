@@ -49,6 +49,13 @@ const todayKey = () => {
   return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
 };
 
+/** Errores de Slack que indican que el token del usuario ya no sirve. */
+const SLACK_STATUS_FATAL_RE =
+  /token_revoked|invalid_auth|not_authed|account_inactive|not_allowed_token|slack_not_connected/i;
+
+/** Aviso una sola vez por carga de página para no repetir el toast. */
+let slackAuthWarned = false;
+
 /**
  * Refleja la modalidad de trabajo como estado de Slack del propio usuario.
  * Best-effort: si Slack no está conectado o falla, no interrumpe el check-in.
@@ -59,13 +66,10 @@ async function syncSlackStatus(status: SlackStatus | null): Promise<void> {
       await invokeSlackApi({ action: "users.profile.set", clear_status: true });
       return;
     }
-    // Comida/descanso/trayecto NO expiran solos: el usuario los termina
-    // manualmente (p. ej. comida con cliente sigue ocupado). El resto expira
-    // al final del día para no dejar el estado pegado.
-    const noExpire =
-      status === PAUSE_SLACK_STATUS.lunch ||
-      status === PAUSE_SLACK_STATUS.break ||
-      status === TRANSIT_SLACK_STATUS;
+    // Todos los estados expiran al fin del día: durante la jornada el usuario
+    // (y el cron de sync) los mantiene al día, y si alguno queda pegado (p. ej.
+    // olvidó terminar la comida o el cierre forzado de medianoche) se limpia
+    // solo en vez de quedar "Comiendo" para siempre.
     const endOfDay = new Date();
     endOfDay.setHours(23, 59, 0, 0);
     await invokeSlackApi({
@@ -73,11 +77,19 @@ async function syncSlackStatus(status: SlackStatus | null): Promise<void> {
       profile: {
         status_text: status.text,
         status_emoji: status.emoji,
-        status_expiration: noExpire ? 0 : Math.floor(endOfDay.getTime() / 1000),
+        status_expiration: Math.floor(endOfDay.getTime() / 1000),
       },
     });
-  } catch {
+  } catch (e) {
     // Silencioso: el estado de Slack es complementario al registro de RH.
+    // Pero si el token murió conviene avisar una vez para que reconecte.
+    if (!slackAuthWarned && e instanceof Error && SLACK_STATUS_FATAL_RE.test(e.message)) {
+      slackAuthWarned = true;
+      toast.warning(
+        "Tu conexión de Slack caducó: tu estado ya no se actualizará. Reconéctalo desde Comunicación.",
+        { duration: 15_000 },
+      );
+    }
   }
 }
 
@@ -257,6 +269,7 @@ export function useJornada() {
       }
 
       let attendanceId = session?.id ?? null;
+      let createdNow = false;
 
       if (action.type === "check_in") {
         const expected = plannedModeForToday(schedule);
@@ -269,39 +282,56 @@ export function useJornada() {
           .eq("user_id", user!.id)
           .eq("work_date", todayKey())
           .is("check_out_at", null)
+          .order("check_in_at", { ascending: false })
           .limit(1)
           .maybeSingle();
         if (openErr) throw openErr;
         if (openToday) {
-          throw new Error("Ya tienes una jornada abierta hoy. Ciérrala antes de iniciar otra.");
+          // Jornada abierta previa: si ya tiene su evento de entrada es un
+          // duplicado real. Si quedó huérfana (la app falló a mitad del
+          // registro), la adoptamos y el evento se inserta abajo: repara el
+          // estado en lugar de bloquear al usuario con "ya tienes jornada".
+          const { data: ciEvent } = await db
+            .from("rh_attendance_events")
+            .select("id")
+            .eq("attendance_id", openToday.id)
+            .eq("event_type", "check_in")
+            .limit(1)
+            .maybeSingle();
+          if (ciEvent) {
+            throw new Error("Ya tienes una jornada abierta hoy. Ciérrala antes de iniciar otra.");
+          }
+          attendanceId = openToday.id as string;
+        } else {
+          // ¿Ya hubo una jornada hoy? Entonces este es un turno adicional (sin comida).
+          const { count } = await db
+            .from("rh_attendance")
+            .select("id", { count: "exact", head: true })
+            .eq("user_id", user!.id)
+            .eq("work_date", todayKey());
+          const isAdditional = (count ?? 0) > 0;
+          const { data, error } = await db
+            .from("rh_attendance")
+            .insert({
+              user_id: user!.id,
+              organization_id: orgId,
+              work_date: todayKey(),
+              check_in_at: new Date().toISOString(),
+              work_mode: action.workMode,
+              expected_work_mode: expected,
+              check_in_lat: geo.fix?.lat ?? null,
+              check_in_lng: geo.fix?.lng ?? null,
+              check_in_accuracy_m: geo.fix?.accuracy ?? null,
+              within_geofence: geo.withinGeofence,
+              office_location_id: geo.officeLocationId,
+              is_additional_shift: isAdditional,
+            })
+            .select("id")
+            .single();
+          if (error) throw error;
+          attendanceId = data.id as string;
+          createdNow = true;
         }
-        // ¿Ya hubo una jornada hoy? Entonces este es un turno adicional (sin comida).
-        const { count } = await db
-          .from("rh_attendance")
-          .select("id", { count: "exact", head: true })
-          .eq("user_id", user!.id)
-          .eq("work_date", todayKey());
-        const isAdditional = (count ?? 0) > 0;
-        const { data, error } = await db
-          .from("rh_attendance")
-          .insert({
-            user_id: user!.id,
-            organization_id: orgId,
-            work_date: todayKey(),
-            check_in_at: new Date().toISOString(),
-            work_mode: action.workMode,
-            expected_work_mode: expected,
-            check_in_lat: geo.fix?.lat ?? null,
-            check_in_lng: geo.fix?.lng ?? null,
-            check_in_accuracy_m: geo.fix?.accuracy ?? null,
-            within_geofence: geo.withinGeofence,
-            office_location_id: geo.officeLocationId,
-            is_additional_shift: isAdditional,
-          })
-          .select("id")
-          .single();
-        if (error) throw error;
-        attendanceId = data.id as string;
       }
 
       if (!attendanceId) throw new Error("No hay una jornada activa.");
@@ -318,7 +348,18 @@ export function useJornada() {
         within_geofence: geo.withinGeofence,
         office_location_id: geo.officeLocationId,
       });
-      if (evErr) throw evErr;
+      if (evErr) {
+        // Si la jornada se creó en esta misma acción, retirarla para no dejar
+        // una sesión "fantasma" sin eventos que bloquee el próximo check-in.
+        if (createdNow) {
+          await db
+            .from("rh_attendance")
+            .delete()
+            .eq("id", attendanceId)
+            .eq("user_id", user!.id);
+        }
+        throw evErr;
+      }
 
       if (action.type === "check_out") {
         await db

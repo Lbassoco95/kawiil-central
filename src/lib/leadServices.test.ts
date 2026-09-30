@@ -97,15 +97,20 @@ describe("primaryService", () => {
 
 describe("formatServices", () => {
   it("usa las etiquetas legibles", () => {
-    expect(formatServices(["legal", "contabilidad"])).toBe("Contabilidad, Legal");
+    expect(formatServices(["legal", "nomina", "contabilidad"])).toBe("Contabilidad, Nómina, Legal");
   });
 });
 
 describe("modelo de cobro", () => {
   it("separa pago único de mensualidad", () => {
-    const { oneTime, monthly } = splitByBilling(["softlanding", "legal", "contabilidad"]);
+    const { oneTime, monthly } = splitByBilling(["softlanding", "legal", "nomina", "contabilidad"]);
     expect(oneTime).toEqual(["softlanding"]);
-    expect(monthly).toEqual(["contabilidad", "legal"]);
+    expect(monthly).toEqual(["contabilidad", "nomina", "legal"]);
+  });
+
+  it("Nómina es mensual y no se agrega automáticamente con Backoffice", () => {
+    expect(splitByBilling(["nomina"]).monthly).toEqual(["nomina"]);
+    expect(toggleBundle([], backoffice)).toEqual(["contabilidad", "legal"]);
   });
 
   it("un Soft Landing sugiere el backoffice mensual", () => {

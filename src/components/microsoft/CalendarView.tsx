@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback, type MouseEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -447,6 +447,21 @@ export function CalendarView({
     if (showCreate) setNewEvent((p) => ({ ...p, date: format(selectedDate, "yyyy-MM-dd") }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showCreate, selectedDate]);
+
+  const openCreateAtTime = (day: Date, event: MouseEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const offsetMinutes = ((event.clientY - rect.top) / SLOT_HEIGHT) * SLOT_MINUTES;
+    const startMinutes = Math.min(END_HOUR * 60 - SLOT_MINUTES, Math.max(START_HOUR * 60, Math.round(offsetMinutes / 15) * 15 + START_HOUR * 60));
+    const endMinutes = Math.min(END_HOUR * 60, startMinutes + 60);
+    setSelectedDate(day);
+    setNewEvent((current) => ({
+      ...current,
+      date: format(day, "yyyy-MM-dd"),
+      startTime: minutesToLabel(startMinutes),
+      endTime: minutesToLabel(endMinutes),
+    }));
+    setShowCreate(true);
+  };
 
   // Eventos de cuentas añadidas (Google/Outlook adicional) son de solo lectura en este panel.
   const isGoogleEvent = !!selectedEventId && (selectedEventId.startsWith("google:") || selectedEventId.startsWith("outlook:"));
@@ -1500,7 +1515,7 @@ export function CalendarView({
                             "relative border-r border-border last:border-r-0 cursor-pointer hover:bg-muted/10",
                             dayIsToday && "bg-primary/[0.03]"
                           )}
-                            onClick={() => { setSelectedDate(day); setShowCreate(true); }}>
+                            onClick={(event) => openCreateAtTime(day, event)}>
                             {dayIsToday && pastHeight > 0 && (
                               <div
                                 aria-hidden
@@ -2593,8 +2608,8 @@ export function CalendarView({
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreate(false)}>Cancelar</Button>
-            <Button onClick={handleCreateEvent} disabled={createEvent.isPending || !newEvent.subject}>
-              {createEvent.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button onClick={handleCreateEvent} disabled={createEvent.isPending || createLinkedEvent.isPending || !newEvent.subject}>
+              {(createEvent.isPending || createLinkedEvent.isPending) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Crear evento
             </Button>
           </DialogFooter>

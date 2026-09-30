@@ -761,15 +761,37 @@ export function useLinkedOutlookMailFolders(accountId: string | null) {
   return useQuery({
     queryKey: ["linked-outlook-mail-folders", accountId],
     queryFn: async () => {
-      if (!accountId) return { folders: [] as Record<string, unknown>[] };
+      if (!accountId) return { folders: [] as Record<string, unknown>[], error: null };
       const { data, error } = await supabase.functions.invoke("outlook-account-api", {
         body: { action: "mail-folders", params: { accountId } },
       });
-      if (error || data?.error) return { folders: [] as Record<string, unknown>[] };
-      return { folders: (data?.folders ?? []) as Record<string, unknown>[], accountId };
+      if (error || data?.error) {
+        return {
+          folders: [] as Record<string, unknown>[],
+          error: data?.error || String(error),
+        };
+      }
+      const folders = (data?.folders ?? []) as Record<string, unknown>[];
+      return {
+        folders: folders.map((f) => {
+          const rawParent = f.parentFolderId ? String(f.parentFolderId) : undefined;
+          return {
+            ...f,
+            id: String(f.id),
+            displayName: String(f.displayName || ""),
+            parentFolderId: rawParent ? `outlook:${accountId}:${rawParent}` : undefined,
+            childFolderCount: typeof f.childFolderCount === "number" ? f.childFolderCount : 0,
+            wellKnownFolderName: f.wellKnownFolderName || undefined,
+            unreadItemCount: typeof f.unreadItemCount === "number" ? f.unreadItemCount : undefined,
+            totalItemCount: typeof f.totalItemCount === "number" ? f.totalItemCount : undefined,
+          };
+        }),
+        accountId,
+        error: null,
+      };
     },
     enabled: !!accountId,
-    staleTime: 5 * 60_000,
+    staleTime: 0,
   });
 }
 

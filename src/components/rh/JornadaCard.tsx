@@ -28,7 +28,9 @@ import {
   plannedModeForToday,
   type RhWorkMode,
 } from "@/lib/rh";
+import { Link } from "react-router-dom";
 import { useJornada, useTransitStatus } from "@/hooks/useRh";
+import { useSlackConnection } from "@/hooks/useSlackConnection";
 
 /** Re-render periódico para que los contadores avancen. */
 function useTicker(active: boolean) {
@@ -43,6 +45,7 @@ function useTicker(active: boolean) {
 export function JornadaCard() {
   const { session, schedule, summary, isPending, act } = useJornada();
   const transit = useTransitStatus();
+  const { statusBroken } = useSlackConnection();
   const inTransit = !!session?.in_transit;
   const plannedMode = plannedModeForToday(schedule);
   const [selectedMode, setSelectedMode] = useState<RhWorkMode>(plannedMode ?? "office");
@@ -75,6 +78,19 @@ export function JornadaCard() {
       </CardHeader>
 
       <CardContent className="space-y-4">
+        {/* Slack revocó el token: el estado/emoji ya no se actualiza */}
+        {statusBroken && (
+          <p className="flex items-start gap-1.5 rounded-md bg-amber-50 px-2 py-1.5 text-xs text-amber-700 dark:bg-amber-900/20 dark:text-amber-400">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>
+              Tu conexión de Slack caducó y tu estado (emoji) ya no se actualiza.{" "}
+              <Link to="/comunicacion" className="font-medium underline">
+                Reconéctalo en Comunicación
+              </Link>
+              .
+            </span>
+          </p>
+        )}
         {/* Resumen del turno */}
         {schedule ? (
           <div className="rounded-lg border bg-muted/40 p-3 text-sm">

@@ -70,6 +70,50 @@ const PREFER_TZ = { Prefer: 'outlook.timezone="America/Mexico_City"' };
 // Sin `sensitivity`: Graph la rechaza de forma intermitente en listados (RequestBroker--ParseUri).
 const MAIL_SELECT = "$select=id,subject,bodyPreview,from,toRecipients,receivedDateTime,sentDateTime,createdDateTime,isRead,hasAttachments,importance,conversationId";
 
+const MAIL_FOLDER_LIST_SELECT =
+  "id,displayName,parentFolderId,wellKnownFolderName,unreadItemCount,totalItemCount,childFolderCount";
+
+function nextLinkToPath(nextLink: string): string {
+  const m = nextLink.match(/graph\.microsoft\.com\/v1\.0(\/.+)/i);
+  return m?.[1] ?? "";
+}
+
+async function graphPagedList<T = Record<string, unknown>>(
+  token: string,
+  path: string,
+): Promise<T[]> {
+  const all: T[] = [];
+  let current: string | null = path;
+  for (let page = 0; page < 10 && current; page++) {
+    const res = await graphFetch(token, current);
+    if (!res.ok) break;
+    const json = await res.json();
+    if (Array.isArray(json.value)) for (const v of json.value) all.push(v as T);
+    const nl = json["@odata.nextLink"];
+    current = typeof nl === "string" && nl ? nextLinkToPath(nl) : null;
+  }
+  return all;
+}
+
+async function listMailFoldersRoot(token: string): Promise<Record<string, unknown>[]> {
+  const withHidden = `/me/mailFolders?$select=${MAIL_FOLDER_LIST_SELECT}&$top=1000&includeHiddenFolders=true`;
+  const plain = `/me/mailFolders?$select=${MAIL_FOLDER_LIST_SELECT}&$top=1000`;
+  let folders = await graphPagedList(token, withHidden);
+  if (folders.length === 0) folders = await graphPagedList(token, plain);
+  return folders;
+}
+
+async function listMailFoldersChildren(
+  token: string,
+  parentId: string,
+): Promise<Record<string, unknown>[]> {
+  const withHidden = `/me/mailFolders/${encodeURIComponent(parentId)}/childFolders?$select=${MAIL_FOLDER_LIST_SELECT}&$top=1000&includeHiddenFolders=true`;
+  const plain = `/me/mailFolders/${encodeURIComponent(parentId)}/childFolders?$select=${MAIL_FOLDER_LIST_SELECT}&$top=1000`;
+  let folders = await graphPagedList(token, withHidden);
+  if (folders.length === 0) folders = await graphPagedList(token, plain);
+  return folders;
+}
+
 function jsonResp(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
@@ -386,7 +430,7 @@ Deno.serve(async (req) => {
         const searchPath = (expr: string) =>
           `/me/messages?${listSelect}&$top=${top}&$search=${encodeURIComponent(`"${expr}"`)}`;
         const folderPath = `/me/mailFolders/${encodeURIComponent(folder)}/messages?${listSelect}&$top=${top}&$orderby=receivedDateTime desc&$count=true${filterParam}`;
-        let res = await graphFetch(token, rawSearch ? searchPath(searchTerms.join(" ")) : folderPath);
+        const res = await graphFetch(token, rawSearch ? searchPath(searchTerms.join(" ")) : folderPath);
         if (!res.ok) {
           // Con cuenta específica NUNCA tragarse el fallo: sin esto la UI muestra
           // "No hay mensajes" en lugar del motivo real.
@@ -491,17 +535,75 @@ Deno.serve(async (req) => {
 
     if (action === "mail-folders") {
       const acc = getAccount(params?.accountId);
-      if (!acc) return jsonResp({ value: [] });
+      if (!acc) {
+        console.log("[outlook-account-api] mail-folders: no_account");
+        return jsonResp({ folders: [], error: "no_account" });
+      }
       const token = await ensureAccessToken(supabaseAdmin, acc);
-      if (!token) return jsonResp({ value: [] });
-      const res = await graphFetch(token,
-        "/me/mailFolders?$select=id,displayName,wellKnownFolderName,unreadItemCount,totalItemCount&$top=100"
+      if (!token) {
+        console.log(`[outlook-account-api] mail-folders: no_token account=${acc.email || acc.id}`);
+        return jsonResp({ folders: [], error: "no_valid_token" });
+      }
+
+      const rootFolders = await listMailFoldersRoot(token);
+      console.log(`[outlook-account-api] mail-folders: account=${acc.email || acc.id} root=${rootFolders.length}`);
+
+      // Recursively fetch children for inbox and for any non-system root folder that declares children.
+      const SYSTEM_WELL_KNOWN = new Set([
+        "deleteditems", "sentitems", "junkemail", "outbox", "drafts",
+        "archive", "msgfolderroot", "recoverableitemsdeletions",
+        "conversationhistory", "scheduled",
+      ]);
+
+      const parentIds = new Set<string>();
+      const inboxFolder = rootFolders.find(
+        (f) => String(f.wellKnownFolderName || "").toLowerCase() === "inbox",
       );
-      if (!res.ok) return jsonResp({ value: [] });
-      const json = await res.json();
-      const folders = (json.value ?? []).map((f: any) => ({
+      if (inboxFolder?.id && typeof inboxFolder.id === "string") {
+        parentIds.add(inboxFolder.id);
+      }
+
+      for (const f of rootFolders) {
+        const id = typeof f.id === "string" ? f.id : null;
+        if (!id) continue;
+        const wk = String(f.wellKnownFolderName || "").toLowerCase();
+        if (wk && SYSTEM_WELL_KNOWN.has(wk)) continue;
+        const cc = typeof f.childFolderCount === "number" ? f.childFolderCount : -1;
+        if (cc !== 0) parentIds.add(id);
+      }
+
+      const allChildren: Record<string, unknown>[] = [];
+      let parentFetchCount = 0;
+      for (const parentId of parentIds) {
+        if (parentFetchCount >= 20) break;
+        parentFetchCount++;
+        const children = await listMailFoldersChildren(token, parentId);
+        allChildren.push(...children);
+      }
+
+      const folders = [...rootFolders, ...allChildren].map((f) => ({
         ...f,
-        id: `outlook:${acc.id}:${f.id}`,
+        id: `outlook:${acc.id}:${String(f.id)}`,
+        _accountId: acc.id,
+        _rawId: f.id,
+      }));
+      console.log(`[outlook-account-api] mail-folders: total=${folders.length} account=${acc.email || acc.id}`);
+      return jsonResp({ folders, _accountId: acc.id });
+    }
+
+    if (action === "child-folders") {
+      const acc = getAccount(params?.accountId);
+      if (!acc) return jsonResp({ folders: [] });
+      const token = await ensureAccessToken(supabaseAdmin, acc);
+      if (!token) return jsonResp({ folders: [] });
+      const parentId = params?.parentId;
+      if (!parentId || typeof parentId !== "string") {
+        return jsonResp({ error: "parentId is required" }, 400);
+      }
+      const children = await listMailFoldersChildren(token, parentId);
+      const folders = children.map((f) => ({
+        ...f,
+        id: `outlook:${acc.id}:${String(f.id)}`,
         _accountId: acc.id,
         _rawId: f.id,
       }));
