@@ -1,12 +1,44 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { requireMicrosoftClientSecretCandidates } from "../_shared/microsoftClientSecrets.ts";
+import { classifyMicrosoftOAuthError } from "../_shared/microsoftOAuthErrors.ts";
+import {
+  buildAppReturnUrl,
+  parseMicrosoftOAuthState,
+  sanitizeReturnPath,
+} from "../_shared/microsoftOAuthState.ts";
 
-const postMessageOrigin = '*';
+const postMessageOrigin = "*";
 
-function renderPage(status: 'success' | 'error', message: string, detail?: string) {
-  const isSuccess = status === 'success';
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function renderPage(
+  status: "success" | "error",
+  message: string,
+  detail?: string,
+  opts?: { returnUrl?: string; autoClose?: boolean },
+) {
+  const isSuccess = status === "success";
   const icon = isSuccess
     ? `<svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`
     : `<svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`;
+
+  const returnUrl = opts?.returnUrl;
+  const autoClose = opts?.autoClose !== false && !returnUrl;
+  const safeReturn = returnUrl ? escapeHtml(returnUrl) : "";
+  const returnBlock = returnUrl
+    ? `<p style="margin-top:20px"><a href="${safeReturn}" style="display:inline-block;padding:10px 18px;border-radius:8px;background:#3b82f6;color:#fff;text-decoration:none;font-size:14px;font-weight:600">Volver a Kawiil Central</a></p>
+       <p class="hint">Si el botón no funciona, cierra esta pestaña y abre de nuevo kawiil-central.mx</p>
+       <script>setTimeout(function(){ window.location.replace(${JSON.stringify(returnUrl)}); }, 1200);</script>`
+    : autoClose
+      ? `<p class="hint">Esta ventana se cerrará automáticamente...</p>
+         <script>setTimeout(function(){ window.close(); }, 3000);</script>`
+      : `<p class="hint">Puedes cerrar esta ventana y volver a Kawiil Central.</p>`;
 
   return `<!DOCTYPE html>
 <html lang="es">
@@ -61,126 +93,207 @@ function renderPage(status: 'success' | 'error', message: string, detail?: strin
 <body>
   <div class="card">
     <div class="icon">${icon}</div>
-    <h1>${message}</h1>
-    ${detail ? `<p class="detail">${detail}</p>` : ''}
-    <p class="hint">Esta ventana se cerrará automáticamente...</p>
+    <h1>${escapeHtml(message)}</h1>
+    ${detail ? `<p class="detail">${escapeHtml(detail)}</p>` : ""}
+    ${returnBlock}
     <p class="brand">Kawiil Central</p>
   </div>
-  <script>
-    setTimeout(function() { window.close(); }, 3000);
-  </script>
 </body>
 </html>`;
+}
+
+function finishHtml(
+  kind: "success" | "error",
+  title: string,
+  detail: string | undefined,
+  state: ReturnType<typeof parseMicrosoftOAuthState>,
+  postMessageType: "microsoft-auth-success" | "microsoft-auth-error",
+  postMessageError?: string,
+) {
+  const mode = state?.m || "popup";
+  const returnPath = sanitizeReturnPath(state?.r);
+  const returnUrl =
+    mode === "redirect"
+      ? buildAppReturnUrl(
+        returnPath,
+        {
+          ms: kind === "success" ? "connected" : "error",
+          ...(postMessageError ? { ms_err: postMessageError.slice(0, 80) } : {}),
+        },
+        state?.o,
+      )
+      : undefined;
+
+  const postMsg =
+    postMessageType === "microsoft-auth-success"
+      ? `window.opener?.postMessage({type:'microsoft-auth-success'},'${postMessageOrigin}');`
+      : `window.opener?.postMessage({type:'microsoft-auth-error',error:${JSON.stringify(postMessageError || "error")}},'${postMessageOrigin}');`;
+
+  const page = renderPage(kind, title, detail, { returnUrl, autoClose: mode === "popup" });
+  // Inyectar postMessage justo antes de </body> (evitar HTML anidado / mojibake).
+  const html = page.replace("</body>", `<script>${postMsg}</script></body>`);
+
+  return new Response(html, {
+    headers: { "Content-Type": "text/html; charset=utf-8" },
+  });
 }
 
 Deno.serve(async (req) => {
   try {
     const url = new URL(req.url);
     const code = url.searchParams.get("code");
-    const userId = url.searchParams.get("state");
+    const rawState = url.searchParams.get("state");
     const error = url.searchParams.get("error");
+    const state = parseMicrosoftOAuthState(rawState);
+    const userId = state?.u;
 
-    console.log("Callback received:", { hasCode: !!code, hasState: !!userId, error });
+    console.log("Callback received:", {
+      hasCode: !!code,
+      hasState: !!userId,
+      mode: state?.m,
+      error,
+    });
 
     if (error) {
-      return new Response(
-        `<html><head></head><body>
-          <script>window.opener?.postMessage({type:'microsoft-auth-error',error:'${error}'},'${postMessageOrigin}');</script>
-          ${renderPage('error', 'Error de conexión', error)}
-        </body></html>`,
-        { headers: { "Content-Type": "text/html" } }
+      return finishHtml(
+        "error",
+        "Error de conexión",
+        error === "access_denied"
+          ? "Cancelaste el permiso en Microsoft. Puedes volver a intentarlo desde Kawiil."
+          : String(error),
+        state,
+        "microsoft-auth-error",
+        error,
       );
     }
 
     if (!code || !userId) {
-      return new Response(
-        renderPage('error', 'Solicitud inválida', 'Faltan parámetros requeridos.'),
-        { status: 400, headers: { "Content-Type": "text/html" } }
+      return finishHtml(
+        "error",
+        "Solicitud inválida",
+        "Faltan parámetros requeridos. Vuelve a Kawiil e intenta conectar de nuevo.",
+        state,
+        "microsoft-auth-error",
+        "invalid_request",
       );
     }
 
     const clientId = Deno.env.get("MICROSOFT_CLIENT_ID")!.trim();
-    const clientSecret = Deno.env.get("MICROSOFT_CLIENT_SECRET")!.trim();
+    const clientSecrets = requireMicrosoftClientSecretCandidates();
     const tenantId = Deno.env.get("MICROSOFT_TENANT_ID")!.trim();
     const redirectUri = `${Deno.env.get("SUPABASE_URL")!.trim()}/functions/v1/microsoft-callback`;
 
-    console.log("Exchanging code for tokens, redirectUri:", redirectUri);
+    console.log("Exchanging code for tokens, redirectUri:", redirectUri, "secret_candidates:", clientSecrets.length);
 
-    const tokenResponse = await fetch(
-      `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          client_id: clientId,
-          client_secret: clientSecret,
-          code,
-          redirect_uri: redirectUri,
-          grant_type: "authorization_code",
-        }),
-      }
-    );
-
-    const tokenData = await tokenResponse.json();
-
-    if (!tokenResponse.ok) {
-      console.error("Token exchange failed:", tokenData);
-      return new Response(
-        `<html><head></head><body>
-          <script>window.opener?.postMessage({type:'microsoft-auth-error',error:'token_exchange_failed'},'${postMessageOrigin}');</script>
-          ${renderPage('error', 'Error al obtener token', 'No se pudo completar la autenticación con Microsoft.')}
-        </body></html>`,
-        { headers: { "Content-Type": "text/html" } }
+    // Un authorization_code solo se puede canjear una vez. Si el 1.er secret falla
+    // por invalid_client, reintentamos con el alias; si Azure consumió el code, el
+    // usuario debe volver a conectar (ms_err distinto de auth_config_expired).
+    let tokenData: Record<string, unknown> = {};
+    let tokenOk = false;
+    let lastFail: unknown = null;
+    for (let i = 0; i < clientSecrets.length; i++) {
+      const tokenResponse = await fetch(
+        `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            client_id: clientId,
+            client_secret: clientSecrets[i],
+            code,
+            redirect_uri: redirectUri,
+            grant_type: "authorization_code",
+          }),
+        },
       );
+      tokenData = await tokenResponse.json().catch(() => ({}));
+      if (tokenResponse.ok && typeof tokenData.access_token === "string") {
+        tokenOk = true;
+        if (i > 0) {
+          console.warn(
+            "Token exchange OK con secret candidato",
+            i + 1,
+            "(alias AZURE_CLIENT_SECRET). Alinea MICROSOFT_CLIENT_SECRET al mismo Value.",
+          );
+        }
+        break;
+      }
+      lastFail = tokenData;
+      const classified = classifyMicrosoftOAuthError(tokenData);
+      const retryableConfig =
+        classified?.code === "AUTH_CONFIG_EXPIRED" || classified?.code === "SECRET_INVALID";
+      console.error("Token exchange failed (secret candidate", i + 1, "):", {
+        codes: (tokenData as { error_codes?: number[] }).error_codes,
+        error: (tokenData as { error?: string }).error,
+        classified: classified?.code,
+      });
+      if (!retryableConfig || i === clientSecrets.length - 1) break;
+    }
+
+    if (!tokenOk) {
+      console.error("Token exchange failed:", lastFail);
+      const classified = classifyMicrosoftOAuthError(lastFail);
+      const userMsg = classified?.message ||
+        "No se pudo completar la autenticación con Microsoft.";
+      const errCode = classified?.code === "AUTH_CONFIG_EXPIRED"
+        ? "auth_config_expired"
+        : classified?.code === "SECRET_INVALID"
+          ? "secret_invalid"
+          : "token_exchange_failed";
+      return finishHtml("error", "Error al obtener token", userMsg, state, "microsoft-auth-error", errCode);
     }
 
     console.log("Token exchange successful, scope:", tokenData.scope);
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000).toISOString();
+    const expiresIn = Number(tokenData.expires_in || 3600);
+    const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
 
     const { error: dbError } = await supabase
       .from("microsoft_tokens")
       .upsert(
         {
           user_id: userId,
-          access_token: tokenData.access_token,
-          refresh_token: tokenData.refresh_token,
+          access_token: String(tokenData.access_token),
+          refresh_token: tokenData.refresh_token ? String(tokenData.refresh_token) : null,
           expires_at: expiresAt,
-          scope: tokenData.scope,
+          scope: tokenData.scope ? String(tokenData.scope) : null,
         },
-        { onConflict: "user_id" }
+        { onConflict: "user_id" },
       );
 
     if (dbError) {
       console.error("DB error:", dbError);
-      return new Response(
-        `<html><head></head><body>
-          <script>window.opener?.postMessage({type:'microsoft-auth-error',error:'db_error'},'${postMessageOrigin}');</script>
-          ${renderPage('error', 'Error al guardar', 'No se pudieron guardar las credenciales.')}
-        </body></html>`,
-        { headers: { "Content-Type": "text/html" } }
+      return finishHtml(
+        "error",
+        "Error al guardar",
+        "No se pudieron guardar las credenciales.",
+        state,
+        "microsoft-auth-error",
+        "db_error",
       );
     }
 
     console.log("Token saved successfully for user:", userId);
 
-    return new Response(
-      `<html><head></head><body>
-        <script>window.opener?.postMessage({type:'microsoft-auth-success'},'${postMessageOrigin}');</script>
-        ${renderPage('success', '¡Microsoft 365 conectado!', 'Tu cuenta se vinculó correctamente con Kawiil.')}
-      </body></html>`,
-      { headers: { "Content-Type": "text/html" } }
+    return finishHtml(
+      "success",
+      "¡Microsoft 365 conectado!",
+      "Tu cuenta se vinculó correctamente con Kawiil.",
+      state,
+      "microsoft-auth-success",
     );
   } catch (err) {
     console.error("Callback error:", err);
     return new Response(
-      renderPage('error', 'Error interno', 'Ocurrió un error inesperado. Intenta de nuevo.'),
-      { status: 500, headers: { "Content-Type": "text/html" } }
+      renderPage("error", "Error interno", "Ocurrió un error inesperado. Intenta de nuevo.", {
+        returnUrl: buildAppReturnUrl("/microsoft365/calendario", { ms: "error" }),
+      }),
+      { status: 500, headers: { "Content-Type": "text/html; charset=utf-8" } },
     );
   }
 });

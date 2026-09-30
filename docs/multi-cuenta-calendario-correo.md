@@ -143,3 +143,63 @@ functions para que la API key viva **solo en el servidor**.
 7. ⬜ IMAP/SMTP para correo (con caché + cron).
 8. ⬜ Rotar la `GOOGLE_MAPS_API_KEY` expuesta.
 7. ⬜ Cifrado de secretos IMAP (Vault/pgsodium).
+
+---
+
+## 5. Incidentes: client secret de Microsoft expirado (AADSTS7000222)
+
+Si Calendario / Correo muestra `auth_config_expired`, `Token refresh failed`,
+`invalid_client` o `AADSTS7000222`, **no es un bug del calendario**: el client
+secret de la App Registration en Azure AD está caducado o mal pegado en Supabase.
+
+App ID: `db370917-4e36-4ef5-b152-322394f50980` (proyecto Supabase
+`qppfampapbxdgednkofc`).
+
+### Remedio operativo (admin)
+
+1. Azure Portal → **App registrations** → app `db370917-…` → **Certificates &
+   secrets** → **New client secret** (o usar el Value del secreto vigente).
+2. Copiar el **Value** del secreto (no el Secret ID). Solo se muestra una vez.
+3. Supabase → **Edge Functions → Secrets** → poner el **mismo Value** en:
+   - `MICROSOFT_CLIENT_SECRET` (lo usan `microsoft-callback`, `microsoft-api`,
+     calendario, OAuth)
+   - `AZURE_CLIENT_SECRET` (pipeline/mail; debe coincidir si es la misma app)
+4. No hace falta redeploy solo por rotar el secreto.
+
+Errores Azure habituales al pegar mal el secreto (sonda y callback los distinguen):
+
+| Código Azure | Significado | Qué hacer |
+|---|---|---|
+| `AADSTS7000222` | Secret **expirado** (sigue el Value viejo en `MICROSOFT_CLIENT_SECRET`) | Pegar el **Value** del secreto nuevo |
+| `AADSTS7000215` | Secret **inválido** (typo, truncado, o se pegó el **Secret ID**) | Copiar el **Value**, no el Secret ID |
+
+Estado verificado 2026-09-28 en `qppfampapbxdgednkofc`: `MICROSOFT_CLIENT_SECRET`
+seguía en `7000222` y `AZURE_CLIENT_SECRET` en `7000215` (Values distintos y ambos
+malos). Mientras Azure responda así, Calendario mostrará `auth_config_expired` al
+conectar — **no es un bug del front**.
+
+### Verificación end-to-end (sonda)
+
+Edge Function desplegada: `microsoft-secret-health` (`verify_jwt = false`).
+
+```bash
+curl -sS "https://qppfampapbxdgednkofc.supabase.co/functions/v1/microsoft-secret-health" \
+  -H "apikey: $SUPABASE_ANON_KEY" \
+  -H "Authorization: Bearer $SUPABASE_ANON_KEY"
+```
+
+OK cuando el JSON tiene:
+
+- `auth_config_expired: false`
+- `secret_status: "OK"`
+- `live_refresh.status: "OK"` **o** `"RECONNECT_REQUIRED"` (secret bien; el
+  usuario debe reconectar Microsoft en Calendario)
+- `azure_alias_matches_microsoft: true` (si ambos secretos están configurados)
+
+Si `live_refresh` es `AUTH_CONFIG_EXPIRED` o `client_credentials` reporta
+`7000222`, el Value en `MICROSOFT_CLIENT_SECRET` **aún no** es el secreto vigente
+de Azure: vuelve al paso 2–3.
+
+Tras `secret_status: OK`, conectar/reconectar Microsoft en Calendario (flujo
+`microsoft-auth` → Azure → `microsoft-callback`) y confirmar que ya no aparece
+`auth_config_expired` en el HTML de error del callback.
