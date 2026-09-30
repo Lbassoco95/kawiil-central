@@ -1,4 +1,11 @@
 #!/usr/bin/env bash
+# Prueba de separación (Corte 0 / S1-S2-S6): aplica el baseline de Kawiil OS en una
+# base Postgres efímera vacía. Demuestra que:
+#   1) el baseline aplica sin la cadena de migraciones de central;
+#   2) ninguna tabla de central aparece en el esquema resultante;
+#   3) el árbol kawiil-os no embebe host ni JWT/llaves de central;
+#   4) RLS aísla empresas; el rollback deja cero objetos portal_*.
+# Corre en CI (job base-y-api de portal-tests.yml) contra el servicio Postgres.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 STUB="$ROOT/supabase/tests/portal/00_supabase_stub.sql"
@@ -12,6 +19,11 @@ if grep -rEn "qppfampapbxdgednkofc|eyJhbGciOiJIUzI1Ni" "$ROOT/kawiil-os" >/dev/n
   echo "FALLA: el conjunto standalone referencia el proyecto o llaves de central"
   exit 1
 fi
+# El project_id local de Kawiil OS no puede ser el de central.
+if grep -E '^\s*project_id\s*=\s*"qppfampapbxdgednkofc"' "$ROOT/kawiil-os/supabase/config.toml" >/dev/null 2>&1; then
+  echo "FALLA: kawiil-os/supabase/config.toml apunta al project_id de central"
+  exit 1
+fi
 
 psql -X -q -d postgres -c "DROP DATABASE IF EXISTS $DB" -c "CREATE DATABASE $DB" >/dev/null
 q -f "$STUB" >/dev/null 2>&1
@@ -19,6 +31,8 @@ q --single-transaction -f "$MIG" >/dev/null
 FORBIDDEN="profiles|user_roles|rh_attendance|rh_employee_profile|expenses|slack_messages|linked_accounts|client_sat_certificates|documents|clients|fis_receipts"
 FOUND="$(q -At -c "SELECT string_agg(tablename, ',') FROM pg_tables WHERE schemaname='public' AND tablename ~ '^($FORBIDDEN)$'")"
 [[ -z "$FOUND" ]] || { echo "FALLA: tablas de central presentes: $FOUND"; exit 1; }
+PORTAL_TABLES="$(q -At -c "SELECT count(*) FROM pg_tables WHERE schemaname='public' AND tablename LIKE 'portal_%'")"
+[[ "$PORTAL_TABLES" -gt 0 ]] || { echo "FALLA: el baseline no creó tablas portal_*"; exit 1; }
 q -c "
 INSERT INTO auth.users(id,email) VALUES
  ('10000000-0000-0000-0000-000000000001','admin-a@demo.invalid'),

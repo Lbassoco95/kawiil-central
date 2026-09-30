@@ -20,12 +20,15 @@ Desde una copia limpia del repositorio:
 ```bash
 npx supabase login
 npx supabase link --workdir kawiil-os --project-ref <REF_KAWIIL_OS>
-npx supabase db push --workdir kawiil-os
+npm run kawiil-os:db-push
+# equivalente: npx supabase db push --workdir kawiil-os
 ```
 
-Antes del `db push`, confirme que `<REF_KAWIIL_OS>` no sea el project ref de central. El conjunto aplicado es exclusivamente `kawiil-os/supabase/migrations/`.
+Antes del `db push`, confirme que `<REF_KAWIIL_OS>` no sea el project ref de central (`qppfampapbxdgednkofc`). El conjunto aplicado es exclusivamente `kawiil-os/supabase/migrations/`.
 
-El baseline vive en `kawiil-os/supabase/` y **no** en `supabase/migrations/` porque ese directorio es la cadena de migraciones del proyecto de central: mezclarlo haría que `supabase db push` de central intentara crear tablas del portal y que el portal heredara la cadena de central. Con `--workdir kawiil-os`, el CLI trata esa carpeta como un proyecto Supabase independiente con su propio `config.toml`, `migrations/` y `rollbacks/`.
+El baseline vive en `kawiil-os/supabase/` (ruta estable del repo; salió de `.devin/`) y **no** en `supabase/migrations/` porque ese directorio es la cadena de migraciones del proyecto de central: mezclarlo haría que `supabase db push` de central intentara crear tablas del portal y que el portal heredara la cadena de central. Con `--workdir kawiil-os`, el CLI trata esa carpeta como un proyecto Supabase independiente con su propio `config.toml`, `migrations/` y `rollbacks/`.
+
+La prueba automática de separación es `npm run test:kawiil-os-db` (también en CI, job `base-y-api`).
 
 Comprobación en SQL Editor del proyecto nuevo:
 

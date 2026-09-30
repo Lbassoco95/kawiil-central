@@ -1,10 +1,6 @@
 BEGIN;
 
-DROP FUNCTION IF EXISTS public.portal_audit(text, uuid, text, text, jsonb, uuid);
-DROP FUNCTION IF EXISTS public.portal_is_employee(uuid, uuid);
-DROP FUNCTION IF EXISTS public.portal_staff_has_company_access(uuid, text);
-DROP FUNCTION IF EXISTS public.portal_has_company_role(uuid, public.portal_role[]);
-
+-- Primero tablas (y sus policies que dependen de las funciones auxiliares).
 DROP TABLE IF EXISTS public.portal_system_outbox CASCADE;
 DROP TABLE IF EXISTS public.portal_system_nonces CASCADE;
 DROP TABLE IF EXISTS public.portal_survey_responses CASCADE;
@@ -35,6 +31,11 @@ DROP TABLE IF EXISTS public.portal_staff_grants CASCADE;
 DROP TABLE IF EXISTS public.portal_memberships CASCADE;
 DROP TABLE IF EXISTS public.portal_accounts CASCADE;
 DROP TABLE IF EXISTS public.portal_companies CASCADE;
+
+DROP FUNCTION IF EXISTS public.portal_audit(text, uuid, text, text, jsonb, uuid);
+DROP FUNCTION IF EXISTS public.portal_is_employee(uuid, uuid);
+DROP FUNCTION IF EXISTS public.portal_staff_has_company_access(uuid, text);
+DROP FUNCTION IF EXISTS public.portal_has_company_role(uuid, public.portal_role[]);
 
 DROP TYPE IF EXISTS public.portal_tier;
 DROP TYPE IF EXISTS public.portal_role;

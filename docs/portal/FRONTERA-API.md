@@ -87,10 +87,12 @@ Central recibe únicamente incidencias agregadas y autorizadas para nómina. El 
 
 ## Pruebas
 
-- `run_kawiil_os_db_tests.sh`: crea una base vacía, aplica solo el baseline, verifica ausencia de tablas de central, prueba aislamiento entre dos empresas y ejecuta rollback.
+- `run_kawiil_os_db_tests.sh` (CI, Postgres efímero del job `base-y-api`): crea una base vacía, aplica solo `kawiil-os/supabase/migrations/` (sin la cadena de central), falla si el árbol embebe host/JWT de central, verifica ausencia de tablas de central, prueba aislamiento entre dos empresas y ejecuta rollback limpio.
+- Aplicación manual del baseline: `npx supabase db push --workdir kawiil-os` (ver `PROYECTO-SEPARADO.md`).
 - `systemBoundary.test.ts`: firma válida, secreto de sentido incorrecto, alteración, expiración y operación alterada.
 - `portal:verificar-cerco`: búsqueda estática obligatoria de accesos directos.
 - La suite HTTP existente mantiene pruebas de papel, empresa y operación desconocida.
+- El rechazo cruzado 401/403 con llaves reales de ambos proyectos queda a Polo (proyectos de ensayo); CI no puede inventar esos proyectos.
 
 ## Riesgo residual
 
