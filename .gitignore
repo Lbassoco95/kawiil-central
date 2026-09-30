@@ -43,3 +43,14 @@ tools/mtg/seed/**
 # Capturas de aceptación con datos reales (Sylon, etc.)
 docs/mtg/acceptance/
 .tmp-mtg-deploy/
+# Artefactos temporales de deploy Edge / smoke
+.tmp-deploy/
+.cursor-deploy*
+.cursor-mcp*
+.cursor-monthly*
+.cursor-invoke*
+.deploy-moffin*
+.final_health*
+.tmp-moffin*
+.tmp_health*
+tmp_deploy/

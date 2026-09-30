@@ -118,13 +118,13 @@ export function SatCoverageTab() {
       toast.error("El cliente no tiene proyecto de contabilidad para disparar la consulta.");
       return;
     }
-    if (!window.confirm("Cada consulta puede generar un cargo según tu plan con Moffin. ¿Continuar?")) {
+    if (!window.confirm("Cada consulta puede generar un cargo según tu plan con SATgo. ¿Continuar?")) {
       return;
     }
     const key = `${clientId}:${type}`;
     toggleBusy(key, true);
     try {
-      const { data: res, error: invErr } = await invokeFunctionWithSession("moffin-query", {
+      const { data: res, error: invErr } = await invokeFunctionWithSession("satgo-query", {
         projectId,
         consultType: type,
       });
@@ -132,7 +132,7 @@ export function SatCoverageTab() {
         toast.error(await functionInvokeUserMessageAsync(res, invErr));
         return;
       }
-      toast.success("Consulta solicitada. Puede tardar unos minutos en Moffin; vuelve a revisar.");
+      toast.success("Consulta SATgo lista (PDF síncrono). Actualiza si no ves el documento aún.");
       queryClient.invalidateQueries({ queryKey: ["sat-coverage", year, month0] });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "No se pudo solicitar la consulta");
