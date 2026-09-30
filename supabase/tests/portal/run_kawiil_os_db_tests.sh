@@ -2,10 +2,17 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 STUB="$ROOT/supabase/tests/portal/00_supabase_stub.sql"
-MIG="$ROOT/.devin/kawiil-os/supabase/migrations/20260929000100_kawiil_os_baseline.sql"
-ROLLBACK="$ROOT/.devin/kawiil-os/supabase/rollbacks/20260929000100_kawiil_os_baseline.rollback.sql"
+MIG="$ROOT/kawiil-os/supabase/migrations/20260929000100_kawiil_os_baseline.sql"
+ROLLBACK="$ROOT/kawiil-os/supabase/rollbacks/20260929000100_kawiil_os_baseline.rollback.sql"
 DB=kawiil_os_standalone_test
 q() { psql -X -v ON_ERROR_STOP=1 -q -d "$DB" "$@"; }
+
+# El conjunto de Kawiil OS no puede conocer el host de central ni ninguna credencial suya.
+if grep -rEn "qppfampapbxdgednkofc|eyJhbGciOiJIUzI1Ni" "$ROOT/kawiil-os" >/dev/null 2>&1; then
+  echo "FALLA: el conjunto standalone referencia el proyecto o llaves de central"
+  exit 1
+fi
+
 psql -X -q -d postgres -c "DROP DATABASE IF EXISTS $DB" -c "CREATE DATABASE $DB" >/dev/null
 q -f "$STUB" >/dev/null 2>&1
 q --single-transaction -f "$MIG" >/dev/null
