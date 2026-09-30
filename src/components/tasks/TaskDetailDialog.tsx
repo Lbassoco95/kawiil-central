@@ -17,6 +17,7 @@ import { useTaskDetail, useAddComment, useUpdateTask, type Task } from "@/hooks/
 import { useAddTaskAssignee, useRemoveTaskAssignee } from "@/hooks/useTaskAssignees";
 import { useCelulaOptions } from "@/hooks/useCelulaOptions";
 import { ACTIVE_SUPABASE_URL, supabase } from "@/integrations/supabase/client";
+import { documentBucket } from "@/lib/documentBucket";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -520,7 +521,7 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
   const handleDocDownload = async (doc: any) => {
     if (!doc.file_path) return;
     try {
-      const { data, error } = await supabase.storage.from("documents").createSignedUrl(doc.file_path, 60, { download: true });
+      const { data, error } = await supabase.storage.from(documentBucket(doc)).createSignedUrl(doc.file_path, 60, { download: true });
       if (error) throw error;
       const a = document.createElement("a");
       a.href = data.signedUrl.startsWith("http")

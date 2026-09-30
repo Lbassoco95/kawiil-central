@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { sanitizeStorageFileName } from "@/lib/storageFilename";
+import { documentBucket } from "@/lib/documentBucket";
 import { mimeTypeForFile } from "@/lib/mimeFromFilename";
 
 /**
@@ -15,13 +16,13 @@ export async function replaceSupabaseStoredDocumentFile(opts: {
 
   const { data: docRow, error: fetchErr } = await supabase
     .from("documents")
-    .select("id, file_path")
+    .select("id, file_path, metadata")
     .eq("id", documentId)
     .single();
   if (fetchErr || !docRow?.id) throw new Error("No se encontró el documento");
 
   if (docRow.file_path) {
-    await supabase.storage.from("documents").remove([docRow.file_path]);
+    await supabase.storage.from(documentBucket(docRow)).remove([docRow.file_path]);
   }
 
   await supabase

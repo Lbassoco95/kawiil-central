@@ -456,6 +456,7 @@ div[id*="lovable" i] {
 .kw-sb-link[data-view-link="dashboard"]      { --item-color: 260 85% 68%; }
 .kw-sb-link[data-view-link="tareas"]         { --item-color: 210 85% 60%; }
 .kw-sb-link[data-view-link="proyectos"]      { --item-color: 145 65% 48%; }
+.kw-sb-link[data-view-link="juntas"]         { --item-color: 199 89% 48%; }
 .kw-sb-link[data-view-link="clientes"]       { --item-color:  38 90% 58%; }
 .kw-sb-link[data-view-link="documentos"]     { --item-color: 200 75% 55%; }
 .kw-sb-link[data-view-link="finanzas"]       { --item-color: 145 65% 48%; }

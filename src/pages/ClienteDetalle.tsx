@@ -7,8 +7,10 @@ import { Button } from "@/components/ui/button";
 import {
   ArrowLeft, Mail, Phone, MapPin, User, FileText,
   CheckSquare, FolderOpen, Pencil, Shield, Building2, ChevronRight, Landmark, DoorOpen,
+  CalendarClock,
 } from "lucide-react";
 import { ClientProjectsTab } from "@/components/clients/ClientProjectsTab";
+import { ClientMeetingsTab } from "@/components/clients/ClientMeetingsTab";
 import { ClientOffboardingSection } from "@/components/clients/ClientOffboardingSection";
 import { ClientEditDialog } from "@/components/clients/ClientEditDialog";
 import { ClientHealthScoreCard } from "@/components/clients/ClientHealthScoreCard";
@@ -72,6 +74,7 @@ const baseTabs: { key: string; label: string; icon?: typeof Shield }[] = [
   { key: "cumplimiento", label: "Cumplimiento", icon: Shield },
   { key: "proyectos", label: "Proyectos" },
   { key: "tareas", label: "Tareas" },
+  { key: "juntas", label: "Juntas", icon: CalendarClock },
   { key: "documentos", label: "Documentos" },
   { key: "cierre", label: "Cierre", icon: DoorOpen },
 ];
@@ -495,6 +498,9 @@ const ClienteDetalle = () => {
             )}
           </div>
         )}
+
+        {/* Juntas (Múuch') */}
+        {tab === "juntas" && <ClientMeetingsTab client={client} />}
 
         {/* Documents */}
         {tab === "documentos" && (

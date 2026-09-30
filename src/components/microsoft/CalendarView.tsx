@@ -42,6 +42,7 @@ import {
   Plus, ChevronLeft, ChevronRight, Loader2, Trash2, Video, Pencil,
   CalendarDays, CheckSquare, Clock, MapPin, Users, ExternalLink, AlertCircle,
   PanelRightClose, PanelRightOpen, Car, Lock, RefreshCw, Check, X, HelpCircle,
+  Mic,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -71,6 +72,7 @@ import { useEventTravelMap } from "@/hooks/useEventTravel";
 import { PlaceAutocompleteInput } from "@/components/microsoft/PlaceAutocompleteInput";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { useOpenMeetingFromCalendar } from "@/hooks/useMtgFromCalendar";
 
 type ViewMode = "day" | "3days" | "week" | "month" | "agenda" | "equipo";
 
@@ -835,6 +837,7 @@ export function CalendarView({
 
   // #3 — Ubicación/estatus de trabajo por día del usuario actual.
   const { user: authUser } = useAuth();
+  const openMtgFromCalendar = useOpenMeetingFromCalendar();
   const { data: workLocations = [] } = useWorkLocations(rangeStart, rangeEnd);
   const myWorkByDate = useMemo(() => {
     const m = new Map<string, (typeof workLocations)[number]>();
@@ -2690,14 +2693,42 @@ export function CalendarView({
                 );
               })()}
               {(() => {
-                const joinUrl = eventDetail?.onlineMeeting?.joinUrl || cachedEvent?.onlineMeeting?.joinUrl || cachedEvent?.onlineMeetingUrl;
-                if (!joinUrl) return null;
-                const isMeet = /meet\.google\.com/i.test(String(joinUrl));
+                const src = eventDetail || cachedEvent;
+                const joinUrl = src?.onlineMeeting?.joinUrl || src?.onlineMeetingUrl;
+                const isMeet = joinUrl ? /meet\.google\.com/i.test(String(joinUrl)) : false;
+                const eventId = selectedEventId || src?.id;
                 return (
-                  <div className="flex justify-end">
-                    <Button variant="outline" size="sm" onClick={() => window.open(joinUrl, "_blank")}>
-                      <Video className="mr-1 h-4 w-4" /> Unirse ({isMeet ? "Google Meet" : "Teams"})
-                    </Button>
+                  <div className="flex flex-wrap justify-end gap-2">
+                    {joinUrl && (
+                      <Button variant="outline" size="sm" onClick={() => window.open(joinUrl, "_blank")}>
+                        <Video className="mr-1 h-4 w-4" /> Unirse ({isMeet ? "Google Meet" : "Teams"})
+                      </Button>
+                    )}
+                    {eventId && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        disabled={openMtgFromCalendar.isPending}
+                        title="Guarda la reunión en Juntas (sin cliente obligatorio). Ahí grabas, subes transcripción y generas minuta; luego asignas cliente. Funciona con cualquier cuenta Outlook/Google conectada; la transcripción automática de Teams requiere organizador en tenant Kawiil + consent Graph."
+                        onClick={() =>
+                          openMtgFromCalendar.mutate({
+                            id: String(eventId),
+                            subject: src?.subject ?? editForm.subject,
+                            start: src?.start,
+                            end: src?.end,
+                            onlineMeeting: src?.onlineMeeting,
+                            onlineMeetingUrl: src?.onlineMeetingUrl,
+                          })
+                        }
+                      >
+                        {openMtgFromCalendar.isPending ? (
+                          <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Mic className="mr-1 h-4 w-4" />
+                        )}
+                        Grabar en Juntas
+                      </Button>
+                    )}
                   </div>
                 );
               })()}

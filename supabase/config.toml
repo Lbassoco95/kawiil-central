@@ -154,3 +154,14 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = true
   [functions.update-user-email]
     verify_jwt = true
+
+  [functions.job-queue-dispatch]
+    verify_jwt = false
+  [functions.mtg-outlook]
+    verify_jwt = true
+  [functions.mtg-graph-admin]
+    verify_jwt = false
+  [functions.mtg-graph-webhook]
+    verify_jwt = false
+  [functions.mtg-minutes-draft]
+    verify_jwt = true
