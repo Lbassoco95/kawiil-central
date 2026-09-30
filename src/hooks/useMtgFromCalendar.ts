@@ -39,7 +39,7 @@ export function useOpenMeetingFromCalendar() {
       subject?: string | null;
       start?: { dateTime?: string; date?: string } | string | null;
       end?: { dateTime?: string; date?: string } | string | null;
-      onlineMeeting?: { joinUrl?: string | null } | null;
+      onlineMeeting?: { joinUrl?: string | null; id?: string | null } | null;
       onlineMeetingUrl?: string | null;
     }) => {
       if (!user) throw new Error("Sesión requerida");
@@ -55,6 +55,10 @@ export function useOpenMeetingFromCalendar() {
           : event.end?.dateTime || event.end?.date || null;
       const joinUrl =
         event.onlineMeeting?.joinUrl || event.onlineMeetingUrl || null;
+      const teamsOnlineMeetingId =
+        typeof event.onlineMeeting?.id === "string" && event.onlineMeeting.id.trim()
+          ? event.onlineMeeting.id.trim()
+          : null;
 
       // Conservamos el id compuesto (outlook:… / google:… / Graph id) para
       // idempotencia entre cuentas conectadas.
@@ -67,6 +71,7 @@ export function useOpenMeetingFromCalendar() {
           scheduledAt: new Date(startRaw).toISOString(),
           durationMin: durationMinutes(startRaw, endRaw),
           teamsJoinUrl: joinUrl,
+          teamsOnlineMeetingId,
         },
       });
     },

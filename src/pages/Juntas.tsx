@@ -32,11 +32,13 @@ import { MtgAdhocMeetingDialog } from "@/components/clients/MtgAdhocMeetingDialo
 import {
   CalendarClock,
   CheckSquare,
+  ExternalLink,
   FileText,
   Mic,
   Plus,
   Search,
   Users,
+  Video,
 } from "lucide-react";
 
 type StatusFilter = "all" | "upcoming" | "live" | "minutes" | "closed";
@@ -236,6 +238,23 @@ export default function Juntas() {
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground shrink-0">
+                    {m.teams_join_url && (
+                      <a
+                        href={m.teams_join_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 text-sky-700 dark:text-sky-400 hover:underline"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Video className="h-3.5 w-3.5" /> Teams
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    )}
+                    {m.outlook_event_id && !m.teams_join_url && (
+                      <span className="inline-flex items-center gap-1">
+                        <CalendarClock className="h-3.5 w-3.5" /> En calendario
+                      </span>
+                    )}
                     {m.recording_path && (
                       <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400">
                         <Mic className="h-3.5 w-3.5" /> Grabación

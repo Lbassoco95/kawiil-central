@@ -168,7 +168,11 @@ export function useCreateAdhocMeeting(clientId: string | null) {
         entityType: "meeting",
         entityId: meeting.id,
         action: MTG_AUDIT_ACTION.MEETING_CREATED,
-        details: { unassigned: !clientId },
+        details: {
+          unassigned: !clientId,
+          outlook_event_id: meeting.outlook_event_id,
+          has_teams: !!meeting.teams_join_url,
+        },
         snapshot: meeting as unknown as Record<string, unknown>,
       });
       return meeting;
@@ -176,6 +180,7 @@ export function useCreateAdhocMeeting(clientId: string | null) {
     onSuccess: () => {
       if (clientId) queryClient.invalidateQueries({ queryKey: KEY(clientId) });
       queryClient.invalidateQueries({ queryKey: ["mtg-meetings-org"] });
+      queryClient.invalidateQueries({ queryKey: ["calendar-events"] });
     },
   });
 }
