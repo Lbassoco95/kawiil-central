@@ -23,10 +23,10 @@ BEGIN
     NEW.email,
     COALESCE(NEW.raw_user_meta_data->>'full_name', split_part(NEW.email, '@', 1))
   );
-  
+
   INSERT INTO public.user_roles (user_id, role)
   VALUES (NEW.id, 'en_formacion');
-  
+
   RETURN NEW;
 END;
 $$;
