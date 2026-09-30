@@ -42,18 +42,22 @@ Guion de la sesión: [DEMO-GUION.md](DEMO-GUION.md). Reinicio: `kawiil-os/demo/r
 ## Reinicio exacto
 
 ```bash
-PORTAL_DEMO_ALLOW_RESET=1 DATABASE_URL='…' npm run portal:demo-reset
+# Opcional: bloquear el ref de central en runtime (no vive dentro de kawiil-os/).
+PORTAL_DEMO_ALLOW_RESET=1 \
+PORTAL_DEMO_FORBID_PROJECT_REF="$VITE_SUPABASE_PROJECT_ID" \
+DATABASE_URL='…' \
+npm run portal:demo-reset
 ```
 
 Qué hace:
 
 1. Exige `PORTAL_DEMO_ALLOW_RESET=1`.
-2. Rechaza conexiones que mencionen el project ref de central.
+2. Rechaza si `VITE_PORTAL_SUPABASE_URL` == `VITE_SUPABASE_URL`, o si la conexión contiene `PORTAL_DEMO_FORBID_PROJECT_REF` (cuando se pasa).
 3. Borra la empresa `demo-espejo-fiscal` y la cuenta demo fija.
 4. Reinserta el dataset canónico (`seed.sql`).
 5. Corre `verify.sql` (4 CFDI `is_test`, resumen sep-2026, 3 documentos, 2 alertas, 1 notificación, sin RH ni emisión).
 
-La semilla es **determinista** (UUIDs fijos). Dos reinicios consecutivos producen el mismo contenido fiscal.
+La semilla es **determinista** (UUIDs fijos). Dos reinicios consecutivos producen el mismo contenido fiscal. El árbol `kawiil-os/` no embebe el project ref ni JWT de central (`test:kawiil-os-db` lo vigila).
 
 ## Qué no entra en este demo
 

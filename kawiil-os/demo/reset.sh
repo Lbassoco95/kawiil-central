@@ -5,14 +5,17 @@
 #     npm run portal:demo-reset
 #   # o: bash kawiil-os/demo/reset.sh
 #
-# Requiere PORTAL_DEMO_ALLOW_RESET=1. Rechaza el project_id de central.
+# Requiere PORTAL_DEMO_ALLOW_RESET=1.
+# Aislamiento: no embebe el project ref de central en este árbol (la suite
+# run_kawiil_os_db_tests.sh lo prohíbe). Opcionalmente pase
+# PORTAL_DEMO_FORBID_PROJECT_REF=<ref-central> para bloquear esa URL en runtime,
+# o configure VITE_SUPABASE_URL + VITE_PORTAL_SUPABASE_URL distintos.
 # Opcional: DATABASE_URL o variables PG*.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 SEED="$ROOT/kawiil-os/demo/seed.sql"
 VERIFY="$ROOT/kawiil-os/demo/verify.sql"
-CENTRAL_REF="qppfampapbxdgednkofc"
 
 if [[ "${PORTAL_DEMO_ALLOW_RESET:-}" != "1" ]]; then
   echo "ABORT: defina PORTAL_DEMO_ALLOW_RESET=1 para confirmar el reinicio del entorno demo."
@@ -24,10 +27,19 @@ if [[ ! -f "$SEED" ]]; then
   exit 1
 fi
 
-# Rechazar URLs/hosts que apunten al proyecto de central.
 COMBO="${DATABASE_URL:-} ${SUPABASE_URL:-} ${VITE_PORTAL_SUPABASE_URL:-} ${PGHOST:-}"
-if grep -F "$CENTRAL_REF" <<<"$COMBO" >/dev/null 2>&1; then
-  echo "ABORT: la conexión parece apuntar al proyecto de central ($CENTRAL_REF)."
+
+# Si el llamador declara el ref prohibido (desde fuera de kawiil-os/), rechazarlo.
+if [[ -n "${PORTAL_DEMO_FORBID_PROJECT_REF:-}" ]] \
+  && grep -F "$PORTAL_DEMO_FORBID_PROJECT_REF" <<<"$COMBO" >/dev/null 2>&1; then
+  echo "ABORT: la conexión menciona PORTAL_DEMO_FORBID_PROJECT_REF (proyecto no demo)."
+  exit 1
+fi
+
+# El portal demo no puede usar la misma URL que central.
+if [[ -n "${VITE_PORTAL_SUPABASE_URL:-}" && -n "${VITE_SUPABASE_URL:-}" ]] \
+  && [[ "${VITE_PORTAL_SUPABASE_URL}" == "${VITE_SUPABASE_URL}" ]]; then
+  echo "ABORT: VITE_PORTAL_SUPABASE_URL no puede coincidir con VITE_SUPABASE_URL."
   exit 1
 fi
 

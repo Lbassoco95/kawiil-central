@@ -216,7 +216,7 @@ PORTAL_DEMO_ALLOW_RESET=1 DATABASE_URL='postgresql://…' npm run portal:demo-re
 npm run test:kawiil-os-demo   # Postgres local/CI: siembra → muta → reinicia → compara hash
 ```
 
-El script aborta sin `PORTAL_DEMO_ALLOW_RESET=1` y si la cadena de conexión menciona el project ref de central.
+El script aborta sin `PORTAL_DEMO_ALLOW_RESET=1`, si el portal y central comparten la misma URL Vite, o si se pasa `PORTAL_DEMO_FORBID_PROJECT_REF` y aparece en la conexión. El ref de central no se embebe bajo `kawiil-os/` (lo exige `test:kawiil-os-db`).
 
 ### Contenido canónico (septiembre 2026)
 
