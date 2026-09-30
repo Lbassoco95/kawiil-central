@@ -143,3 +143,43 @@ functions para que la API key viva **solo en el servidor**.
 7. ⬜ IMAP/SMTP para correo (con caché + cron).
 8. ⬜ Rotar la `GOOGLE_MAPS_API_KEY` expuesta.
 7. ⬜ Cifrado de secretos IMAP (Vault/pgsodium).
+
+---
+
+## 5. Incidentes: client secret de Microsoft expirado (AADSTS7000222)
+
+Si al sincronizar / conectar Microsoft ves `auth_config_expired`,
+`Token refresh failed`, `invalid_client` o `AADSTS7000222`, **no es un bug del
+calendario**: el secreto de la App Registration en Azure AD caducó.
+
+App ID en producción: `db370917-4e36-4ef5-b152-322394f50980`.
+
+### Qué falla
+
+- Refresco de tokens (`microsoft-api`, correo, cuentas Outlook vinculadas).
+- Nuevas conexiones OAuth (`microsoft-callback` muestra «Error al obtener token»
+  con `auth_config_expired`).
+- Mientras el access token en caché siga vivo, la UI puede **mostrar** eventos
+  pero las escrituras / sincronización fallan al renovar.
+
+### Remedio operativo (admin) — obligatorio
+
+1. [Azure Portal](https://portal.azure.com) → **Microsoft Entra ID** →
+   **App registrations** → app `db370917-4e36-4ef5-b152-322394f50980`
+   (o busca por Application ID).
+2. **Certificates & secrets** → **Client secrets** → **+ New client secret**
+   (descripción p. ej. `kawiil-2026`, vigencia 12–24 meses).
+3. **Copiar el Value** del secreto de inmediato (solo se muestra una vez).
+4. [Supabase](https://supabase.com/dashboard/project/qppfampapbxdgednkofc/settings/functions)
+   → **Edge Functions → Secrets** → editar/crear:
+   - `MICROSOFT_CLIENT_SECRET` = el Value nuevo
+   - si existe `AZURE_CLIENT_SECRET` (mail/pipeline), actualizarlo al mismo valor
+5. No hace falta redeploy solo por el secreto. Opcional si hay cambios de código:
+   ```bash
+   supabase functions deploy microsoft-api microsoft-auth microsoft-callback outlook-account-api --no-verify-jwt
+   ```
+6. En Kawiil: Calendario → **Vincular cuenta de Microsoft** (redirect) → debe
+   volver con `?ms=connected`. Luego guardar un evento de prueba.
+
+Reconectar desde la UI **sin** renovar el secreto **no** arregla nada: el
+exchange del `code` también usa `MICROSOFT_CLIENT_SECRET`.

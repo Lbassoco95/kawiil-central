@@ -1,11 +1,12 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { CalendarView } from "@/components/microsoft/CalendarView";
 import { MicrosoftConnectCard } from "@/components/microsoft/MicrosoftConnectCard";
 import { useMicrosoftConnection, useCalendarEvents } from "@/hooks/useMicrosoft";
 import { useTasksForCalendar } from "@/hooks/useTasks";
-import { useDueDateAlerts } from "@/hooks/useNotifications";
+import { toast } from "sonner";
 import {
   addDaysToYmd,
   formatMX,
@@ -17,7 +18,36 @@ import {
 } from "@/lib/dateUtils";
 
 const Microsoft365Calendario = () => {
-  const { isConnected, isLoading, connect, isConnecting } = useMicrosoftConnection();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const {
+    isConnected,
+    isLoading,
+    connect,
+    isConnecting,
+    connectionError,
+    refetchConnection,
+  } = useMicrosoftConnection();
+
+  useEffect(() => {
+    const ms = searchParams.get("ms");
+    if (!ms) return;
+    if (ms === "connected") {
+      toast.success("Microsoft 365 conectado exitosamente");
+      void refetchConnection();
+    } else if (ms === "error") {
+      const detail = searchParams.get("ms_err");
+      toast.error(
+        detail
+          ? `No se pudo conectar Microsoft: ${detail}`
+          : "No se pudo completar la vinculación con Microsoft. Intenta de nuevo.",
+        { duration: 10000 },
+      );
+    }
+    const next = new URLSearchParams(searchParams);
+    next.delete("ms");
+    next.delete("ms_err");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams, refetchConnection]);
 
   const todayYmd = useMemo(() => toDateStringMX(nowMX()), []);
   const dayRange = useMemo(() => mexicoDayRangeISO(todayYmd), [todayYmd]);
@@ -109,7 +139,12 @@ const Microsoft365Calendario = () => {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="animate-scale-in">
-          <MicrosoftConnectCard onConnect={connect} isConnecting={isConnecting} />
+          <MicrosoftConnectCard
+            onConnect={connect}
+            isConnecting={isConnecting}
+            connectionError={connectionError?.message}
+            onRetryConnection={() => void refetchConnection()}
+          />
         </div>
       </div>
     );

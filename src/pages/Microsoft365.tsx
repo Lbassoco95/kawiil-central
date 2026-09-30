@@ -9,7 +9,15 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Calendar, Mail, Loader2, RefreshCw, Inbox } from "lucide-react";
 
 const Microsoft365 = () => {
-  const { isConnected, isLoading, connect, isConnecting, profile } = useMicrosoftConnection();
+  const {
+    isConnected,
+    isLoading,
+    connect,
+    isConnecting,
+    profile,
+    connectionError,
+    refetchConnection,
+  } = useMicrosoftConnection();
   const syncPhoto = useSyncMicrosoftPhoto();
 
   if (isLoading) {
@@ -25,7 +33,12 @@ const Microsoft365 = () => {
   if (!isConnected) {
     return (
       <AppLayout>
-        <MicrosoftConnectCard onConnect={connect} isConnecting={isConnecting} />
+        <MicrosoftConnectCard
+          onConnect={connect}
+          isConnecting={isConnecting}
+          connectionError={connectionError?.message}
+          onRetryConnection={() => void refetchConnection()}
+        />
       </AppLayout>
     );
   }

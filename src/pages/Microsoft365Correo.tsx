@@ -7,7 +7,15 @@ import { useTasksRealtime } from "@/hooks/useTasksRealtime";
 import { Mail, RefreshCw } from "lucide-react";
 
 const Microsoft365Correo = () => {
-  const { isConnected, isLoading, connect, isConnecting, profile } = useMicrosoftConnection();
+  const {
+    isConnected,
+    isLoading,
+    connect,
+    isConnecting,
+    profile,
+    connectionError,
+    refetchConnection,
+  } = useMicrosoftConnection();
   useTasksRealtime();
 
   return (
@@ -63,7 +71,12 @@ const Microsoft365Correo = () => {
             </div>
           ) : !isConnected ? (
             <div className="p-6 animate-scale-in">
-              <MicrosoftConnectCard onConnect={connect} isConnecting={isConnecting} />
+              <MicrosoftConnectCard
+                onConnect={connect}
+                isConnecting={isConnecting}
+                connectionError={connectionError?.message}
+                onRetryConnection={() => void refetchConnection()}
+              />
             </div>
           ) : (
             <ErrorBoundary>

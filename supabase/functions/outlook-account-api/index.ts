@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { classifyMicrosoftOAuthError } from "../_shared/microsoftOAuthErrors.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -41,7 +42,13 @@ async function ensureAccessToken(
   });
   const data = await res.json();
   if (!res.ok || !data.access_token) {
-    await supabaseAdmin.from("linked_accounts").update({ status: "error", last_error: "refresh_failed" }).eq("id", account.id);
+    const classified = classifyMicrosoftOAuthError(data);
+    const lastError = classified?.code === "AUTH_CONFIG_EXPIRED"
+      ? "auth_config_expired"
+      : classified?.code === "RECONNECT_REQUIRED"
+        ? "reconnect_required"
+        : "refresh_failed";
+    await supabaseAdmin.from("linked_accounts").update({ status: "error", last_error: lastError }).eq("id", account.id);
     return null;
   }
   const newExpiry = new Date(Date.now() + (data.expires_in ?? 3600) * 1000).toISOString();
