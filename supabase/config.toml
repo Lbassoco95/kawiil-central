@@ -170,3 +170,5 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = false
   [functions.mtg-minutes-draft]
     verify_jwt = true
+  [functions.mtg-transcribe-recording]
+    verify_jwt = true

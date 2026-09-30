@@ -81,10 +81,21 @@ Puedes crear una junta **sin cliente** (prospecto / interna) desde `/juntas` o c
 | Capacidad | Cualquier cuenta conectada (Outlook/Google del usuario) | Tenant Kawiil (`kawiil.mx`) |
 |---|---|---|
 | Crear junta desde calendario + tablero | Sí | Sí |
-| Grabar audio en el navegador / subir archivo | Sí | Sí |
+| Grabar audio / pantalla+audio / subir A/V | Sí | Sí |
+| Transcribir grabación con OpenAI (multiidioma → español) | Sí (`mtg-transcribe-recording`, secret `OPENAI_API_KEY`) | Sí |
 | Subir transcripción manual (.vtt/.txt/.docx) | Sí | Sí |
 | Unirse al Meet/Teams del evento | Sí (el enlace del evento) | Sí |
 | Traer **automáticamente** grabación/transcripción de Teams vía Graph | No | Sí, con admin consent + app permissions + organizador en el tenant |
+
+### Captura + idiomas (etapas)
+
+| Etapa | Qué | Estado |
+|---|---|---|
+| **1 — Archivo** | Grabar audio o pantalla+mic; subir A/V; Edge Whisper (`whisper-1`) detecta idioma (es/en/zh…); si no es español, `gpt-4o-mini` traduce a ES; guarda VTT y encola minuta | Implementado |
+| **2 — En vivo** | Subtítulos/traducción en tiempo real durante la llamada (Realtime / `gpt-live-transcribe`) | Roadmap |
+| **3 — Kawiilito bot** | Bot que se une a Teams/Meet (p. ej. Recall.ai), graba A/V aunque nadie grabe en el browser, y alimenta el mismo pipeline STT→ES | Roadmap (`Recall.ai` abajo) |
+
+Límite etapa 1: Whisper acepta ~**25 MB** por archivo. Preferir **Grabar audio** o clips livianos; el A/V completo se guarda en el bucket aunque el STT falle por tamaño.
 
 Para la demo de mañana a las 9 (sin cliente): Calendario → evento → **Grabar en Juntas** → iniciar → grabar/notas → terminar → minuta → más tarde **Asignar cliente**.
 
@@ -92,7 +103,9 @@ Para la demo de mañana a las 9 (sin cliente): Calendario → evento → **Graba
 
 - Side panel de Teams
 - Portal del cliente
-- Recall.ai (grabación/transcripción alternativa)
+- Recall.ai / bot «Kawiilito» (entra a la reunión, graba A/V + STT aunque el organizador no grabe en el browser)
+- Traducción en vivo en la llamada (etapa 2)
+- Chunking de grabaciones >25 MB para Whisper
 - Propuesta de avance desde Slack o correo
 - Webhook saliente Donna/Cerebro (contrato abajo; **no implementado**)
 - Pull automático de recording/transcript Graph en cuentas no-Kawiil (delegado)
