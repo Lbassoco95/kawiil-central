@@ -85,11 +85,12 @@ export function MtgImportResumenDialog(props: {
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Cargar resumen a la junta</DialogTitle>
+          <DialogTitle>Importar texto al tablero</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
-          Sube el DOCX o pega el texto del resumen (como el de Grupo Sylon). Se empareja con los
-          temas del tablero por empresa y actualiza avance, notas y movimiento.
+          Uso avanzado: pega texto para emparejar con temas ya existentes. La estructura de
+          presentación se alimenta en vivo en «Plantilla presentación», no hace falta cargar un
+          DOCX como documento aparte.
         </p>
         <div className="space-y-2">
           <Label htmlFor="mtg-resumen-file">Archivo (.docx / .txt)</Label>

@@ -44,7 +44,6 @@ import {
   ChevronLeft,
   ChevronRight,
   ExternalLink,
-  FileUp,
   Link2,
   Loader2,
   Projector,
@@ -57,8 +56,8 @@ import { MtgAssignClientDialog } from "@/components/mtg/MtgAssignClientDialog";
 import { MtgTopicHistoryDrawer } from "@/components/mtg/MtgTopicHistoryDrawer";
 import { MtgArchiveSection } from "@/components/mtg/MtgArchiveSection";
 import { MtgJoinLinkDialog } from "@/components/mtg/MtgJoinLinkDialog";
-import { MtgImportResumenDialog } from "@/components/mtg/MtgImportResumenDialog";
 import { MtgCallCaptureBar } from "@/components/mtg/MtgCallCaptureBar";
+import { MtgPresentationTemplate } from "@/components/mtg/MtgPresentationTemplate";
 import { parseMeetingJoinLink } from "@/lib/mtg/joinLink";
 
 const PROJECTION_KEY = "mtg-projection-mode";
@@ -81,7 +80,6 @@ export default function JuntaDetalle() {
   const [historyTopic, setHistoryTopic] = useState<{ id: string; title: string } | null>(null);
   const [assignClientOpen, setAssignClientOpen] = useState(false);
   const [joinLinkOpen, setJoinLinkOpen] = useState(false);
-  const [importResumenOpen, setImportResumenOpen] = useState(false);
   const [agreementDraft, setAgreementDraft] = useState({
     text: "",
     entityKey: "",
@@ -323,8 +321,10 @@ export default function JuntaDetalle() {
                 variant={projection ? "default" : "outline"}
                 size="sm"
                 onClick={() => setProjection((p) => !p)}
+                title="Vista tipo resumen para proyectar y alimentar en vivo"
               >
-                <Projector className="h-3.5 w-3.5 mr-1" /> Modo proyección
+                <Projector className="h-3.5 w-3.5 mr-1" />
+                {projection ? "Salir de presentación" : "Plantilla presentación"}
               </Button>
               {meeting.teams_join_url ? (
                 <>
@@ -378,17 +378,6 @@ export default function JuntaDetalle() {
               {liveEditable && (meeting.status === "in_progress" || meeting.status === "planned") && (
                 <Button size="sm" variant="secondary" onClick={handleEnd} disabled={board.doEnd.isPending}>
                   Terminar junta
-                </Button>
-              )}
-              {user && series && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setImportResumenOpen(true)}
-                >
-                  <FileUp className="h-3.5 w-3.5 mr-1" />
-                  Cargar resumen
                 </Button>
               )}
               {user && (
@@ -493,6 +482,26 @@ export default function JuntaDetalle() {
           </div>
         </div>
 
+        {projection ? (
+          <MtgPresentationTemplate
+            title={series?.title ?? meeting.title ?? "Junta"}
+            dateLabel={formatDateMX(meeting.scheduled_at)}
+            topics={topicsFiltered}
+            entities={entities}
+            expectedNext={expectedNext}
+            decisions={decisions}
+            liveEditable={liveEditable}
+            onPatchUpdate={schedulePatch}
+            onToggleExpected={(id, done) =>
+              board.toggleExpectedNext.mutate(
+                { id, done },
+                { onError: (e: Error) => toast.error(e.message) },
+              )
+            }
+            onOpenHistory={(t) => setHistoryTopic(t)}
+          />
+        ) : (
+          <>
         {/* Acuerdos de hoy */}
         <section className="space-y-3">
           <h2 className="font-semibold">Acuerdos de hoy</h2>
@@ -624,10 +633,10 @@ export default function JuntaDetalle() {
           </ul>
         </section>
 
-        {/* Resuelto / Nuevo */}
+        {/* Resuelto / Nuevo — misma estructura que la plantilla DOCX */}
         {resolved.length > 0 && (
           <section>
-            <h2 className="font-semibold mb-2">Se resolvió desde la sesión pasada</h2>
+            <h2 className="font-semibold mb-2">Lo que se cerró</h2>
             {resolved.map((t) => (
               <TopicRow
                 key={t.id}
@@ -642,7 +651,7 @@ export default function JuntaDetalle() {
         )}
         {news.length > 0 && (
           <section>
-            <h2 className="font-semibold mb-2">Nuevo desde la sesión pasada</h2>
+            <h2 className="font-semibold mb-2">Focos / nuevo</h2>
             {news.map((t) => (
               <TopicRow
                 key={t.id}
@@ -656,9 +665,9 @@ export default function JuntaDetalle() {
           </section>
         )}
 
-        {/* Sigue abierto */}
+        {/* En curso */}
         <section>
-          <h2 className="font-semibold mb-2">Sigue abierto</h2>
+          <h2 className="font-semibold mb-2">En curso</h2>
           {openSorted.length === 0 ? (
             <p className="text-sm text-muted-foreground">Sin temas abiertos en este filtro.</p>
           ) : (
@@ -675,9 +684,36 @@ export default function JuntaDetalle() {
           )}
         </section>
 
-        {/* Decisiones */}
+        {/* Decisiones / para acordar */}
         <section>
-          <h2 className="font-semibold mb-2">Decisiones que se piden hoy</h2>
+          <h2 className="font-semibold mb-2">Para acordar hoy</h2>
+          {expectedNext.length > 0 && (
+            <ul className="mb-3 space-y-2">
+              {expectedNext.map((e) => (
+                <li
+                  key={e.id}
+                  className={cn(
+                    "flex items-start gap-3 rounded-md border border-border/60 px-3 py-2 text-sm",
+                    e.done && "opacity-60",
+                  )}
+                >
+                  <Checkbox
+                    checked={!!e.done}
+                    disabled={!liveEditable}
+                    onCheckedChange={(c) =>
+                      board.toggleExpectedNext.mutate(
+                        { id: e.id, done: !!c },
+                        { onError: (err: Error) => toast.error(err.message) },
+                      )
+                    }
+                    className="mt-0.5"
+                  />
+                  <span className={cn(e.done && "line-through text-muted-foreground")}>{e.text}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <h3 className="text-sm font-medium mb-2 text-muted-foreground">Decisiones</h3>
           {decisions.length === 0 ? (
             <p className="text-sm text-muted-foreground">Ninguna.</p>
           ) : (
@@ -713,16 +749,13 @@ export default function JuntaDetalle() {
           )}
         </section>
 
-        {/* Próxima */}
+        {/* Próxima — cierre de plantilla; los puntos de hoy viven en «Para acordar» */}
         <section>
-          <h2 className="font-semibold mb-2">Para la próxima sesión</h2>
-          <ul className="list-disc pl-5 text-sm space-y-1">
-            {expectedNext.map((e) => (
-              <li key={e.id} className={e.done ? "line-through text-muted-foreground" : ""}>
-                {e.text}
-              </li>
-            ))}
-          </ul>
+          <h2 className="font-semibold mb-2">Próxima sesión</h2>
+          <p className="text-sm text-muted-foreground">
+            Lo marcado en «Para acordar hoy» y los focos abiertos alimentan la siguiente junta al
+            preparar el tablero.
+          </p>
         </section>
 
         {/* Contexto: vencimientos / tareas */}
@@ -754,7 +787,7 @@ export default function JuntaDetalle() {
             </ul>
             <p className="text-[11px] text-muted-foreground mt-1">
               Abre la tarea para comentar o reasignar. Los acuerdos de arriba crean tareas por
-              empresa (Vizum / Sylon / Rivium) al elegir entidad y proyecto.
+              empresa al elegir entidad y proyecto.
             </p>
           </div>
         </section>
@@ -770,6 +803,8 @@ export default function JuntaDetalle() {
             onOpenHistory={(t) => setHistoryTopic(t)}
             onReopened={() => board.invalidate()}
           />
+        )}
+          </>
         )}
       </div>
 
@@ -801,18 +836,6 @@ export default function JuntaDetalle() {
           organizationId={orgId}
           actorUserId={user.id}
           meeting={meeting}
-          onDone={() => board.invalidate()}
-        />
-      )}
-
-      {user && series && (
-        <MtgImportResumenDialog
-          open={importResumenOpen}
-          onOpenChange={setImportResumenOpen}
-          organizationId={orgId}
-          actorUserId={user.id}
-          meetingId={meeting.id}
-          seriesId={series.id}
           onDone={() => board.invalidate()}
         />
       )}

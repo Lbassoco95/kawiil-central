@@ -78,8 +78,9 @@ export function MtgJoinLinkDialog(props: {
           <DialogTitle>Link de la llamada</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
-          Si ya estás en una reunión (o te pasaron el enlace), pégalo aquí. Queda
-          guardado en la junta para entrar con un clic — Teams, Meet o Zoom.
+          Esta junta ya existe: pega el enlace de Teams (u otra) para unirte y para
+          que Kawiilito sepa a qué llamada entrar a grabar. La grabación queda en
+          Teams; después la extraemos aquí.
         </p>
         <div className="space-y-2">
           <Label htmlFor="mtg-join-link">Enlace</Label>

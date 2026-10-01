@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import { extractResumenLines } from "./applyResumenToBoard";
 
 describe("applyResumenToBoard", () => {
-  it("extrae líneas útiles del resumen Sylon", () => {
+  it("extrae líneas útiles del resumen y omite encabezados", () => {
     const raw = `
-Resumen junta Grupo Sylon · 1 de octubre de 2026
+Resumen junta Grupo Demo · 1 de octubre de 2026
 Lo que se cerró
-Reporte de Hallazgos S1 2026 — Rivium — Enviado; Gonzalo confirmó.
+Reporte de Hallazgos S1 2026 — Entidad A — Enviado; se confirmó.
 En curso
 INE — verificación de datos de la credencial — Abierto y en tiempo
 Para acordar hoy

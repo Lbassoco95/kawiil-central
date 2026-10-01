@@ -268,6 +268,17 @@ export function useMtgBoard(meetingId: string | undefined) {
     onSuccess: invalidate,
   });
 
+  const toggleExpectedNext = useMutation({
+    mutationFn: async (input: { id: string; done: boolean }) => {
+      const { error } = await mtgDb
+        .from("mtg_expected_next")
+        .update({ done: input.done })
+        .eq("id", input.id);
+      if (error) throw error;
+    },
+    onSuccess: invalidate,
+  });
+
   return {
     ...boardQuery,
     patchUpdate,
@@ -276,6 +287,7 @@ export function useMtgBoard(meetingId: string | undefined) {
     addAgreement,
     setProject,
     markDecision,
+    toggleExpectedNext,
     invalidate,
   };
 }
