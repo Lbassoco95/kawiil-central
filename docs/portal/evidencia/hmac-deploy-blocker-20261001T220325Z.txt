@@ -1,0 +1,31 @@
+evidencia_hmac_deploy
+stamp_utc=20261001T220325Z
+branch=cursor/corte-4-demo-espejo-4489
+pr=334
+
+A_listar_proyectos_con_token:
+  comando: 'test -n \"$SUPABASE_ACCESS_TOKEN\" && curl -sS -H \"Authorization: Bearer $SUPABASE_ACCESS_TOKEN\" https://api.supabase.com/v1/projects'
+  resultado: BLOQUEADO — SUPABASE_ACCESS_TOKEN ABSENT en el entorno del agente (len check previo; Management API sin token → HTTP 401)
+  nota_mcp_alternativa: Supabase MCP (credencial distinta, NO el token acotado) listó 9 proyectos de la org, incl. ensayo+demo; NO se usó para mutaciones ni como sustituto del token scoped. A exige confirmar que el token temporal solo ve los dos autorizados — imposible sin el token.
+
+B_ensayo:
+  B1_secretos: NO ejecutado (falta token)
+  B2_deploy: NO ejecutado (falta token); scripts reproducibles añadidos en scripts/
+  B3_bateria: NO ejecutada
+  probe_sin_mutacion: POST portal-system-api ensayo → HTTP 503 {\"error\":\"not_configured\"}
+  edges_activas_ensayo: portal-api v16, portal-system-api v1, portal-system-dispatch v1, portal-notify v4 (+ canarios portal-api-*)
+
+C_demo:
+  omitido: B no pasó
+  probe_sin_mutacion: POST portal-system-api demo → HTTP 503 {\"error\":\"not_configured\"}
+  edges_activas_demo: portal-api v3, portal-system-api v1, portal-system-dispatch v1, portal-notify v1
+
+D_docs:
+  añadidos: docs/portal/DEPLOY-HMAC.md, scripts/deploy-portal-edge-functions.sh, scripts/set-portal-hmac-secrets.sh, scripts/hmac-battery-portal-system.sh, scripts/run-portal-hmac-pipeline.sh, scripts/lib/kawiil-os-allowlist.sh
+  actualizados: docs/portal/README.md, PROYECTO-SEPARADO.md, ARRANQUE-POLO.md, supabase/config.toml (verify_jwt portal-system-*)
+
+confirmaciones:
+  no_toco_central: si (ningún --project-ref qppfampapbxdgednkofc; denylist en scripts)
+  no_merge: si
+  no_secretos_en_logs_commits: si (token ausente; HMAC no generados/cargados)
+  aviso: usuario debe revocar token cursor-hmac-temporal tras usarlo / o reinyectar SUPABASE_ACCESS_TOKEN en secretos del Cloud Agent y re-ejecutar

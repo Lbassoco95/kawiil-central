@@ -6,6 +6,7 @@ Cara nueva de `kawiil-central` para los clientes de Kawiil: **espejo fiscal de s
 |---|---|
 | [RECONOCIMIENTO.md](RECONOCIMIENTO.md) | Qué había en el repo y qué se decidió |
 | [PROYECTO-SEPARADO.md](PROYECTO-SEPARADO.md) | Crear el proyecto OS, aplicar baseline (`npm run kawiil-os:db-push`) y secretos |
+| [DEPLOY-HMAC.md](DEPLOY-HMAC.md) | Despliegue reproducible de Edges + secretos HMAC (ensayo/demo) y batería |
 | [FRONTERA-API.md](FRONTERA-API.md) | Frontera entre proyectos, capas y riesgo residual |
 | [PAC.md](PAC.md) | Contrato espejo: PAC/Facturapi viven en central; OS no emite |
 | [DEMO.md](DEMO.md) | Entorno de demostración del espejo (D1–D7, reinicio exacto) |

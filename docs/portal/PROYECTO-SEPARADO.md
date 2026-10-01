@@ -86,9 +86,20 @@ Copie al proyecto nuevo estas funciones y sus dependencias compartidas:
 
 Use siempre el project ref de Kawiil OS. No despliegue allí funciones de Microsoft, Slack, Dropbox, Moffin de central ni `central-portal-api`.
 
+### Despliegue reproducible (CLI)
+
+Con `SUPABASE_ACCESS_TOKEN` en el entorno (nunca embebido):
+
+```bash
+./scripts/deploy-portal-edge-functions.sh tglhceuszxcgkxmskdkl   # ensayo
+./scripts/deploy-portal-edge-functions.sh ehtmlkvmiipmtcidsffk   # demo
+```
+
+Pipeline HMAC + deploy + batería: `./scripts/run-portal-hmac-pipeline.sh ensayo` (y solo si pasa, `demo`). Detalle: [DEPLOY-HMAC.md](DEPLOY-HMAC.md).
+
 ## 4. Crear secretos independientes
 
-En Kawiil OS configure:
+En Kawiil OS configure (nombres; valores solo vía `supabase secrets set` / Dashboard → Edge Functions → Secrets):
 
 - `CENTRAL_TO_OS_SIGNING_SECRET`: valida publicaciones de central.
 - `OS_TO_CENTRAL_SIGNING_SECRET`: firma entregas a central; debe ser distinto al anterior.
@@ -96,6 +107,12 @@ En Kawiil OS configure:
 - `CRON_SECRET`: invocación del despachador.
 - `PORTAL_ALLOWED_ORIGIN`, `PORTAL_PUBLIC_URL` y secretos de cifrado propios.
 - Proveedor de correo propio del portal, Turnstile y, cuando corresponda, PAC sandbox.
+
+Script que genera HMAC con `openssl rand` y los carga (sin escribir valores al repo):
+
+```bash
+./scripts/set-portal-hmac-secrets.sh <ref-ensayo-o-demo>
+```
 
 No configure en Kawiil OS:
 
