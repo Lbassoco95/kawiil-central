@@ -46,13 +46,17 @@ export async function findGroupBoardMeetingForDay(opts: {
   return null;
 }
 
-/** Junta ad hoc vacía (sin serie / sin updates) candidata a redirigir al tablero de grupo. */
+/**
+ * Solo redirige juntas vacías (sin serie y sin temas).
+ * Nunca por el solo hecho de estar «cancelada»: cancelar no debe vaciar el tablero
+ * ni empujar al usuario a otra junta si esta ya tiene contenido.
+ */
 export function shouldSeekGroupBoard(meeting: {
   series_id: string | null;
   status: string;
   topicUpdateCount: number;
 }): boolean {
-  if (meeting.status === "cancelled") return true;
-  if (!meeting.series_id && meeting.topicUpdateCount === 0) return true;
-  return false;
+  if (meeting.topicUpdateCount > 0) return false;
+  if (meeting.series_id) return false;
+  return true;
 }

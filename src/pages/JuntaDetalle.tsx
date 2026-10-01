@@ -472,6 +472,22 @@ export default function JuntaDetalle() {
             onPasteLink={() => setJoinLinkOpen(true)}
           />
 
+          {!meeting.teams_join_url && liveEditable && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-sky-500/30 bg-sky-500/5 px-3 py-2.5 text-sm">
+              <div className="min-w-0">
+                <p className="font-medium text-foreground">Falta el link de la llamada</p>
+                <p className="text-xs text-muted-foreground">
+                  Pega el enlace de Teams (o Meet/Zoom) de esta reunión para Unirse, grabar audio
+                  de la llamada y dejar lista la extracción después.
+                </p>
+              </div>
+              <Button type="button" size="sm" onClick={() => setJoinLinkOpen(true)}>
+                <Link2 className="h-3.5 w-3.5 mr-1" />
+                Pegar link de Teams
+              </Button>
+            </div>
+          )}
+
             {user && orgId && (
             <MtgRecordingControls
               organizationId={orgId}
