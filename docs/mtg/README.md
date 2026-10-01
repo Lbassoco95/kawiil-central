@@ -95,6 +95,19 @@ Puedes crear una junta **sin cliente** (prospecto / interna) desde `/juntas` o c
 | **2 — En vivo** | Subtítulos/traducción en tiempo real durante la llamada (Realtime / `gpt-live-transcribe`) | Roadmap |
 | **3 — Kawiilito bot** | Bot que se une a Teams/Meet (p. ej. Recall.ai), graba A/V aunque nadie grabe en el browser, y alimenta el mismo pipeline STT→ES | Roadmap (`Recall.ai` abajo) |
 
+### Qué sirve del stack Hetzner / “cerebro” (y qué no)
+
+| Pieza | Dónde | ¿Sirve para que un bot *entre* a grabar? | Sí sirve para |
+|---|---|---|---|
+| `openclaw-gateway` | VM Hetzner (systemd `:3000`) | **No** — solo `/v1/chat/completions` | Minuta / JSON a partir de transcript (`worker/mtg`) |
+| `kawiil-agents` | VM Hetzner (Docker) | **No** — cola de agentes / Ju'un portales | `dispatch-to-agent` → `/api/tasks/dispatch` |
+| `job-queue-dispatch` → `/api/jobs/run` | Edge → VM | **No** | Correr `mtg.generate_minutes` / fetch transcript |
+| Webhook Donna/Cerebro | Contrato en este README | **No** (ni implementado) | Eventos post-junta (`mtg.minutes_approved`…) |
+| Microsoft Graph (tenant kawiil.mx) | Edges `mtg-graph-*` | **No** entra; **sí** puede *extraer* recording/transcript de Teams tras la call | Stub **501** hasta admin consent de Polo |
+| Browser + Storage `mtg` | Front + Edge Whisper | N/A | Captura real **hoy** (Audio de llamada / Grabar audio) |
+
+**Conclusión operativa:** para la junta de hoy, pega el link → graba en Teams o con **Audio de llamada** → Whisper → el cerebro Hetzner (openclaw) arma la minuta. Un bot que se una solo requiere Recall (u otro) + Edge nueva; **no** reutiliza openclaw/kawiil-agents.
+
 Límite etapa 1: Whisper acepta ~**25 MB** por archivo. Preferir **Grabar audio** o clips livianos; el A/V completo se guarda en el bucket aunque el STT falle por tamaño.
 
 Para la demo de mañana a las 9 (sin cliente): Calendario → evento → **Grabar en Juntas** → iniciar → grabar/notas → terminar → minuta → más tarde **Asignar cliente**.

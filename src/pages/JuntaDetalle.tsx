@@ -39,13 +39,32 @@ import {
   resolvedThisMeeting,
 } from "@/lib/mtg/boardArchive";
 import { unreviewedCount } from "@/lib/mtg/meetingLifecycle";
-import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, Loader2, Projector } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  ExternalLink,
+  FileUp,
+  Link2,
+  Loader2,
+  Projector,
+  Video,
+} from "lucide-react";
 import { toast } from "sonner";
 import { MtgUploadTranscriptButton } from "@/components/mtg/MtgUploadTranscriptButton";
 import { MtgRecordingControls } from "@/components/mtg/MtgRecordingControls";
 import { MtgAssignClientDialog } from "@/components/mtg/MtgAssignClientDialog";
 import { MtgTopicHistoryDrawer } from "@/components/mtg/MtgTopicHistoryDrawer";
 import { MtgArchiveSection } from "@/components/mtg/MtgArchiveSection";
+import { MtgJoinLinkDialog } from "@/components/mtg/MtgJoinLinkDialog";
+import { MtgImportResumenDialog } from "@/components/mtg/MtgImportResumenDialog";
+import { MtgCallCaptureBar } from "@/components/mtg/MtgCallCaptureBar";
+import { MtgPresentationTemplate } from "@/components/mtg/MtgPresentationTemplate";
+import { parseMeetingJoinLink } from "@/lib/mtg/joinLink";
+import {
+  findGroupBoardMeetingForDay,
+  shouldSeekGroupBoard,
+} from "@/lib/mtg/findGroupBoardMeeting";
 
 const PROJECTION_KEY = "mtg-projection-mode";
 
@@ -66,6 +85,8 @@ export default function JuntaDetalle() {
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [historyTopic, setHistoryTopic] = useState<{ id: string; title: string } | null>(null);
   const [assignClientOpen, setAssignClientOpen] = useState(false);
+  const [joinLinkOpen, setJoinLinkOpen] = useState(false);
+  const [importResumenOpen, setImportResumenOpen] = useState(false);
   const [agreementDraft, setAgreementDraft] = useState({
     text: "",
     entityKey: "",
@@ -76,6 +97,7 @@ export default function JuntaDetalle() {
     dueDate: "",
   });
   const debounceTimers = useRef<Map<string, number>>(new Map());
+  const redirectedRef = useRef(false);
 
   useEffect(() => {
     try {
@@ -84,6 +106,64 @@ export default function JuntaDetalle() {
       /* ignore */
     }
   }, [projection]);
+
+  useEffect(() => {
+    if (!projection) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      setProjection(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [projection]);
+
+  // Junta vacía/cancelada del calendario → tablero de grupo del mismo día (con plantilla DOCX).
+  useEffect(() => {
+    if (!board.data || redirectedRef.current) return;
+    const m = board.data.meeting;
+    const topicCount = board.data.boardTopics.filter((t) => t.update).length;
+    if (
+      !shouldSeekGroupBoard({
+        series_id: m.series_id,
+        status: m.status,
+        topicUpdateCount: topicCount,
+      })
+    ) {
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const target = await findGroupBoardMeetingForDay({
+          organizationId: m.organization_id,
+          scheduledAt: m.scheduled_at,
+          excludeMeetingId: m.id,
+        });
+        if (cancelled || !target || target.id === m.id) return;
+        redirectedRef.current = true;
+        toast.message("Abriendo el tablero de grupo con la plantilla de sesión…", {
+          duration: 6000,
+        });
+        navigate(`/juntas/${target.id}`, { replace: true });
+      } catch {
+        /* no bloquear si no hay tablero hermano */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [board.data, navigate]);
+
+  // Multi-empresa con temas: abrir en plantilla presentación (estructura tipo DOCX).
+  useEffect(() => {
+    const ents = board.data?.series?.entities?.length ?? 0;
+    const topics = board.data?.boardTopics?.length ?? 0;
+    if (ents > 1 && topics > 0) {
+      setProjection(true);
+    }
+  }, [board.data?.meeting?.id, board.data?.series?.entities?.length, board.data?.boardTopics?.length]);
 
   const entities = useMemo(
     () => entitiesForFilter(board.data?.series?.entities, board.data?.meeting.client_id ?? null),
@@ -217,14 +297,132 @@ export default function JuntaDetalle() {
       if (!ok) return;
     }
     board.doEnd.mutate(undefined, {
-      onSuccess: () => toast.success("Junta terminada"),
+      onSuccess: () =>
+        toast.success("Junta terminada — borrador de minuta listo", {
+          action: {
+            label: "Ver minuta",
+            onClick: () => navigate(`/juntas/${meetingId}/minuta`),
+          },
+        }),
       onError: (e: Error) => toast.error(e.message),
     });
   };
 
+  const entityFilterChips =
+    entities.length > 1 ? (
+      <>
+        <button
+          type="button"
+          className={cn(
+            "rounded-full border px-3 py-1 text-[0.85em] font-medium transition-colors",
+            entityFilter === "all"
+              ? "border-foreground bg-foreground text-background"
+              : "border-border bg-card text-muted-foreground hover:border-foreground/40 hover:text-foreground",
+          )}
+          aria-pressed={entityFilter === "all"}
+          onClick={() => setEntityFilter("all")}
+        >
+          Todo
+        </button>
+        {entities.map((e) => (
+          <button
+            key={e.key}
+            type="button"
+            className={cn(
+              "rounded-full border px-3 py-1 text-[0.85em] font-medium transition-colors",
+              entityFilter === e.key
+                ? "border-foreground bg-foreground text-background"
+                : "border-border bg-card text-muted-foreground hover:border-foreground/40 hover:text-foreground",
+            )}
+            aria-pressed={entityFilter === e.key}
+            onClick={() => setEntityFilter(e.key)}
+          >
+            {e.label}
+          </button>
+        ))}
+      </>
+    ) : null;
+
+  if (projection) {
+    return (
+      <AppLayout chrome="none">
+        <MtgPresentationTemplate
+          title={series?.title ?? meeting.title ?? "Junta"}
+          dateLabel={formatDateMX(meeting.scheduled_at)}
+          topics={topicsFiltered}
+          entities={entities}
+          expectedNext={expectedNext}
+          decisions={decisions}
+          agreements={agreements}
+          liveEditable={liveEditable}
+          projection
+          onPatchUpdate={schedulePatch}
+          onToggleExpected={(id, done) =>
+            board.toggleExpectedNext.mutate(
+              { id, done },
+              { onError: (e: Error) => toast.error(e.message) },
+            )
+          }
+          onOpenHistory={(t) => setHistoryTopic(t)}
+          toolbar={
+            <>
+              {entityFilterChips}
+              {user && series && liveEditable && (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-3 py-1 text-[0.85em] font-medium text-muted-foreground hover:border-foreground/40 hover:text-foreground"
+                  onClick={() => setImportResumenOpen(true)}
+                  title="Cargar texto/DOCX del resumen a los temas del tablero"
+                >
+                  <FileUp className="h-3.5 w-3.5" />
+                  Cargar resumen
+                </button>
+              )}
+              {savedAt && (
+                <span className="font-mono text-[0.8em] text-muted-foreground">
+                  guardado {savedAt}
+                </span>
+              )}
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 rounded-full border border-foreground bg-foreground px-3 py-1 text-[0.85em] font-medium text-background"
+                onClick={() => setProjection(false)}
+              >
+                <Projector className="h-3.5 w-3.5" />
+                Salir de proyección
+              </button>
+            </>
+          }
+        />
+        <MtgTopicHistoryDrawer
+          topicId={historyTopic?.id ?? null}
+          topicTitle={historyTopic?.title}
+          open={!!historyTopic}
+          onOpenChange={(o) => {
+            if (!o) setHistoryTopic(null);
+          }}
+        />
+        {user && series && (
+          <MtgImportResumenDialog
+            open={importResumenOpen}
+            onOpenChange={setImportResumenOpen}
+            organizationId={orgId}
+            actorUserId={user.id}
+            meetingId={meeting.id}
+            seriesId={series.id}
+            onDone={() => {
+              board.invalidate();
+              setProjection(true);
+            }}
+          />
+        )}
+      </AppLayout>
+    );
+  }
+
   return (
     <AppLayout>
-      <div className={cn("space-y-6 animate-fade-in pb-24", projection && "text-lg")}>
+      <div className="space-y-6 animate-fade-in pb-24">
         {/* Encabezado */}
         <div className="sticky top-0 z-20 glass-card p-4 space-y-3 border-b">
           <div className="flex flex-wrap items-start gap-3 justify-between">
@@ -298,17 +496,48 @@ export default function JuntaDetalle() {
             </div>
             <div className="flex flex-wrap gap-2">
               <Button
-                variant={projection ? "default" : "outline"}
+                variant="outline"
                 size="sm"
-                onClick={() => setProjection((p) => !p)}
+                onClick={() => setProjection(true)}
+                title="Vista tipo tablero a pantalla completa para compartir pantalla"
               >
-                <Projector className="h-3.5 w-3.5 mr-1" /> Modo proyección
+                <Projector className="h-3.5 w-3.5 mr-1" />
+                Proyectar
               </Button>
-              {meeting.teams_join_url && (
-                <Button asChild variant="outline" size="sm">
-                  <a href={meeting.teams_join_url} target="_blank" rel="noreferrer">
-                    Teams <ExternalLink className="h-3 w-3 ml-1" />
-                  </a>
+              {meeting.teams_join_url ? (
+                <>
+                  <Button asChild size="sm">
+                    <a href={meeting.teams_join_url} target="_blank" rel="noreferrer">
+                      <Video className="h-3.5 w-3.5 mr-1" />
+                      {(() => {
+                        try {
+                          return `Unirse · ${parseMeetingJoinLink(meeting.teams_join_url).label}`;
+                        } catch {
+                          return "Unirse a la llamada";
+                        }
+                      })()}
+                      <ExternalLink className="h-3 w-3 ml-1" />
+                    </a>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setJoinLinkOpen(true)}
+                  >
+                    <Link2 className="h-3.5 w-3.5 mr-1" />
+                    Cambiar link
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setJoinLinkOpen(true)}
+                >
+                  <Link2 className="h-3.5 w-3.5 mr-1" />
+                  Pegar link de llamada
                 </Button>
               )}
               {liveEditable && meeting.status === "planned" && (
@@ -327,6 +556,18 @@ export default function JuntaDetalle() {
               {liveEditable && (meeting.status === "in_progress" || meeting.status === "planned") && (
                 <Button size="sm" variant="secondary" onClick={handleEnd} disabled={board.doEnd.isPending}>
                   Terminar junta
+                </Button>
+              )}
+              {user && series && liveEditable && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setImportResumenOpen(true)}
+                  title="Cargar texto/DOCX del resumen a los temas del tablero"
+                >
+                  <FileUp className="h-3.5 w-3.5 mr-1" />
+                  Cargar resumen
                 </Button>
               )}
               {user && (
@@ -349,6 +590,28 @@ export default function JuntaDetalle() {
               )}
             </div>
           </div>
+
+          <MtgCallCaptureBar
+            meeting={meeting}
+            onPasteLink={() => setJoinLinkOpen(true)}
+          />
+
+          {!meeting.teams_join_url && liveEditable && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-sky-500/30 bg-sky-500/5 px-3 py-2.5 text-sm">
+              <div className="min-w-0">
+                <p className="font-medium text-foreground">Falta el link de la llamada</p>
+                <p className="text-xs text-muted-foreground">
+                  Pega el enlace de Teams (o Meet/Zoom) de esta reunión para Unirse, grabar audio
+                  de la llamada y dejar lista la extracción después.
+                </p>
+              </div>
+              <Button type="button" size="sm" onClick={() => setJoinLinkOpen(true)}>
+                <Link2 className="h-3.5 w-3.5 mr-1" />
+                Pegar link de Teams
+              </Button>
+            </div>
+          )}
+
             {user && orgId && (
             <MtgRecordingControls
               organizationId={orgId}
@@ -359,21 +622,60 @@ export default function JuntaDetalle() {
             />
           )}
 
-          {!meeting.client_id && user && (
+          {meeting.recording_path ? (
+            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2.5 text-sm space-y-0.5">
+              <p className="font-medium text-foreground">Grabación en Storage</p>
+              <p className="text-muted-foreground text-xs">
+                {meeting.recording_bytes != null
+                  ? `${(meeting.recording_bytes / (1024 * 1024)).toFixed(1)} MB · `
+                  : ""}
+                {meeting.recording_saved_at
+                  ? `guardada ${new Date(meeting.recording_saved_at).toLocaleString("es-MX")}`
+                  : "enlazada a esta junta"}
+                . Puedes transcribir o volver a subir si necesitas otra toma.
+              </p>
+            </div>
+          ) : (
+            (meeting.status === "ended" ||
+              meeting.status === "minutes_draft" ||
+              meeting.status === "minutes_review" ||
+              meeting.status === "in_progress" ||
+              meeting.status === "planned") && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2.5 text-sm space-y-1">
+                <p className="font-medium text-foreground">Aún sin grabación en Storage</p>
+                <p className="text-muted-foreground text-xs">
+                  Usa <strong>Grabar audio</strong> / <strong>Audio de llamada</strong> (hasta ~3 h)
+                  o <strong>Subir grabación</strong>. Al detener, se guarda una copia local y luego
+                  se sube; si falla la red puedes <strong>Reintentar subida</strong> o{" "}
+                  <strong>Descargar copia local</strong>. Bucket mtg hasta 500 MB.
+                </p>
+              </div>
+            )
+          )}
+
+          {!meeting.client_id && entities.length === 0 && user && (
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm">
               <p className="text-muted-foreground">
-                Esta junta aún no tiene cliente. Puedes grabar, tomar notas y generar minuta; al final
-                asignas el cliente para migrar el contexto o las tareas.
+                Esta junta aún no tiene cliente(s). Asigna uno o varios (grupo) para filtrar temas y
+                crear tareas por empresa. La plantilla de sesión se alimenta en el tablero.
               </p>
               <Button size="sm" variant="secondary" onClick={() => setAssignClientOpen(true)}>
-                Asignar cliente
+                Asignar cliente(s)
               </Button>
             </div>
           )}
-          {meeting.client_id && user && (
-            <div className="flex justify-end">
+          {(meeting.client_id || entities.length > 0) && user && (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              {entities.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Clientes en tablero:{" "}
+                  <span className="text-foreground font-medium">
+                    {entities.map((e) => e.label).join(" · ")}
+                  </span>
+                </p>
+              )}
               <Button size="sm" variant="ghost" onClick={() => setAssignClientOpen(true)}>
-                Cambiar / reasignar cliente
+                {entities.length > 1 ? "Editar clientes" : "Cambiar / añadir clientes"}
               </Button>
             </div>
           )}
@@ -385,7 +687,7 @@ export default function JuntaDetalle() {
                 variant={entityFilter === "all" ? "default" : "outline"}
                 onClick={() => setEntityFilter("all")}
               >
-                Todo
+                Todo el grupo
               </Button>
               {entities.map((e) => (
                 <Button
@@ -499,8 +801,17 @@ export default function JuntaDetalle() {
               >
                 <div className="font-medium">{a.text}</div>
                 <div className="text-xs text-muted-foreground mt-1">
+                  {a.entity_key
+                    ? `${entities.find((e) => e.key === a.entity_key)?.label ?? a.entity_key} · `
+                    : ""}
                   {a.status} · {a.project_id ? "con proyecto" : "ámbar (sin proyecto)"} ·{" "}
-                  {a.task_id ? `tarea ${a.task_id.slice(0, 8)}…` : "sin tarea"}
+                  {a.task_id ? (
+                    <Link to={`/tareas?task=${a.task_id}`} className="text-sky-700 dark:text-sky-400 hover:underline">
+                      ver tarea
+                    </Link>
+                  ) : (
+                    "sin tarea"
+                  )}
                 </div>
                 {liveEditable && a.status === "confirmed" && !a.task_id && user && (
                   <Select
@@ -532,10 +843,10 @@ export default function JuntaDetalle() {
           </ul>
         </section>
 
-        {/* Resuelto / Nuevo */}
+        {/* Resuelto / Nuevo — misma estructura que la plantilla DOCX */}
         {resolved.length > 0 && (
           <section>
-            <h2 className="font-semibold mb-2">Se resolvió desde la sesión pasada</h2>
+            <h2 className="font-semibold mb-2">Lo que se cerró</h2>
             {resolved.map((t) => (
               <TopicRow
                 key={t.id}
@@ -550,7 +861,7 @@ export default function JuntaDetalle() {
         )}
         {news.length > 0 && (
           <section>
-            <h2 className="font-semibold mb-2">Nuevo desde la sesión pasada</h2>
+            <h2 className="font-semibold mb-2">Focos / nuevo</h2>
             {news.map((t) => (
               <TopicRow
                 key={t.id}
@@ -564,9 +875,9 @@ export default function JuntaDetalle() {
           </section>
         )}
 
-        {/* Sigue abierto */}
+        {/* En curso */}
         <section>
-          <h2 className="font-semibold mb-2">Sigue abierto</h2>
+          <h2 className="font-semibold mb-2">En curso</h2>
           {openSorted.length === 0 ? (
             <p className="text-sm text-muted-foreground">Sin temas abiertos en este filtro.</p>
           ) : (
@@ -583,9 +894,36 @@ export default function JuntaDetalle() {
           )}
         </section>
 
-        {/* Decisiones */}
+        {/* Decisiones / para acordar */}
         <section>
-          <h2 className="font-semibold mb-2">Decisiones que se piden hoy</h2>
+          <h2 className="font-semibold mb-2">Para acordar hoy</h2>
+          {expectedNext.length > 0 && (
+            <ul className="mb-3 space-y-2">
+              {expectedNext.map((e) => (
+                <li
+                  key={e.id}
+                  className={cn(
+                    "flex items-start gap-3 rounded-md border border-border/60 px-3 py-2 text-sm",
+                    e.done && "opacity-60",
+                  )}
+                >
+                  <Checkbox
+                    checked={!!e.done}
+                    disabled={!liveEditable}
+                    onCheckedChange={(c) =>
+                      board.toggleExpectedNext.mutate(
+                        { id: e.id, done: !!c },
+                        { onError: (err: Error) => toast.error(err.message) },
+                      )
+                    }
+                    className="mt-0.5"
+                  />
+                  <span className={cn(e.done && "line-through text-muted-foreground")}>{e.text}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <h3 className="text-sm font-medium mb-2 text-muted-foreground">Decisiones</h3>
           {decisions.length === 0 ? (
             <p className="text-sm text-muted-foreground">Ninguna.</p>
           ) : (
@@ -621,16 +959,13 @@ export default function JuntaDetalle() {
           )}
         </section>
 
-        {/* Próxima */}
+        {/* Próxima — cierre de plantilla; los puntos de hoy viven en «Para acordar» */}
         <section>
-          <h2 className="font-semibold mb-2">Para la próxima sesión</h2>
-          <ul className="list-disc pl-5 text-sm space-y-1">
-            {expectedNext.map((e) => (
-              <li key={e.id} className={e.done ? "line-through text-muted-foreground" : ""}>
-                {e.text}
-              </li>
-            ))}
-          </ul>
+          <h2 className="font-semibold mb-2">Próxima sesión</h2>
+          <p className="text-sm text-muted-foreground">
+            Lo marcado en «Para acordar hoy» y los focos abiertos alimentan la siguiente junta al
+            preparar el tablero.
+          </p>
         </section>
 
         {/* Contexto: vencimientos / tareas */}
@@ -650,10 +985,20 @@ export default function JuntaDetalle() {
             <ul className="text-xs space-y-1 max-h-40 overflow-auto">
               {board.data.plainTasks.slice(0, 40).map((t) => (
                 <li key={t.id}>
-                  {t.title} · {t.status}
+                  <Link
+                    to={`/tareas?task=${t.id}`}
+                    className="text-sky-700 dark:text-sky-400 hover:underline"
+                  >
+                    {t.title}
+                  </Link>
+                  <span className="text-muted-foreground"> · {t.status}</span>
                 </li>
               ))}
             </ul>
+            <p className="text-[11px] text-muted-foreground mt-1">
+              Abre la tarea para comentar o reasignar. Los acuerdos de arriba crean tareas por
+              empresa al elegir entidad y proyecto.
+            </p>
           </div>
         </section>
 
@@ -688,7 +1033,34 @@ export default function JuntaDetalle() {
           actorUserId={user.id}
           meetingId={meeting.id}
           currentClientId={meeting.client_id}
+          currentEntityClientIds={entities.map((e) => e.client_id)}
           onDone={() => board.invalidate()}
+        />
+      )}
+
+      {user && (
+        <MtgJoinLinkDialog
+          open={joinLinkOpen}
+          onOpenChange={setJoinLinkOpen}
+          organizationId={orgId}
+          actorUserId={user.id}
+          meeting={meeting}
+          onDone={() => board.invalidate()}
+        />
+      )}
+
+      {user && series && (
+        <MtgImportResumenDialog
+          open={importResumenOpen}
+          onOpenChange={setImportResumenOpen}
+          organizationId={orgId}
+          actorUserId={user.id}
+          meetingId={meeting.id}
+          seriesId={series.id}
+          onDone={() => {
+            board.invalidate();
+            setProjection(true);
+          }}
         />
       )}
     </AppLayout>
@@ -719,13 +1091,20 @@ function TopicRow({
   return (
     <div className={cn("border rounded-md p-3 mb-2 space-y-2", MOVEMENT[u.movement].color.replace(/text-\S+/g, ""))}>
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <button
-          type="button"
-          className="font-medium text-sm text-left hover:underline"
-          onClick={onOpenHistory}
-        >
-          {topic.title}
-        </button>
+        <div className="min-w-0 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className="font-medium text-sm text-left hover:underline"
+            onClick={onOpenHistory}
+          >
+            {topic.title}
+          </button>
+          {topic.entity_key && (
+            <Badge variant="secondary" className="text-[10px]">
+              {topic.entity_key}
+            </Badge>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           {readOnly ? (
             <Badge variant="outline" className={MOVEMENT[u.movement].color}>

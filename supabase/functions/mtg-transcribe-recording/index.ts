@@ -3,7 +3,9 @@
  * y deja el texto en español en el bucket mtg (transcripts).
  *
  * JWT requerido. Secret: OPENAI_API_KEY.
- * Etapa 1: archivo ≤ ~24 MB (límite Whisper). Multiidioma → español.
+ * Soporta grabaciones largas (~3 h): parte el archivo en trozos ≤20 MB
+ * (límite Whisper ~25 MB) y fusiona segmentos con offset temporal.
+ * Multiidioma → español.
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -16,7 +18,12 @@ const cors = {
 };
 
 const MTG_BUCKET = "mtg";
-const MAX_BYTES = 24 * 1024 * 1024;
+/** Tope por petición Whisper. */
+const WHISPER_MAX_BYTES = 24 * 1024 * 1024;
+/** Tamaño de cada trozo (bajo el techo). */
+const WHISPER_CHUNK_BYTES = 20 * 1024 * 1024;
+/** Archivo completo admitido (~3 h audio con margen). */
+const MAX_RECORDING_BYTES = 200 * 1024 * 1024;
 
 type WhisperSegment = { start: number; end: number; text: string };
 
@@ -71,16 +78,91 @@ function buildStoragePath(opts: {
   return `${opts.organizationId}/mtg/${opts.anchorType}/${opts.anchorId}/${yyyy}/${mm}/transcripts/${ts}_${safe}`;
 }
 
-async function translateSegmentsToSpanish(
+/** Parte bytes para Whisper; reusa cabecera en trozos siguientes (webm/mp4). */
+function splitBytesForWhisper(
+  bytes: Uint8Array,
+  chunkBytes = WHISPER_CHUNK_BYTES,
+  headerBytes = 64 * 1024,
+): Uint8Array[] {
+  if (bytes.byteLength === 0) return [];
+  if (bytes.byteLength <= chunkBytes) return [bytes];
+  const headerLen = Math.min(headerBytes, Math.floor(chunkBytes / 4), bytes.byteLength);
+  const header = bytes.subarray(0, headerLen);
+  const out: Uint8Array[] = [];
+  let offset = 0;
+  while (offset < bytes.byteLength) {
+    if (offset === 0) {
+      const end = Math.min(chunkBytes, bytes.byteLength);
+      out.push(bytes.subarray(0, end));
+      offset = end;
+      continue;
+    }
+    const bodyBudget = chunkBytes - headerLen;
+    const end = Math.min(offset + bodyBudget, bytes.byteLength);
+    const body = bytes.subarray(offset, end);
+    const merged = new Uint8Array(headerLen + body.byteLength);
+    merged.set(header, 0);
+    merged.set(body, headerLen);
+    out.push(merged);
+    offset = end;
+  }
+  return out;
+}
+
+async function whisperTranscribeChunk(opts: {
+  apiKey: string;
+  bytes: Uint8Array;
+  mime: string;
+  ext: string;
+  fileName: string;
+}): Promise<{ segments: WhisperSegment[]; duration: number; language: string | null }> {
+  const form = new FormData();
+  form.append(
+    "file",
+    new Blob([opts.bytes], { type: opts.mime }),
+    opts.fileName,
+  );
+  form.append("model", "whisper-1");
+  form.append("response_format", "verbose_json");
+  form.append(
+    "prompt",
+    "Junta de trabajo Kawiil. Puede haber español, inglés o chino. Nombres propios y términos fiscales/legales.",
+  );
+
+  const sttResp = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${opts.apiKey}` },
+    body: form,
+  });
+  if (!sttResp.ok) {
+    const errText = await sttResp.text();
+    throw new Error(`Whisper ${sttResp.status}: ${errText.slice(0, 400)}`);
+  }
+  const stt = await sttResp.json();
+  const language =
+    typeof stt.language === "string" ? stt.language : null;
+  let segments: WhisperSegment[] = Array.isArray(stt.segments)
+    ? stt.segments.map((s: { start?: number; end?: number; text?: string }) => ({
+        start: Number(s.start) || 0,
+        end: Number(s.end) || 0,
+        text: String(s.text || ""),
+      }))
+    : [];
+  if (segments.length === 0 && typeof stt.text === "string" && stt.text.trim()) {
+    segments = [{ start: 0, end: 1, text: stt.text.trim() }];
+  }
+  const duration =
+    typeof stt.duration === "number" && stt.duration > 0
+      ? stt.duration
+      : segments.reduce((max, s) => Math.max(max, s.end), 0);
+  return { segments, duration, language };
+}
+
+async function translateSegmentBatch(
   apiKey: string,
-  segments: WhisperSegment[],
+  batch: { i: number; t: string }[],
   sourceLang: string | null,
-): Promise<WhisperSegment[]> {
-  if (segments.length === 0) return segments;
-  const payload = segments.map((s, idx) => ({
-    i: idx,
-    t: s.text,
-  }));
+): Promise<Map<number, string>> {
   const resp = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -104,7 +186,7 @@ async function translateSegmentsToSpanish(
           role: "user",
           content: JSON.stringify({
             source_language: sourceLang || "unknown",
-            items: payload,
+            items: batch,
           }),
         },
       ],
@@ -130,6 +212,26 @@ async function translateSegmentsToSpanish(
     if (typeof item?.i === "number" && typeof item?.t === "string") {
       byIndex.set(item.i, item.t.trim());
     }
+  }
+  return byIndex;
+}
+
+async function translateSegmentsToSpanish(
+  apiKey: string,
+  segments: WhisperSegment[],
+  sourceLang: string | null,
+): Promise<WhisperSegment[]> {
+  if (segments.length === 0) return segments;
+  const byIndex = new Map<number, string>();
+  const batchSize = 80;
+  for (let start = 0; start < segments.length; start += batchSize) {
+    const slice = segments.slice(start, start + batchSize);
+    const payload = slice.map((s, j) => ({
+      i: start + j,
+      t: s.text,
+    }));
+    const part = await translateSegmentBatch(apiKey, payload, sourceLang);
+    for (const [k, v] of part) byIndex.set(k, v);
   }
   return segments.map((s, idx) => ({
     ...s,
@@ -246,19 +348,19 @@ serve(async (req) => {
     }
 
     const bytes = new Uint8Array(await fileBlob.arrayBuffer());
-    if (bytes.byteLength > MAX_BYTES) {
+    if (bytes.byteLength > MAX_RECORDING_BYTES) {
       await admin
         .from("mtg_meetings")
         .update({
           transcript_status: "failed",
           transcript_unavailable_reason:
-            "Grabación > 24 MB: en etapa 1 Whisper tiene límite. Sube solo audio o un clip más corto.",
+            "Grabación > 200 MB (~3 h). Sube audio más liviano o parte la conversación.",
         })
         .eq("id", meetingId);
       return new Response(
         JSON.stringify({
           error:
-            "La grabación supera 24 MB (límite Whisper etapa 1). Usa «Grabar audio» o sube un archivo de audio más liviano.",
+            "La grabación supera ~200 MB (tope para ~3 horas). Usa audio a bitrate moderado o parte la sesión.",
           code: "file_too_large",
           size_bytes: bytes.byteLength,
         }),
@@ -289,56 +391,54 @@ serve(async (req) => {
               ? "audio/mp4"
               : "audio/webm";
 
-    const form = new FormData();
-    form.append(
-      "file",
-      new Blob([bytes], { type: mime }),
-      `recording.${ext}`,
-    );
-    form.append("model", "whisper-1");
-    form.append("response_format", "verbose_json");
-    // Hint opcional: no forzamos idioma para dejar detectar chino/inglés/español.
-    form.append(
-      "prompt",
-      "Junta de trabajo Kawiil. Puede haber español, inglés o chino. Nombres propios y términos fiscales/legales.",
-    );
-
-    const sttResp = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${openaiKey}` },
-      body: form,
-    });
-    if (!sttResp.ok) {
-      const errText = await sttResp.text();
+    const chunks = splitBytesForWhisper(bytes);
+    let segments: WhisperSegment[] = [];
+    let languageDetected: string | null = null;
+    let timeOffset = 0;
+    try {
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i];
+        if (chunk.byteLength > WHISPER_MAX_BYTES) {
+          throw new Error(`Trozo ${i + 1} supera el límite Whisper (${chunk.byteLength} bytes)`);
+        }
+        const part = await whisperTranscribeChunk({
+          apiKey: openaiKey,
+          bytes: chunk,
+          mime,
+          ext,
+          fileName: `recording-part${i + 1}.${ext}`,
+        });
+        if (!languageDetected && part.language) languageDetected = part.language;
+        for (const s of part.segments) {
+          segments.push({
+            start: s.start + timeOffset,
+            end: s.end + timeOffset,
+            text: s.text,
+          });
+        }
+        timeOffset += part.duration > 0
+          ? part.duration
+          : Math.max(0, ...part.segments.map((s) => s.end), 0);
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
       await admin
         .from("mtg_meetings")
         .update({
           transcript_status: "failed",
-          transcript_unavailable_reason: `Whisper ${sttResp.status}: ${errText.slice(0, 200)}`,
+          transcript_unavailable_reason: msg.slice(0, 240),
         })
         .eq("id", meetingId);
       return new Response(
         JSON.stringify({
-          error: `OpenAI Whisper falló (${sttResp.status})`,
-          details: errText.slice(0, 400),
+          error: "OpenAI Whisper falló al transcribir (posible archivo largo)",
+          details: msg.slice(0, 400),
+          chunks: chunks.length,
         }),
         { status: 502, headers: { ...cors, "Content-Type": "application/json" } },
       );
     }
 
-    const stt = await sttResp.json();
-    const languageDetected =
-      typeof stt.language === "string" ? stt.language : null;
-    let segments: WhisperSegment[] = Array.isArray(stt.segments)
-      ? stt.segments.map((s: { start?: number; end?: number; text?: string }) => ({
-          start: Number(s.start) || 0,
-          end: Number(s.end) || 0,
-          text: String(s.text || ""),
-        }))
-      : [];
-    if (segments.length === 0 && typeof stt.text === "string" && stt.text.trim()) {
-      segments = [{ start: 0, end: 1, text: stt.text.trim() }];
-    }
     if (segments.length === 0) {
       await admin
         .from("mtg_meetings")
@@ -414,6 +514,8 @@ serve(async (req) => {
         language_detected: languageDetected,
         translated_to_spanish: translated,
         segments: segments.length,
+        chunks: chunks.length,
+        size_bytes: bytes.byteLength,
       },
     });
 
@@ -442,6 +544,8 @@ serve(async (req) => {
         translated_to_spanish: translated,
         enqueued_minutes: enqueued,
         segments: segments.length,
+        chunks: chunks.length,
+        size_bytes: bytes.byteLength,
       }),
       { headers: { ...cors, "Content-Type": "application/json" } },
     );

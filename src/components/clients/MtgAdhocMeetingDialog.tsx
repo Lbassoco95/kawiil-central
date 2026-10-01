@@ -39,6 +39,7 @@ import { useProfiles } from "@/hooks/useTasks";
 import { useCreateAdhocMeeting } from "@/hooks/useMtgMeetings";
 import { useMicrosoftConnection } from "@/hooks/useMicrosoft";
 import { createOutlookTeamsEventForMeeting } from "@/lib/mtg/createOutlookEventForMeeting";
+import { parseMeetingJoinLink } from "@/lib/mtg/joinLink";
 import { useQueryClient } from "@tanstack/react-query";
 
 const adhocSchema = z.object({
@@ -46,15 +47,27 @@ const adhocSchema = z.object({
   scheduled_at: z.string().min(1, "Captura fecha y hora de la junta."),
   duration_min: z.coerce.number().int().min(5, "Mínimo 5 minutos."),
   facilitator_user_id: z.string().nullable().optional(),
+  /** Link de llamada ya en curso (solo si no se crea Outlook+Teams). */
+  join_link: z.string().optional(),
 });
 
 type AdhocSchemaValues = z.infer<typeof adhocSchema>;
+
+function localDatetimeValue(d = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 interface MtgAdhocMeetingDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Null = junta sin cliente (se asigna después). */
   client: Tables<"clients"> | null;
+  /**
+   * `join_link` = invitar pegando el enlace de una llamada en curso.
+   * `create` (default) = generar junta nueva (Outlook + Teams opcional).
+   */
+  entryMode?: "create" | "join_link";
   /** Si se define, se llama tras crear (p. ej. navegar al tablero). */
   onCreated?: (meetingId: string) => void;
 }
@@ -63,8 +76,10 @@ export function MtgAdhocMeetingDialog({
   open,
   onOpenChange,
   client,
+  entryMode = "create",
   onCreated,
 }: MtgAdhocMeetingDialogProps) {
+  const joinLinkMode = entryMode === "join_link";
   const { data: profiles = [] } = useProfiles();
   const createMeeting = useCreateAdhocMeeting(client?.id ?? null);
   const { isConnected, isLoading: msLoading } = useMicrosoftConnection();
@@ -79,6 +94,7 @@ export function MtgAdhocMeetingDialog({
       scheduled_at: "",
       duration_min: 60,
       facilitator_user_id: client?.responsible_user_id ?? null,
+      join_link: "",
     },
   });
 
@@ -86,13 +102,14 @@ export function MtgAdhocMeetingDialog({
     if (open) {
       form.reset({
         title: "",
-        scheduled_at: "",
+        scheduled_at: joinLinkMode ? localDatetimeValue() : "",
         duration_min: 60,
         facilitator_user_id: client?.responsible_user_id ?? null,
+        join_link: "",
       });
-      setCreateOutlookTeams(true);
+      setCreateOutlookTeams(!joinLinkMode);
     }
-  }, [open, client?.responsible_user_id, form]);
+  }, [open, client?.responsible_user_id, form, joinLinkMode]);
 
   const onSubmit = async (v: AdhocSchemaValues) => {
     const title =
@@ -103,7 +120,19 @@ export function MtgAdhocMeetingDialog({
       let teams_join_url: string | null = null;
       let teams_online_meeting_id: string | null = null;
 
-      if (createOutlookTeams) {
+      if (joinLinkMode || !createOutlookTeams) {
+        if (joinLinkMode && !v.join_link?.trim()) {
+          toast.error("Pega el link de la llamada para invitar a la junta.");
+          return;
+        }
+        if (v.join_link?.trim()) {
+          const parsed = parseMeetingJoinLink(v.join_link);
+          teams_join_url = parsed.url;
+          if (parsed.teamsOnlineMeetingId) {
+            teams_online_meeting_id = parsed.teamsOnlineMeetingId;
+          }
+        }
+      } else if (createOutlookTeams) {
         if (msLoading) {
           toast.error("Espera un momento: comprobando la conexión con Microsoft…");
           return;
@@ -157,6 +186,14 @@ export function MtgAdhocMeetingDialog({
             ? "Junta creada y evento en Outlook"
             : "Junta creada (sin cliente) y evento en Outlook",
         );
+      } else if (teams_join_url) {
+        toast.success(
+          joinLinkMode
+            ? "Junta lista: ya puedes ingresar a la llamada"
+            : client
+              ? "Junta creada con link de llamada"
+              : "Junta creada (sin cliente) con link de llamada",
+        );
       } else {
         toast.success(
           client
@@ -166,6 +203,9 @@ export function MtgAdhocMeetingDialog({
       }
       onOpenChange(false);
       onCreated?.(meeting.id);
+      if (joinLinkMode && teams_join_url) {
+        window.open(teams_join_url, "_blank", "noopener,noreferrer");
+      }
     } catch (e) {
       toast.error("Error: " + (e as Error).message, { duration: 10000 });
     } finally {
@@ -179,10 +219,24 @@ export function MtgAdhocMeetingDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Nueva junta</DialogTitle>
+          <DialogTitle>
+            {joinLinkMode ? "Invitar con link de llamada" : "Generar nueva junta"}
+          </DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
-          {client ? (
+          {joinLinkMode ? (
+            client ? (
+              <>
+                Pega el enlace de la llamada en curso para la junta de{" "}
+                <strong>{client.name}</strong>. Quedará listo para ingresar.
+              </>
+            ) : (
+              <>
+                Pega el enlace de una llamada ya en curso (Teams, Meet o Zoom). Se crea la
+                junta en Múuch' asociada a ese link para que puedas ingresar.
+              </>
+            )
+          ) : client ? (
             <>
               Junta ad hoc de <strong>{client.name}</strong>, sin serie.
             </>
@@ -195,15 +249,44 @@ export function MtgAdhocMeetingDialog({
         </p>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            {joinLinkMode && (
+              <FormField
+                control={form.control}
+                name="join_link"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Link de la llamada *</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="https://teams.microsoft.com/l/meetup-join/…"
+                        autoFocus
+                        {...field}
+                      />
+                    </FormControl>
+                    <p className="text-xs text-muted-foreground">
+                      Copia el enlace desde Teams, Meet o Zoom e invítalo a esta junta.
+                    </p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
             <FormField
               control={form.control}
               name="title"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Título {client ? "(opcional)" : "*"}</FormLabel>
+                  <FormLabel>Título {client || joinLinkMode ? "(opcional)" : "*"}</FormLabel>
                   <FormControl>
                     <Input
-                      placeholder={client ? `Junta · ${client.name}` : "Ej. Llamada prospecto 9:00"}
+                      placeholder={
+                        client
+                          ? `Junta · ${client.name}`
+                          : joinLinkMode
+                            ? "Ej. Llamada en curso"
+                            : "Ej. Llamada prospecto 9:00"
+                      }
                       {...field}
                     />
                   </FormControl>
@@ -265,38 +348,70 @@ export function MtgAdhocMeetingDialog({
               )}
             />
 
-            <div className="flex items-start justify-between gap-3 rounded-md border border-border/60 px-3 py-2.5">
-              <div className="space-y-0.5 min-w-0">
-                <Label htmlFor="mtg-outlook-teams" className="text-sm font-medium">
-                  Crear en Outlook + Teams
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Deja el evento en tu calendario y genera el enlace para entrar a la reunión.
-                  {!isConnected && !msLoading && (
-                    <span className="block text-amber-700 dark:text-amber-400 mt-0.5">
-                      Microsoft no está conectado: conéctalo en Calendario antes de crear.
-                    </span>
-                  )}
-                </p>
+            {!joinLinkMode && (
+              <div className="flex items-start justify-between gap-3 rounded-md border border-border/60 px-3 py-2.5">
+                <div className="space-y-0.5 min-w-0">
+                  <Label htmlFor="mtg-outlook-teams" className="text-sm font-medium">
+                    Crear en Outlook + Teams
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Deja el evento en tu calendario y genera el enlace para entrar a la reunión.
+                    {!isConnected && !msLoading && (
+                      <span className="block text-amber-700 dark:text-amber-400 mt-0.5">
+                        Microsoft no está conectado: conéctalo en Calendario antes de crear.
+                      </span>
+                    )}
+                  </p>
+                </div>
+                <Switch
+                  id="mtg-outlook-teams"
+                  checked={createOutlookTeams}
+                  onCheckedChange={setCreateOutlookTeams}
+                  disabled={busy}
+                />
               </div>
-              <Switch
-                id="mtg-outlook-teams"
-                checked={createOutlookTeams}
-                onCheckedChange={setCreateOutlookTeams}
-                disabled={busy}
+            )}
+
+            {!joinLinkMode && !createOutlookTeams && (
+              <FormField
+                control={form.control}
+                name="join_link"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Link de llamada (opcional)</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="https://teams.microsoft.com/l/meetup-join/…"
+                        {...field}
+                      />
+                    </FormControl>
+                    <p className="text-xs text-muted-foreground">
+                      Si ya estás en la llamada, pega el enlace (Teams, Meet o Zoom) para entrar
+                      desde la junta.
+                    </p>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </div>
+            )}
 
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={busy}>
+              <Button
+                type="submit"
+                disabled={busy || (joinLinkMode && !form.watch("join_link")?.trim())}
+              >
                 {busy
-                  ? createOutlookTeams
-                    ? "Creando evento…"
-                    : "Creando..."
-                  : "Crear junta"}
+                  ? joinLinkMode
+                    ? "Asociando…"
+                    : createOutlookTeams
+                      ? "Creando evento…"
+                      : "Creando..."
+                  : joinLinkMode
+                    ? "Invitar e ingresar"
+                    : "Crear junta"}
               </Button>
             </div>
           </form>

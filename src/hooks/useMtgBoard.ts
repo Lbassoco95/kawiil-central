@@ -196,14 +196,24 @@ export function useMtgBoard(meetingId: string | undefined) {
       const updates = boardQuery.data.boardTopics
         .map((t) => t.update)
         .filter(Boolean) as MtgTopicUpdateRow[];
-      return endMeeting({
+      const ended = await endMeeting({
         organizationId: boardQuery.data.meeting.organization_id,
         actorUserId: user.id,
         meeting: boardQuery.data.meeting,
         updates,
         pendingDecisionIds: pending,
-        enqueueMinutes: false,
+        enqueueMinutes: true,
       });
+      // Borrador inmediato (acuerdos/tablero); el worker enriquecerá si hay transcripción.
+      try {
+        const { error } = await supabase.functions.invoke("mtg-minutes-draft", {
+          body: { meeting_id: ended.id },
+        });
+        if (error) console.warn("[mtg] minutes-draft after end", error);
+      } catch (e) {
+        console.warn("[mtg] minutes-draft after end", e);
+      }
+      return ended;
     },
     onSuccess: invalidate,
   });
@@ -258,6 +268,17 @@ export function useMtgBoard(meetingId: string | undefined) {
     onSuccess: invalidate,
   });
 
+  const toggleExpectedNext = useMutation({
+    mutationFn: async (input: { id: string; done: boolean }) => {
+      const { error } = await mtgDb
+        .from("mtg_expected_next")
+        .update({ done: input.done })
+        .eq("id", input.id);
+      if (error) throw error;
+    },
+    onSuccess: invalidate,
+  });
+
   return {
     ...boardQuery,
     patchUpdate,
@@ -266,6 +287,7 @@ export function useMtgBoard(meetingId: string | undefined) {
     addAgreement,
     setProject,
     markDecision,
+    toggleExpectedNext,
     invalidate,
   };
 }
