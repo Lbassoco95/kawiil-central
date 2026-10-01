@@ -468,23 +468,46 @@ export function MtgRecordingControls(props: {
           )}
           Subir grabación
         </Button>
-        {(props.meeting.recording_path || phase === "done" || phase === "error") &&
-          !recording && (
+        {props.meeting.recording_path && !recording && (
             <Button
               type="button"
               size={size}
-              variant="secondary"
+              variant={
+                props.meeting.transcript_status === "failed" ||
+                props.meeting.transcript_status === "unavailable"
+                  ? "default"
+                  : "secondary"
+              }
               disabled={processing}
               onClick={() => void runTranscription()}
-              title="Transcribir con OpenAI (multiidioma → español)"
+              title={
+                props.meeting.transcript_unavailable_reason ||
+                "Transcribir con OpenAI (multiidioma → español)"
+              }
             >
               {phase === "transcribing" ? (
                 <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
               ) : (
                 <Sparkles className="h-3.5 w-3.5 mr-1" />
               )}
-              Transcribir IA
+              {props.meeting.transcript_status === "failed" ||
+              props.meeting.transcript_status === "unavailable"
+                ? "Reintentar transcripción"
+                : props.meeting.transcript_status === "received"
+                  ? "Volver a transcribir"
+                  : "Transcribir IA"}
             </Button>
+          )}
+        {!props.meeting.recording_path &&
+          (props.meeting.transcript_status === "failed" ||
+            props.meeting.status === "ended" ||
+            props.meeting.status === "minutes_draft") &&
+          !recording &&
+          phase === "idle" && (
+            <span className="text-[11px] text-amber-700 dark:text-amber-400">
+              Sin grabación en Storage — sube audio o graba de nuevo para reintentar la
+              transcripción.
+            </span>
           )}
       </div>
 

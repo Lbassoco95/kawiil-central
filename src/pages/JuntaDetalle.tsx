@@ -39,7 +39,17 @@ import {
   resolvedThisMeeting,
 } from "@/lib/mtg/boardArchive";
 import { unreviewedCount } from "@/lib/mtg/meetingLifecycle";
-import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, Link2, Loader2, Projector, Video } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  ExternalLink,
+  FileUp,
+  Link2,
+  Loader2,
+  Projector,
+  Video,
+} from "lucide-react";
 import { toast } from "sonner";
 import { MtgUploadTranscriptButton } from "@/components/mtg/MtgUploadTranscriptButton";
 import { MtgRecordingControls } from "@/components/mtg/MtgRecordingControls";
@@ -47,6 +57,8 @@ import { MtgAssignClientDialog } from "@/components/mtg/MtgAssignClientDialog";
 import { MtgTopicHistoryDrawer } from "@/components/mtg/MtgTopicHistoryDrawer";
 import { MtgArchiveSection } from "@/components/mtg/MtgArchiveSection";
 import { MtgJoinLinkDialog } from "@/components/mtg/MtgJoinLinkDialog";
+import { MtgImportResumenDialog } from "@/components/mtg/MtgImportResumenDialog";
+import { MtgCallCaptureBar } from "@/components/mtg/MtgCallCaptureBar";
 import { parseMeetingJoinLink } from "@/lib/mtg/joinLink";
 
 const PROJECTION_KEY = "mtg-projection-mode";
@@ -69,6 +81,7 @@ export default function JuntaDetalle() {
   const [historyTopic, setHistoryTopic] = useState<{ id: string; title: string } | null>(null);
   const [assignClientOpen, setAssignClientOpen] = useState(false);
   const [joinLinkOpen, setJoinLinkOpen] = useState(false);
+  const [importResumenOpen, setImportResumenOpen] = useState(false);
   const [agreementDraft, setAgreementDraft] = useState({
     text: "",
     entityKey: "",
@@ -367,6 +380,17 @@ export default function JuntaDetalle() {
                   Terminar junta
                 </Button>
               )}
+              {user && series && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setImportResumenOpen(true)}
+                >
+                  <FileUp className="h-3.5 w-3.5 mr-1" />
+                  Cargar resumen
+                </Button>
+              )}
               {user && (
                 <MtgUploadTranscriptButton
                   organizationId={orgId}
@@ -387,6 +411,12 @@ export default function JuntaDetalle() {
               )}
             </div>
           </div>
+
+          <MtgCallCaptureBar
+            meeting={meeting}
+            onPasteLink={() => setJoinLinkOpen(true)}
+          />
+
             {user && orgId && (
             <MtgRecordingControls
               organizationId={orgId}
@@ -552,8 +582,17 @@ export default function JuntaDetalle() {
               >
                 <div className="font-medium">{a.text}</div>
                 <div className="text-xs text-muted-foreground mt-1">
+                  {a.entity_key
+                    ? `${entities.find((e) => e.key === a.entity_key)?.label ?? a.entity_key} · `
+                    : ""}
                   {a.status} · {a.project_id ? "con proyecto" : "ámbar (sin proyecto)"} ·{" "}
-                  {a.task_id ? `tarea ${a.task_id.slice(0, 8)}…` : "sin tarea"}
+                  {a.task_id ? (
+                    <Link to={`/tareas?task=${a.task_id}`} className="text-sky-700 dark:text-sky-400 hover:underline">
+                      ver tarea
+                    </Link>
+                  ) : (
+                    "sin tarea"
+                  )}
                 </div>
                 {liveEditable && a.status === "confirmed" && !a.task_id && user && (
                   <Select
@@ -703,10 +742,20 @@ export default function JuntaDetalle() {
             <ul className="text-xs space-y-1 max-h-40 overflow-auto">
               {board.data.plainTasks.slice(0, 40).map((t) => (
                 <li key={t.id}>
-                  {t.title} · {t.status}
+                  <Link
+                    to={`/tareas?task=${t.id}`}
+                    className="text-sky-700 dark:text-sky-400 hover:underline"
+                  >
+                    {t.title}
+                  </Link>
+                  <span className="text-muted-foreground"> · {t.status}</span>
                 </li>
               ))}
             </ul>
+            <p className="text-[11px] text-muted-foreground mt-1">
+              Abre la tarea para comentar o reasignar. Los acuerdos de arriba crean tareas por
+              empresa (Vizum / Sylon / Rivium) al elegir entidad y proyecto.
+            </p>
           </div>
         </section>
 
@@ -755,6 +804,18 @@ export default function JuntaDetalle() {
           onDone={() => board.invalidate()}
         />
       )}
+
+      {user && series && (
+        <MtgImportResumenDialog
+          open={importResumenOpen}
+          onOpenChange={setImportResumenOpen}
+          organizationId={orgId}
+          actorUserId={user.id}
+          meetingId={meeting.id}
+          seriesId={series.id}
+          onDone={() => board.invalidate()}
+        />
+      )}
     </AppLayout>
   );
 }
@@ -783,13 +844,20 @@ function TopicRow({
   return (
     <div className={cn("border rounded-md p-3 mb-2 space-y-2", MOVEMENT[u.movement].color.replace(/text-\S+/g, ""))}>
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <button
-          type="button"
-          className="font-medium text-sm text-left hover:underline"
-          onClick={onOpenHistory}
-        >
-          {topic.title}
-        </button>
+        <div className="min-w-0 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className="font-medium text-sm text-left hover:underline"
+            onClick={onOpenHistory}
+          >
+            {topic.title}
+          </button>
+          {topic.entity_key && (
+            <Badge variant="secondary" className="text-[10px]">
+              {topic.entity_key}
+            </Badge>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           {readOnly ? (
             <Badge variant="outline" className={MOVEMENT[u.movement].color}>
