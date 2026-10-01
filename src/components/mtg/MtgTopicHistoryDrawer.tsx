@@ -30,7 +30,7 @@ export function MtgTopicHistoryDrawer(props: {
 
   return (
     <Sheet open={props.open} onOpenChange={props.onOpenChange}>
-      <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+      <SheetContent className="z-[120] w-full sm:max-w-lg overflow-y-auto">
         <SheetHeader>
           <SheetTitle className="text-left pr-6">{props.topicTitle ?? "Historial del tema"}</SheetTitle>
         </SheetHeader>

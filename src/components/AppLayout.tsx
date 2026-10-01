@@ -64,54 +64,49 @@ export function AppLayout({
     return () => window.removeEventListener("keydown", h);
   }, []);
 
-  if (hideChrome) {
-    return (
-      <NewTaskModalContext.Provider value={newTaskModalValue}>
-        <ChatProvider>
-          <div className="fixed inset-0 z-[80] flex h-svh max-h-svh w-full flex-col overflow-hidden bg-background">
-            <main className="relative z-10 min-h-0 flex-1 overflow-auto">
-              {children}
-            </main>
-          </div>
-          <TaskFormDialog open={newTaskOpen} onOpenChange={setNewTaskOpen} />
-          <GlobalCommandPalette />
-        </ChatProvider>
-      </NewTaskModalContext.Provider>
-    );
-  }
-
   return (
     <NewTaskModalContext.Provider value={newTaskModalValue}>
     <ChatProvider>
     <div
       className={cn(
-        "flex w-full bg-background relative",
-        isFullWidth ? "h-svh max-h-svh min-h-0 overflow-hidden" : "min-h-screen",
+        hideChrome
+          ? "fixed inset-0 z-[80] flex h-svh max-h-svh w-full flex-col overflow-hidden bg-background"
+          : "flex w-full bg-background relative",
+        !hideChrome && (isFullWidth ? "h-svh max-h-svh min-h-0 overflow-hidden" : "min-h-screen"),
       )}
     >
-      <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden" aria-hidden>
-        <div className="absolute -top-1/4 -right-1/4 w-[600px] h-[600px] rounded-full bg-primary/[0.03] blur-3xl" />
-        <div className="absolute -bottom-1/4 -left-1/4 w-[500px] h-[500px] rounded-full bg-accent/[0.03] blur-3xl" />
-      </div>
-      <AppSidebar />
+      {!hideChrome && (
+        <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden" aria-hidden>
+          <div className="absolute -top-1/4 -right-1/4 w-[600px] h-[600px] rounded-full bg-primary/[0.03] blur-3xl" />
+          <div className="absolute -bottom-1/4 -left-1/4 w-[500px] h-[500px] rounded-full bg-accent/[0.03] blur-3xl" />
+        </div>
+      )}
+      {!hideChrome && <AppSidebar />}
       <main
-        className={`flex-1 w-full relative z-10 min-h-0 ${
-          isFullWidth ? "flex flex-col overflow-hidden" : "overflow-auto"
-        }`}
+        className={cn(
+          "relative z-10 min-h-0",
+          hideChrome
+            ? "flex-1 overflow-auto"
+            : `flex-1 w-full ${isFullWidth ? "flex flex-col overflow-hidden" : "overflow-auto"}`,
+        )}
       >
-        <AppTopbar isFullWidth={isFullWidth} />
+        {!hideChrome && <AppTopbar isFullWidth={isFullWidth} />}
         <div
-          className={`animate-fade-in ${
-            isFullWidth
-              ? `w-full max-w-none flex-1 min-h-0 flex flex-col overflow-hidden ${isMobile ? "px-0 pb-0 pt-0" : "px-0 pb-0"}`
-              : `max-w-7xl mx-auto ${isMobile ? "px-4 pt-4 pb-24" : "p-6"}`
-          }`}
+          className={
+            hideChrome
+              ? undefined
+              : `animate-fade-in ${
+                  isFullWidth
+                    ? `w-full max-w-none flex-1 min-h-0 flex flex-col overflow-hidden ${isMobile ? "px-0 pb-0 pt-0" : "px-0 pb-0"}`
+                    : `max-w-7xl mx-auto ${isMobile ? "px-4 pt-4 pb-24" : "p-6"}`
+                }`
+          }
         >
           {children}
         </div>
       </main>
-      <FloatingAIChat />
-      {isMobile && !isFullWidth && <MobileBottomNav />}
+      {!hideChrome && <FloatingAIChat />}
+      {!hideChrome && isMobile && !isFullWidth && <MobileBottomNav />}
     </div>
     <TaskFormDialog open={newTaskOpen} onOpenChange={setNewTaskOpen} />
     <GlobalCommandPalette />
