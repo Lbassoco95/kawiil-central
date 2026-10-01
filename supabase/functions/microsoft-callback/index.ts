@@ -1,20 +1,21 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { classifyMicrosoftOAuthError } from "../_shared/microsoftOAuthErrors.ts";
 import {
+  ADMIN_CONSENT_REQUIRED,
+  escapeHtml,
+  isAdminConsentGranted,
+  isAdminConsentRequired,
+  jsonForScript,
+  normalizeTenant,
+  readMicrosoftCallbackError,
+} from "../_shared/microsoftConsent.ts";
+import {
   buildAppReturnUrl,
   parseMicrosoftOAuthState,
   sanitizeReturnPath,
 } from "../_shared/microsoftOAuthState.ts";
 
 const postMessageOrigin = "*";
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
 
 function renderPage(
   status: "success" | "error",
@@ -33,7 +34,7 @@ function renderPage(
   const returnBlock = returnUrl
     ? `<p style="margin-top:20px"><a href="${safeReturn}" style="display:inline-block;padding:10px 18px;border-radius:8px;background:#3b82f6;color:#fff;text-decoration:none;font-size:14px;font-weight:600">Volver a Kawiil Central</a></p>
        <p class="hint">Si el botón no funciona, cierra esta pestaña y abre de nuevo kawiil-central.mx</p>
-       <script>setTimeout(function(){ window.location.replace(${JSON.stringify(returnUrl)}); }, 1200);</script>`
+       <script>setTimeout(function(){ window.location.replace(${jsonForScript(returnUrl)}); }, 1200);</script>`
     : autoClose
       ? `<p class="hint">Esta ventana se cerrará automáticamente...</p>
          <script>setTimeout(function(){ window.close(); }, 3000);</script>`
@@ -108,6 +109,7 @@ function finishHtml(
   state: ReturnType<typeof parseMicrosoftOAuthState>,
   postMessageType: "microsoft-auth-success" | "microsoft-auth-error",
   postMessageError?: string,
+  tenant?: string | null,
 ) {
   const mode = state?.m || "popup";
   const returnPath = sanitizeReturnPath(state?.r);
@@ -118,15 +120,17 @@ function finishHtml(
         {
           ms: kind === "success" ? "connected" : "error",
           ...(postMessageError ? { ms_err: postMessageError.slice(0, 80) } : {}),
+          ...(tenant ? { ms_tenant: tenant } : {}),
         },
         state?.o,
       )
       : undefined;
 
-  const postMsg =
+  const payload =
     postMessageType === "microsoft-auth-success"
-      ? `window.opener?.postMessage({type:'microsoft-auth-success'},'${postMessageOrigin}');`
-      : `window.opener?.postMessage({type:'microsoft-auth-error',error:${JSON.stringify(postMessageError || "error")}},'${postMessageOrigin}');`;
+      ? { type: postMessageType }
+      : { type: postMessageType, error: postMessageError || "error", ...(tenant ? { tenant } : {}) };
+  const postMsg = `window.opener?.postMessage(${jsonForScript(payload)},${jsonForScript(postMessageOrigin)});`;
 
   const page = renderPage(kind, title, detail, { returnUrl, autoClose: mode === "popup" });
   // Inyectar postMessage justo antes de </body> (evitar HTML anidado / mojibake).
@@ -142,7 +146,8 @@ Deno.serve(async (req) => {
     const url = new URL(req.url);
     const code = url.searchParams.get("code");
     const rawState = url.searchParams.get("state");
-    const error = url.searchParams.get("error");
+    const oauthError = readMicrosoftCallbackError(url.searchParams);
+    const error = oauthError.error;
     const state = parseMicrosoftOAuthState(rawState);
     const userId = state?.u;
 
@@ -151,7 +156,36 @@ Deno.serve(async (req) => {
       hasState: !!userId,
       mode: state?.m,
       error,
+      errorDescription: oauthError.errorDescription,
+      errorSubcode: oauthError.errorSubcode,
     });
+
+    const tenant = normalizeTenant(url.searchParams.get("tenant")) ||
+      normalizeTenant(Deno.env.get("MICROSOFT_TENANT_ID"));
+
+    if (isAdminConsentGranted(url.searchParams)) {
+      return new Response(
+        renderPage(
+          "success",
+          "Aprobado, ya puedes conectar",
+          "El administrador aprobó Kawiil para tu organización. Vuelve a Kawiil Central y conecta Microsoft 365.",
+          { autoClose: false },
+        ),
+        { headers: { "Content-Type": "text/html; charset=utf-8" } },
+      );
+    }
+
+    if (error && isAdminConsentRequired(oauthError)) {
+      return finishHtml(
+        "error",
+        "Tu organización requiere la aprobación de un administrador",
+        "La política de Microsoft 365 de tu empresa no permite que conectes Kawiil por tu cuenta. Pide a tu administrador de Microsoft 365 que apruebe Kawiil y vuelve a intentarlo.",
+        state,
+        "microsoft-auth-error",
+        ADMIN_CONSENT_REQUIRED,
+        tenant,
+      );
+    }
 
     if (error) {
       return finishHtml(

@@ -1,8 +1,10 @@
+import { useSyncExternalStore } from "react";
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEmailDetail, useEmailAttachments, useRespondEvent } from "@/hooks/useMicrosoft";
 import { fetchMessageAttachmentBlob } from "@/lib/outlookEmailMedia";
+import { AdminConsentRequiredError, isAdminConsentRequiredCode } from "@/lib/microsoftAdminConsent";
 import { toast } from "sonner";
 
 export type AccountProvider = "microsoft" | "google" | "imap";
@@ -250,6 +252,30 @@ export function useGoogleCalendarEvents(start?: string, end?: string, enabled = 
 
 // ───────────────────────── Outlook (cuentas adicionales) ─────────────────────────
 
+export type OutlookAdminConsentPrompt = { open: boolean; tenant: string | null };
+
+let adminConsentPrompt: OutlookAdminConsentPrompt = { open: false, tenant: null };
+const adminConsentListeners = new Set<() => void>();
+
+function setAdminConsentPrompt(next: OutlookAdminConsentPrompt) {
+  adminConsentPrompt = next;
+  adminConsentListeners.forEach((l) => l());
+}
+
+function subscribeAdminConsentPrompt(listener: () => void) {
+  adminConsentListeners.add(listener);
+  return () => adminConsentListeners.delete(listener);
+}
+
+/** Estado del diálogo "requiere aprobación del administrador" (compartido por toda la app). */
+export function useOutlookAdminConsentPrompt() {
+  const prompt = useSyncExternalStore(subscribeAdminConsentPrompt, () => adminConsentPrompt);
+  return {
+    ...prompt,
+    close: () => setAdminConsentPrompt({ open: false, tenant: prompt.tenant }),
+  };
+}
+
 /** Conecta / desconecta una cuenta ADICIONAL de Outlook/Microsoft (aparte del buzón principal). */
 export function useOutlookConnection() {
   const queryClient = useQueryClient();
@@ -274,7 +300,13 @@ export function useOutlookConnection() {
             resolve();
           } else if (event.data?.type === "outlook-auth-error") {
             window.removeEventListener("message", handler);
-            reject(new Error(event.data.error));
+            if (isAdminConsentRequiredCode(event.data.error)) {
+              reject(new AdminConsentRequiredError(typeof event.data.tenant === "string" ? event.data.tenant : null));
+            } else {
+              reject(new Error(String(event.data.error || "Error de Microsoft")));
+            }
+          } else if (event.data?.type === "outlook-admin-consent-success") {
+            toast.success("Aprobado, ya puedes conectar");
           }
         };
         window.addEventListener("message", handler);
@@ -290,7 +322,13 @@ export function useOutlookConnection() {
       queryClient.invalidateQueries({ queryKey: ["outlook-account-calendars"] });
       toast.success("Cuenta de Outlook conectada");
     },
-    onError: (err: Error) => toast.error("Error al conectar Outlook: " + err.message),
+    onError: (err: Error) => {
+      if (err instanceof AdminConsentRequiredError) {
+        setAdminConsentPrompt({ open: true, tenant: err.tenant });
+        return;
+      }
+      toast.error("Error al conectar Outlook: " + err.message);
+    },
   });
 
   const disconnect = useMutation({

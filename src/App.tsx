@@ -10,6 +10,7 @@ import { AccessibilityProvider } from "@/contexts/AccessibilityContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { ModuleGate } from "@/components/ModuleGate";
+import { OutlookAdminConsentDialog } from "@/components/microsoft/OutlookAdminConsentDialog";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Clientes from "./pages/Clientes";
@@ -67,6 +68,7 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
+      <OutlookAdminConsentDialog />
       <ErrorBoundary>
         <BrowserRouter>
           <AuthProvider>

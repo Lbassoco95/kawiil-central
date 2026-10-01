@@ -7,6 +7,7 @@ import { MicrosoftConnectCard } from "@/components/microsoft/MicrosoftConnectCar
 import { useMicrosoftConnection, useCalendarEvents } from "@/hooks/useMicrosoft";
 import { useTasksForCalendar } from "@/hooks/useTasks";
 import { toast } from "sonner";
+import { isAdminConsentRequiredCode } from "@/lib/microsoftAdminConsent";
 import {
   addDaysToYmd,
   formatMX,
@@ -37,7 +38,9 @@ const Microsoft365Calendario = () => {
     } else if (ms === "error") {
       const detail = searchParams.get("ms_err");
       toast.error(
-        detail
+        isAdminConsentRequiredCode(detail)
+          ? "Tu organización requiere la aprobación de un administrador de Microsoft 365 para conectar Kawiil. Pídele que apruebe la aplicación y vuelve a intentarlo."
+          : detail
           ? `No se pudo conectar Microsoft: ${detail}`
           : "No se pudo completar la vinculación con Microsoft. Intenta de nuevo.",
         { duration: 10000 },
@@ -46,6 +49,7 @@ const Microsoft365Calendario = () => {
     const next = new URLSearchParams(searchParams);
     next.delete("ms");
     next.delete("ms_err");
+    next.delete("ms_tenant");
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams, refetchConnection]);
 
