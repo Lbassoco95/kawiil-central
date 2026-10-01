@@ -90,7 +90,7 @@ export function MtgImportResumenDialog(props: {
         <p className="text-sm text-muted-foreground">
           Pega o sube el DOCX/texto del resumen (estructura de la sesión). Se empareja con los
           temas del tablero y llena avance / notas. Luego usa «Plantilla presentación» para
-          proyectarlo y nutrirlo en vivo.
+          proyectarlo a pantalla completa y nutrirlo en vivo.
         </p>
         <div className="space-y-2">
           <Label htmlFor="mtg-resumen-file">Archivo (.docx / .txt)</Label>

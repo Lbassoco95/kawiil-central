@@ -56,7 +56,7 @@ function topic(opts: {
 }
 
 describe("MtgPresentationTemplate", () => {
-  it("muestra secciones de la plantilla DOCX", () => {
+  it("muestra secciones del tablero tipo presentación", () => {
     render(
       <MtgPresentationTemplate
         title="Seguimiento quincenal"
@@ -81,11 +81,11 @@ describe("MtgPresentationTemplate", () => {
               topic_id: null,
               text: "Confirmar fecha límite",
               done: false,
+              done_at: null,
               sort_order: 0,
               created_at: "",
-              updated_at: "",
             },
-          ] as MtgExpectedNextRow[]
+          ] satisfies MtgExpectedNextRow[]
         }
         decisions={[]}
         liveEditable
@@ -94,13 +94,17 @@ describe("MtgPresentationTemplate", () => {
       />,
     );
 
-    expect(screen.getByText("Plantilla de presentación")).toBeInTheDocument();
-    expect(screen.getByText("Lo que se cerró")).toBeInTheDocument();
-    expect(screen.getByText("En curso")).toBeInTheDocument();
-    expect(screen.getByText("Focos de hoy")).toBeInTheDocument();
-    expect(screen.getByText("Para acordar hoy")).toBeInTheDocument();
+    expect(screen.getByText("Seguimiento quincenal")).toBeInTheDocument();
+    expect(screen.getByText(/Se resolvió/)).toBeInTheDocument();
+    expect(screen.getByText(/Sigue abierto/)).toBeInTheDocument();
+    expect(screen.getByText(/Nuevo desde la sesión pasada/)).toBeInTheDocument();
+    expect(screen.getByText(/Acuerdos de hoy/)).toBeInTheDocument();
+    expect(screen.getByText(/Para la próxima sesión/)).toBeInTheDocument();
     expect(screen.getByText("Hallazgos cerrados")).toBeInTheDocument();
     expect(screen.getByText("INE en curso")).toBeInTheDocument();
+    expect(screen.getByText("Meta alertas")).toBeInTheDocument();
     expect(screen.getByText("Confirmar fecha límite")).toBeInTheDocument();
+    expect(screen.getByText("resueltas")).toBeInTheDocument();
+    expect(screen.getByText("avanzaron")).toBeInTheDocument();
   });
 });

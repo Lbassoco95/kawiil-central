@@ -107,6 +107,18 @@ export default function JuntaDetalle() {
     }
   }, [projection]);
 
+  useEffect(() => {
+    if (!projection) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      setProjection(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [projection]);
+
   // Junta vacía/cancelada del calendario → tablero de grupo del mismo día (con plantilla DOCX).
   useEffect(() => {
     if (!board.data || redirectedRef.current) return;
@@ -296,9 +308,121 @@ export default function JuntaDetalle() {
     });
   };
 
+  const entityFilterChips =
+    entities.length > 1 ? (
+      <>
+        <button
+          type="button"
+          className={cn(
+            "rounded-full border px-3 py-1 text-[0.85em] font-medium transition-colors",
+            entityFilter === "all"
+              ? "border-foreground bg-foreground text-background"
+              : "border-border bg-card text-muted-foreground hover:border-foreground/40 hover:text-foreground",
+          )}
+          aria-pressed={entityFilter === "all"}
+          onClick={() => setEntityFilter("all")}
+        >
+          Todo
+        </button>
+        {entities.map((e) => (
+          <button
+            key={e.key}
+            type="button"
+            className={cn(
+              "rounded-full border px-3 py-1 text-[0.85em] font-medium transition-colors",
+              entityFilter === e.key
+                ? "border-foreground bg-foreground text-background"
+                : "border-border bg-card text-muted-foreground hover:border-foreground/40 hover:text-foreground",
+            )}
+            aria-pressed={entityFilter === e.key}
+            onClick={() => setEntityFilter(e.key)}
+          >
+            {e.label}
+          </button>
+        ))}
+      </>
+    ) : null;
+
+  if (projection) {
+    return (
+      <AppLayout chrome="none">
+        <MtgPresentationTemplate
+          title={series?.title ?? meeting.title ?? "Junta"}
+          dateLabel={formatDateMX(meeting.scheduled_at)}
+          topics={topicsFiltered}
+          entities={entities}
+          expectedNext={expectedNext}
+          decisions={decisions}
+          agreements={agreements}
+          liveEditable={liveEditable}
+          projection
+          onPatchUpdate={schedulePatch}
+          onToggleExpected={(id, done) =>
+            board.toggleExpectedNext.mutate(
+              { id, done },
+              { onError: (e: Error) => toast.error(e.message) },
+            )
+          }
+          onOpenHistory={(t) => setHistoryTopic(t)}
+          toolbar={
+            <>
+              {entityFilterChips}
+              {user && series && liveEditable && (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-3 py-1 text-[0.85em] font-medium text-muted-foreground hover:border-foreground/40 hover:text-foreground"
+                  onClick={() => setImportResumenOpen(true)}
+                  title="Cargar texto/DOCX del resumen a los temas del tablero"
+                >
+                  <FileUp className="h-3.5 w-3.5" />
+                  Cargar resumen
+                </button>
+              )}
+              {savedAt && (
+                <span className="font-mono text-[0.8em] text-muted-foreground">
+                  guardado {savedAt}
+                </span>
+              )}
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 rounded-full border border-foreground bg-foreground px-3 py-1 text-[0.85em] font-medium text-background"
+                onClick={() => setProjection(false)}
+              >
+                <Projector className="h-3.5 w-3.5" />
+                Salir de proyección
+              </button>
+            </>
+          }
+        />
+        <MtgTopicHistoryDrawer
+          topicId={historyTopic?.id ?? null}
+          topicTitle={historyTopic?.title}
+          open={!!historyTopic}
+          onOpenChange={(o) => {
+            if (!o) setHistoryTopic(null);
+          }}
+        />
+        {user && series && (
+          <MtgImportResumenDialog
+            open={importResumenOpen}
+            onOpenChange={setImportResumenOpen}
+            organizationId={orgId}
+            actorUserId={user.id}
+            meetingId={meeting.id}
+            seriesId={series.id}
+            onDone={() => {
+              board.invalidate();
+              setProjection(true);
+            }}
+          />
+        )}
+      </AppLayout>
+    );
+  }
+
   return (
     <AppLayout>
-      <div className={cn("space-y-6 animate-fade-in pb-24", projection && "text-lg")}>
+      <div className="space-y-6 animate-fade-in pb-24">
         {/* Encabezado */}
         <div className="sticky top-0 z-20 glass-card p-4 space-y-3 border-b">
           <div className="flex flex-wrap items-start gap-3 justify-between">
@@ -372,13 +496,13 @@ export default function JuntaDetalle() {
             </div>
             <div className="flex flex-wrap gap-2">
               <Button
-                variant={projection ? "default" : "outline"}
+                variant="outline"
                 size="sm"
-                onClick={() => setProjection((p) => !p)}
-                title="Vista tipo resumen para proyectar y alimentar en vivo"
+                onClick={() => setProjection(true)}
+                title="Vista tipo tablero a pantalla completa para compartir pantalla"
               >
                 <Projector className="h-3.5 w-3.5 mr-1" />
-                {projection ? "Salir de presentación" : "Plantilla presentación"}
+                Proyectar
               </Button>
               {meeting.teams_join_url ? (
                 <>
@@ -440,10 +564,10 @@ export default function JuntaDetalle() {
                   size="sm"
                   variant="outline"
                   onClick={() => setImportResumenOpen(true)}
-                  title="Cargar texto/DOCX de la sesión a los temas del tablero"
+                  title="Cargar texto/DOCX del resumen a los temas del tablero"
                 >
                   <FileUp className="h-3.5 w-3.5 mr-1" />
-                  Cargar plantilla sesión
+                  Cargar resumen
                 </Button>
               )}
               {user && (
@@ -588,26 +712,6 @@ export default function JuntaDetalle() {
           </div>
         </div>
 
-        {projection ? (
-          <MtgPresentationTemplate
-            title={series?.title ?? meeting.title ?? "Junta"}
-            dateLabel={formatDateMX(meeting.scheduled_at)}
-            topics={topicsFiltered}
-            entities={entities}
-            expectedNext={expectedNext}
-            decisions={decisions}
-            liveEditable={liveEditable}
-            onPatchUpdate={schedulePatch}
-            onToggleExpected={(id, done) =>
-              board.toggleExpectedNext.mutate(
-                { id, done },
-                { onError: (e: Error) => toast.error(e.message) },
-              )
-            }
-            onOpenHistory={(t) => setHistoryTopic(t)}
-          />
-        ) : (
-          <>
         {/* Acuerdos de hoy */}
         <section className="space-y-3">
           <h2 className="font-semibold">Acuerdos de hoy</h2>
@@ -909,8 +1013,6 @@ export default function JuntaDetalle() {
             onOpenHistory={(t) => setHistoryTopic(t)}
             onReopened={() => board.invalidate()}
           />
-        )}
-          </>
         )}
       </div>
 

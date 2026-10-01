@@ -20,11 +20,21 @@ type AppLayoutProps = {
   children: ReactNode;
   /** Contenido a ancho completo (p. ej. cliente Slack) */
   contentMaxWidth?: "default" | "full";
+  /**
+   * `none` = sin sidebar/topbar/chat (proyección de juntas a pantalla completa).
+   * Sigue montando providers y trackers de la app.
+   */
+  chrome?: "default" | "none";
 };
 
-export function AppLayout({ children, contentMaxWidth = "default" }: AppLayoutProps) {
+export function AppLayout({
+  children,
+  contentMaxWidth = "default",
+  chrome = "default",
+}: AppLayoutProps) {
   const isMobile = useIsMobile();
   const isFullWidth = contentMaxWidth === "full";
+  const hideChrome = chrome === "none";
   useTasksRealtime();
   useActivityTracker();
   useNotificationDelivery();
@@ -53,6 +63,22 @@ export function AppLayout({ children, contentMaxWidth = "default" }: AppLayoutPr
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
   }, []);
+
+  if (hideChrome) {
+    return (
+      <NewTaskModalContext.Provider value={newTaskModalValue}>
+        <ChatProvider>
+          <div className="fixed inset-0 z-[80] flex h-svh max-h-svh w-full flex-col overflow-hidden bg-background">
+            <main className="relative z-10 min-h-0 flex-1 overflow-auto">
+              {children}
+            </main>
+          </div>
+          <TaskFormDialog open={newTaskOpen} onOpenChange={setNewTaskOpen} />
+          <GlobalCommandPalette />
+        </ChatProvider>
+      </NewTaskModalContext.Provider>
+    );
+  }
 
   return (
     <NewTaskModalContext.Provider value={newTaskModalValue}>
