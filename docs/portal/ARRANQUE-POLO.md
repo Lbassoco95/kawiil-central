@@ -32,7 +32,7 @@ Nombres exactos. No usa producción. Las **llaves** van solo en variables de su 
 
 5. En el proyecto **`kawiil-os-demo`**, cree el usuario Auth `demo.cliente@kawiil-demo.invalid` (contraseña solo en su administrador de secretos). Si el UUID no es el de la semilla, ajuste la membresía en SQL Editor según `docs/portal/DEMO.md`.
 
-6. Despliegue en el proyecto demo solo estas funciones: `portal-api`, `portal-system-api`, `portal-system-dispatch`, `portal-notify`. Secretos de prueba (Turnstile always-pass). `PORTAL_MIRROR_READ_ONLY=true`. Con token Management API: `SUPABASE_ACCESS_TOKEN=… ./scripts/run-portal-hmac-pipeline.sh demo` (después de que ensayo pase). Ver `docs/portal/DEPLOY-HMAC.md`.
+6. Despliegue en el proyecto demo solo estas funciones: `portal-api`, `portal-system-api`, `portal-system-dispatch`, `portal-notify`. Secretos de prueba (Turnstile always-pass). `PORTAL_MIRROR_READ_ONLY=true`. Con token Management API: `SUPABASE_ACCESS_TOKEN=… ./tools/portal/run-portal-hmac-pipeline.sh demo` (después de que ensayo pase). Ver `docs/portal/DEPLOY-HMAC.md`.
 
 7. Publique el front del portal apuntando **solo** al demo:
    ```bash
@@ -65,9 +65,9 @@ Nombres exactos. No usa producción. Las **llaves** van solo en variables de su 
 | Reinicio datos demo | `npm run portal:demo-reset` |
 | Cruce de llaves | `npm run kawiil-os:verify-cross` |
 | Cerco del árbol OS | `npm run test:kawiil-os-db` |
-| Deploy Edges + HMAC | `./scripts/run-portal-hmac-pipeline.sh ensayo\|demo` |
-| Solo deploy Edges | `./scripts/deploy-portal-edge-functions.sh <ref>` |
-| Solo secretos HMAC | `./scripts/set-portal-hmac-secrets.sh <ref>` |
-| Batería HMAC | `CENTRAL_TO_OS_SIGNING_SECRET=… ./scripts/hmac-battery-portal-system.sh <ref>` |
+| Deploy Edges + HMAC | `./tools/portal/run-portal-hmac-pipeline.sh ensayo\|demo` |
+| Solo deploy Edges | `./tools/portal/deploy-portal-edge-functions.sh <ref>` |
+| Solo secretos HMAC | `./tools/portal/set-portal-hmac-secrets.sh <ref>` |
+| Batería HMAC | `CENTRAL_TO_OS_SIGNING_SECRET=… ./tools/portal/hmac-battery-portal-system.sh <ref>` |
 
 Detalle técnico: `docs/portal/PROYECTO-SEPARADO.md`, `docs/portal/DEMO.md`, `docs/portal/DEPLOY-HMAC.md`.

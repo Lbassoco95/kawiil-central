@@ -91,11 +91,11 @@ Use siempre el project ref de Kawiil OS. No despliegue allí funciones de Micros
 Con `SUPABASE_ACCESS_TOKEN` en el entorno (nunca embebido):
 
 ```bash
-./scripts/deploy-portal-edge-functions.sh tglhceuszxcgkxmskdkl   # ensayo
-./scripts/deploy-portal-edge-functions.sh ehtmlkvmiipmtcidsffk   # demo
+./tools/portal/deploy-portal-edge-functions.sh tglhceuszxcgkxmskdkl   # ensayo
+./tools/portal/deploy-portal-edge-functions.sh ehtmlkvmiipmtcidsffk   # demo
 ```
 
-Pipeline HMAC + deploy + batería: `./scripts/run-portal-hmac-pipeline.sh ensayo` (y solo si pasa, `demo`). Detalle: [DEPLOY-HMAC.md](DEPLOY-HMAC.md).
+Pipeline HMAC + deploy + batería: `./tools/portal/run-portal-hmac-pipeline.sh ensayo` (y solo si pasa, `demo`). Detalle: [DEPLOY-HMAC.md](DEPLOY-HMAC.md).
 
 ## 4. Crear secretos independientes
 
@@ -111,7 +111,7 @@ En Kawiil OS configure (nombres; valores solo vía `supabase secrets set` / Dash
 Script que genera HMAC con `openssl rand` y los carga (sin escribir valores al repo):
 
 ```bash
-./scripts/set-portal-hmac-secrets.sh <ref-ensayo-o-demo>
+./tools/portal/set-portal-hmac-secrets.sh <ref-ensayo-o-demo>
 ```
 
 No configure en Kawiil OS:

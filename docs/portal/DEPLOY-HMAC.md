@@ -10,7 +10,11 @@
 | Demo | `kawiil-os-demo` | `ehtmlkvmiipmtcidsffk` |
 | Central (prohibido) | — | `qppfampapbxdgednkofc` |
 
-Los scripts en `scripts/` se detienen si el `--project-ref` no es ensayo o demo, o si es Central.
+Los scripts en `tools/portal/` se detienen si el `--project-ref` no es ensayo o demo, o si es Central.
+
+## Ubicación de scripts
+
+En este repositorio el directorio `scripts/` está en `.gitignore`. Los comandos reproducibles viven en `tools/portal/` (misma allowlist ensayo/demo; leen `SUPABASE_ACCESS_TOKEN` del entorno).
 
 ## Requisitos
 
@@ -24,14 +28,14 @@ Los scripts en `scripts/` se detienen si el `--project-ref` no es ensayo o demo,
 export SUPABASE_ACCESS_TOKEN='…'   # solo en el entorno local / CI secreto
 
 # Pipeline completo (secretos HMAC nuevos + deploy + batería):
-./scripts/run-portal-hmac-pipeline.sh ensayo
+./tools/portal/run-portal-hmac-pipeline.sh ensayo
 # Solo si ensayo pasó:
-./scripts/run-portal-hmac-pipeline.sh demo
+./tools/portal/run-portal-hmac-pipeline.sh demo
 
 # O por pasos:
-./scripts/set-portal-hmac-secrets.sh tglhceuszxcgkxmskdkl
-./scripts/deploy-portal-edge-functions.sh tglhceuszxcgkxmskdkl
-CENTRAL_TO_OS_SIGNING_SECRET='…' ./scripts/hmac-battery-portal-system.sh tglhceuszxcgkxmskdkl
+./tools/portal/set-portal-hmac-secrets.sh tglhceuszxcgkxmskdkl
+./tools/portal/deploy-portal-edge-functions.sh tglhceuszxcgkxmskdkl
+CENTRAL_TO_OS_SIGNING_SECRET='…' ./tools/portal/hmac-battery-portal-system.sh tglhceuszxcgkxmskdkl
 ```
 
 `deploy-portal-edge-functions.sh` despliega, en este orden lógico vía CLI:

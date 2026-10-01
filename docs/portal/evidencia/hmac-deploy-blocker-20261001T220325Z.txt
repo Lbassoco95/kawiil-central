@@ -10,7 +10,7 @@ A_listar_proyectos_con_token:
 
 B_ensayo:
   B1_secretos: NO ejecutado (falta token)
-  B2_deploy: NO ejecutado (falta token); scripts reproducibles añadidos en scripts/
+  B2_deploy: NO ejecutado (falta token); scripts reproducibles añadidos en tools/portal/
   B3_bateria: NO ejecutada
   probe_sin_mutacion: POST portal-system-api ensayo → HTTP 503 {\"error\":\"not_configured\"}
   edges_activas_ensayo: portal-api v16, portal-system-api v1, portal-system-dispatch v1, portal-notify v4 (+ canarios portal-api-*)
@@ -21,7 +21,7 @@ C_demo:
   edges_activas_demo: portal-api v3, portal-system-api v1, portal-system-dispatch v1, portal-notify v1
 
 D_docs:
-  añadidos: docs/portal/DEPLOY-HMAC.md, scripts/deploy-portal-edge-functions.sh, scripts/set-portal-hmac-secrets.sh, scripts/hmac-battery-portal-system.sh, scripts/run-portal-hmac-pipeline.sh, scripts/lib/kawiil-os-allowlist.sh
+  añadidos: docs/portal/DEPLOY-HMAC.md, tools/portal/deploy-portal-edge-functions.sh, tools/portal/set-portal-hmac-secrets.sh, tools/portal/hmac-battery-portal-system.sh, tools/portal/run-portal-hmac-pipeline.sh, tools/portal/kawiil-os-allowlist.sh
   actualizados: docs/portal/README.md, PROYECTO-SEPARADO.md, ARRANQUE-POLO.md, supabase/config.toml (verify_jwt portal-system-*)
 
 confirmaciones:
