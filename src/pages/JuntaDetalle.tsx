@@ -44,6 +44,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ExternalLink,
+  FileUp,
   Link2,
   Loader2,
   Projector,
@@ -56,9 +57,14 @@ import { MtgAssignClientDialog } from "@/components/mtg/MtgAssignClientDialog";
 import { MtgTopicHistoryDrawer } from "@/components/mtg/MtgTopicHistoryDrawer";
 import { MtgArchiveSection } from "@/components/mtg/MtgArchiveSection";
 import { MtgJoinLinkDialog } from "@/components/mtg/MtgJoinLinkDialog";
+import { MtgImportResumenDialog } from "@/components/mtg/MtgImportResumenDialog";
 import { MtgCallCaptureBar } from "@/components/mtg/MtgCallCaptureBar";
 import { MtgPresentationTemplate } from "@/components/mtg/MtgPresentationTemplate";
 import { parseMeetingJoinLink } from "@/lib/mtg/joinLink";
+import {
+  findGroupBoardMeetingForDay,
+  shouldSeekGroupBoard,
+} from "@/lib/mtg/findGroupBoardMeeting";
 
 const PROJECTION_KEY = "mtg-projection-mode";
 
@@ -80,6 +86,7 @@ export default function JuntaDetalle() {
   const [historyTopic, setHistoryTopic] = useState<{ id: string; title: string } | null>(null);
   const [assignClientOpen, setAssignClientOpen] = useState(false);
   const [joinLinkOpen, setJoinLinkOpen] = useState(false);
+  const [importResumenOpen, setImportResumenOpen] = useState(false);
   const [agreementDraft, setAgreementDraft] = useState({
     text: "",
     entityKey: "",
@@ -90,6 +97,7 @@ export default function JuntaDetalle() {
     dueDate: "",
   });
   const debounceTimers = useRef<Map<string, number>>(new Map());
+  const redirectedRef = useRef(false);
 
   useEffect(() => {
     try {
@@ -98,6 +106,52 @@ export default function JuntaDetalle() {
       /* ignore */
     }
   }, [projection]);
+
+  // Junta vacía/cancelada del calendario → tablero de grupo del mismo día (con plantilla DOCX).
+  useEffect(() => {
+    if (!board.data || redirectedRef.current) return;
+    const m = board.data.meeting;
+    const topicCount = board.data.boardTopics.filter((t) => t.update).length;
+    if (
+      !shouldSeekGroupBoard({
+        series_id: m.series_id,
+        status: m.status,
+        topicUpdateCount: topicCount,
+      })
+    ) {
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const target = await findGroupBoardMeetingForDay({
+          organizationId: m.organization_id,
+          scheduledAt: m.scheduled_at,
+          excludeMeetingId: m.id,
+        });
+        if (cancelled || !target || target.id === m.id) return;
+        redirectedRef.current = true;
+        toast.message("Abriendo el tablero de grupo con la plantilla de sesión…", {
+          duration: 6000,
+        });
+        navigate(`/juntas/${target.id}`, { replace: true });
+      } catch {
+        /* no bloquear si no hay tablero hermano */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [board.data, navigate]);
+
+  // Multi-empresa con temas: abrir en plantilla presentación (estructura tipo DOCX).
+  useEffect(() => {
+    const ents = board.data?.series?.entities?.length ?? 0;
+    const topics = board.data?.boardTopics?.length ?? 0;
+    if (ents > 1 && topics > 0) {
+      setProjection(true);
+    }
+  }, [board.data?.meeting?.id, board.data?.series?.entities?.length, board.data?.boardTopics?.length]);
 
   const entities = useMemo(
     () => entitiesForFilter(board.data?.series?.entities, board.data?.meeting.client_id ?? null),
@@ -380,6 +434,18 @@ export default function JuntaDetalle() {
                   Terminar junta
                 </Button>
               )}
+              {user && series && liveEditable && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setImportResumenOpen(true)}
+                  title="Cargar texto/DOCX de la sesión a los temas del tablero"
+                >
+                  <FileUp className="h-3.5 w-3.5 mr-1" />
+                  Cargar plantilla sesión
+                </Button>
+              )}
               {user && (
                 <MtgUploadTranscriptButton
                   organizationId={orgId}
@@ -447,21 +513,29 @@ export default function JuntaDetalle() {
             )
           )}
 
-          {!meeting.client_id && user && (
+          {!meeting.client_id && entities.length === 0 && user && (
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm">
               <p className="text-muted-foreground">
-                Esta junta aún no tiene cliente. Puedes grabar, tomar notas y generar minuta; al final
-                asignas el cliente para migrar el contexto o las tareas.
+                Esta junta aún no tiene cliente(s). Asigna uno o varios (grupo) para filtrar temas y
+                crear tareas por empresa. La plantilla de sesión se alimenta en el tablero.
               </p>
               <Button size="sm" variant="secondary" onClick={() => setAssignClientOpen(true)}>
-                Asignar cliente
+                Asignar cliente(s)
               </Button>
             </div>
           )}
-          {meeting.client_id && user && (
-            <div className="flex justify-end">
+          {(meeting.client_id || entities.length > 0) && user && (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              {entities.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Clientes en tablero:{" "}
+                  <span className="text-foreground font-medium">
+                    {entities.map((e) => e.label).join(" · ")}
+                  </span>
+                </p>
+              )}
               <Button size="sm" variant="ghost" onClick={() => setAssignClientOpen(true)}>
-                Cambiar / reasignar cliente
+                {entities.length > 1 ? "Editar clientes" : "Cambiar / añadir clientes"}
               </Button>
             </div>
           )}
@@ -473,7 +547,7 @@ export default function JuntaDetalle() {
                 variant={entityFilter === "all" ? "default" : "outline"}
                 onClick={() => setEntityFilter("all")}
               >
-                Todo
+                Todo el grupo
               </Button>
               {entities.map((e) => (
                 <Button
@@ -841,6 +915,7 @@ export default function JuntaDetalle() {
           actorUserId={user.id}
           meetingId={meeting.id}
           currentClientId={meeting.client_id}
+          currentEntityClientIds={entities.map((e) => e.client_id)}
           onDone={() => board.invalidate()}
         />
       )}
@@ -853,6 +928,21 @@ export default function JuntaDetalle() {
           actorUserId={user.id}
           meeting={meeting}
           onDone={() => board.invalidate()}
+        />
+      )}
+
+      {user && series && (
+        <MtgImportResumenDialog
+          open={importResumenOpen}
+          onOpenChange={setImportResumenOpen}
+          organizationId={orgId}
+          actorUserId={user.id}
+          meetingId={meeting.id}
+          seriesId={series.id}
+          onDone={() => {
+            board.invalidate();
+            setProjection(true);
+          }}
         />
       )}
     </AppLayout>

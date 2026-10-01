@@ -85,12 +85,12 @@ export function MtgImportResumenDialog(props: {
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Importar texto al tablero</DialogTitle>
+          <DialogTitle>Cargar plantilla de sesión</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
-          Uso avanzado: pega texto para emparejar con temas ya existentes. La estructura de
-          presentación se alimenta en vivo en «Plantilla presentación», no hace falta cargar un
-          DOCX como documento aparte.
+          Pega o sube el DOCX/texto del resumen (estructura de la sesión). Se empareja con los
+          temas del tablero y llena avance / notas. Luego usa «Plantilla presentación» para
+          proyectarlo y nutrirlo en vivo.
         </p>
         <div className="space-y-2">
           <Label htmlFor="mtg-resumen-file">Archivo (.docx / .txt)</Label>
