@@ -416,20 +416,36 @@ export default function JuntaDetalle() {
             />
           )}
 
-          {!meeting.recording_path &&
+          {meeting.recording_path ? (
+            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2.5 text-sm space-y-0.5">
+              <p className="font-medium text-foreground">Grabación en Storage</p>
+              <p className="text-muted-foreground text-xs">
+                {meeting.recording_bytes != null
+                  ? `${(meeting.recording_bytes / (1024 * 1024)).toFixed(1)} MB · `
+                  : ""}
+                {meeting.recording_saved_at
+                  ? `guardada ${new Date(meeting.recording_saved_at).toLocaleString("es-MX")}`
+                  : "enlazada a esta junta"}
+                . Puedes transcribir o volver a subir si necesitas otra toma.
+              </p>
+            </div>
+          ) : (
             (meeting.status === "ended" ||
               meeting.status === "minutes_draft" ||
-              meeting.status === "minutes_review") && (
+              meeting.status === "minutes_review" ||
+              meeting.status === "in_progress" ||
+              meeting.status === "planned") && (
               <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2.5 text-sm space-y-1">
-                <p className="font-medium text-foreground">Sin grabación guardada</p>
+                <p className="font-medium text-foreground">Aún sin grabación en Storage</p>
                 <p className="text-muted-foreground text-xs">
-                  Si grabaste pantalla+video, el archivo pudo rechazarse por tamaño. Usa{" "}
-                  <strong>Grabar audio</strong> o <strong>Audio de llamada</strong> (hasta ~3 h),
-                  o <strong>Subir grabación</strong> con MP3/M4A; luego <strong>Transcribir IA</strong>
-                  (archivos grandes se parten solos). La minuta en borrador está en Minuta.
+                  Usa <strong>Grabar audio</strong> / <strong>Audio de llamada</strong> (hasta ~3 h)
+                  o <strong>Subir grabación</strong>. Al detener, se guarda una copia local y luego
+                  se sube; si falla la red puedes <strong>Reintentar subida</strong> o{" "}
+                  <strong>Descargar copia local</strong>. Bucket mtg hasta 500 MB.
                 </p>
               </div>
-            )}
+            )
+          )}
 
           {!meeting.client_id && user && (
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm">

@@ -16,6 +16,9 @@ import {
   CheckCircle2,
   Sparkles,
   AlertCircle,
+  Download,
+  RefreshCw,
+  HardDrive,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -25,6 +28,15 @@ import {
   uploadMeetingRecording,
 } from "@/lib/mtg/uploadRecording";
 import { requestRecordingTranscription } from "@/lib/mtg/requestRecordingTranscription";
+import {
+  checkpointPendingRecording,
+  clearPendingRecording,
+  downloadBlobLocally,
+  getPendingRecording,
+  putPendingRecording,
+  type PendingRecording,
+} from "@/lib/mtg/pendingRecordingStore";
+import { formatRecordingSizeMb } from "@/lib/mtg/recordingLimits";
 
 type CaptureMode = "audio" | "av";
 
@@ -160,10 +172,13 @@ export function MtgRecordingControls(props: {
   const mediaRef = useRef<MediaRecorder | null>(null);
   const stopExtrasRef = useRef<(() => void) | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const captureMimeRef = useRef("audio/webm");
+  const captureNameRef = useRef("grabacion-junta.webm");
   const [phase, setPhase] = useState<ReviewPhase>("idle");
   const [phaseError, setPhaseError] = useState<string | null>(null);
   const [elapsedSec, setElapsedSec] = useState(0);
   const [pulse, setPulse] = useState(0);
+  const [pendingLocal, setPendingLocal] = useState<PendingRecording | null>(null);
   const autoTranscribe = props.autoTranscribe !== false;
 
   const recording = phase === "recording";
@@ -182,6 +197,39 @@ export function MtgRecordingControls(props: {
     const t = window.setInterval(() => setPulse((p) => p + 1), 800);
     return () => window.clearInterval(t);
   }, [processing]);
+
+  // No perder audio si cierran la pestaña mientras graban o suben.
+  useEffect(() => {
+    if (!(recording || phase === "uploading" || pendingLocal)) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [recording, phase, pendingLocal]);
+
+  // Recuperar copia local pendiente (p. ej. falló la subida o se recargó).
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const pending = await getPendingRecording(props.meeting.id);
+        if (cancelled) return;
+        if (pending && !props.meeting.recording_path) {
+          setPendingLocal(pending);
+        } else if (pending && props.meeting.recording_path && !pending.partial) {
+          await clearPendingRecording(props.meeting.id);
+          if (!cancelled) setPendingLocal(null);
+        }
+      } catch {
+        /* IndexedDB opcional */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [props.meeting.id, props.meeting.recording_path]);
 
   useEffect(() => {
     return () => {
@@ -247,20 +295,38 @@ export function MtgRecordingControls(props: {
     setPhase("uploading");
     setPhaseError(null);
     setPulse(0);
+    const contentType = file.type || "audio/webm";
+    const name = fileName ?? `grabacion-${Date.now()}.webm`;
     try {
-      await uploadMeetingRecording({
+      // Respaldo local ANTES de Storage: si falla la red, no se pierde el audio.
+      await putPendingRecording({
+        meetingId: props.meeting.id,
+        fileName: name,
+        contentType,
+        sizeBytes: file.size,
+        origin,
+        updatedAt: new Date().toISOString(),
+        partial: false,
+        blob: file instanceof Blob ? file : new Blob([file], { type: contentType }),
+      });
+      const pending = await getPendingRecording(props.meeting.id);
+      if (pending) setPendingLocal(pending);
+
+      const res = await uploadMeetingRecording({
         organizationId: props.organizationId,
         actorUserId: props.actorUserId,
         meeting: props.meeting,
         series: props.series,
         file,
-        fileName,
+        fileName: name,
         origin,
       });
+      await clearPendingRecording(props.meeting.id);
+      setPendingLocal(null);
       toast.success(
         autoTranscribe
-          ? "Grabación guardada — transcribiendo…"
-          : "Grabación guardada en la junta",
+          ? `Grabación en Storage (${formatRecordingSizeMb(res.sizeBytes)} MB) — transcribiendo…`
+          : `Grabación guardada en Storage (${formatRecordingSizeMb(res.sizeBytes)} MB)`,
       );
       props.onDone?.();
       if (autoTranscribe) {
@@ -271,11 +337,31 @@ export function MtgRecordingControls(props: {
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Error al guardar grabación";
       setPhase("error");
-      setPhaseError(msg);
-      toast.error(msg);
+      setPhaseError(
+        `${msg} La copia local se conserva: puedes reintentar la subida o descargarla.`,
+      );
+      toast.error(msg, {
+        duration: 12000,
+        description: "Copia local disponible — Reintentar o Descargar",
+      });
+      try {
+        const pending = await getPendingRecording(props.meeting.id);
+        if (pending) setPendingLocal(pending);
+      } catch {
+        /* ignore */
+      }
     } finally {
       if (inputRef.current) inputRef.current.value = "";
     }
+  };
+
+  const retryPendingUpload = async () => {
+    const pending = pendingLocal ?? (await getPendingRecording(props.meeting.id));
+    if (!pending) {
+      toast.error("No hay copia local pendiente");
+      return;
+    }
+    await saveBlob(pending.blob, pending.fileName, pending.origin);
   };
 
   const startRecording = async (mode: CaptureMode) => {
@@ -324,17 +410,33 @@ export function MtgRecordingControls(props: {
       }
 
       chunksRef.current = [];
+      const type = recorder.mimeType || mime || "audio/webm";
+      const ext = type.includes("mp4") ? "m4a" : type.includes("ogg") ? "ogg" : "webm";
+      const name =
+        mode === "av" ? `grabacion-llamada.${ext}` : `grabacion-junta.${ext}`;
+      captureMimeRef.current = type;
+      captureNameRef.current = name;
+      let chunkCount = 0;
       recorder.ondataavailable = (ev) => {
         if (ev.data.size > 0) chunksRef.current.push(ev.data);
+        chunkCount += 1;
+        // Checkpoint cada ~15 s para no perder todo si se cierra la pestaña.
+        if (chunkCount % 15 === 0) {
+          void checkpointPendingRecording({
+            meetingId: props.meeting.id,
+            chunks: chunksRef.current,
+            fileName: captureNameRef.current,
+            contentType: captureMimeRef.current,
+            origin: "browser_recorder",
+          }).catch(() => {
+            /* best-effort */
+          });
+        }
       };
       recorder.onstop = () => {
         stopExtrasRef.current?.();
         stopExtrasRef.current = null;
-        const type = recorder.mimeType || "audio/webm";
-        const blob = new Blob(chunksRef.current, { type });
-        const ext = type.includes("mp4") ? "m4a" : type.includes("ogg") ? "ogg" : "webm";
-        const name =
-          mode === "av" ? `grabacion-llamada.${ext}` : `grabacion-junta.${ext}`;
+        const blob = new Blob(chunksRef.current, { type: captureMimeRef.current });
         setPhase("uploading");
         setElapsedSec(0);
         if (blob.size < 1024) {
@@ -344,7 +446,7 @@ export function MtgRecordingControls(props: {
           mediaRef.current = null;
           return;
         }
-        void saveBlob(blob, name, "browser_recorder");
+        void saveBlob(blob, captureNameRef.current, "browser_recorder");
         mediaRef.current = null;
       };
 
@@ -405,7 +507,16 @@ export function MtgRecordingControls(props: {
         {props.meeting.recording_path && phase === "idle" && (
           <span className="inline-flex items-center gap-1 text-[11px] text-emerald-700 dark:text-emerald-400">
             <CheckCircle2 className="h-3.5 w-3.5" />
-            Grabación guardada
+            En Storage
+            {props.meeting.recording_bytes != null
+              ? ` · ${formatRecordingSizeMb(props.meeting.recording_bytes)} MB`
+              : ""}
+          </span>
+        )}
+        {pendingLocal && !props.meeting.recording_path && phase === "idle" && (
+          <span className="inline-flex items-center gap-1 text-[11px] text-amber-700 dark:text-amber-400">
+            <HardDrive className="h-3.5 w-3.5" />
+            Copia local pendiente · {formatRecordingSizeMb(pendingLocal.sizeBytes)} MB
           </span>
         )}
         {props.meeting.transcript_status === "received" && phase === "idle" && (
@@ -498,15 +609,47 @@ export function MtgRecordingControls(props: {
                   : "Transcribir IA"}
             </Button>
           )}
+        {pendingLocal && !props.meeting.recording_path && !recording && (
+          <>
+            <Button
+              type="button"
+              size={size}
+              variant="default"
+              disabled={processing}
+              onClick={() => void retryPendingUpload()}
+              title="Subir de nuevo la copia local a Storage"
+            >
+              {phase === "uploading" ? (
+                <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3.5 w-3.5 mr-1" />
+              )}
+              Reintentar subida
+            </Button>
+            <Button
+              type="button"
+              size={size}
+              variant="outline"
+              disabled={processing}
+              onClick={() => {
+                downloadBlobLocally(pendingLocal.blob, pendingLocal.fileName);
+                toast.message("Descarga iniciada — conserva el archivo por si acaso");
+              }}
+            >
+              <Download className="h-3.5 w-3.5 mr-1" />
+              Descargar copia local
+            </Button>
+          </>
+        )}
         {!props.meeting.recording_path &&
+          !pendingLocal &&
           (props.meeting.transcript_status === "failed" ||
             props.meeting.status === "ended" ||
             props.meeting.status === "minutes_draft") &&
           !recording &&
           phase === "idle" && (
             <span className="text-[11px] text-amber-700 dark:text-amber-400">
-              Sin grabación en Storage — sube audio o graba de nuevo para reintentar la
-              transcripción.
+              Sin grabación en Storage — sube audio o graba de nuevo para no perder la sesión.
             </span>
           )}
       </div>

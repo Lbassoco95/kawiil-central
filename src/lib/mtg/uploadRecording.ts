@@ -1,6 +1,7 @@
 /**
  * Subida / grabación de audio-video de la junta → bucket mtg (kind recordings).
  * Soporta conversaciones de hasta ~3 horas (ver recordingLimits).
+ * Reintenta Storage y verifica el objeto antes de marcar recording_path.
  */
 
 import { supabase } from "@/integrations/supabase/client";
@@ -50,6 +51,58 @@ export function isAllowedRecordingFile(file: File): boolean {
   return AUDIO_EXT.has(ext) || VIDEO_EXT.has(ext);
 }
 
+function isRetriableStorageError(err: unknown): boolean {
+  const msg = String((err as { message?: string })?.message || err || "").toLowerCase();
+  const status = (err as { statusCode?: string | number; status?: number })?.statusCode
+    ?? (err as { status?: number })?.status;
+  if (status === 413 || status === "413") return false;
+  if (msg.includes("too large") || msg.includes("entitytoolarge") || msg.includes("payload too large")) {
+    return false;
+  }
+  if (status === 429 || status === "429" || status === 500 || status === "500" || status === 502 || status === 503) {
+    return true;
+  }
+  return (
+    msg.includes("network") ||
+    msg.includes("fetch") ||
+    msg.includes("timeout") ||
+    msg.includes("temporar") ||
+    msg.includes("unavailable") ||
+    msg.includes("failed to fetch")
+  );
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((r) => setTimeout(r, ms));
+}
+
+async function uploadWithRetries(
+  path: string,
+  file: File,
+  contentType: string,
+  attempts = 3,
+): Promise<void> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    const { error: upErr } = await supabase.storage
+      .from(MTG_BUCKET)
+      .upload(path, file, { upsert: true, contentType, cacheControl: "3600" });
+    if (!upErr) return;
+    lastErr = upErr;
+    if (!isRetriableStorageError(upErr) || i === attempts - 1) break;
+    await sleep(800 * (i + 1) * (i + 1));
+  }
+  throw lastErr;
+}
+
+/** Confirma que el objeto existe en Storage (signed URL corta). */
+export async function verifyRecordingInStorage(path: string): Promise<boolean> {
+  const { data, error } = await supabase.storage
+    .from(MTG_BUCKET)
+    .createSignedUrl(path, 60);
+  return !error && !!data?.signedUrl;
+}
+
 export async function uploadMeetingRecording(opts: {
   organizationId: string;
   actorUserId: string;
@@ -58,7 +111,7 @@ export async function uploadMeetingRecording(opts: {
   file: File | Blob;
   fileName?: string;
   origin?: "manual_upload" | "browser_recorder";
-}): Promise<{ path: string }> {
+}): Promise<{ path: string; sizeBytes: number }> {
   if (!canUploadRecording(opts.meeting.status)) {
     throw new Error(`No se puede guardar grabación en estado ${opts.meeting.status}`);
   }
@@ -101,11 +154,11 @@ export async function uploadMeetingRecording(opts: {
       : ext === "mp3"
         ? "audio/mpeg"
         : `application/octet-stream`);
-  const { error: upErr } = await supabase.storage
-    .from(MTG_BUCKET)
-    .upload(path, asFile, { upsert: true, contentType });
-  if (upErr) {
-    const msg = (upErr.message || "").toLowerCase();
+
+  try {
+    await uploadWithRetries(path, asFile, contentType);
+  } catch (upErr) {
+    const msg = String((upErr as { message?: string })?.message || upErr || "").toLowerCase();
     const status = (upErr as { statusCode?: string | number }).statusCode;
     if (
       status === "413" ||
@@ -119,14 +172,30 @@ export async function uploadMeetingRecording(opts: {
         `El archivo pesa ${formatRecordingSizeMb(asFile.size)} MB y Storage lo rechazó. Usa «Grabar audio» / «Audio de llamada» (hasta ~${MTG_MAX_RECORDING_HOURS} h) en vez de video de pantalla.`,
       );
     }
-    throw upErr;
+    throw upErr instanceof Error ? upErr : new Error(String(upErr));
   }
 
+  const ok = await verifyRecordingInStorage(path);
+  if (!ok) {
+    throw new Error(
+      "La subida no se pudo verificar en Storage. Reintenta; la copia local se conserva hasta confirmar.",
+    );
+  }
+
+  const savedAt = new Date().toISOString();
   const { error: mErr } = await mtgDb
     .from("mtg_meetings")
-    .update({ recording_path: path })
+    .update({
+      recording_path: path,
+      recording_bytes: asFile.size,
+      recording_saved_at: savedAt,
+    })
     .eq("id", opts.meeting.id);
-  if (mErr) throw mErr;
+  if (mErr) {
+    throw new Error(
+      `Archivo en Storage (${path}) pero no se pudo enlazar a la junta: ${mErr.message}. Reintenta «Subir» o avisa a soporte con esa ruta.`,
+    );
+  }
 
   await logMtgAudit({
     organizationId: opts.organizationId,
@@ -142,8 +211,10 @@ export async function uploadMeetingRecording(opts: {
       content_type: contentType,
       max_hours: MTG_MAX_RECORDING_HOURS,
       will_chunk_whisper: asFile.size > MTG_WHISPER_MAX_BYTES,
+      verified_in_storage: true,
+      saved_at: savedAt,
     },
   });
 
-  return { path };
+  return { path, sizeBytes: asFile.size };
 }

@@ -90,6 +90,8 @@ export type MtgMeetingRow = {
     | "unavailable";
   transcript_path: string | null;
   recording_path: string | null;
+  recording_bytes: number | null;
+  recording_saved_at: string | null;
   transcript_unavailable_reason: string | null;
   minutes_id: string | null;
   created_by: string | null;
