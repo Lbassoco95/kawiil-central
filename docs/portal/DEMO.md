@@ -1,16 +1,16 @@
-# DEMO — entorno de demostración del espejo fiscal (Corte 4)
+# DEMO — entorno de demostración del espejo del servicio Kawiil (Corte 4)
 
-**Alcance:** solo lectura del espejo fiscal con datos sintéticos. **Sin RH y sin emisión.** No usa el proyecto ni las credenciales de central.
+**Alcance:** solo lectura del **espejo del servicio** (todo lo que Kawiil trabaja en central para el cliente) con datos sintéticos. El bloque fiscal es el primero disponible; **sin RH y sin emisión**. No usa el proyecto ni las credenciales de central.
 
 Guion: [DEMO-GUION.md](DEMO-GUION.md). Arranque Polo: [ARRANQUE-POLO.md](ARRANQUE-POLO.md). Reinicio: `npm run portal:demo-reset` (cerco en `tools/portal/`).
 
-## Checklist D1–D7 (adaptado al espejo)
+## Checklist D1–D7 (adaptado al espejo del servicio)
 
 | Ítem | Qué exige | Cómo se cumple en este corte |
 |---|---|---|
 | **D1** | Demo en proyecto/rama propio, sin credenciales reales | Proyecto **`kawiil-os-demo`** + build con `VITE_PORTAL_*` distintos de central. Turnstile de prueba. |
-| **D2** | Datos sintéticos del espejo | Semilla `kawiil-os/demo/seed.sql` + fixture: facturas, IVA/retenciones, constancia/opinión, declaración, notificación SAT, alertas EFOS/cancelación. |
-| **D3** | Marca «DEMO — sin validez fiscal» | CFDI `is_test=true`; UI + banner `VITE_PORTAL_DEMO_MODE=true`. |
+| **D2** | Datos sintéticos del servicio (bloque fiscal primero) | Semilla `kawiil-os/demo/seed.sql` + fixture: facturas, IVA/retenciones, constancia/opinión, declaración, notificación SAT, alertas EFOS/cancelación. |
+| **D3** | Marca «DEMO — sin validez fiscal» en datos fiscales | CFDI `is_test=true`; UI + banner `VITE_PORTAL_DEMO_MODE=true`. |
 | **D4** | Reinicio exacto documentado y automatizable | `npm run portal:demo-reset` / `kawiil-os:bootstrap-demo`. Prueba: `npm run test:kawiil-os-demo`. |
 | **D5** | Guion sin RH ni emisión | [DEMO-GUION.md](DEMO-GUION.md). |
 | **D6** | Aislamiento / cerco | Árbol `kawiil-os/` **sin** ref/JWT de central (denylist de `test:kawiil-os-db` intacta). Bootstrap y reset se niegan si el ref es central o el destino no es `kawiil-os-demo`. |

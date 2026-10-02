@@ -77,8 +77,8 @@ export default function Inicio() {
   return (
     <>
       <PageTitle
-        title="Tablero fiscal (espejo)"
-        subtitle={active?.client_name}
+        title="Resumen del servicio"
+        subtitle={active ? `${active.client_name} · Espejo del servicio Kawiil` : "Espejo del servicio Kawiil"}
         breadcrumb={["Kawiil", "Portal", "Inicio"]}
         icon={<LayoutDashboard />}
         actions={
@@ -101,9 +101,12 @@ export default function Inicio() {
           </label>
         }
       />
-      <ManagementLegend />
-      <div className="mt-3">
-        <Notice tone="info">Solo lectura: Kawiil publica desde central lo que ya descargó y procesó. Usted no carga XML ni consulta el SAT desde aquí.</Notice>
+      <div className="mt-3 space-y-3">
+        <Notice tone="info">
+          Solo lectura: aquí ve lo que el equipo de Kawiil ya trabaja y publica desde central para su cuenta.
+          En esta fase el bloque fiscal es el primero disponible; RH y emisión llegan después.
+        </Notice>
+        <ManagementLegend />
       </div>
       {err && (
         <div className="mt-4">
@@ -112,6 +115,14 @@ export default function Inicio() {
       )}
       {d && (
         <div className="mt-4 grid gap-4 md:grid-cols-3">
+          <section className="surface-toolbar p-4 md:col-span-3" aria-labelledby="t-servicio">
+            <h2 id="t-servicio" className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+              Situación fiscal del periodo
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Parte del servicio publicado por Kawiil: IVA, retenciones, calidad de datos y marcas del periodo seleccionado.
+            </p>
+          </section>
           <section className="surface-toolbar p-4 md:col-span-3" aria-labelledby="t-calidad">
             <h2 id="t-calidad" className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
               Calidad de datos y regla PUE/PPD
@@ -190,7 +201,7 @@ export default function Inicio() {
             )}
             {(d.iva_flujo?.pendientes_de_pago?.length ?? 0) > 0 && (
               <p className="mt-2 text-xs text-muted-foreground">
-                {d.iva_flujo!.pendientes_de_pago.length} factura(s) PPD del periodo aún sin complemento de pago en el espejo.{" "}
+                {d.iva_flujo!.pendientes_de_pago.length} factura(s) PPD del periodo aún sin complemento de pago publicado.{" "}
                 <Link className="underline" to="/facturas">Ver facturas</Link>
               </p>
             )}
@@ -220,7 +231,7 @@ export default function Inicio() {
           )}
           <section className="page-list-card p-4 md:col-span-3">
             <h2 className="mb-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">Marcas de deducibilidad</h2>
-            <p className="mb-2 text-xs text-muted-foreground">Avisos informativos del espejo. Consulte a su equipo si tiene dudas.</p>
+            <p className="mb-2 text-xs text-muted-foreground">Avisos informativos del servicio publicado. Consulte a su equipo si tiene dudas.</p>
             {d.marcas?.length ? (
               <ul className="space-y-2">{d.marcas.map((m) => (
                 <li key={m.cfdi_id} className="rounded-md border p-2 text-sm">

@@ -76,7 +76,7 @@ export default function FacturaDetalle() {
           </section>
           <section className="rounded-xl border bg-card p-4">
             <h2 className="text-lg">Conceptos</h2>
-            {d!.conceptos.length === 0 ? <Empty>Sin conceptos en el espejo.</Empty> : (
+            {d!.conceptos.length === 0 ? <Empty>Sin conceptos publicados aún.</Empty> : (
               <ul className="mt-2 space-y-2">{d!.conceptos.map((c, i) => (
                 <li key={i} className="flex justify-between gap-2 border-t pt-2 text-sm">
                   <span>{c.description} · {c.quantity} × {fmtMoney(c.unit_value)}</span>

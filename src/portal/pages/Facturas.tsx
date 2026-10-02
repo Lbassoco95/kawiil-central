@@ -37,13 +37,13 @@ export default function Facturas() {
   return (
     <>
       <PageTitle
-        title="Facturas (espejo)"
-        subtitle="Emitidas y recibidas publicadas por Kawiil. En esta fase usted no carga XML ni crea facturas."
+        title="Facturas"
+        subtitle="CFDI emitidos y recibidos que Kawiil ya publicó para su cuenta. En esta fase usted no carga XML ni crea facturas."
         breadcrumb={["Kawiil", "Portal", "Facturas"]}
         icon={<FileText />}
       />
       <div className="mb-3">
-        <Notice tone="info">Espejo de solo lectura. La descarga y el procesamiento viven en central; aquí solo consulta el detalle ya publicado.</Notice>
+        <Notice tone="info">Parte del espejo del servicio (solo lectura). La descarga y el procesamiento viven en central; aquí consulta el detalle ya publicado.</Notice>
       </div>
       <div role="tablist" aria-label="Tipo de factura" className="portal-pill-group mb-3">
         {(["recibida", "emitida"] as const).map((d) => (

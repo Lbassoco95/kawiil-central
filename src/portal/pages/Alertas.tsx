@@ -36,7 +36,7 @@ export default function Alertas() {
 
   return (
     <>
-      <PageTitle title="Alertas y notificaciones SAT" subtitle="Publicadas por Kawiil. Espejo de solo lectura." />
+      <PageTitle title="Alertas y notificaciones SAT" subtitle="Publicadas por Kawiil como parte del espejo del servicio. Solo lectura." />
       <div className="mb-3"><Notice tone="info">Incluye avisos EFOS/69-B, cancelaciones y notificaciones del SAT que central ya obtuvo. No se consulta el SAT desde esta pantalla.</Notice></div>
 
       <section className="mb-6" aria-labelledby="a-alertas">

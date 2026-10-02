@@ -1,6 +1,6 @@
 # Portal del cliente de Kawiil OS
 
-Cara nueva de `kawiil-central` para los clientes de Kawiil: **espejo fiscal de solo lectura** (tablero IVA/retenciones, facturas, constancia/opinión, declaraciones, notificaciones SAT y alertas) publicado desde central por API firmada. En esta fase el cliente **no** carga XML, no emite ni pide factura de ticket. Vive en un **proyecto Supabase independiente** (`kawiil-os/`); el navegador solo habla Auth + `portal-api`.
+Cara nueva de `kawiil-central` para los clientes de Kawiil: **espejo del servicio de solo lectura** — todo lo que el equipo trabaja en central para la cuenta del cliente. En esta fase el primer bloque disponible es el fiscal (resumen IVA/retenciones, facturas, constancia/opinión, declaraciones, notificaciones SAT y alertas), publicado desde central por API firmada. El cliente **no** carga XML, no emite ni pide factura de ticket; RH y emisión son fase 2. Vive en un **proyecto Supabase independiente** (`kawiil-os/`); el navegador solo habla Auth + `portal-api`.
 
 | Documento | Para qué |
 |---|---|

@@ -51,12 +51,12 @@ export default function AuthShell({ title, children }: { title: string; children
               )}
             </div>
             <div className="space-y-4">
-              <p className="text-xs font-medium uppercase tracking-[0.18em] text-white/70">Espejo fiscal</p>
+              <p className="text-xs font-medium uppercase tracking-[0.18em] text-white/70">Espejo del servicio</p>
               <h2 className="max-w-md text-3xl font-bold leading-tight tracking-tight">
-                Lo que Kawiil ya procesó, en un solo lugar.
+                Todo lo que Kawiil trabaja por usted, en un solo lugar.
               </h2>
               <p className="max-w-md text-sm text-white/80">
-                Tablero, facturas y documentos publicados desde central. Solo lectura: usted consulta, no carga XML ni consulta el SAT.
+                Resumen del servicio, facturas, documentos y alertas publicados desde central. Solo lectura: usted consulta; no carga XML ni consulta el SAT.
               </p>
             </div>
             <p className="text-[11px] text-white/60">© {new Date().getFullYear()} Kawiil MX · Portal del cliente</p>

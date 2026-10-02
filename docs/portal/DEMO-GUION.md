@@ -1,35 +1,37 @@
-# Guion de demostración — espejo fiscal (fase Corte 4)
+# Guion de demostración — espejo del servicio Kawiil (fase Corte 4)
 
-Alineado a la «Guía de la primera etapa» del portal, **recortado a la fase espejo**: solo lectura de lo que Kawiil ya publicó. **No** se demuestra RH ni emisión.
+Alineado a la «Guía de la primera etapa» del portal, **recortado a la fase espejo del servicio**: solo lectura de lo que Kawiil ya publicó desde central. El bloque fiscal es lo visible hoy; **no** se demuestra RH ni emisión.
 
-Duración orientativa: 12–15 minutos. Cuenta: `demo.cliente@kawiil-demo.invalid` sobre la empresa **DEMO Espejo Fiscal SA de CV**.
+Duración orientativa: 12–15 minutos. Cuenta: `demo.cliente@kawiil-demo.invalid` sobre la empresa **DEMO Espejo Fiscal SA de CV** (nombre de la razón social sembrada; el producto se presenta como espejo del servicio).
 
-Antes de empezar: reinicio exacto (`docs/portal/DEMO.md`) y build con `VITE_PORTAL_DEMO_MODE=true`. Debe verse el banner *Entorno de demostración · DEMO — sin validez fiscal*.
+Antes de empezar: reinicio exacto (`docs/portal/DEMO.md`) y build con `VITE_PORTAL_DEMO_MODE=true`. Debe verse el banner *Entorno de demostración · DEMO — sin validez fiscal* (marca correcta para CFDI sintéticos).
 
 ---
 
 ## 0. Marco (1 min)
 
-- «Esto es un **espejo**: el cliente ve facturas, IVA, constancia, declaraciones y alertas que Kawiil ya procesó en central.»
-- «Ningún dato tiene validez fiscal. Toda factura lleva la marca **DEMO — sin validez fiscal**.»
+- «Esto es el **espejo del servicio Kawiil**: el cliente ve, en solo lectura, lo que el equipo ya trabaja y publica en central.»
+- «Hoy el primer bloque disponible es el fiscal (facturas, IVA, constancia, declaraciones, alertas). RH y emisión son fase 2.»
+- «Ningún CFDI demo tiene validez fiscal. Toda factura lleva la marca **DEMO — sin validez fiscal**.»
 - «En esta fase el cliente **no** carga XML, **no** emite y **no** usa RH.»
 
 ## 1. Acceso (1 min)
 
 1. Abrir el dominio demo del portal.
-2. Ingresar con la cuenta demo.
-3. Confirmar banner DEMO y que no hay entradas de Tickets ni «Crear factura» en la navegación.
+2. En login, ver el panel: **Espejo del servicio**.
+3. Ingresar con la cuenta demo.
+4. Confirmar banner DEMO y que no hay entradas de Tickets ni «Crear factura» en la navegación.
 
-## 2. Tablero IVA y retenciones (3 min)
+## 2. Resumen del servicio / bloque fiscal (3 min)
 
-1. Ir a **Inicio**.
+1. Ir a **Inicio** (título: **Resumen del servicio**).
 2. Periodo **septiembre 2026** (semilla).
-3. Señalar:
+3. Señalar la sección **Situación fiscal del periodo** y luego:
    - Ingresos y gastos del mes (cifras publicadas).
    - IVA estimado / trasladado / acreditable.
    - Retenciones IVA e ISR.
    - Indicador de **calidad media** (hay una factura solo metadatos).
-   - Leyenda de espejo / demostración.
+   - Leyenda de demostración / gestión.
 4. Mencionar la regla PUE/PPD visible (`iva_basis` = flujo de efectivo en la semilla).
 
 ## 3. Facturas emitidas y recibidas (4 min)
@@ -58,7 +60,7 @@ Antes de empezar: reinicio exacto (`docs/portal/DEMO.md`) y build con `VITE_PORT
 
 ## 6. Cierre (1 min)
 
-- Recapitular: espejo de solo lectura, datos ficticios, marca DEMO, reinicio exacto en un comando.
+- Recapitular: espejo del servicio (solo lectura), bloque fiscal primero, datos ficticios, marca DEMO en CFDI, reinicio exacto en un comando.
 - Fuera de alcance hoy: emitir, cargar XML, tickets, RH, e.firma.
 - Preguntas.
 
