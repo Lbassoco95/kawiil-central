@@ -69,7 +69,7 @@ export default function Mensajes() {
         <nav aria-label="Conversaciones" className="md:col-span-1">
           {threads.length === 0 ? <Empty>Sin conversaciones todavía.</Empty> : (
             <ul className="space-y-1">{threads.map((t) => (
-              <li key={t.id}><button onClick={() => setSel(t.id)} aria-current={sel === t.id} className={`w-full rounded-lg border p-2 text-left ${sel === t.id ? "border-accent bg-secondary" : "bg-card"}`}>
+              <li key={t.id}><button onClick={() => setSel(t.id)} aria-current={sel === t.id} className={`w-full rounded-lg border p-2 text-left ${sel === t.id ? "border-primary/40 bg-sky-50" : "bg-card"}`}>
                 <p className="truncate font-medium">{t.subject}</p>
                 <p className="text-xs text-muted-foreground">{fmtDateTime(t.last_message_at)} · <StatusPill tone={t.status === "resuelto" ? "ok" : "info"}>{t.status === "resuelto" ? "Resuelta" : "Abierta"}</StatusPill></p>
               </button></li>))}

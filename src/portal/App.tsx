@@ -36,7 +36,7 @@ function Gate({ children }: { children: ReactNode }) {
   if (!me?.is_portal_account) {
     return (
       <div className="mx-auto max-w-md p-6">
-        <h1 className="text-2xl text-accent">Esta cuenta es del equipo de Kawiil</h1>
+        <h1 className="text-2xl font-bold gradient-text">Esta cuenta es del equipo de Kawiil</h1>
         <p className="mt-2 text-sm">Las cuentas del equipo trabajan en Kawiil OS (central), no en el portal del cliente.</p>
         <button className="mt-4 underline" onClick={() => db.auth.signOut()}>Cerrar sesión</button>
       </div>
@@ -45,7 +45,7 @@ function Gate({ children }: { children: ReactNode }) {
   if (me.status === "suspendida") {
     return (
       <div className="mx-auto max-w-md p-6">
-        <h1 className="text-2xl text-accent">Cuenta suspendida</h1>
+        <h1 className="text-2xl font-bold gradient-text">Cuenta suspendida</h1>
         <p className="mt-2 text-sm">Su acceso está suspendido. Si cree que es un error, comuníquese con su contacto en Kawiil.</p>
         <button className="mt-4 underline" onClick={() => db.auth.signOut()}>Cerrar sesión</button>
       </div>

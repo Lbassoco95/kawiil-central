@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { LayoutDashboard } from "lucide-react";
 import { usePortal } from "../lib/session";
 import { callApi } from "../lib/api";
 import { fmtDate, fmtMoney, MONTHS, monthLabel } from "../lib/format";
@@ -78,22 +79,43 @@ export default function Inicio() {
       <PageTitle
         title="Tablero fiscal (espejo)"
         subtitle={active?.client_name}
+        breadcrumb={["Kawiil", "Portal", "Inicio"]}
+        icon={<LayoutDashboard />}
         actions={
           <label className="text-sm">
-            <span className="mr-2">Mes</span>
-            <select className="rounded-md border px-2 py-1" value={`${ym.y}-${ym.m}`} onChange={(e) => { const [y, m] = e.target.value.split("-").map(Number); setYm({ y, m }); }}>
-              {months.map((o) => <option key={`${o.y}-${o.m}`} value={`${o.y}-${o.m}`}>{MONTHS[o.m - 1]} {o.y}</option>)}
+            <span className="mr-2 text-muted-foreground">Mes</span>
+            <select
+              className="h-9 rounded-md border border-border/70 bg-background px-2 text-sm"
+              value={`${ym.y}-${ym.m}`}
+              onChange={(e) => {
+                const [y, m] = e.target.value.split("-").map(Number);
+                setYm({ y, m });
+              }}
+            >
+              {months.map((o) => (
+                <option key={`${o.y}-${o.m}`} value={`${o.y}-${o.m}`}>
+                  {MONTHS[o.m - 1]} {o.y}
+                </option>
+              ))}
             </select>
           </label>
         }
       />
       <ManagementLegend />
-      <div className="mt-3"><Notice tone="info">Solo lectura: Kawiil publica desde central lo que ya descargó y procesó. Usted no carga XML ni consulta el SAT desde aquí.</Notice></div>
-      {err && <div className="mt-4"><Notice tone="warn">{err}</Notice></div>}
+      <div className="mt-3">
+        <Notice tone="info">Solo lectura: Kawiil publica desde central lo que ya descargó y procesó. Usted no carga XML ni consulta el SAT desde aquí.</Notice>
+      </div>
+      {err && (
+        <div className="mt-4">
+          <Notice tone="warn">{err}</Notice>
+        </div>
+      )}
       {d && (
         <div className="mt-4 grid gap-4 md:grid-cols-3">
-          <section className="rounded-xl border bg-card p-4 md:col-span-3" aria-labelledby="t-calidad">
-            <h2 id="t-calidad" className="text-lg">Calidad de datos y regla PUE/PPD</h2>
+          <section className="surface-toolbar p-4 md:col-span-3" aria-labelledby="t-calidad">
+            <h2 id="t-calidad" className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+              Calidad de datos y regla PUE/PPD
+            </h2>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <StatusPill tone={qualityTone}>{d.calidad ? `Calidad ${d.calidad.quality_label}` : "Sin indicador"}</StatusPill>
               <StatusPill tone="wait">{d.iva_basis === "issuance" ? "Base: emisión" : "Base: flujo de efectivo"}</StatusPill>
@@ -103,26 +125,47 @@ export default function Inicio() {
             {d.leyenda && <p className="mt-1 text-xs text-muted-foreground">{d.leyenda}</p>}
           </section>
 
-          <section className="rounded-xl border bg-card p-4" aria-labelledby="t-gasto">
-            <h2 id="t-gasto" className="text-lg">Gasto del mes</h2>
-            <p className="kw-mono text-2xl">{fmtMoney(d.gasto_total)}</p>
-            <Delta now={d.gasto_total} prev={d.gasto_mes_anterior} />
+          <section className="stat-card relative overflow-hidden" aria-labelledby="t-gasto">
+            <div aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-br from-rose-500/5 to-transparent" />
+            <div className="relative">
+              <h2 id="t-gasto" className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Gasto del mes
+              </h2>
+              <p className="kw-mono mt-1 text-2xl font-bold tracking-tight">{fmtMoney(d.gasto_total)}</p>
+              <Delta now={d.gasto_total} prev={d.gasto_mes_anterior} />
+            </div>
           </section>
-          <section className="rounded-xl border bg-card p-4" aria-labelledby="t-ingreso">
-            <h2 id="t-ingreso" className="text-lg">Ingresos del mes</h2>
-            <p className="kw-mono text-2xl">{fmtMoney(d.ingreso_total)}</p>
-            <p className="text-xs text-muted-foreground">Ingresos menos gastos: <span className="kw-mono">{fmtMoney(d.ingreso_total - d.gasto_total)}</span></p>
+          <section className="stat-card relative overflow-hidden" aria-labelledby="t-ingreso">
+            <div aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-br from-sky-500/5 to-transparent" />
+            <div className="relative">
+              <h2 id="t-ingreso" className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Ingresos del mes
+              </h2>
+              <p className="kw-mono mt-1 text-2xl font-bold tracking-tight">{fmtMoney(d.ingreso_total)}</p>
+              <p className="text-xs text-muted-foreground">
+                Ingresos menos gastos: <span className="kw-mono">{fmtMoney(d.ingreso_total - d.gasto_total)}</span>
+              </p>
+            </div>
           </section>
-          <section className="rounded-xl border bg-card p-4" aria-labelledby="t-iva">
-            <h2 id="t-iva" className="text-lg">IVA estimado</h2>
-            <p className="kw-mono text-2xl">{fmtMoney(Math.abs(d.iva_estimado))}</p>
-            <StatusPill tone={d.iva_estimado > 0 ? "warn" : "ok"}>{d.iva_estimado > 0 ? "a cargo" : "a favor"}</StatusPill>
-            <p className="mt-1 text-xs text-muted-foreground">Trasladado {fmtMoney(d.iva.trasladado)} − acreditable {fmtMoney(d.iva.acreditable)}.
-              {d.iva.facturas_sin_desglose > 0 && ` ${d.iva.facturas_sin_desglose} factura(s) sin desglose de IVA no cuentan.`}</p>
+          <section className="stat-card relative overflow-hidden" aria-labelledby="t-iva">
+            <div aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-br from-amber-500/5 to-transparent" />
+            <div className="relative">
+              <h2 id="t-iva" className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                IVA estimado
+              </h2>
+              <p className="kw-mono mt-1 text-2xl font-bold tracking-tight">{fmtMoney(Math.abs(d.iva_estimado))}</p>
+              <StatusPill tone={d.iva_estimado > 0 ? "warn" : "ok"}>{d.iva_estimado > 0 ? "a cargo" : "a favor"}</StatusPill>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Trasladado {fmtMoney(d.iva.trasladado)} − acreditable {fmtMoney(d.iva.acreditable)}.
+                {d.iva.facturas_sin_desglose > 0 && ` ${d.iva.facturas_sin_desglose} factura(s) sin desglose de IVA no cuentan.`}
+              </p>
+            </div>
           </section>
 
-          <section className="rounded-xl border bg-card p-4 md:col-span-3" aria-labelledby="t-ret">
-            <h2 id="t-ret" className="text-lg">IVA y retenciones</h2>
+          <section className="surface-glass-subtle p-4 md:col-span-3" aria-labelledby="t-ret">
+            <h2 id="t-ret" className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+              IVA y retenciones
+            </h2>
             <div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div><p className="text-xs text-muted-foreground">IVA retenido a su empresa</p><p className="kw-mono text-lg">{fmtMoney(d.retenciones?.iva_retenido_a_la_empresa ?? 0)}</p></div>
               <div><p className="text-xs text-muted-foreground">IVA que su empresa retuvo</p><p className="kw-mono text-lg">{fmtMoney(d.retenciones?.iva_retenido_por_la_empresa ?? 0)}</p></div>
@@ -153,18 +196,18 @@ export default function Inicio() {
             )}
           </section>
 
-          <section className="rounded-xl border bg-card p-4 md:col-span-2">
-            <h2 className="mb-2 text-lg">Gasto por categoría</h2>
+          <section className="page-list-card p-4 md:col-span-2">
+            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">Gasto por categoría</h2>
             {d.por_categoria?.length ? <Bars rows={d.por_categoria.map((c) => ({ label: c.categoria, value: c.total, note: `${c.facturas} fact.` }))} /> : <Empty>Sin gastos categorizados este mes.</Empty>}
             {d.por_confirmar > 0 && <p className="mt-2 text-xs text-muted-foreground">{d.por_confirmar} factura(s) «Por confirmar»: el equipo de Kawiil revisa su categoría.</p>}
           </section>
-          <section className="rounded-xl border bg-card p-4">
-            <h2 className="mb-2 text-lg">Principales proveedores</h2>
+          <section className="page-list-card p-4">
+            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">Principales proveedores</h2>
             {d.por_proveedor?.length ? <Bars rows={d.por_proveedor.map((p) => ({ label: p.nombre ?? p.rfc, value: p.total }))} /> : <Empty>Sin proveedores este mes.</Empty>}
           </section>
           {(d.por_mes?.length ?? 0) > 0 && (
-            <section className="rounded-xl border bg-card p-4 md:col-span-3">
-              <h2 className="mb-2 text-lg">Últimos 12 meses</h2>
+            <section className="page-list-card p-4 md:col-span-3">
+              <h2 className="mb-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">Últimos 12 meses</h2>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead><tr className="text-left text-muted-foreground"><th className="py-1">Mes</th><th className="text-right">Ingresos</th><th className="text-right">Gastos</th><th className="text-right">Diferencia</th></tr></thead>
@@ -175,8 +218,8 @@ export default function Inicio() {
               </div>
             </section>
           )}
-          <section className="rounded-xl border bg-card p-4 md:col-span-3">
-            <h2 className="mb-2 text-lg">Marcas de deducibilidad</h2>
+          <section className="page-list-card p-4 md:col-span-3">
+            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">Marcas de deducibilidad</h2>
             <p className="mb-2 text-xs text-muted-foreground">Avisos informativos del espejo. Consulte a su equipo si tiene dudas.</p>
             {d.marcas?.length ? (
               <ul className="space-y-2">{d.marcas.map((m) => (
