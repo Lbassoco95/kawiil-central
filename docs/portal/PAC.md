@@ -2,7 +2,7 @@
 
 ## Decisión de cumplimiento
 
-En la fase **espejo fiscal**, Kawiil OS **no** implementa adaptadores PAC ni Facturapi. La emisión, el timbrado, la descarga masiva y la consulta al SAT con e.firma/CIEC/SatGo viven **solo en central**.
+En la fase **espejo del servicio** (bloque fiscal primero), Kawiil OS **no** implementa adaptadores PAC ni Facturapi. La emisión, el timbrado, la descarga masiva y la consulta al SAT con e.firma/CIEC/SatGo viven **solo en central**.
 
 Este documento fija el contrato para no reabrir F1/F3 en OS hasta que Polo lo decida.
 

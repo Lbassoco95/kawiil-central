@@ -162,7 +162,7 @@ Pendiente de confirmar con material real en el ensayo: la distinción CSD / e.fi
 3. Política de baja y resguardo fijada por Polo (`docs/portal/CONSERVACION.md`); quedan sus pendientes de §9 de ese documento.
 4. Clientes piloto; emisión en modo prueba hasta que exista PAC. En Corte 3 el portal es espejo: no emitir desde OS (`PAC.md`).
 
-## 12. Corte 3 — espejo fiscal (Kawiil OS)
+## 12. Corte 3 — espejo del servicio (Kawiil OS)
 
 ### Migración standalone
 

@@ -101,7 +101,7 @@ Nunca salen de Kawiil OS:
 - Documentos de expedientes laborales.
 - CSD, llaves, contraseñas o texto cifrado.
 
-**Nunca entran a Kawiil OS desde central (espejo fiscal):** e.firma, CIEC, SatGo, tokens Moffin, `MOFFIN_FIEL_SECRET` ni material de sellado. Solo metadatos y archivos ya procesados/publicables.
+**Nunca entran a Kawiil OS desde central (espejo del servicio):** e.firma, CIEC, SatGo, tokens Moffin, `MOFFIN_FIEL_SECRET` ni material de sellado. Solo metadatos y archivos ya procesados/publicables.
 
 Central recibe únicamente incidencias agregadas y autorizadas para nómina. El acceso excepcional del equipo a expedientes o resultados agregados se implementa como autorización temporal en Kawiil OS y queda auditado; no concede acceso de base.
 
