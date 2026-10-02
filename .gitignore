@@ -55,3 +55,6 @@ docs/mtg/acceptance/
 .tmp_health*
 tmp_deploy/
 dist-portal
+
+# portal demo local env (never commit)
+.env.portal.local
