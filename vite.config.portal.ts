@@ -22,7 +22,7 @@ export default defineConfig({
   plugins: [react()],
   css: {
     postcss: {
-      plugins: [tailwind({ config: path.resolve(__dirname, "tailwind.config.ts") }), autoprefixer()],
+      plugins: [tailwind({ config: path.resolve(__dirname, "tailwind.config.portal.ts") }), autoprefixer()],
     },
   },
   resolve: { alias: { "@": path.resolve(__dirname, "./src") } },

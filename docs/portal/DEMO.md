@@ -1,6 +1,8 @@
-# DEMO — entorno de demostración del espejo del servicio Kawiil (Corte 4)
+# DEMO — entorno de demostración Kawiil OS
 
-**Alcance:** solo lectura del **espejo del servicio** (todo lo que Kawiil trabaja en central para el cliente) con datos sintéticos. El bloque fiscal es el primero disponible; **sin RH y sin emisión**. No usa el proyecto ni las credenciales de central.
+**Alcance:** producto cliente Kawiil OS (rediseño pack kawiil.mx) + espejo del servicio con datos sintéticos. **Sin IA/chat a LLM**, **sin Savio cobranza**, **sin RH**. EEFF: «Disponible desde enero 2027».
+
+**URL:** https://kawiil-os-demo-portal.vercel.app/ · vista diseño sin sesión: `/diseno`
 
 Guion: [DEMO-GUION.md](DEMO-GUION.md). Arranque Polo: [ARRANQUE-POLO.md](ARRANQUE-POLO.md). Reinicio: `npm run portal:demo-reset` (cerco en `tools/portal/`).
 
