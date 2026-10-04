@@ -377,23 +377,32 @@
 
   .kw-login__compose {
     display: flex;
-    flex-direction: column;
-    align-items: stretch;
+    flex-direction: row;
+    align-items: flex-end;
+    justify-content: flex-end;
     gap: 0;
     width: 100%;
   }
 
   .kw-login__mascot {
-    width: min(108px, 32vw);
+    width: min(96px, 28vw);
     height: auto;
     display: block;
     position: relative;
     z-index: 2;
-    align-self: flex-start;
-    margin: 0 0 -40px 8px;
+    flex: 0 0 auto;
+    align-self: flex-end;
+    margin: 0 -34px 10px 0;
     pointer-events: none;
     object-fit: contain;
     filter: drop-shadow(0 10px 14px rgba(0, 60, 140, 0.25));
+  }
+
+  .kw-login__form {
+    position: relative;
+    z-index: 1;
+    flex: 1 1 auto;
+    min-width: 0;
   }
 
   .kw-ideas {
@@ -439,26 +448,17 @@
     }
 
     .kw-login__compose {
-      flex-direction: row;
-      align-items: flex-end;
-      justify-content: flex-end;
-      gap: 0;
-      margin-left: -96px;
-      width: calc(100% + 96px);
+      margin-left: -104px;
+      width: calc(100% + 104px);
     }
 
     .kw-login__mascot {
       width: 176px;
-      flex: 0 0 auto;
-      align-self: flex-end;
       /* Apoyado / recargado en el box de login (overlap sutil, sin recortar). */
-      margin: 0 -56px 16px 0;
+      margin: 0 -58px 14px 0;
     }
 
     .kw-login__form {
-      position: relative;
-      z-index: 1;
-      flex: 1 1 auto;
       width: min(100%, 440px);
     }
   }
