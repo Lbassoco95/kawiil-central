@@ -10,7 +10,7 @@ import type {
   TeamMember,
 } from "../design/types";
 
-export const SAMPLE_CLIENT = "DEMO Espejo Fiscal SA de CV";
+export const SAMPLE_CLIENT = "Bassoco, Vega, Salas, Morales, Servicios Empresariales S.C.";
 export const SAMPLE_PERIOD = "Septiembre 2026";
 
 export const CASHFLOW: CashflowPoint[] = [
