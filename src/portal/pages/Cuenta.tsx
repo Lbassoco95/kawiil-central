@@ -5,10 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { usePortal } from "../lib/session";
 import { db } from "../lib/supabase";
-import { callApi, fileToBase64, PortalApiError } from "../lib/api";
+import { callApi } from "../lib/api";
 import { fmtDate } from "../lib/format";
 import { Notice, PageTitle, StatusPill } from "../components/ui";
-import { csdExpiryLevel } from "../../../supabase/functions/_shared/portal/csd.ts";
 import { hastaPara, PLAZO_OMISION, PLAZOS, type Plazo, type ResguardoItem } from "../lib/retention";
 
 interface PlanItem extends ResguardoItem { key: string; label: string; detalle: string; cantidad?: number; client?: string; para?: string }
@@ -85,41 +84,12 @@ function DeletionSection({ onDone }: { onDone: () => void }) {
   );
 }
 
-interface Csd { registry_id: string; cert_serial: string | null; cert_not_after: string | null; revoked_at: string | null; registered_via: string; last_used_at: string | null }
 const ROLE: Record<string, string> = { administrador: "Administrador", operativo: "Operativo", consulta: "Consulta" };
 
 export default function Cuenta() {
   const { me, active, setActive } = usePortal();
   const navigate = useNavigate();
-  const [csd, setCsd] = useState<Csd[]>([]);
-  const [cer, setCer] = useState<File | null>(null);
-  const [key, setKey] = useState<File | null>(null);
-  const [pwd, setPwd] = useState("");
-  const [msg, setMsg] = useState<{ tone: "ok" | "bad" | "warn"; text: string } | null>(null);
   const isAdmin = active?.role === "administrador";
-
-  const [req, setReq] = useState<{ ok: boolean; missing: { key: string; label: string }[] } | null>(null);
-  const loadCsd = async () => {
-    if (!active || !isAdmin) return;
-    setReq(await callApi<{ ok: boolean; missing: { key: string; label: string }[] }>("csd.requisitos", { client_id: active.client_id }).catch(() => null));
-    const r = await callApi<{ csd: Csd[] }>("csd.estado", { client_id: active.client_id }).catch(() => ({ csd: [] }));
-    setCsd(r.csd);
-  };
-  useEffect(() => { void loadCsd(); }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const uploadCsd = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!cer || !key || !pwd || !active) return;
-    try {
-      await callApi("csd.cargar", { client_id: active.client_id, cer_base64: await fileToBase64(cer), key_base64: await fileToBase64(key), password: pwd });
-      setPwd(""); setCer(null); setKey(null);
-      setMsg({ tone: "ok", text: "Certificado guardado y cifrado. Por seguridad no se puede ver ni descargar de nuevo." });
-      await loadCsd();
-    } catch (err) {
-      setPwd(""); // nunca se conserva la contraseña en pantalla tras un intento fallido
-      setMsg({ tone: "bad", text: err instanceof PortalApiError ? err.message : "No se pudo guardar el certificado." });
-    }
-  };
 
   return (
     <>
@@ -138,29 +108,10 @@ export default function Cuenta() {
       {isAdmin && (
         <section className="mb-4 rounded-xl border bg-card p-4" aria-labelledby="csd-t">
           <h2 id="csd-t" className="text-lg">Certificado de sello digital (CSD)</h2>
-          <p className="text-sm text-muted-foreground">Se usa solo para sellar sus facturas. Se carga una vez, se guarda cifrado y nunca se vuelve a mostrar ni descargar. Nunca le pediremos su e.firma ni su CIEC en el portal.</p>
-          {csd.map((c) => {
-            const exp = csdExpiryLevel(c.cert_not_after);
-            return (
-              <div key={c.registry_id} className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-md border p-2 text-sm">
-                <span>Serie <span className="kw-mono">{c.cert_serial}</span> · vence {fmtDate(c.cert_not_after)}</span>
-                {c.revoked_at ? <StatusPill tone="bad">Revocado</StatusPill> : <StatusPill tone={exp.level === "ok" ? "ok" : exp.level === "aviso" ? "warn" : "bad"}>{exp.level === "vencido" ? "Vencido" : `Vence en ${exp.days} días`}</StatusPill>}
-                {!c.revoked_at && <Button size="sm" variant="ghost" onClick={async () => { await callApi("csd.revocar", { registry_id: c.registry_id }); await loadCsd(); }}>Revocar</Button>}
-              </div>
-            );
-          })}
-          {req && !req.ok && (
-            <div className="mt-3"><Notice tone="warn" title="Antes de recibir su certificado falta:">
-              <ul className="list-disc pl-5">{req.missing.map((m) => <li key={m.key}>{m.label}</li>)}</ul>
-            </Notice></div>
-          )}
-          {req?.ok && <form onSubmit={uploadCsd} className="mt-3 grid gap-2 md:grid-cols-3">
-            <div><Label htmlFor="cer">Archivo .cer</Label><Input id="cer" type="file" accept=".cer" onChange={(e) => setCer(e.target.files?.[0] ?? null)} /></div>
-            <div><Label htmlFor="key">Archivo .key</Label><Input id="key" type="file" accept=".key" onChange={(e) => setKey(e.target.files?.[0] ?? null)} /></div>
-            <div><Label htmlFor="pwd">Contraseña de la llave</Label><Input id="pwd" type="password" autoComplete="off" value={pwd} onChange={(e) => setPwd(e.target.value)} /></div>
-            <Button type="submit" className="md:col-span-3 md:w-fit" disabled={!cer || !key || !pwd}>Guardar certificado</Button>
-          </form>}
-          {msg && <div className="mt-3"><Notice tone={msg.tone}>{msg.text}</Notice></div>}
+          <Notice tone="info" title="No disponible en fase espejo">
+            En esta fase Kawiil OS solo muestra la representación publicada por central. No se carga CSD, e.firma ni CIEC en el portal.
+            La emisión y el sellado no forman parte del espejo actual.
+          </Notice>
         </section>
       )}
 

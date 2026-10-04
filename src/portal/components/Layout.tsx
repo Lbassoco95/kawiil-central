@@ -41,7 +41,12 @@ export default function Layout() {
     }
   }, [collapsed]);
 
-  const navItems = ALL_NAV.filter((n) => n.to !== "/facturas");
+  /** En /diseno no hay rutas de espejo autenticado ni cuenta. */
+  const designHidden = new Set(["/facturas", "/documentos", "/alertas", "/cuenta"]);
+  const navItems = ALL_NAV.filter((n) => !(isDesignPreview() && designHidden.has(n.to)));
+  const moreItems = [...PRIMARY_NAV.slice(4), ...MORE_NAV].filter(
+    (n) => !(isDesignPreview() && designHidden.has(n.to)),
+  );
 
   return (
     <div className={`kw-shell${collapsed ? " kw-shell--side-collapsed" : ""}`}>
@@ -203,7 +208,7 @@ export default function Layout() {
         <div className="kw-more-panel" role="dialog" aria-modal="true" aria-label="Más secciones" onClick={() => setMoreOpen(false)}>
           <GlassPanel tone="strong" className="kw-more-sheet" onClick={(e) => e.stopPropagation()}>
             <p className="kw-title">Más</p>
-            {[...PRIMARY_NAV.slice(4), ...MORE_NAV].map(({ to, label, Icon }) => (
+            {moreItems.map(({ to, label, Icon }) => (
               <NavLink key={to} to={href(to)} className="kw-side__link" onClick={() => setMoreOpen(false)}>
                 <IconBadge icon={Icon} size="sm" className="kw-iconbox--nav" />
                 {label}
@@ -239,8 +244,8 @@ export default function Layout() {
 
       <DemoModal open={originOpen} title="¿De dónde sale «SAT al día»?" onClose={() => setOriginOpen(false)}>
         <p className="kw-small">
-          En el demo, el chip indica que las cifras del resumen salen de CFDI del SAT (vía Moffin), ya digeridos por Kawiil.
-          En producción el mismo chip abre el rastro de origen del número que estés viendo.
+          En el demo, el chip indica que las cifras del resumen son la representación local de CFDI que central ya publicó al portal (obtención SAT solo en central).
+          OS no consulta Moffin, SatGo ni el SAT: solo muestra el espejo. En producción el mismo chip abre el rastro de esa publicación.
         </p>
         <button type="button" className="kw-btn kw-btn--primary" style={{ marginTop: 12 }} onClick={() => { setOriginOpen(false); navigate(href("/origen")); }}>
           Ir a Origen de datos

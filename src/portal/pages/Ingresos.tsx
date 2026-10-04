@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   CashflowChart,
   ClassificationPrompt,
@@ -20,8 +20,11 @@ import {
 } from "../lib/sampleData";
 import { clampPeriodIndex, notifyPeriod, periodLabel } from "../lib/periodDemo";
 import { pushDemoToast } from "../lib/demoStore";
+import { shouldUseDemoFixtures } from "../lib/dataMode";
+import { usePortal } from "../lib/session";
+import { listMirrorInvoices, rankParties, sumTotals, toInvoiceRows } from "../lib/mirrorInvoices";
 
-export default function Ingresos() {
+function FixtureIngresos() {
   const [period, setPeriod] = useState<PeriodId>("mes");
   const [idx, setIdx] = useState(2);
   const label = periodLabel(period, idx);
@@ -30,7 +33,7 @@ export default function Ingresos() {
     <>
       <PageHead
         title="Ingresos"
-        subtitle={`${label} · CFDI emitidos vigentes`}
+        subtitle={`${label} · CFDI emitidos vigentes · fixture demo`}
         actions={
           <PeriodSwitch
             value={period}
@@ -64,7 +67,7 @@ export default function Ingresos() {
           data={CASHFLOW}
           title="Ingresos por mes"
           series="ingresos"
-          footer="Solo CFDI emitidos vigentes. Datos de ejemplo."
+          footer="Solo CFDI emitidos vigentes. Fixture demo (equivalente al espejo publicado)."
         />
       </div>
 
@@ -105,4 +108,60 @@ export default function Ingresos() {
       </div>
     </>
   );
+}
+
+function MirrorIngresos() {
+  const { active } = usePortal();
+  const [rows, setRows] = useState(INCOME_INVOICES);
+  const [total, setTotal] = useState(0);
+  const [rank, setRank] = useState(TOP_CLIENTS);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!active) return;
+    listMirrorInvoices(active.client_id, "emitida")
+      .then((list) => {
+        const vigentes = list.filter((r) => r.sat_status !== "cancelado");
+        setRows(toInvoiceRows(vigentes, "emitida"));
+        setTotal(sumTotals(vigentes));
+        setRank(rankParties(vigentes, "emitida"));
+        setErr(null);
+      })
+      .catch(() => setErr("No se pudo leer el espejo de facturas emitidas."));
+  }, [active]);
+
+  return (
+    <>
+      <PageHead
+        title="Ingresos"
+        subtitle={`${active?.client_name ?? "Portal"} · CFDI emitidos ya publicados`}
+      />
+      {err ? <p className="kw-small" style={{ color: "var(--caution-text)", marginBottom: 16 }}>{err}</p> : null}
+      <div className="kw-grid kw-kpis" style={{ marginBottom: 24 }}>
+        <KpiTile label="Ingresos publicados" value={total} tone="ingreso" note={`${rows.length} CFDI en el espejo`} source="sat" />
+        <KpiTile
+          label="Cliente principal"
+          value={rank[0]?.amount ?? 0}
+          tone="ingreso"
+          note={rank[0] ? `${rank[0].name} · ${rank[0].share}%` : "Sin datos publicados aún"}
+          source="sat"
+        />
+      </div>
+      <div className="kw-grid kw-two" style={{ marginBottom: 24 }}>
+        <RankedList title="Clientes (espejo local)" items={rank} tone="ingreso" />
+        <GlassPanel>
+          <p className="kw-title" style={{ fontSize: 16 }}>Solo representación</p>
+          <p className="kw-small" style={{ marginTop: 8 }}>
+            Lectura de `facturas.listar` sobre tablas portal. Central publica con `invoice.publish`; OS no consulta el SAT.
+          </p>
+        </GlassPanel>
+      </div>
+      <InvoiceTable title="Facturas emitidas publicadas" rows={rows} partyLabel="Cliente" />
+    </>
+  );
+}
+
+export default function Ingresos() {
+  if (shouldUseDemoFixtures()) return <FixtureIngresos />;
+  return <MirrorIngresos />;
 }

@@ -1052,7 +1052,16 @@ const ROUTES: Record<string, Handler> = {
   "sesion.registrar_acceso": registrarAcceso,
   "legal.actual": legalActual,
   "legal.aceptar": aceptarLegal,
-  "cuenta.activar_basico": activarBasico,
+  "cuenta.activar_basico": async (ctx) => {
+    if (MIRROR_READ_ONLY) {
+      throw new ApiError(
+        403,
+        "espejo_solo_lectura",
+        "En esta fase no hay alta automática: Kawiil vincula y publica la empresa desde central.",
+      );
+    }
+    return activarBasico(ctx);
+  },
   "cuenta.plan_baja": planBajaCuenta,
   "cuenta.eliminar": eliminarCuenta,
   "archivos.enlace": enlaceArchivo,
@@ -1084,10 +1093,37 @@ const ROUTES: Record<string, Handler> = {
   "mensajes.listar": listarHilos,
   "mensajes.leer": leerHilo,
   "mensajes.enviar": enviarMensaje,
-  "csd.cargar": cargarCsd,
+  "csd.cargar": async (ctx) => {
+    if (MIRROR_READ_ONLY) {
+      throw new ApiError(
+        403,
+        "espejo_solo_lectura",
+        "En la fase espejo no se carga CSD en Kawiil OS. La emisión no aplica; FIEL/CIEC solo viven en central.",
+      );
+    }
+    return cargarCsd(ctx);
+  },
   "csd.estado": estadoCsd,
-  "csd.requisitos": requisitosCsd,
-  "csd.revocar": revocarCsd,
+  "csd.requisitos": async (ctx) => {
+    if (MIRROR_READ_ONLY) {
+      throw new ApiError(
+        403,
+        "espejo_solo_lectura",
+        "En la fase espejo no se gestiona CSD desde el portal.",
+      );
+    }
+    return requisitosCsd(ctx);
+  },
+  "csd.revocar": async (ctx) => {
+    if (MIRROR_READ_ONLY) {
+      throw new ApiError(
+        403,
+        "espejo_solo_lectura",
+        "En la fase espejo no se gestiona CSD desde el portal.",
+      );
+    }
+    return revocarCsd(ctx);
+  },
   "central/invitar": invitar,
   "central/cliente.baja": bajaCliente,
   "central/tickets.facturar": facturarTicket,

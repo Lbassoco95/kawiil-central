@@ -2,6 +2,8 @@
 
 **Alcance:** producto cliente Kawiil OS (rediseño pack kawiil.mx) + espejo del servicio con datos sintéticos. **Sin IA/chat a LLM**, **sin Savio cobranza**, **sin RH**. EEFF: «Disponible desde enero 2027».
 
+**Modelo de datos (fase 1):** kawiil-central es la fuente de verdad y **publica** hacia OS. En OS la info **ya está** como representación local (tablas portal / fixtures demo). La UI solo muestra; **no** hay pulls desde OS a SAT, Moffin, SatGo ni “ir a pedir” a central como origen.
+
 **URL:** https://kawiil-os-demo-portal.vercel.app/ · vista diseño sin sesión: `/diseno`
 
 Guion: [DEMO-GUION.md](DEMO-GUION.md). Arranque Polo: [ARRANQUE-POLO.md](ARRANQUE-POLO.md). Reinicio: `npm run portal:demo-reset` (cerco en `tools/portal/`).

@@ -1,4 +1,6 @@
 import {
+  Bell,
+  FileStack,
   FileText,
   Home,
   Inbox,
@@ -35,6 +37,8 @@ export const MORE_NAV: NavItem[] = [
   { to: "/origen", label: "Origen de datos", Icon: Waypoints, more: true },
   { to: "/hallazgos", label: "Seguimientos", Icon: Lightbulb, more: true },
   { to: "/facturas", label: "Facturas (espejo)", Icon: FileText, more: true },
+  { to: "/documentos", label: "Documentos", Icon: FileStack, more: true },
+  { to: "/alertas", label: "Alertas", Icon: Bell, more: true },
   { to: "/cuenta", label: "Cuenta", Icon: MoreHorizontal, more: true },
 ];
 

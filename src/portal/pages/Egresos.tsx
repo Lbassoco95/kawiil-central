@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   CashflowChart,
   ClassificationPrompt,
@@ -20,8 +20,11 @@ import {
 } from "../lib/sampleData";
 import { clampPeriodIndex, notifyPeriod, periodLabel } from "../lib/periodDemo";
 import { pushDemoToast } from "../lib/demoStore";
+import { shouldUseDemoFixtures } from "../lib/dataMode";
+import { usePortal } from "../lib/session";
+import { listMirrorInvoices, rankParties, sumTotals, toInvoiceRows } from "../lib/mirrorInvoices";
 
-export default function Egresos() {
+function FixtureEgresos() {
   const [period, setPeriod] = useState<PeriodId>("mes");
   const [idx, setIdx] = useState(2);
   const label = periodLabel(period, idx);
@@ -30,7 +33,7 @@ export default function Egresos() {
     <>
       <PageHead
         title="Egresos"
-        subtitle={`${label} · CFDI recibidos vigentes`}
+        subtitle={`${label} · CFDI recibidos vigentes · fixture demo`}
         actions={
           <PeriodSwitch
             value={period}
@@ -60,7 +63,7 @@ export default function Egresos() {
       </div>
 
       <div className="kw-grid" style={{ marginBottom: 24 }}>
-        <CashflowChart data={CASHFLOW} title="Egresos por mes" series="egresos" footer="Solo CFDI recibidos vigentes. Datos de ejemplo." />
+        <CashflowChart data={CASHFLOW} title="Egresos por mes" series="egresos" footer="Solo CFDI recibidos vigentes. Fixture demo (equivalente al espejo publicado)." />
       </div>
 
       <div className="kw-grid kw-two" style={{ marginBottom: 24 }}>
@@ -100,4 +103,59 @@ export default function Egresos() {
       </div>
     </>
   );
+}
+
+function MirrorEgresos() {
+  const { active } = usePortal();
+  const [rows, setRows] = useState(EXPENSE_INVOICES);
+  const [total, setTotal] = useState(0);
+  const [rank, setRank] = useState(TOP_SUPPLIERS);
+  const [pendingAmount, setPendingAmount] = useState(0);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!active) return;
+    listMirrorInvoices(active.client_id, "recibida")
+      .then((list) => {
+        const vigentes = list.filter((r) => r.sat_status !== "cancelado");
+        const pending = vigentes.filter((r) => r.category_status !== "confirmada");
+        setRows(toInvoiceRows(vigentes, "recibida"));
+        setTotal(sumTotals(vigentes));
+        setRank(rankParties(vigentes, "recibida"));
+        setPendingAmount(sumTotals(pending));
+        setPendingCount(pending.length);
+        setErr(null);
+      })
+      .catch(() => setErr("No se pudo leer el espejo de facturas recibidas."));
+  }, [active]);
+
+  return (
+    <>
+      <PageHead
+        title="Egresos"
+        subtitle={`${active?.client_name ?? "Portal"} · CFDI recibidos ya publicados`}
+      />
+      {err ? <p className="kw-small" style={{ color: "var(--caution-text)", marginBottom: 16 }}>{err}</p> : null}
+      <div className="kw-grid kw-kpis" style={{ marginBottom: 24 }}>
+        <KpiTile label="Egresos publicados" value={total} tone="egreso" note={`${rows.length} CFDI en el espejo`} source="sat" />
+        <KpiTile label="Por clasificar" value={pendingAmount} tone="egreso" source="pendiente" note={`${pendingCount} facturas sin categoría confirmada`} />
+      </div>
+      <div className="kw-grid kw-two" style={{ marginBottom: 24 }}>
+        <RankedList title="Proveedores (espejo local)" items={rank} tone="egreso" />
+        <GlassPanel>
+          <p className="kw-title" style={{ fontSize: 16 }}>Solo representación</p>
+          <p className="kw-small" style={{ marginTop: 8 }}>
+            Lectura de `facturas.listar` sobre tablas portal. Central publica con `invoice.publish`; OS no consulta el SAT.
+          </p>
+        </GlassPanel>
+      </div>
+      <InvoiceTable title="Facturas recibidas publicadas" rows={rows} partyLabel="Proveedor" />
+    </>
+  );
+}
+
+export default function Egresos() {
+  if (shouldUseDemoFixtures()) return <FixtureEgresos />;
+  return <MirrorEgresos />;
 }

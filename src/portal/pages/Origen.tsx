@@ -7,11 +7,11 @@ import type { Source } from "../design/types";
 const COPY: Record<Source, { title: string; body: string }> = {
   sat: {
     title: "CFDI · SAT",
-    body: "Comprobantes descargados con e.firma o CIEC (vía Moffin), filtrados y sumados por Kawiil antes de mostrarlos.",
+    body: "Representación local en Kawiil OS: central obtiene los CFDI (SAT; SatGo/Moffin solo en central, con e.firma allí) y publica el espejo. OS no va a pedir ni traer nada del SAT.",
   },
   buzon: {
     title: "Buzón tributario",
-    body: "Mensajes del SAT que central publica al portal con un resumen para el cliente.",
+    body: "Mensajes del SAT que central ya obtuvo y publicó al portal, con un resumen para el cliente.",
   },
   estados: {
     title: "Estados financieros",
@@ -22,8 +22,8 @@ const COPY: Record<Source, { title: string; body: string }> = {
     body: "Datos capturados a mano por tu equipo en kawiil-central y publicados al portal.",
   },
   pendiente: {
-    title: "Pendiente de cargar",
-    body: "La fuente existe pero aún no hay archivo o descarga. Preferimos dejar el bloque vacío a inventar cifras.",
+    title: "Pendiente de publicar",
+    body: "La fuente existe en el servicio, pero central aún no ha publicado la copia al portal. Preferimos dejar el bloque vacío a inventar cifras.",
   },
   savio: {
     title: "Savio",
@@ -40,7 +40,10 @@ export default function Origen() {
       <div className="kw-grid kw-main-cols">
         <div className="kw-grid">
           <GlassPanel>
-            <h3 className="kw-title">Fuentes que usa Kawiil OS</h3>
+            <h3 className="kw-title">Representación publicada en Kawiil OS</h3>
+            <p className="kw-small" style={{ marginTop: 8 }}>
+              kawiil-central es la fuente de verdad y publica hacia OS. En el portal la información ya está; la UI solo la muestra.
+            </p>
             <ul style={{ listStyle: "none", margin: "16px 0 0", padding: 0, display: "grid", gap: 12 }}>
               {(["sat", "buzon", "estados", "manual", "pendiente"] as Source[]).map((source) => (
                 <li key={source} className="flex flex-wrap items-center gap-3">
@@ -53,14 +56,14 @@ export default function Origen() {
               La cobranza de Savio no aparece en Kawiil OS: es uso interno de Kawiil.
             </p>
           </GlassPanel>
-          <LineagePanel title="Ejemplo: ingresos de septiembre" subtitle="Datos de ejemplo" steps={INCOME_LINEAGE} />
+          <LineagePanel title="Ejemplo: ingresos de septiembre" subtitle="Datos de ejemplo (fixture demo)" steps={INCOME_LINEAGE} />
         </div>
         <KawiilitoGuide
           pose="duda"
           title="Cada número tiene un chip"
           actions={[{ label: "Ver ejemplo de rastro", primary: true, onClick: () => setOpen("sat") }]}
         >
-          Toca «¿De dónde sale?» en cualquier cifra. Te muestro el rastro hasta el SAT o el archivo pendiente.
+          Toca «¿De dónde sale?» en cualquier cifra. Te muestro el rastro hasta la publicación en el portal (no un pull en vivo).
         </KawiilitoGuide>
       </div>
 
