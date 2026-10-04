@@ -1,4 +1,5 @@
 import { useState, type ButtonHTMLAttributes, type HTMLAttributes, type ReactNode } from "react";
+import type { LucideIcon } from "lucide-react";
 import { POSE_SRC, deltaWords, money } from "./assets";
 import type {
   CashflowPoint,
@@ -20,6 +21,24 @@ import type {
 
 function cx(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
+}
+
+/** Caja circular fija para íconos Lucide (misma métrica en login, nav y listas). */
+export function IconBadge({
+  icon: Icon,
+  size = "md",
+  className,
+}: {
+  icon: LucideIcon;
+  size?: "sm" | "md";
+  className?: string;
+}) {
+  const px = size === "sm" ? 16 : 20;
+  return (
+    <span className={cx("kw-iconbox", size === "sm" && "kw-iconbox--sm", className)} aria-hidden>
+      <Icon size={px} strokeWidth={1.75} />
+    </span>
+  );
 }
 
 const SOURCES: Record<Source, { label: string; via: string; color: string }> = {

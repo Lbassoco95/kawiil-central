@@ -368,30 +368,50 @@
     font: 400 14px/21px var(--font-sans);
   }
 
+  .kw-login__compose {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    width: 100%;
+  }
+
+  .kw-login__panels {
+    display: grid;
+    gap: var(--space-5);
+    width: 100%;
+    min-width: 0;
+  }
+
+  .kw-login__mascot {
+    width: min(112px, 34vw);
+    height: auto;
+    display: block;
+    position: relative;
+    z-index: 2;
+    align-self: flex-start;
+    margin: 0 0 -36px 10px;
+    pointer-events: none;
+    filter: drop-shadow(0 10px 14px rgba(0, 60, 140, 0.25));
+  }
+
   .kw-ideas {
     list-style: none;
     margin: 0;
     padding: 0;
     display: grid;
-    gap: 12px;
+    gap: 14px;
   }
 
   .kw-ideas li {
     display: grid;
-    grid-template-columns: 40px 1fr;
+    grid-template-columns: 40px minmax(0, 1fr);
     gap: 12px;
-    align-items: start;
+    align-items: center;
   }
 
-  .kw-ideas__icon {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    display: grid;
-    place-items: center;
-    background: var(--surface-glass-tint);
-    border: 1px solid var(--glass-edge);
-    color: var(--link);
+  .kw-ideas__copy {
+    min-width: 0;
   }
 
   .kw-ideas strong {
@@ -399,18 +419,41 @@
     font: 600 15px/20px var(--font-sans);
   }
 
-  .kw-ideas span {
+  .kw-ideas__detail {
     display: block;
     margin-top: 2px;
     color: var(--ink-muted);
     font: 400 13px/18px var(--font-sans);
   }
 
-  .kw-login__mascot {
-    width: min(160px, 40vw);
-    margin: 0 auto;
-    display: block;
-    filter: drop-shadow(0 10px 14px rgba(0, 60, 140, 0.25));
+  @media (min-width: 720px) {
+    .kw-login__card {
+      width: min(100%, 680px);
+    }
+
+    .kw-login__compose {
+      flex-direction: row;
+      align-items: flex-end;
+      justify-content: center;
+      gap: 0;
+    }
+
+    .kw-login__mascot {
+      width: 168px;
+      flex: 0 0 auto;
+      align-self: flex-end;
+      margin: 0 -40px 12px 0;
+    }
+
+    .kw-login__panels {
+      width: min(100%, 440px);
+      flex: 0 1 440px;
+    }
+
+    .kw-login__form {
+      position: relative;
+      z-index: 1;
+    }
   }
 
   @media (prefers-reduced-motion: no-preference) {

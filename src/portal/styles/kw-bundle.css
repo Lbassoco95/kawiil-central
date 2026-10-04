@@ -259,8 +259,57 @@ button.kw-chip:hover { border-color: var(--control-border); }
 .kw-seg__btn:hover:not([aria-pressed="true"]) { color: var(--ink); background: var(--surface-glass-tint); }
 .kw-period__nav { display: inline-flex; align-items: center; gap: var(--space-2); }
 .kw-period__label { font: 600 15px/22px var(--font-display); min-width: 130px; text-align: center; color: var(--ink); }
-.kw-iconbtn { width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--control-border); background: var(--surface-glass-strong); color: var(--ink); display: inline-grid; place-items: center; cursor: pointer; }
+.kw-iconbtn { width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--control-border); background: var(--surface-glass-strong); color: var(--ink); display: inline-grid; place-items: center; cursor: pointer; line-height: 0; }
 .kw-iconbtn:disabled { opacity: 0.4; cursor: not-allowed; }
+.kw-iconbtn svg { display: block; }
+
+/* Caja fija circular para íconos Lucide (login ideas, nav, módulos) */
+.kw-iconbox {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  box-sizing: border-box;
+  background: var(--surface-glass-tint);
+  border: 1px solid var(--glass-edge);
+  color: var(--link);
+  line-height: 0;
+  overflow: hidden;
+}
+.kw-iconbox svg {
+  display: block;
+  width: 20px;
+  height: 20px;
+  stroke-width: 1.75;
+}
+.kw-iconbox--sm {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+}
+.kw-iconbox--sm svg {
+  width: 16px;
+  height: 16px;
+}
+.kw-iconbox--nav {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  background: color-mix(in srgb, var(--surface-glass-tint) 70%, transparent);
+}
+.kw-iconbox--nav svg {
+  width: 14px;
+  height: 14px;
+}
+.kw-side__link[aria-current="page"] .kw-iconbox--nav,
+.kw-topnav a[aria-current="page"] .kw-iconbox--nav,
+.kw-bottomnav a[aria-current="page"] .kw-iconbox--nav {
+  background: color-mix(in srgb, var(--on-primary) 18%, transparent);
+  border-color: color-mix(in srgb, var(--on-primary) 35%, transparent);
+  color: inherit;
+}
 .kw-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 /* ---------- Propuesta de registro ---------- */

@@ -6,7 +6,7 @@ import { DEMO_FISCAL_MARK, isPortalDemoMode } from "../lib/demo";
 import { db } from "../lib/supabase";
 import { ALL_NAV, MORE_NAV, PRIMARY_NAV } from "../lib/nav";
 import { LOGO } from "../design/assets";
-import { GlassPanel, KawiilitoDock, SourceChip } from "../design/primitives";
+import { GlassPanel, IconBadge, KawiilitoDock, SourceChip } from "../design/primitives";
 import { useTheme } from "../design/ThemeProvider";
 import { isDesignPreview } from "../lib/designPreview";
 import { portalPath } from "../lib/basePath";
@@ -48,7 +48,7 @@ export default function Layout() {
                 <NavLink key={to} to={href(to)} end={to === "/"}>
                   {({ isActive }) => (
                     <>
-                      <Icon className="h-4 w-4" aria-hidden />
+                      <IconBadge icon={Icon} size="sm" className="kw-iconbox--nav" />
                       {label}
                       {isActive ? <span className="sr-only">(actual)</span> : null}
                     </>
@@ -79,7 +79,7 @@ export default function Layout() {
                 <span className="kw-small max-w-[10rem] truncate">{active?.client_name || "Cliente demo"}</span>
               )}
               <button type="button" className="kw-iconbtn" onClick={toggle} aria-label={theme === "light" ? "Activar modo oscuro" : "Activar modo claro"}>
-                {theme === "light" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+                {theme === "light" ? <Moon size={16} strokeWidth={1.75} /> : <Sun size={16} strokeWidth={1.75} />}
               </button>
               {!isDesignPreview() && (
                 <button
@@ -91,7 +91,7 @@ export default function Layout() {
                   }}
                   aria-label="Cerrar sesión"
                 >
-                  <LogOut className="h-4 w-4" aria-hidden />
+                  <LogOut size={16} strokeWidth={1.75} aria-hidden />
                 </button>
               )}
             </div>
@@ -108,7 +108,7 @@ export default function Layout() {
                 <NavLink key={to} to={href(to)} end={to === "/"} className="kw-side__link">
                   {({ isActive }) => (
                     <>
-                      <Icon className="h-4 w-4" aria-hidden />
+                      <IconBadge icon={Icon} size="sm" className="kw-iconbox--nav" />
                       {label}
                       {isActive ? <span className="sr-only">(actual)</span> : null}
                     </>
@@ -145,7 +145,7 @@ export default function Layout() {
               <NavLink to={href(to)} end={to === "/"}>
                 {({ isActive }) => (
                   <>
-                    <Icon className="h-5 w-5" aria-hidden />
+                    <IconBadge icon={Icon} size="sm" className="kw-iconbox--nav" />
                     <span>{short || label}</span>
                     {isActive ? <span className="sr-only">(actual)</span> : null}
                   </>
@@ -156,7 +156,7 @@ export default function Layout() {
           <li>
             <button type="button" onClick={() => setMoreOpen(true)} aria-haspopup="dialog" style={{ width: "100%" }}>
               <span className="flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-semibold text-[color:var(--ink-muted)]">
-                <MoreHorizontal className="h-5 w-5" aria-hidden />
+                <IconBadge icon={MoreHorizontal} size="sm" className="kw-iconbox--nav" />
                 Más
               </span>
             </button>
@@ -179,7 +179,7 @@ export default function Layout() {
                 className="kw-side__link"
                 onClick={() => setMoreOpen(false)}
               >
-                <Icon className="h-4 w-4" aria-hidden />
+                <IconBadge icon={Icon} size="sm" className="kw-iconbox--nav" />
                 {label}
               </NavLink>
             ))}

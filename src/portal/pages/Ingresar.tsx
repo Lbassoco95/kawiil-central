@@ -1,14 +1,31 @@
 import { useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
-import { Eye, HandHelping, Archive } from "lucide-react";
-import { GlassPanel, KwButton } from "../design/primitives";
+import { Archive, Eye, HandHelping, Moon, Sun } from "lucide-react";
+import { GlassPanel, IconBadge, KwButton } from "../design/primitives";
 import { LOGO, POSE_SRC } from "../design/assets";
 import { useTheme } from "../design/ThemeProvider";
 import { DEMO_FISCAL_MARK, isPortalDemoMode } from "../lib/demo";
 import { db } from "../lib/supabase";
 import { usePortal } from "../lib/session";
 import { isDesignPreview } from "../lib/designPreview";
-import { Moon, Sun } from "lucide-react";
+
+const IDEAS = [
+  {
+    Icon: Eye,
+    title: "Interpretamos",
+    detail: "Tus cifras y tus mensajes del SAT en lenguaje claro.",
+  },
+  {
+    Icon: HandHelping,
+    title: "Decidimos contigo",
+    detail: "Con lo que Kawiil aprende de tu negocio.",
+  },
+  {
+    Icon: Archive,
+    title: "Conservamos",
+    detail: "Tu información ordenada y a la mano.",
+  },
+] as const;
 
 export default function Ingresar() {
   const { session } = usePortal();
@@ -45,7 +62,7 @@ export default function Ingresar() {
         <div className="kw-login__card">
           <div className="flex justify-end">
             <button type="button" className="kw-iconbtn" onClick={toggle} aria-label={theme === "light" ? "Modo oscuro" : "Modo claro"}>
-              {theme === "light" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+              {theme === "light" ? <Moon size={16} strokeWidth={1.75} /> : <Sun size={16} strokeWidth={1.75} />}
             </button>
           </div>
 
@@ -55,7 +72,6 @@ export default function Ingresar() {
               alt="Kawiil Mx"
               style={{ height: 36, margin: "0 auto" }}
             />
-            <img className="kw-login__mascot" src={POSE_SRC.saluda} alt="Kawiilito saluda" />
             <h1>Kawiil OS</h1>
             <p className="kw-login__lead">La aplicación que tu empresa necesita para ver su negocio.</p>
             <p className="kw-login__support">
@@ -63,82 +79,69 @@ export default function Ingresar() {
             </p>
           </div>
 
-          <GlassPanel size="xl">
-            <ul className="kw-ideas">
-              <li>
-                <span className="kw-ideas__icon" aria-hidden>
-                  <Eye className="h-5 w-5" />
-                </span>
-                <div>
-                  <strong>Interpretamos</strong>
-                  <span>Tus cifras y tus mensajes del SAT en lenguaje claro.</span>
-                </div>
-              </li>
-              <li>
-                <span className="kw-ideas__icon" aria-hidden>
-                  <HandHelping className="h-5 w-5" />
-                </span>
-                <div>
-                  <strong>Decidimos contigo</strong>
-                  <span>Con lo que Kawiil aprende de tu negocio.</span>
-                </div>
-              </li>
-              <li>
-                <span className="kw-ideas__icon" aria-hidden>
-                  <Archive className="h-5 w-5" />
-                </span>
-                <div>
-                  <strong>Conservamos</strong>
-                  <span>Tu información ordenada y a la mano.</span>
-                </div>
-              </li>
-            </ul>
-          </GlassPanel>
+          <div className="kw-login__compose">
+            <img className="kw-login__mascot" src={POSE_SRC.saluda} alt="Kawiilito saluda" width={180} height={180} />
+            <div className="kw-login__panels">
+              <GlassPanel size="xl">
+                <ul className="kw-ideas">
+                  {IDEAS.map(({ Icon, title, detail }) => (
+                    <li key={title}>
+                      <IconBadge icon={Icon} />
+                      <div className="kw-ideas__copy">
+                        <strong>{title}</strong>
+                        <span className="kw-ideas__detail">{detail}</span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </GlassPanel>
 
-          <GlassPanel tone="strong" size="xl">
-            <form onSubmit={submit} className="grid" style={{ gap: 16 }} noValidate>
-              <label className="kw-label">
-                Correo
-                <input
-                  className="kw-field"
-                  id="email"
-                  type="email"
-                  autoComplete="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </label>
-              <label className="kw-label">
-                Contraseña
-                <input
-                  className="kw-field"
-                  id="password"
-                  type="password"
-                  autoComplete="current-password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-              </label>
-              {error ? (
-                <p role="alert" className="kw-small" style={{ color: "var(--caution-text)", margin: 0 }}>
-                  {error}
+              <GlassPanel tone="strong" size="xl" className="kw-login__form">
+                <form onSubmit={submit} className="grid" style={{ gap: 16 }} noValidate>
+                  <label className="kw-label">
+                    Correo
+                    <input
+                      className="kw-field"
+                      id="email"
+                      type="email"
+                      autoComplete="email"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                    />
+                  </label>
+                  <label className="kw-label">
+                    Contraseña
+                    <input
+                      className="kw-field"
+                      id="password"
+                      type="password"
+                      autoComplete="current-password"
+                      required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                    />
+                  </label>
+                  {error ? (
+                    <p role="alert" className="kw-small" style={{ color: "var(--caution-text)", margin: 0 }}>
+                      {error}
+                    </p>
+                  ) : null}
+                  <KwButton variant="primary" type="submit" disabled={busy} style={{ width: "100%", minHeight: 44 }}>
+                    {busy ? "Entrando…" : "Entrar"}
+                  </KwButton>
+                </form>
+                <p style={{ margin: "14px 0 0", textAlign: "center" }}>
+                  <Link className="kw-btn kw-btn--text" to="/recuperar">
+                    No puedo entrar
+                  </Link>
                 </p>
-              ) : null}
-              <KwButton variant="primary" type="submit" disabled={busy} style={{ width: "100%", minHeight: 44 }}>
-                {busy ? "Entrando…" : "Entrar"}
-              </KwButton>
-            </form>
-            <p style={{ margin: "14px 0 0", textAlign: "center" }}>
-              <Link className="kw-btn kw-btn--text" to="/recuperar">
-                No puedo entrar
-              </Link>
-            </p>
-            <p className="kw-small" style={{ margin: "10px 0 0", textAlign: "center" }}>
-              El acceso lo da Kawiil. No hay registro público.
-            </p>
-          </GlassPanel>
+                <p className="kw-small" style={{ margin: "10px 0 0", textAlign: "center" }}>
+                  El acceso lo da Kawiil. No hay registro público.
+                </p>
+              </GlassPanel>
+            </div>
+          </div>
 
           <p className="kw-small" style={{ textAlign: "center" }}>
             <Link to="/legal/aviso_privacidad" style={{ color: "var(--link)" }}>
