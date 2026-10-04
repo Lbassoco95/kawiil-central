@@ -384,14 +384,15 @@
   }
 
   .kw-login__mascot {
-    width: min(112px, 34vw);
+    width: min(118px, 36vw);
     height: auto;
     display: block;
     position: relative;
     z-index: 2;
     align-self: flex-start;
-    margin: 0 0 -36px 10px;
+    margin: 4px 0 -44px 4px;
     pointer-events: none;
+    object-fit: contain;
     filter: drop-shadow(0 10px 14px rgba(0, 60, 140, 0.25));
   }
 
@@ -439,10 +440,11 @@
     }
 
     .kw-login__mascot {
-      width: 168px;
+      width: 176px;
       flex: 0 0 auto;
       align-self: flex-end;
-      margin: 0 -40px 12px 0;
+      /* Apoyado / recargado en el box de login (overlap sutil, sin recortar). */
+      margin: 0 -64px 20px 0;
     }
 
     .kw-login__panels {
