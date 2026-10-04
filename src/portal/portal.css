@@ -368,6 +368,13 @@
     font: 400 14px/21px var(--font-sans);
   }
 
+  .kw-login__panels {
+    display: grid;
+    gap: var(--space-5);
+    width: 100%;
+    min-width: 0;
+  }
+
   .kw-login__compose {
     display: flex;
     flex-direction: column;
@@ -376,21 +383,14 @@
     width: 100%;
   }
 
-  .kw-login__panels {
-    display: grid;
-    gap: var(--space-5);
-    width: 100%;
-    min-width: 0;
-  }
-
   .kw-login__mascot {
-    width: min(118px, 36vw);
+    width: min(108px, 32vw);
     height: auto;
     display: block;
     position: relative;
     z-index: 2;
     align-self: flex-start;
-    margin: 4px 0 -44px 4px;
+    margin: 0 0 -40px 8px;
     pointer-events: none;
     object-fit: contain;
     filter: drop-shadow(0 10px 14px rgba(0, 60, 140, 0.25));
@@ -429,14 +429,22 @@
 
   @media (min-width: 720px) {
     .kw-login__card {
-      width: min(100%, 680px);
+      width: min(100%, 640px);
+    }
+
+    .kw-login__panels {
+      width: min(100%, 440px);
+      justify-self: end;
+      margin-inline: auto;
     }
 
     .kw-login__compose {
       flex-direction: row;
       align-items: flex-end;
-      justify-content: center;
+      justify-content: flex-end;
       gap: 0;
+      margin-left: -96px;
+      width: calc(100% + 96px);
     }
 
     .kw-login__mascot {
@@ -444,17 +452,14 @@
       flex: 0 0 auto;
       align-self: flex-end;
       /* Apoyado / recargado en el box de login (overlap sutil, sin recortar). */
-      margin: 0 -64px 20px 0;
-    }
-
-    .kw-login__panels {
-      width: min(100%, 440px);
-      flex: 0 1 440px;
+      margin: 0 -56px 16px 0;
     }
 
     .kw-login__form {
       position: relative;
       z-index: 1;
+      flex: 1 1 auto;
+      width: min(100%, 440px);
     }
   }
 

@@ -79,23 +79,23 @@ export default function Ingresar() {
             </p>
           </div>
 
-          <div className="kw-login__compose">
-            <img className="kw-login__mascot" src={POSE_SRC.saluda} alt="Kawiilito saluda" width={180} height={180} />
-            <div className="kw-login__panels">
-              <GlassPanel size="xl">
-                <ul className="kw-ideas">
-                  {IDEAS.map(({ Icon, title, detail }) => (
-                    <li key={title}>
-                      <IconBadge icon={Icon} />
-                      <div className="kw-ideas__copy">
-                        <strong>{title}</strong>
-                        <span className="kw-ideas__detail">{detail}</span>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </GlassPanel>
+          <div className="kw-login__panels">
+            <GlassPanel size="xl">
+              <ul className="kw-ideas">
+                {IDEAS.map(({ Icon, title, detail }) => (
+                  <li key={title}>
+                    <IconBadge icon={Icon} />
+                    <div className="kw-ideas__copy">
+                      <strong>{title}</strong>
+                      <span className="kw-ideas__detail">{detail}</span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </GlassPanel>
 
+            <div className="kw-login__compose">
+              <img className="kw-login__mascot" src={POSE_SRC.saluda} alt="Kawiilito saluda" width={180} height={180} />
               <GlassPanel tone="strong" size="xl" className="kw-login__form">
                 <form onSubmit={submit} className="grid" style={{ gap: 16 }} noValidate>
                   <label className="kw-label">
