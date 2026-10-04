@@ -33,7 +33,7 @@ export const PRIMARY_NAV: NavItem[] = [
 export const MORE_NAV: NavItem[] = [
   { to: "/facturacion", label: "Facturación", Icon: Receipt, more: true },
   { to: "/origen", label: "Origen de datos", Icon: Waypoints, more: true },
-  { to: "/hallazgos", label: "Hallazgos", Icon: Lightbulb, more: true },
+  { to: "/hallazgos", label: "Seguimientos", Icon: Lightbulb, more: true },
   { to: "/facturas", label: "Facturas (espejo)", Icon: FileText, more: true },
   { to: "/cuenta", label: "Cuenta", Icon: MoreHorizontal, more: true },
 ];

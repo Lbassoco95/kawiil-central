@@ -75,8 +75,15 @@ export interface RequestItem {
   folio?: string;
 }
 
+/** Estatus legible para filtros del demo (espejo de step). */
+export type RequestFilter = "todas" | "pendiente" | "en_proceso" | "hecha";
+
 export interface InsightItem {
   title: string;
   detail: string;
   basis?: string;
+  /** Acción o seguimiento del equipo Kawiil en central */
+  followUp?: string;
+  owner?: string;
+  status?: "abierto" | "en_seguimiento" | "cerrado";
 }

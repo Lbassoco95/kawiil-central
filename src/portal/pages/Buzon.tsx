@@ -1,6 +1,11 @@
+import { useState } from "react";
 import { GlassPanel, KawiilitoGuide, MailboxCard, PageHead } from "../design/primitives";
+import DemoModal from "../components/DemoModal";
+import { pushDemoToast } from "../lib/demoStore";
 
 export default function Buzon() {
+  const [original, setOriginal] = useState<null | { title: string; folio?: string; body: string }>(null);
+
   return (
     <>
       <PageHead title="Buzón tributario" subtitle="Mensajes del SAT con un resumen claro" />
@@ -20,6 +25,14 @@ export default function Buzon() {
               { label: "Quién actúa", value: "Tu contador" },
             ]}
             reviewed={false}
+            onOpenOriginal={() => {
+              setOriginal({
+                title: "Requerimiento de información sobre ingresos de 2025",
+                folio: "REQ-2026-0045671",
+                body: "Texto de ejemplo del mensaje original del SAT (demo). En producción se abre el PDF/HTML publicado desde central.",
+              });
+              pushDemoToast({ tone: "info", text: "Mensaje original abierto (demo)." });
+            }}
           />
           <MailboxCard
             urgency="info"
@@ -32,6 +45,12 @@ export default function Buzon() {
               { label: "Acción", value: "Ninguna" },
             ]}
             reviewed
+            onOpenOriginal={() => {
+              setOriginal({
+                title: "Aviso de actualización de datos del contribuyente",
+                body: "Comunicado informativo de ejemplo. Sin acción requerida.",
+              });
+            }}
           />
         </div>
         <div className="kw-grid">
@@ -46,6 +65,17 @@ export default function Buzon() {
           </GlassPanel>
         </div>
       </div>
+
+      <DemoModal
+        open={!!original}
+        title={original?.title || "Mensaje original"}
+        onClose={() => setOriginal(null)}
+      >
+        {original?.folio ? <p className="kw-mono kw-small">Folio: {original.folio}</p> : null}
+        <p className="kw-small" style={{ marginTop: 8 }}>
+          {original?.body}
+        </p>
+      </DemoModal>
     </>
   );
 }

@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { LogOut, Moon, MoreHorizontal, Sun } from "lucide-react";
+import { ChevronLeft, ChevronRight, LogOut, Menu, Moon, MoreHorizontal, Sun, X } from "lucide-react";
 import { usePortal } from "../lib/session";
 import { DEMO_FISCAL_MARK, isPortalDemoMode } from "../lib/demo";
 import { db } from "../lib/supabase";
@@ -10,6 +10,10 @@ import { GlassPanel, IconBadge, KawiilitoDock, SourceChip } from "../design/prim
 import { useTheme } from "../design/ThemeProvider";
 import { isDesignPreview } from "../lib/designPreview";
 import { portalPath } from "../lib/basePath";
+import DemoToastHost from "./DemoToast";
+import DemoModal from "./DemoModal";
+
+const SIDE_KEY = "kawiil-os-demo-sidebar-collapsed";
 
 export default function Layout() {
   const { me, active, setActive } = usePortal();
@@ -17,11 +21,30 @@ export default function Layout() {
   const demo = isPortalDemoMode() || isDesignPreview();
   const { theme, toggle } = useTheme();
   const [moreOpen, setMoreOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
+  const [originOpen, setOriginOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem(SIDE_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
   const href = (to: string) => portalPath(to);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(SIDE_KEY, collapsed ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, [collapsed]);
+
+  const navItems = ALL_NAV.filter((n) => n.to !== "/facturas");
+
   return (
-    <div className="kw-shell">
+    <div className={`kw-shell${collapsed ? " kw-shell--side-collapsed" : ""}`}>
       <a
         href="#contenido"
         className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded focus:bg-card focus:p-2 focus:shadow"
@@ -37,28 +60,22 @@ export default function Layout() {
       <header className="kw-header">
         <GlassPanel padded={false} size="xl" className="kw-header__bar" style={{ borderRadius: 0, borderLeft: 0, borderRight: 0, borderTop: 0 }}>
           <div className="kw-header__inner">
+            <button
+              type="button"
+              className="kw-iconbtn kw-header__menu"
+              aria-label="Abrir menú"
+              onClick={() => setDrawerOpen(true)}
+            >
+              <Menu size={18} strokeWidth={1.75} />
+            </button>
             <div className="kw-header__brand">
               <img className="logo-light" src={LOGO.wordBlue} alt="Kawiil Mx" />
               <img className="logo-dark" src={LOGO.wordWhite} alt="Kawiil Mx" />
               {demo && <span className="kw-caption">DEMO</span>}
             </div>
 
-            <nav className="kw-topnav" aria-label="Secciones">
-              {ALL_NAV.filter((n) => n.to !== "/facturas" && n.to !== "/cuenta").map(({ to, label, Icon }) => (
-                <NavLink key={to} to={href(to)} end={to === "/"}>
-                  {({ isActive }) => (
-                    <>
-                      <IconBadge icon={Icon} size="sm" className="kw-iconbox--nav" />
-                      {label}
-                      {isActive ? <span className="sr-only">(actual)</span> : null}
-                    </>
-                  )}
-                </NavLink>
-              ))}
-            </nav>
-
             <div className="ml-auto flex items-center gap-2">
-              <SourceChip source="sat" label="SAT al día" via="ejemplo" />
+              <SourceChip source="sat" label="SAT al día" via="ejemplo" onClick={() => setOriginOpen(true)} />
               {(me?.clients?.length ?? 0) > 1 ? (
                 <label className="flex items-center gap-2 text-sm">
                   <span className="sr-only">Cliente</span>
@@ -100,16 +117,34 @@ export default function Layout() {
       </header>
 
       <div className="kw-shell__body">
-        <aside className="kw-side" aria-label="Navegación">
-          <GlassPanel>
-            <p className="kw-caption">Kawiil OS</p>
+        <aside className={`kw-side${collapsed ? " kw-side--collapsed" : ""}`} aria-label="Navegación">
+          <GlassPanel padded={false} className="kw-side__panel">
+            <div className="kw-side__top">
+              {!collapsed ? <p className="kw-caption">Kawiil OS</p> : <span className="sr-only">Kawiil OS</span>}
+              <button
+                type="button"
+                className="kw-iconbtn"
+                aria-label={collapsed ? "Expandir menú lateral" : "Colapsar menú lateral"}
+                aria-pressed={collapsed}
+                onClick={() => setCollapsed((v) => !v)}
+              >
+                {collapsed ? <ChevronRight size={16} strokeWidth={1.75} /> : <ChevronLeft size={16} strokeWidth={1.75} />}
+              </button>
+            </div>
             <nav className="kw-side__nav">
-              {ALL_NAV.filter((n) => n.to !== "/facturas").map(({ to, label, Icon }) => (
-                <NavLink key={to} to={href(to)} end={to === "/"} className="kw-side__link">
+              {navItems.map(({ to, label, Icon }) => (
+                <NavLink
+                  key={to}
+                  to={href(to)}
+                  end={to === "/"}
+                  className="kw-side__link"
+                  title={label}
+                  aria-label={label}
+                >
                   {({ isActive }) => (
                     <>
                       <IconBadge icon={Icon} size="sm" className="kw-iconbox--nav" />
-                      {label}
+                      <span className="kw-side__label">{label}</span>
                       {isActive ? <span className="sr-only">(actual)</span> : null}
                     </>
                   )}
@@ -166,19 +201,10 @@ export default function Layout() {
 
       {moreOpen ? (
         <div className="kw-more-panel" role="dialog" aria-modal="true" aria-label="Más secciones" onClick={() => setMoreOpen(false)}>
-          <GlassPanel
-            tone="strong"
-            className="kw-more-sheet"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <GlassPanel tone="strong" className="kw-more-sheet" onClick={(e) => e.stopPropagation()}>
             <p className="kw-title">Más</p>
             {[...PRIMARY_NAV.slice(4), ...MORE_NAV].map(({ to, label, Icon }) => (
-              <NavLink
-                key={to}
-                to={href(to)}
-                className="kw-side__link"
-                onClick={() => setMoreOpen(false)}
-              >
+              <NavLink key={to} to={href(to)} className="kw-side__link" onClick={() => setMoreOpen(false)}>
                 <IconBadge icon={Icon} size="sm" className="kw-iconbox--nav" />
                 {label}
               </NavLink>
@@ -189,6 +215,39 @@ export default function Layout() {
           </GlassPanel>
         </div>
       ) : null}
+
+      {drawerOpen ? (
+        <div className="kw-more-panel kw-drawer-panel" role="dialog" aria-modal="true" aria-label="Menú" onClick={() => setDrawerOpen(false)}>
+          <GlassPanel tone="strong" className="kw-drawer-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between gap-2">
+              <p className="kw-title">Kawiil OS</p>
+              <button type="button" className="kw-iconbtn" aria-label="Cerrar menú" onClick={() => setDrawerOpen(false)}>
+                <X size={16} strokeWidth={1.75} />
+              </button>
+            </div>
+            <nav className="kw-side__nav" style={{ marginTop: 12 }}>
+              {navItems.map(({ to, label, Icon }) => (
+                <NavLink key={to} to={href(to)} end={to === "/"} className="kw-side__link" onClick={() => setDrawerOpen(false)}>
+                  <IconBadge icon={Icon} size="sm" className="kw-iconbox--nav" />
+                  {label}
+                </NavLink>
+              ))}
+            </nav>
+          </GlassPanel>
+        </div>
+      ) : null}
+
+      <DemoModal open={originOpen} title="¿De dónde sale «SAT al día»?" onClose={() => setOriginOpen(false)}>
+        <p className="kw-small">
+          En el demo, el chip indica que las cifras del resumen salen de CFDI del SAT (vía Moffin), ya digeridos por Kawiil.
+          En producción el mismo chip abre el rastro de origen del número que estés viendo.
+        </p>
+        <button type="button" className="kw-btn kw-btn--primary" style={{ marginTop: 12 }} onClick={() => { setOriginOpen(false); navigate(href("/origen")); }}>
+          Ir a Origen de datos
+        </button>
+      </DemoModal>
+
+      <DemoToastHost />
     </div>
   );
 }

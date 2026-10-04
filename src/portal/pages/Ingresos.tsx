@@ -16,19 +16,42 @@ import {
   CASHFLOW,
   INCOME_GROUPS,
   INCOME_INVOICES,
-  SAMPLE_PERIOD,
   TOP_CLIENTS,
 } from "../lib/sampleData";
+import { clampPeriodIndex, notifyPeriod, periodLabel } from "../lib/periodDemo";
+import { pushDemoToast } from "../lib/demoStore";
 
 export default function Ingresos() {
   const [period, setPeriod] = useState<PeriodId>("mes");
+  const [idx, setIdx] = useState(2);
+  const label = periodLabel(period, idx);
 
   return (
     <>
       <PageHead
         title="Ingresos"
-        subtitle={`${SAMPLE_PERIOD} · CFDI emitidos vigentes`}
-        actions={<PeriodSwitch value={period} onChange={setPeriod} label={SAMPLE_PERIOD} />}
+        subtitle={`${label} · CFDI emitidos vigentes`}
+        actions={
+          <PeriodSwitch
+            value={period}
+            onChange={(id) => {
+              setPeriod(id);
+              setIdx(2);
+              notifyPeriod(periodLabel(id, 2));
+            }}
+            label={label}
+            onPrev={() => {
+              const next = clampPeriodIndex(period, idx - 1);
+              setIdx(next);
+              notifyPeriod(periodLabel(period, next));
+            }}
+            onNext={() => {
+              const next = clampPeriodIndex(period, idx + 1);
+              setIdx(next);
+              notifyPeriod(periodLabel(period, next));
+            }}
+          />
+        }
       />
 
       <div className="kw-grid kw-kpis" style={{ marginBottom: 24 }}>
@@ -70,6 +93,7 @@ export default function Ingresos() {
               { id: "otro", label: "No, fue otra cosa" },
             ]}
             flag="El concepto dice servicio, pero la clave del CFDI parece de mercancía. Conviene revisar la emisión."
+            onAnswer={(id) => pushDemoToast({ tone: "ok", text: `Respuesta demo guardada (${id}). Tu contador la verá en central.` })}
           />
           <GlassPanel>
             <p className="kw-caption">Códigos de cuenta</p>

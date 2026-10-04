@@ -16,19 +16,42 @@ import {
   CASHFLOW,
   EXPENSE_GROUPS,
   EXPENSE_INVOICES,
-  SAMPLE_PERIOD,
   TOP_SUPPLIERS,
 } from "../lib/sampleData";
+import { clampPeriodIndex, notifyPeriod, periodLabel } from "../lib/periodDemo";
+import { pushDemoToast } from "../lib/demoStore";
 
 export default function Egresos() {
   const [period, setPeriod] = useState<PeriodId>("mes");
+  const [idx, setIdx] = useState(2);
+  const label = periodLabel(period, idx);
 
   return (
     <>
       <PageHead
         title="Egresos"
-        subtitle={`${SAMPLE_PERIOD} · CFDI recibidos vigentes`}
-        actions={<PeriodSwitch value={period} onChange={setPeriod} label={SAMPLE_PERIOD} />}
+        subtitle={`${label} · CFDI recibidos vigentes`}
+        actions={
+          <PeriodSwitch
+            value={period}
+            onChange={(id) => {
+              setPeriod(id);
+              setIdx(2);
+              notifyPeriod(periodLabel(id, 2));
+            }}
+            label={label}
+            onPrev={() => {
+              const next = clampPeriodIndex(period, idx - 1);
+              setIdx(next);
+              notifyPeriod(periodLabel(period, next));
+            }}
+            onNext={() => {
+              const next = clampPeriodIndex(period, idx + 1);
+              setIdx(next);
+              notifyPeriod(periodLabel(period, next));
+            }}
+          />
+        }
       />
 
       <div className="kw-grid kw-kpis" style={{ marginBottom: 24 }}>
@@ -65,6 +88,7 @@ export default function Egresos() {
               { id: "cliente", label: "No, fue comida con cliente" },
               { id: "otro", label: "No, fue otra cosa" },
             ]}
+            onAnswer={(id) => pushDemoToast({ tone: "ok", text: `Clasificación demo (${id}) enviada al seguimiento del contador.` })}
           />
           <GlassPanel tone="strong">
             <p className="kw-title" style={{ fontSize: 16 }}>Aviso</p>

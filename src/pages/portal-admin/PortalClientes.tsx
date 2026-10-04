@@ -16,6 +16,7 @@ import FacturacionGastosTab from "@/components/portal-admin/FacturacionGastosTab
 import FacturasTab from "@/components/portal-admin/FacturasTab";
 import CatalogosTab from "@/components/portal-admin/CatalogosTab";
 import BajaTab from "@/components/portal-admin/BajaTab";
+import HallazgosTab from "@/components/portal-admin/HallazgosTab";
 
 const TABS = [
   ["cuentas", "Cuentas", CuentasTab],
@@ -23,6 +24,7 @@ const TABS = [
   ["dropbox", "Dropbox", DropboxTab],
   ["gastos", "Facturación de gastos", FacturacionGastosTab],
   ["facturas", "Facturas", FacturasTab],
+  ["seguimientos", "Seguimientos", HallazgosTab],
   ["emision", "Emisión", EmisionTab],
   ["catalogos", "Catálogos", CatalogosTab],
   ["baja", "Baja y resguardo", BajaTab],

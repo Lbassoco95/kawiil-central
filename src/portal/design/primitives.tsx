@@ -1,4 +1,4 @@
-import { useState, type ButtonHTMLAttributes, type HTMLAttributes, type ReactNode } from "react";
+import { useRef, useState, type ButtonHTMLAttributes, type HTMLAttributes, type ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { POSE_SRC, deltaWords, money } from "./assets";
 import type {
@@ -14,10 +14,12 @@ import type {
   Pose,
   ProposalStatus,
   RankItem,
+  RequestFilter,
   RequestItem,
   Source,
   TeamMember,
 } from "./types";
+import { pushDemoToast } from "../lib/demoStore";
 
 function cx(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
@@ -499,11 +501,11 @@ export function PeriodSwitch({
       </div>
       {label ? (
         <div className="kw-period__nav">
-          <button type="button" className="kw-iconbtn" aria-label="Periodo anterior" onClick={onPrev}>
+          <button type="button" className="kw-iconbtn" aria-label="Periodo anterior" onClick={onPrev} disabled={!onPrev}>
             ‹
           </button>
           <span className="kw-period__label">{label}</span>
-          <button type="button" className="kw-iconbtn" aria-label="Periodo siguiente" onClick={onNext}>
+          <button type="button" className="kw-iconbtn" aria-label="Periodo siguiente" onClick={onNext} disabled={!onNext}>
             ›
           </button>
         </div>
@@ -796,7 +798,14 @@ export function MailboxCard({
             {reviewed ? "Revisado por tu contador" : "Tu contador aún lo revisa"}
           </span>
         </div>
-        <KwButton onClick={onOpenOriginal}>Ver mensaje original</KwButton>
+        <KwButton
+          onClick={() => {
+            if (onOpenOriginal) onOpenOriginal();
+            else pushDemoToast({ tone: "info", text: "En el demo: el mensaje original del SAT se muestra en un panel (abre el botón desde Buzón)." });
+          }}
+        >
+          Ver mensaje original
+        </KwButton>
       </div>
     </GlassPanel>
   );
@@ -882,11 +891,13 @@ export function ClassificationPrompt({
 }
 
 export function InsightList({ title, subtitle, items, footer }: { title?: string; subtitle?: string; items: InsightItem[]; footer?: string }) {
+  const statusWord = (s?: InsightItem["status"]) =>
+    s === "cerrado" ? "Cerrado" : s === "en_seguimiento" ? "En seguimiento" : s === "abierto" ? "Abierto" : null;
   return (
     <GlassPanel padded={false} className="kw-ins">
       <div className="kw-chart__head">
         <div>
-          <h3 className="kw-title">{title || "Lo que Kawiil va entendiendo de tu negocio"}</h3>
+          <h3 className="kw-title">{title || "Seguimientos de Kawiil"}</h3>
           {subtitle ? <p className="kw-small" style={{ margin: "2px 0 0" }}>{subtitle}</p> : null}
         </div>
       </div>
@@ -895,8 +906,21 @@ export function InsightList({ title, subtitle, items, footer }: { title?: string
           <li key={i} className="kw-ins__row">
             <span className="kw-ins__dot" aria-hidden />
             <div>
-              <p className="kw-ins__t">{it.title}</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="kw-ins__t" style={{ margin: 0 }}>{it.title}</p>
+                {statusWord(it.status) ? (
+                  <span className="kw-caption" style={{ color: it.status === "abierto" ? "var(--caution-text)" : "var(--link)" }}>
+                    {statusWord(it.status)}
+                  </span>
+                ) : null}
+              </div>
               <p className="kw-small" style={{ margin: "2px 0 0" }}>{it.detail}</p>
+              {it.followUp ? (
+                <p className="kw-small" style={{ margin: "6px 0 0" }}>
+                  <strong>Seguimiento:</strong> {it.followUp}
+                </p>
+              ) : null}
+              {it.owner ? <p className="kw-caption" style={{ margin: "4px 0 0" }}>Equipo: {it.owner}</p> : null}
               {it.basis ? <p className="kw-caption" style={{ margin: "4px 0 0" }}>{it.basis}</p> : null}
             </div>
           </li>
@@ -980,6 +1004,7 @@ export function TeamChat({
           if (!t) return;
           setMsgs((prev) => [...prev, { from: "yo", time: "Ahora", text: t }]);
           setDraft("");
+          pushDemoToast({ tone: "ok", text: "Mensaje enviado al equipo (demo local)." });
         }}
       >
         <label className="kw-label" style={{ flex: 1 }}>
@@ -1000,16 +1025,27 @@ export function TeamChat({
   );
 }
 
-export function InvoiceRequestForm() {
+export function InvoiceRequestForm({
+  onSubmitted,
+}: {
+  onSubmitted?: (payload: { cliente: string; monto: string; concepto: string }) => void;
+}) {
   const [sent, setSent] = useState(false);
   if (sent) {
     return (
       <GlassPanel padded={false} className="kw-form" as="section">
         <div className="kw-cls__done">
           <span className="kw-prop__state" style={{ color: "var(--positive-text)" }}>
-            Solicitud enviada. La verás en el seguimiento.
+            Solicitud enviada. La verás en el seguimiento con estatus «Solicitada».
           </span>
         </div>
+        <KwButton
+          variant="text"
+          onClick={() => setSent(false)}
+          style={{ marginTop: 8 }}
+        >
+          Pedir otra factura
+        </KwButton>
       </GlassPanel>
     );
   }
@@ -1024,7 +1060,16 @@ export function InvoiceRequestForm() {
         style={{ gap: 16 }}
         onSubmit={(e) => {
           e.preventDefault();
+          const fd = new FormData(e.currentTarget);
+          const payload = {
+            cliente: String(fd.get("cliente") || ""),
+            monto: String(fd.get("monto") || ""),
+            concepto: String(fd.get("concepto") || ""),
+          };
+          onSubmitted?.(payload);
+          pushDemoToast({ tone: "ok", text: "Solicitud de factura registrada en el demo (local)." });
           setSent(true);
+          e.currentTarget.reset();
         }}
       >
         <div className="kw-form__row">
@@ -1049,14 +1094,79 @@ export function InvoiceRequestForm() {
   );
 }
 
-export function UploadBox() {
+export function UploadBox({
+  onUploaded,
+}: {
+  onUploaded?: (files: { name: string; source: "foto" | "galeria" | "archivo" }[]) => void;
+}) {
   const [over, setOver] = useState(false);
-  const [files, setFiles] = useState<string[]>([]);
+  const [files, setFiles] = useState<{ name: string; source: "foto" | "galeria" | "archivo" }[]>([]);
+  const cam = useRef<HTMLInputElement>(null);
+  const gal = useRef<HTMLInputElement>(null);
+  const file = useRef<HTMLInputElement>(null);
+
+  const take = (list: FileList | null, source: "foto" | "galeria" | "archivo") => {
+    const next = Array.from(list || []).map((f) => ({ name: f.name, source }));
+    if (!next.length) return;
+    const merged = [...next, ...files];
+    setFiles(merged);
+    onUploaded?.(next);
+    pushDemoToast({
+      tone: "ok",
+      text:
+        source === "foto"
+          ? `Foto lista: ${next.map((f) => f.name).join(", ")}. Estatus: Solicitada → En proceso.`
+          : `Recibo(s) agregados desde ${source === "galeria" ? "galería" : "archivo"}.`,
+    });
+  };
+
   return (
     <GlassPanel padded={false} className="kw-form" as="section">
       <div>
-        <h3 className="kw-title">Subir recibos</h3>
-        <p className="kw-small" style={{ margin: "2px 0 0" }}>Fotos o PDF. Tu equipo los revisa y los registra.</p>
+        <h3 className="kw-title">Subir recibos / tickets</h3>
+        <p className="kw-small" style={{ margin: "2px 0 0" }}>
+          Toma una foto, elige de la galería o sube un archivo. En el demo se guarda en este dispositivo.
+        </p>
+      </div>
+      <input
+        ref={cam}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="kw-sr"
+        onChange={(e) => {
+          take(e.target.files, "foto");
+          e.target.value = "";
+        }}
+      />
+      <input
+        ref={gal}
+        type="file"
+        accept="image/jpeg,image/png,image/heic,image/heif,.heic,.heif,application/pdf"
+        multiple
+        className="kw-sr"
+        onChange={(e) => {
+          take(e.target.files, "galeria");
+          e.target.value = "";
+        }}
+      />
+      <input
+        ref={file}
+        type="file"
+        accept="image/jpeg,image/png,application/pdf,.pdf"
+        multiple
+        className="kw-sr"
+        onChange={(e) => {
+          take(e.target.files, "archivo");
+          e.target.value = "";
+        }}
+      />
+      <div className="kw-upload-actions">
+        <KwButton variant="primary" onClick={() => cam.current?.click()}>
+          Tomar foto
+        </KwButton>
+        <KwButton onClick={() => gal.current?.click()}>Galería</KwButton>
+        <KwButton onClick={() => file.current?.click()}>Subir archivo</KwButton>
       </div>
       <div
         className={cx("kw-drop", over && "kw-drop--over")}
@@ -1068,24 +1178,18 @@ export function UploadBox() {
         onDrop={(e) => {
           e.preventDefault();
           setOver(false);
-          setFiles((prev) => [...prev, ...Array.from(e.dataTransfer.files).map((f) => f.name)]);
+          take(e.dataTransfer.files, "archivo");
         }}
       >
-        <p className="kw-title" style={{ fontSize: 16 }}>Arrastra archivos aquí</p>
-        <label className="kw-btn kw-btn--primary" style={{ cursor: "pointer" }}>
-          Elegir archivos
-          <input
-            type="file"
-            multiple
-            className="kw-sr"
-            onChange={(e) => setFiles((prev) => [...prev, ...Array.from(e.target.files || []).map((f) => f.name)])}
-          />
-        </label>
+        <p className="kw-title" style={{ fontSize: 16 }}>O arrastra archivos aquí</p>
+        <p className="kw-small" style={{ margin: 0 }}>JPG, PNG, HEIC o PDF · demo local</p>
       </div>
       {files.length ? (
         <ul className="kw-small" style={{ margin: 0, paddingLeft: 18 }}>
-          {files.map((f) => (
-            <li key={f}>{f}</li>
+          {files.map((f, i) => (
+            <li key={`${f.name}-${i}`}>
+              {f.name} · vía {f.source}
+            </li>
           ))}
         </ul>
       ) : null}
@@ -1093,40 +1197,96 @@ export function UploadBox() {
   );
 }
 
-export function RequestTracker({ items, title, subtitle }: { items: RequestItem[]; title?: string; subtitle?: string }) {
+function filterBucket(step: number): Exclude<RequestFilter, "todas"> {
+  if (step <= 0) return "pendiente";
+  if (step >= 2) return "hecha";
+  return "en_proceso";
+}
+
+export function RequestTracker({
+  items,
+  title,
+  subtitle,
+  filter = "todas",
+  onFilterChange,
+}: {
+  items: RequestItem[];
+  title?: string;
+  subtitle?: string;
+  filter?: RequestFilter;
+  onFilterChange?: (f: RequestFilter) => void;
+}) {
   const stepsFor = (kind: RequestItem["kind"]) =>
     kind === "recibo" ? ["Subido", "En revisión", "Registrado"] : ["Solicitada", "En proceso", "Emitida"];
+  const counts = {
+    todas: items.length,
+    pendiente: items.filter((i) => filterBucket(i.step) === "pendiente").length,
+    en_proceso: items.filter((i) => filterBucket(i.step) === "en_proceso").length,
+    hecha: items.filter((i) => filterBucket(i.step) === "hecha").length,
+  };
+  const visible = filter === "todas" ? items : items.filter((i) => filterBucket(i.step) === filter);
+  const filters: { id: RequestFilter; label: string }[] = [
+    { id: "todas", label: `Todas (${counts.todas})` },
+    { id: "pendiente", label: `Pendientes (${counts.pendiente})` },
+    { id: "en_proceso", label: `En proceso (${counts.en_proceso})` },
+    { id: "hecha", label: `Hechas (${counts.hecha})` },
+  ];
   return (
     <GlassPanel padded={false} className="kw-track" as="section">
       <div className="kw-chart__head">
         <div>
-          <h3 className="kw-title">{title || "Seguimiento"}</h3>
-          <p className="kw-small" style={{ margin: "2px 0 0" }}>{subtitle || "Facturas solicitadas y recibos subidos"}</p>
+          <h3 className="kw-title">{title || "Cuáles ya se hicieron"}</h3>
+          <p className="kw-small" style={{ margin: "2px 0 0" }}>
+            {subtitle || "Facturas y recibos: pendiente · en proceso · hecha"}
+          </p>
         </div>
       </div>
+      {onFilterChange ? (
+        <div className="kw-filter-row" style={{ padding: "0 16px 8px" }} role="group" aria-label="Filtrar por estatus">
+          {filters.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              className="kw-filter-chip"
+              aria-pressed={filter === f.id}
+              onClick={() => onFilterChange(f.id)}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
       <ul className="kw-track__list">
-        {items.map((it, i) => {
-          const steps = stepsFor(it.kind);
-          return (
-            <li key={i} className="kw-req">
-              <div className="kw-req__top">
-                <p className="kw-req__t">{it.title}</p>
-                <span className="kw-caption">
-                  {it.kind === "recibo" ? "Recibo" : "Factura"} · {it.date}
-                </span>
-              </div>
-              {it.detail ? <p className="kw-small">{it.detail}</p> : null}
-              {it.folio ? <p className="kw-mono kw-small">Folio: {it.folio}</p> : null}
-              <div className="kw-steps">
-                {steps.map((s, si) => (
-                  <span key={s} className={cx("kw-step", si < it.step && "kw-step--done", si === it.step && "kw-step--now")}>
-                    {s}
+        {visible.length === 0 ? (
+          <li className="kw-req">
+            <p className="kw-small">No hay elementos en este filtro.</p>
+          </li>
+        ) : (
+          visible.map((it, i) => {
+            const steps = stepsFor(it.kind);
+            const bucket = filterBucket(it.step);
+            const bucketLabel = bucket === "pendiente" ? "Pendiente" : bucket === "en_proceso" ? "En proceso" : "Hecha";
+            return (
+              <li key={`${it.title}-${i}`} className="kw-req">
+                <div className="kw-req__top">
+                  <p className="kw-req__t">{it.title}</p>
+                  <span className="kw-caption">
+                    {it.kind === "recibo" ? "Recibo" : "Factura"} · {bucketLabel} · {it.date}
                   </span>
-                ))}
-              </div>
-            </li>
-          );
-        })}
+                </div>
+                {it.detail ? <p className="kw-small">{it.detail}</p> : null}
+                {it.folio ? <p className="kw-mono kw-small">Folio: {it.folio}</p> : null}
+                <div className="kw-steps">
+                  {steps.map((s, si) => (
+                    <span key={s} className={cx("kw-step", si < it.step && "kw-step--done", si === it.step && "kw-step--now")}>
+                      {s}
+                    </span>
+                  ))}
+                </div>
+              </li>
+            );
+          })
+        )}
       </ul>
     </GlassPanel>
   );

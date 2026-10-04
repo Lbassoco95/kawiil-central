@@ -1,14 +1,27 @@
+import { useNavigate } from "react-router-dom";
 import { GlassPanel, KawiilitoGuide, PageHead, TeamChat, TeamRoster } from "../design/primitives";
 import { CHAT, TEAM } from "../lib/sampleData";
+import { portalPath } from "../lib/basePath";
 
 export default function Mensajes() {
+  const navigate = useNavigate();
   return (
     <>
       <PageHead title="Mensajes" subtitle="Tu equipo contable y legal" />
       <div className="kw-grid kw-main-cols">
         <TeamChat members={TEAM} messages={CHAT} status="Equipo en línea" />
         <div className="kw-grid">
-          <KawiilitoGuide pose="saluda" title="Tu equipo te atiende aquí">
+          <KawiilitoGuide
+            pose="saluda"
+            title="Tu equipo te atiende aquí"
+            actions={[
+              {
+                label: "Ir a Facturación",
+                primary: true,
+                onClick: () => navigate(portalPath("/facturacion")),
+              },
+            ]}
+          >
             Escribe cuando tengas una duda contable o legal. Para pedir una factura, ve a Facturación. No hay asistente de IA.
           </KawiilitoGuide>
           <GlassPanel>

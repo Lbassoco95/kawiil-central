@@ -9,18 +9,41 @@ import {
   PeriodSwitch,
 } from "../design/primitives";
 import type { PeriodId } from "../design/types";
-import { CASHFLOW, INCOME_LINEAGE, SAMPLE_CLIENT, SAMPLE_PERIOD } from "../lib/sampleData";
+import { CASHFLOW, INCOME_LINEAGE, SAMPLE_CLIENT } from "../lib/sampleData";
+import { clampPeriodIndex, notifyPeriod, periodLabel } from "../lib/periodDemo";
 
 export default function Resumen() {
   const [period, setPeriod] = useState<PeriodId>("mes");
+  const [idx, setIdx] = useState(2);
   const [why, setWhy] = useState(true);
+  const label = periodLabel(period, idx);
 
   return (
     <>
       <PageHead
         title="Resumen"
-        subtitle={`${SAMPLE_PERIOD} · ${SAMPLE_CLIENT}`}
-        actions={<PeriodSwitch value={period} onChange={setPeriod} label={SAMPLE_PERIOD} />}
+        subtitle={`${label} · ${SAMPLE_CLIENT}`}
+        actions={
+          <PeriodSwitch
+            value={period}
+            onChange={(id) => {
+              setPeriod(id);
+              setIdx(2);
+              notifyPeriod(periodLabel(id, 2));
+            }}
+            label={label}
+            onPrev={() => {
+              const next = clampPeriodIndex(period, idx - 1);
+              setIdx(next);
+              notifyPeriod(periodLabel(period, next));
+            }}
+            onNext={() => {
+              const next = clampPeriodIndex(period, idx + 1);
+              setIdx(next);
+              notifyPeriod(periodLabel(period, next));
+            }}
+          />
+        }
       />
 
       <div className="kw-grid kw-kpis" style={{ marginBottom: 24 }}>
@@ -87,13 +110,16 @@ export default function Resumen() {
         <div className="kw-grid">
           <KawiilitoGuide
             pose="cifras"
-            title="Septiembre cerró en $182,000 de neto"
-            actions={[{ label: "¿De dónde sale?", primary: true, onClick: () => setWhy(true) }]}
+            title={`${label} · neto $182,000 (ejemplo)`}
+            actions={[
+              { label: "¿De dónde sale?", primary: true, onClick: () => setWhy(true) },
+              { label: "Ocultar rastro", text: true, onClick: () => setWhy(false) },
+            ]}
           >
-            Tus ingresos subieron frente a agosto y tus egresos bajaron un poco.
+            Tus ingresos subieron frente al periodo anterior y tus egresos bajaron un poco.
           </KawiilitoGuide>
           {why ? (
-            <LineagePanel title="¿De dónde sale «Ingresos del mes»?" subtitle={SAMPLE_PERIOD} steps={INCOME_LINEAGE} />
+            <LineagePanel title="¿De dónde sale «Ingresos del mes»?" subtitle={label} steps={INCOME_LINEAGE} />
           ) : null}
         </div>
       </div>

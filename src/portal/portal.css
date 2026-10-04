@@ -111,7 +111,7 @@
 
   .kw-side {
     display: none;
-    width: 240px;
+    width: 248px;
     flex: none;
     padding: var(--space-4);
     position: sticky;
@@ -119,6 +119,28 @@
     align-self: flex-start;
     max-height: 100vh;
     overflow: auto;
+    transition: width 180ms ease;
+  }
+
+  .kw-shell--side-collapsed .kw-side {
+    width: 88px;
+  }
+
+  .kw-side__panel {
+    padding: 12px;
+    min-height: calc(100vh - 120px);
+  }
+
+  .kw-side__top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 40px;
+  }
+
+  .kw-shell--side-collapsed .kw-side__top {
+    justify-content: center;
   }
 
   .kw-side__nav {
@@ -139,6 +161,28 @@
     text-decoration: none;
   }
 
+  .kw-shell--side-collapsed .kw-side__link {
+    justify-content: center;
+    padding: 0;
+    width: 44px;
+    margin-inline: auto;
+  }
+
+  .kw-side__label {
+    white-space: nowrap;
+  }
+
+  .kw-shell--side-collapsed .kw-side__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    border: 0;
+  }
+
   .kw-side__link[aria-current="page"] {
     background: var(--primary);
     color: var(--on-primary);
@@ -149,34 +193,13 @@
     color: var(--ink);
   }
 
-  .kw-topnav {
-    display: none;
-    gap: 6px;
-    flex-wrap: wrap;
-    align-items: center;
-  }
-
-  .kw-topnav a {
-    font: 600 14px/20px var(--font-sans);
-    min-height: 40px;
-    padding: 0 14px;
-    border-radius: var(--radius-pill);
-    border: 1px solid transparent;
-    color: var(--ink-muted);
-    text-decoration: none;
+  .kw-header__menu {
     display: inline-flex;
-    align-items: center;
-    gap: 8px;
   }
 
-  .kw-topnav a[aria-current="page"] {
-    background: var(--primary);
-    color: var(--on-primary);
-  }
-
-  .kw-topnav a:hover:not([aria-current="page"]) {
-    background: var(--surface-glass-tint);
-    color: var(--ink);
+  /* Menú superior eliminado: navegación = lateral (desktop/tablet) o bottom/drawer (móvil). */
+  .kw-topnav {
+    display: none !important;
   }
 
   .kw-bottomnav {
@@ -308,6 +331,9 @@
     .kw-bottomnav {
       display: none;
     }
+    .kw-header__menu {
+      display: none;
+    }
     .kw-main {
       padding: var(--space-5);
       padding-bottom: var(--space-7);
@@ -315,13 +341,6 @@
   }
 
   @media (min-width: 1280px) {
-    .kw-side {
-      display: none;
-    }
-    .kw-topnav {
-      display: flex;
-      flex: 1;
-    }
     .kw-main {
       padding-inline: var(--space-7);
     }
@@ -508,6 +527,75 @@
     padding-bottom: calc(var(--space-5) + env(safe-area-inset-bottom));
     display: grid;
     gap: 8px;
+  }
+
+  .kw-modal-sheet {
+    margin: auto;
+    width: min(520px, calc(100% - 32px));
+    border-radius: var(--radius-xl);
+    padding: var(--space-5);
+    align-self: center;
+  }
+
+  .kw-drawer-panel {
+    align-items: stretch;
+    justify-items: start;
+  }
+
+  .kw-drawer-sheet {
+    width: min(320px, 88vw);
+    height: 100%;
+    border-radius: 0 var(--radius-xl) var(--radius-xl) 0;
+    padding: var(--space-5);
+  }
+
+  .kw-toast {
+    position: fixed;
+    right: 16px;
+    bottom: calc(88px + env(safe-area-inset-bottom));
+    z-index: 60;
+    width: min(320px, calc(100vw - 32px));
+    padding: 12px 14px;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--glass-edge);
+    background: var(--surface-glass-strong);
+    box-shadow: var(--shadow-md, 0 8px 24px rgba(6, 16, 31, 0.12));
+  }
+
+  @media (min-width: 768px) {
+    .kw-toast {
+      bottom: 24px;
+    }
+  }
+
+  .kw-upload-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .kw-filter-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .kw-filter-chip {
+    min-height: 36px;
+    padding: 0 12px;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--control-border);
+    background: transparent;
+    color: var(--ink-muted);
+    font: 600 13px/18px var(--font-sans);
+    cursor: pointer;
+  }
+
+  .kw-filter-chip[aria-pressed="true"] {
+    background: var(--primary);
+    color: var(--on-primary);
+    border-color: transparent;
   }
 
   .kw-eeff-lock {

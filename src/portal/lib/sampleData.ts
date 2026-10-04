@@ -195,18 +195,27 @@ export const REQUESTS: RequestItem[] = [
 
 export const INSIGHTS: InsightItem[] = [
   {
-    title: "Tus ingresos del mes vienen sobre todo de supervisión de obra",
-    detail: "Más de la mitad de lo facturado en septiembre se agrupa así, según el concepto del CFDI y tu confirmación.",
-    basis: "Base: 12 CFDI emitidos · SAT · respuestas tuyas",
+    title: "Concentración de ingresos en supervisión de obra",
+    detail: "Más de la mitad de lo facturado en septiembre se agrupa así. Tu contador lo anotó tras revisar CFDI y tus confirmaciones.",
+    basis: "Origen: seguimiento en kawiil-central · 12 CFDI emitidos",
+    followUp: "Revisar mix de clientes para octubre contigo",
+    owner: "Ana López · Contable",
+    status: "en_seguimiento",
   },
   {
-    title: "Café Plaza Maya aparece a menudo sin clasificar",
-    detail: "Cuando confirmes si es gasto de oficina o comida con cliente, tu contador lo registra igual la próxima vez.",
-    basis: "Base: 6 CFDI recibidos · pendiente tu respuesta",
+    title: "Café Plaza Maya sin clasificar",
+    detail: "Hay varios tickets/CFDI de este proveedor. Falta tu respuesta cerrada para que el equipo registre el gasto igual la próxima vez.",
+    basis: "Origen: tarea de seguimiento en central · 6 CFDI recibidos",
+    followUp: "Pedirte clasificación (oficina vs comida con cliente)",
+    owner: "Ana López · Contable",
+    status: "abierto",
   },
   {
-    title: "Los estados financieros aún no entran a esta vista",
-    detail: "Disponible desde enero 2027. Mientras tanto, el resumen se apoya solo en CFDI del SAT.",
-    basis: "Base: módulo EEFF pendiente",
+    title: "Requerimiento SAT 2025 en revisión",
+    detail: "El equipo legal ya abrió el mensaje del buzón y prepara la respuesta. Aquí solo ves el seguimiento, no un feed genérico.",
+    basis: "Origen: buzón tributario + nota de seguimiento en central",
+    followUp: "Entregar borrador de respuesta en 5 días hábiles",
+    owner: "Jesús García · Legal",
+    status: "en_seguimiento",
   },
 ];
