@@ -54,3 +54,7 @@ docs/mtg/acceptance/
 .tmp-moffin*
 .tmp_health*
 tmp_deploy/
+dist-portal
+
+# portal demo local env (never commit)
+.env.portal.local

@@ -1,0 +1,167 @@
+/* Portal del cliente — tokens y superficies alineados a Kawiil Central (index.css / design-system).
+   Tipografía Inter (cuerpo) + JetBrains Mono (cifras). Banner DEMO obligatorio en modo demo. */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 14% 96%;
+    --foreground: 220 20% 14%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 20% 14%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 20% 14%;
+    --primary: 210 100% 47%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 220 20% 14%;
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 46%;
+    --accent: 157 72% 36%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 210 100% 47%;
+    --radius: 0.625rem;
+
+    --sidebar-background: 228 20% 12%;
+    --sidebar-foreground: 220 15% 65%;
+    --sidebar-primary: 210 100% 52%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 228 16% 18%;
+    --sidebar-accent-foreground: 220 15% 92%;
+    --sidebar-border: 228 14% 18%;
+    --sidebar-ring: 210 100% 47%;
+
+    --success: 157 72% 36%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --info: 210 100% 47%;
+    --info-foreground: 0 0% 100%;
+
+    /* Legacy alias: acciones críticas del portal (no sustituye --accent verde de central). */
+    --kw-critical: 157 100% 50%;
+    --kw-critical-foreground: 228 20% 12%;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: "Inter", system-ui, -apple-system, sans-serif;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: "Inter", system-ui, sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  .kw-mono,
+  .font-mono {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+  }
+
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+}
+
+@layer components {
+  .kw-critical {
+    background: hsl(var(--kw-critical));
+    color: hsl(var(--kw-critical-foreground));
+    font-weight: 600;
+  }
+  .kw-critical:hover {
+    filter: brightness(0.95);
+  }
+
+  .kw-placeholder {
+    border: 2px dashed hsl(var(--warning));
+    background: hsl(40 100% 96%);
+  }
+
+  .kw-demo-banner {
+    background: hsl(var(--warning));
+    color: hsl(var(--warning-foreground));
+    text-align: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    padding: 0.4rem 0.75rem;
+  }
+
+  .surface-toolbar {
+    @apply rounded-xl border border-border/70 bg-card shadow-md backdrop-blur-md;
+    box-shadow:
+      0 1px 2px rgb(15 23 42 / 0.04),
+      0 4px 16px -2px rgb(15 23 42 / 0.07);
+  }
+
+  .surface-glass-subtle {
+    @apply rounded-xl border border-border/60 bg-card/95 shadow-sm backdrop-blur-sm;
+  }
+
+  .page-list-card {
+    @apply rounded-xl border border-border/70 bg-card shadow-sm transition-shadow duration-200 hover:border-primary/15 hover:shadow-md;
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.045);
+  }
+
+  .stat-card {
+    @apply rounded-2xl border border-border/70 bg-card p-5 shadow-sm transition-shadow duration-300;
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+  }
+  .stat-card:hover {
+    @apply shadow-md;
+  }
+
+  .gradient-text {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(to right, hsl(var(--primary)), hsl(var(--accent)));
+  }
+
+  .portal-hero {
+    @apply relative overflow-hidden rounded-2xl border border-border/70 px-5 py-4 sm:px-6 sm:py-5;
+    background:
+      radial-gradient(ellipse 520px 180px at 0% 0%, hsl(var(--primary) / 0.09), transparent 70%),
+      radial-gradient(ellipse 380px 140px at 100% 100%, hsl(var(--accent) / 0.08), transparent 70%),
+      hsl(var(--card));
+  }
+
+  .portal-pill-group {
+    @apply inline-flex items-center gap-0.5 rounded-lg border border-border/60 bg-muted p-1;
+  }
+
+  .portal-pill-group button[aria-selected="true"],
+  .portal-pill-group button.active {
+    @apply rounded-md bg-card text-foreground shadow-sm ring-1 ring-border/50;
+  }
+
+  .portal-pill-group button {
+    @apply rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground;
+  }
+}

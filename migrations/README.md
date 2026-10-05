@@ -27,3 +27,17 @@ Convención:
 | 2026-09-18 | `2026-09-18_mtg_unmatched_transcripts.rollback.sql` | Rollback unmatched transcripts. |
 | 2026-09-18 | `2026-09-18_mtg_documents_group_and_slack.rollback.sql` | Rollback `documents.client_group_id` + `mtg_series.slack_channel_id`. |
 | 2026-09-18 | *(pendiente apply prod)* | `20260918140000`, `20260918140100`, `20260918140200` **aún no** en `schema_migrations` de prod. Harness local (`verify.sh` B345) debe pasar en Mac de Polo antes de `supabase db push`. Rama: `feat/mtg-juntas-b2`. |
+| 2026-09-29 | `2026-09-29_portal_function_grants.rollback.sql` | **Rollback** de `20260929120700_portal_function_grants.sql` (portal): devuelve EXECUTE a anon en 21 funciones del portal. Correr PRIMERO de los del portal. |
+| 2026-09-28 | `2026-09-28_portal_client_offboarding.rollback.sql` | **Rollback** de `20260929120600_portal_client_offboarding.sql` (B4, baja de cliente premier). Después del de permisos. Borra los registros de solicitudes de baja de clientes; no devuelve lo destruido. |
+| 2026-09-28 | `2026-09-28_portal_offboarding.rollback.sql` | **Rollback** de `20260929120500_portal_offboarding.sql` (B2/B3). Restaura las funciones de baja de `…120200`. No devuelve lo destruido. |
+| 2026-09-28 | `2026-09-28_portal_retention_terms.rollback.sql` | **Rollback** de `20260929120400_portal_retention_terms.sql` (B1). Pierde el registro de elecciones y los resguardos de constancias legales (anotarlos antes). |
+| 2026-09-28 | `2026-09-28_portal_route_guard_health.rollback.sql` | **Rollback** de `20260929120300_portal_route_guard_health.sql` (V1). |
+| 2026-09-28 | `2026-09-28_portal_account_deletion.rollback.sql` | **Rollback** de `20260929120200_portal_account_deletion.sql` (C4). Pierde solicitudes y resguardos; no revierte seudonimizaciones. |
+| 2026-09-28 | `2026-09-28_portal_rate_limits.rollback.sql` | **Rollback** de `20260929120100_portal_rate_limits.sql` (C3). |
+| 2026-09-28 | `2026-09-28_portal_csd_authorization.rollback.sql` | **Rollback** de `20260929120000_portal_csd_authorization.sql` (C2/C5). |
+| 2026-09-28 | `2026-09-28_portal_isolation_guard.rollback.sql` | **Rollback** de `20260929110500_portal_isolation_guard.sql` (portal del cliente): quita las policies restrictivas `portal_deny_portal_accounts`, la de storage y el `pgrst.db_pre_request`. Después de los anteriores. |
+| 2026-09-28 | `2026-09-28_portal_tickets.rollback.sql` | **Rollback** de `20260929110400_portal_tickets.sql`: quita policies, vista y RPC del portal sobre Ju'un. No borra tickets. |
+| 2026-09-28 | `2026-09-28_portal_cfdi.rollback.sql` | **Rollback** de `20260929110300_portal_cfdi.sql`. Destructivo para datos del portal (facturas cargadas, emisiones, cancelaciones, registro de CSD). No toca `client_sat_certificates`. |
+| 2026-09-28 | `2026-09-28_portal_documents.rollback.sql` | **Rollback** de `20260929110200_portal_documents.sql`. Borra mapeo y registro de documentos; el bucket `portal` solo si está vacío. |
+| 2026-09-28 | `2026-09-28_portal_messaging.rollback.sql` | **Rollback** de `20260929110100_portal_messaging.sql`. Borra hilos y mensajes del portal. |
+| 2026-09-28 | `2026-09-28_portal_core.rollback.sql` | **Rollback** de `20260929110000_portal_core.sql`. Correr AL FINAL. Borra cuentas del portal (y sus usuarios de Auth, por seguridad) y restaura `handle_new_user`. |

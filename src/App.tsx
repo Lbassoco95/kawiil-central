@@ -51,6 +51,8 @@ import PipelinePartners from "./pages/pipeline/PipelinePartners";
 import PipelineActivities from "./pages/pipeline/PipelineActivities";
 import EmailTemplatesContabilidad from "./pages/contabilidad/EmailTemplatesContabilidad";
 import ContratoPublico from "./pages/ContratoPublico";
+import PortalClientes from "./pages/portal-admin/PortalClientes";
+import BandejaClientes from "./pages/portal-admin/BandejaClientes";
 
 const queryClient = new QueryClient();
 
@@ -121,6 +123,8 @@ const App = () => (
               <Route path="/despacho" element={<Navigate to="/hub" replace />} />
               <Route path="/notificaciones" element={<ProtectedRoute><Notificaciones /></ProtectedRoute>} />
               <Route path="/comunicacion" element={<ProtectedRoute><Comunicacion /></ProtectedRoute>} />
+              <Route path="/comunicacion/clientes" element={<ProtectedRoute><BandejaClientes /></ProtectedRoute>} />
+              <Route path="/portal-clientes" element={<ProtectedRoute><PortalClientes /></ProtectedRoute>} />
               <Route path="/asistente" element={<ProtectedRoute><ModuleGate moduleKey="ai"><AsistenteIA /></ModuleGate></ProtectedRoute>} />
               <Route path="/conocimiento" element={<ProtectedRoute><ModuleGate moduleKey="conocimiento"><BaseConocimiento /></ModuleGate></ProtectedRoute>} />
               <Route path="/finanzas" element={<ProtectedRoute><ModuleGate moduleKey="finanzas"><Finanzas /></ModuleGate></ProtectedRoute>} />
