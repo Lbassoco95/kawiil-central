@@ -110,7 +110,7 @@ function FixtureResumen() {
             data={CASHFLOW}
             source="sat"
             onExplain={() => setWhy(true)}
-            footer="Fixture demo (equivalente al espejo). En sesión real se lee la representación ya publicada en OS."
+            footer="Datos de ejemplo (vista de diseño). Con sesión real verás las cifras de tu cuenta."
           />
           <GlassPanel tone="strong">
             <div className="kw-eeff-lock">
@@ -135,7 +135,7 @@ function FixtureResumen() {
               { label: "Ocultar rastro", text: true, onClick: () => setWhy(false) },
             ]}
           >
-            En el demo estas cifras son fixtures. En producción ves la copia que central ya publicó al portal.
+            En el demo estas cifras son de ejemplo. Con tu sesión verás las cifras reales de tu cuenta.
           </KawiilitoGuide>
           {why ? (
             <LineagePanel title="¿De dónde sale «Ingresos del mes»?" subtitle={label} steps={INCOME_LINEAGE} />
@@ -162,7 +162,7 @@ function MirrorResumen() {
     callApi<Dash>("tablero.consultar", { client_id: active.client_id, year: ym.y, month: ym.m })
       .then(setD)
       .catch(() => {
-        setErr("No se pudo leer el resumen publicado en el portal.");
+        setErr("No se pudo cargar el resumen de tu cuenta.");
         setD(null);
       })
       .finally(() => setLoading(false));
@@ -173,7 +173,7 @@ function MirrorResumen() {
     return { y: dt.getFullYear(), m: dt.getMonth() + 1 };
   });
 
-  const client = active?.client_name ?? "Espejo del servicio";
+  const client = active?.client_name ?? "Tu cuenta";
   const label = `${MONTHS[ym.m - 1]} ${ym.y}`;
   const ingreso = d?.ingreso_total ?? 0;
   const gasto = d?.gasto_total ?? 0;
@@ -194,7 +194,7 @@ function MirrorResumen() {
     <>
       <PageHead
         title="Resumen"
-        subtitle={`${label} · ${client} · representación publicada`}
+        subtitle={`${label} · ${client}`}
         actions={
           <label className="kw-small">
             <span className="mr-2">Mes</span>
@@ -217,12 +217,12 @@ function MirrorResumen() {
       />
 
       {err ? <p className="kw-small" style={{ color: "var(--caution-text)", marginBottom: 16 }}>{err}</p> : null}
-      {loading ? <p className="kw-small" style={{ marginBottom: 16 }}>Cargando tablero publicado…</p> : null}
+      {loading ? <p className="kw-small" style={{ marginBottom: 16 }}>Cargando resumen…</p> : null}
       {zeroMeta ? (
         <GlassPanel style={{ marginBottom: 16 }}>
           <p className="kw-small" style={{ margin: 0 }}>
-            Totales en $0 para {client} en {label}: el espejo ya tiene CFDI publicados (p. ej. SatGo metadatos).
-            No se muestran fixtures sintéticos (Costa Maya / Aldea del Sol).
+            Totales en $0 para {client} en {label}: ya hay facturas de tu cuenta, pero algunos montos aún vienen solo como metadatos.
+            No se muestran datos de ejemplo (hoteles Tulum / constructora ficticia).
           </p>
         </GlassPanel>
       ) : null}
@@ -235,7 +235,7 @@ function MirrorResumen() {
           tone="ingreso"
           spark={sparkIn.length ? sparkIn : undefined}
           source="sat"
-          note={`${client} · tablero.consultar`}
+          note={`${client} · CFDI de tu cuenta`}
           onExplain={() => setWhy(true)}
         />
         <KpiTile
@@ -245,7 +245,7 @@ function MirrorResumen() {
           tone="egreso"
           spark={sparkOut.length ? sparkOut : undefined}
           source="sat"
-          note={`${client} · tablero.consultar`}
+          note={`${client} · CFDI de tu cuenta`}
           onExplain={() => setWhy(true)}
         />
         <KpiTile
@@ -272,15 +272,15 @@ function MirrorResumen() {
               data={cashflow}
               source="sat"
               onExplain={() => setWhy(true)}
-              footer={d?.leyenda ?? `Solo lectura del espejo de ${client} (portal_cfdi / resumen publicado). Sin pulls a SAT ni proveedores.`}
+              footer={d?.leyenda ?? `Cifras de ${client} en solo lectura. Sin consultas al SAT desde esta pantalla.`}
             />
           ) : (
             <GlassPanel>
               <p className="kw-title" style={{ fontSize: 16 }}>Flujo del periodo</p>
               <p className="kw-small" style={{ marginTop: 8 }}>
                 {loading
-                  ? "Cargando serie publicada…"
-                  : `Sin serie mensual publicada aún para ${client}. No se usan fixtures de demo.`}
+                  ? "Cargando serie…"
+                  : `Aún no hay serie mensual para ${client}. No se muestran datos de ejemplo.`}
               </p>
             </GlassPanel>
           )}
@@ -307,7 +307,7 @@ function MirrorResumen() {
               { label: "Ocultar rastro", text: true, onClick: () => setWhy(false) },
             ]}
           >
-            Estos números ya están en Kawiil OS porque central los publicó para {client}. La UI no va a buscarlos afuera.
+            Estas cifras son de {client}: el equipo de Kawiil ya las tiene listas aquí. En esta fase solo consultas.
           </KawiilitoGuide>
           {why ? (
             <LineagePanel title="¿De dónde sale «Ingresos del mes»?" subtitle={`${label} · ${client}`} steps={INCOME_LINEAGE} />

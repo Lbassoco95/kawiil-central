@@ -32,7 +32,7 @@ export default function Documentos() {
     <>
       <PageTitle title="Documentos SAT y declaraciones" subtitle="Constancia, opinión, declaraciones y otros documentos del servicio publicados por Kawiil."
         actions={<label className="text-sm">Año <select className="ml-1 rounded-md border px-2 py-1" value={String(year)} onChange={(e) => setYear(e.target.value === "todos" ? "todos" : Number(e.target.value))}><option value="todos">Todos</option>{years.map((y) => <option key={y} value={y}>{y}</option>)}</select></label>} />
-      <div className="mb-3"><Notice tone="info">Parte del espejo del servicio: la constancia y la opinión se obtienen en central (Moffin) y se publican firmadas a Kawiil OS. Aquí solo ve la copia autorizada, con fecha de obtención.</Notice></div>
+      <div className="mb-3"><Notice tone="info">Constancia, opinión y declaraciones de tu cuenta, listas para consultar, con fecha de obtención. Solo lectura.</Notice></div>
       {groups.length === 0 ? <Empty>Aún no hay documentos publicados.</Empty> : groups.map((g) => (
         <section key={g.t} className="mb-5" aria-labelledby={`g-${g.t}`}>
           <h2 id={`g-${g.t}`} className="mb-2 text-lg">{TYPES[g.t]}</h2>

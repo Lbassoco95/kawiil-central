@@ -107,11 +107,12 @@ function AppRoutes() {
         <Route path="egresos" element={<Egresos />} />
         <Route path="buzon" element={<Buzon />} />
         <Route path="mensajes" element={<Mensajes />} />
-        <Route path="facturacion" element={<Facturacion />} />
+        {/* Solicitudes demo solo en /diseno; en sesión real Facturación = listado CFDI */}
+        <Route path="facturacion" element={<Navigate to="/facturas" replace />} />
         <Route path="origen" element={<Origen />} />
         <Route path="hallazgos" element={<Hallazgos />} />
         <Route path="facturas" element={<Facturas />} />
-        <Route path="facturas/nueva" element={<Navigate to="/facturacion" replace />} />
+        <Route path="facturas/nueva" element={<Navigate to="/facturas" replace />} />
         <Route path="facturas/:id" element={<FacturaDetalle />} />
         <Route path="documentos" element={<Documentos />} />
         <Route path="alertas" element={<Alertas />} />

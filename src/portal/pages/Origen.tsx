@@ -7,11 +7,11 @@ import type { Source } from "../design/types";
 const COPY: Record<Source, { title: string; body: string }> = {
   sat: {
     title: "CFDI · SAT",
-    body: "Representación local en Kawiil OS: central obtiene los CFDI (SAT; SatGo/Moffin solo en central, con e.firma allí) y publica el espejo. OS no va a pedir ni traer nada del SAT.",
+    body: "Son las facturas (CFDI) de tu cuenta. El equipo de Kawiil las obtiene del SAT y las deja listas aquí para que las consultes. Desde esta pantalla no se descarga ni se consulta el SAT.",
   },
   buzon: {
     title: "Buzón tributario",
-    body: "Mensajes del SAT que central ya obtuvo y publicó al portal, con un resumen para el cliente.",
+    body: "Avisos del SAT relacionados con tu cuenta, ya listos en el portal con un resumen claro.",
   },
   estados: {
     title: "Estados financieros",
@@ -19,15 +19,15 @@ const COPY: Record<Source, { title: string; body: string }> = {
   },
   manual: {
     title: "Captura manual",
-    body: "Datos capturados a mano por tu equipo en kawiil-central y publicados al portal.",
+    body: "Datos que tu equipo de Kawiil registró a mano y dejó disponibles en tu cuenta.",
   },
   pendiente: {
-    title: "Pendiente de publicar",
-    body: "La fuente existe en el servicio, pero central aún no ha publicado la copia al portal. Preferimos dejar el bloque vacío a inventar cifras.",
+    title: "Pendiente",
+    body: "Aún no hay cifra lista para mostrar. Preferimos dejar el bloque vacío a inventar números.",
   },
   savio: {
     title: "Savio",
-    body: "Cobranza interna de Kawiil. No se muestra en Kawiil OS.",
+    body: "Cobranza interna de Kawiil. No se muestra en el portal del cliente.",
   },
 };
 
@@ -40,9 +40,9 @@ export default function Origen() {
       <div className="kw-grid kw-main-cols">
         <div className="kw-grid">
           <GlassPanel>
-            <h3 className="kw-title">Representación publicada en Kawiil OS</h3>
+            <h3 className="kw-title">De dónde salen tus cifras</h3>
             <p className="kw-small" style={{ marginTop: 8 }}>
-              kawiil-central es la fuente de verdad y publica hacia OS. En el portal la información ya está; la UI solo la muestra.
+              Aquí ves la información de tu cuenta que el equipo de Kawiil ya tiene lista. En esta fase solo consultas; no hay cargas ni consultas al SAT desde el portal.
             </p>
             <ul style={{ listStyle: "none", margin: "16px 0 0", padding: 0, display: "grid", gap: 12 }}>
               {(["sat", "buzon", "estados", "manual", "pendiente"] as Source[]).map((source) => (
@@ -63,7 +63,7 @@ export default function Origen() {
           title="Cada número tiene un chip"
           actions={[{ label: "Ver ejemplo de rastro", primary: true, onClick: () => setOpen("sat") }]}
         >
-          Toca «¿De dónde sale?» en cualquier cifra. Te muestro el rastro hasta la publicación en el portal (no un pull en vivo).
+          Toca «¿De dónde sale?» en cualquier cifra. Te muestro el rastro de esa factura o dato en tu cuenta.
         </KawiilitoGuide>
       </div>
 

@@ -41,12 +41,14 @@ export default function Layout() {
     }
   }, [collapsed]);
 
-  /** En /diseno no hay rutas de espejo autenticado ni cuenta. */
-  const designHidden = new Set(["/facturas", "/documentos", "/alertas", "/cuenta"]);
-  const navItems = ALL_NAV.filter((n) => !(isDesignPreview() && designHidden.has(n.to)));
-  const moreItems = [...PRIMARY_NAV.slice(4), ...MORE_NAV].filter(
-    (n) => !(isDesignPreview() && designHidden.has(n.to)),
-  );
+  /** En /diseno: sin documentos/alertas/cuenta; Facturación apunta a la vista demo de solicitudes. */
+  const designHidden = new Set(["/documentos", "/alertas", "/cuenta"]);
+  const resolveNav = (n: (typeof ALL_NAV)[number]) =>
+    isDesignPreview() && n.to === "/facturas" ? { ...n, to: "/facturacion" } : n;
+  const navItems = ALL_NAV.filter((n) => !(isDesignPreview() && designHidden.has(n.to))).map(resolveNav);
+  const moreItems = [...PRIMARY_NAV.slice(4), ...MORE_NAV]
+    .filter((n) => !(isDesignPreview() && designHidden.has(n.to)))
+    .map(resolveNav);
 
   return (
     <div className={`kw-shell${collapsed ? " kw-shell--side-collapsed" : ""}`}>
@@ -244,8 +246,8 @@ export default function Layout() {
 
       <DemoModal open={originOpen} title="¿De dónde sale «SAT al día»?" onClose={() => setOriginOpen(false)}>
         <p className="kw-small">
-          En el demo, el chip indica que las cifras del resumen son la representación local de CFDI que central ya publicó al portal (obtención SAT solo en central).
-          OS no consulta Moffin, SatGo ni el SAT: solo muestra el espejo. En producción el mismo chip abre el rastro de esa publicación.
+          El chip indica que las cifras del resumen vienen de los CFDI de tu cuenta que el equipo de Kawiil ya tiene listos aquí.
+          En esta fase solo consultas: no se descarga ni se consulta el SAT desde esta pantalla.
         </p>
         <button type="button" className="kw-btn kw-btn--primary" style={{ marginTop: 12 }} onClick={() => { setOriginOpen(false); navigate(href("/origen")); }}>
           Ir a Origen de datos

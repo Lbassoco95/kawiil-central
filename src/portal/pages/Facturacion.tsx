@@ -66,9 +66,8 @@ export default function Facturacion() {
           <GlassPanel>
             <h3 className="kw-title" style={{ fontSize: 16 }}>Cómo se lee el reporte</h3>
             <p className="kw-small" style={{ margin: "6px 0 0" }}>
-              En el demo, solicitudes y recibos viven en <strong>localStorage</strong> del navegador (carga del cliente).
-              Las facturas del espejo SAT siguen en «Facturas (espejo)» vía central. En producción, tickets/recibos
-              también se leerán desde central (estado del equipo) y esta lista será el espejo.
+              En esta vista de diseño, solicitudes y recibos viven en el navegador (demo). Con sesión real, Facturación
+              muestra los CFDI de tu cuenta en solo lectura; las solicitudes al equipo van por Mensajes.
             </p>
           </GlassPanel>
         </div>

@@ -26,7 +26,7 @@ export const INCOME_LINEAGE: LineageStep[] = [
   {
     state: "done",
     title: "Kawiil publicó tus CFDI en el portal",
-    detail: "Central obtuvo los comprobantes (SAT vía SatGo/Moffin, con e.firma solo en central) y los publicó firmados a Kawiil OS. Aquí ya están como representación local.",
+    detail: "El equipo de Kawiil obtuvo tus comprobantes del SAT y los dejó listos en tu cuenta para consultarlos aquí.",
     source: "sat",
     meta: "67 comprobantes en septiembre",
     uuids: ["3F9A71C2…B04E", "A1D4E8F0…77C2"],
@@ -40,7 +40,7 @@ export const INCOME_LINEAGE: LineageStep[] = [
   {
     state: "done",
     title: "Sumamos por mes",
-    detail: "Total en MXN por fecha de emisión, ya guardado en el espejo del portal.",
+    detail: "Total en MXN por fecha de emisión, ya disponible en Facturación.",
     meta: "$571,000",
   },
   {

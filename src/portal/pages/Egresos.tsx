@@ -63,7 +63,7 @@ function FixtureEgresos() {
       </div>
 
       <div className="kw-grid" style={{ marginBottom: 24 }}>
-        <CashflowChart data={CASHFLOW} title="Egresos por mes" series="egresos" footer="Solo CFDI recibidos vigentes. Fixture demo (equivalente al espejo publicado)." />
+        <CashflowChart data={CASHFLOW} title="Egresos por mes" series="egresos" footer="Solo CFDI recibidos vigentes. Datos de ejemplo (vista de diseño)." />
       </div>
 
       <div className="kw-grid kw-two" style={{ marginBottom: 24 }}>
@@ -113,7 +113,7 @@ function MirrorEgresos() {
   const [rank, setRank] = useState<ReturnType<typeof rankParties>>([]);
   const [pendingAmount, setPendingAmount] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);
-  const [sourceNote, setSourceNote] = useState("espejo local");
+  const [sourceNote, setSourceNote] = useState("facturas de tu cuenta");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
@@ -137,44 +137,44 @@ function MirrorEgresos() {
         setRows([]);
         setCount(0);
         setRank([]);
-        setErr("No se pudo leer el espejo de facturas recibidas.");
+        setErr("No se pudieron cargar las facturas recibidas de tu cuenta.");
       })
       .finally(() => setLoading(false));
   }, [active]);
 
   const zeroMeta = count > 0 && total === 0;
-  const client = active?.client_name ?? "Portal";
+  const client = active?.client_name ?? "Tu cuenta";
 
   return (
     <>
       <PageHead
         title="Egresos"
-        subtitle={`${client} · CFDI recibidos publicados · ${sourceNote}`}
+        subtitle={`${client} · CFDI recibidos · ${sourceNote}`}
       />
       {err ? <p className="kw-small" style={{ color: "var(--caution-text)", marginBottom: 16 }}>{err}</p> : null}
-      {loading ? <p className="kw-small" style={{ marginBottom: 16 }}>Cargando representación publicada…</p> : null}
+      {loading ? <p className="kw-small" style={{ marginBottom: 16 }}>Cargando facturas…</p> : null}
       {zeroMeta ? (
         <GlassPanel style={{ marginBottom: 16 }}>
           <p className="kw-small" style={{ margin: 0 }}>
-            Hay {count} CFDI recibidos de {client} en el espejo; los montos vienen en $0 (metadatos SatGo sin XML completo).
-            No son fixtures de demo.
+            Hay {count} facturas recibidas de {client}; los montos aparecen en $0 porque aún solo hay metadatos (sin XML completo).
+            Son CFDI reales de tu cuenta, no datos de ejemplo.
           </p>
         </GlassPanel>
       ) : null}
       <div className="kw-grid kw-kpis" style={{ marginBottom: 24 }}>
-        <KpiTile label="Egresos publicados" value={total} tone="egreso" note={`${count} CFDI · ${sourceNote}`} source="sat" />
+        <KpiTile label="Egresos del periodo" value={total} tone="egreso" note={`${count} CFDI · ${sourceNote}`} source="sat" />
         <KpiTile label="Por clasificar" value={pendingAmount} tone="egreso" source="pendiente" note={`${pendingCount} facturas sin categoría confirmada`} />
       </div>
       <div className="kw-grid kw-two" style={{ marginBottom: 24 }}>
-        <RankedList title="Proveedores (espejo local)" items={rank} tone="egreso" />
+        <RankedList title="Proveedores principales" items={rank} tone="egreso" />
         <GlassPanel>
-          <p className="kw-title" style={{ fontSize: 16 }}>Solo representación</p>
+          <p className="kw-title" style={{ fontSize: 16 }}>Solo consulta</p>
           <p className="kw-small" style={{ marginTop: 8 }}>
-            Lectura de `facturas.listar` sobre tablas portal de {client}. Central publica con `invoice.publish`; OS no consulta el SAT.
+            Facturas recibidas de {client}. En esta fase no cargas XML desde aquí; si necesitas algo, escribe por Mensajes.
           </p>
         </GlassPanel>
       </div>
-      <InvoiceTable title="Facturas recibidas publicadas" rows={rows} partyLabel="Proveedor" />
+      <InvoiceTable title="Facturas recibidas" rows={rows} partyLabel="Proveedor" />
     </>
   );
 }

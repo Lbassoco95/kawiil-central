@@ -1,7 +1,6 @@
 import {
   Bell,
   FileStack,
-  FileText,
   Home,
   Inbox,
   Lightbulb,
@@ -32,11 +31,14 @@ export const PRIMARY_NAV: NavItem[] = [
   { to: "/mensajes", label: "Mensajes", short: "Msgs", Icon: MessageSquare, primary: true },
 ];
 
+/**
+ * Una sola entrada de Facturación (CFDI de la cuenta).
+ * En `/diseno` Layout remapea `/facturas` → `/facturacion` (vista de solicitudes demo).
+ */
 export const MORE_NAV: NavItem[] = [
-  { to: "/facturacion", label: "Facturación", Icon: Receipt, more: true },
+  { to: "/facturas", label: "Facturación", Icon: Receipt, more: true },
   { to: "/origen", label: "Origen de datos", Icon: Waypoints, more: true },
   { to: "/hallazgos", label: "Seguimientos", Icon: Lightbulb, more: true },
-  { to: "/facturas", label: "Facturas (espejo)", Icon: FileText, more: true },
   { to: "/documentos", label: "Documentos", Icon: FileStack, more: true },
   { to: "/alertas", label: "Alertas", Icon: Bell, more: true },
   { to: "/cuenta", label: "Cuenta", Icon: MoreHorizontal, more: true },

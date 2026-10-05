@@ -37,13 +37,19 @@ export default function Facturas() {
   return (
     <>
       <PageTitle
-        title="Facturas"
-        subtitle="CFDI emitidos y recibidos que Kawiil ya publicó para su cuenta. En esta fase usted no carga XML ni crea facturas."
-        breadcrumb={["Kawiil", "Portal", "Facturas"]}
+        title="Facturación"
+        subtitle={
+          active
+            ? `${active.client_name} · CFDI emitidos y recibidos de tu cuenta. En esta fase solo consultas; no cargas XML ni creas facturas.`
+            : "CFDI emitidos y recibidos de tu cuenta. En esta fase solo consultas; no cargas XML ni creas facturas."
+        }
+        breadcrumb={["Kawiil", "Portal", "Facturación"]}
         icon={<FileText />}
       />
       <div className="mb-3">
-        <Notice tone="info">Parte del espejo del servicio (solo lectura). La descarga y el procesamiento viven en central; aquí consulta el detalle ya publicado.</Notice>
+        <Notice tone="info">
+          Solo lectura: aquí ves las facturas de tu cuenta que el equipo de Kawiil ya tiene listas. Si necesitas emitir o corregir algo, escríbenos por Mensajes.
+        </Notice>
       </div>
       <div role="tablist" aria-label="Tipo de factura" className="portal-pill-group mb-3">
         {(["recibida", "emitida"] as const).map((d) => (

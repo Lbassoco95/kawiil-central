@@ -62,9 +62,9 @@ export function sumTotals(rows: MirrorCfdi[]): number {
 
 export function mirrorSourceNote(rows: MirrorCfdi[]): string {
   const sources = [...new Set(rows.map((r) => r.source).filter(Boolean))] as string[];
-  if (sources.includes("satgo_facfiel")) return "publicado SatGo (satgo_facfiel)";
-  if (sources.length) return `origen ${sources.join(", ")}`;
-  return "espejo local portal_cfdi";
+  if (sources.includes("satgo_facfiel")) return "CFDI de tu cuenta (SAT)";
+  if (sources.length) return "CFDI de tu cuenta";
+  return "facturas de tu cuenta";
 }
 
 export function rankParties(rows: MirrorCfdi[], direction: "emitida" | "recibida", limit = 4) {

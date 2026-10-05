@@ -78,7 +78,7 @@ export default function Inicio() {
     <>
       <PageTitle
         title="Resumen del servicio"
-        subtitle={active ? `${active.client_name} · Espejo del servicio Kawiil` : "Espejo del servicio Kawiil"}
+        subtitle={active ? `${active.client_name} · Resumen de tu cuenta` : "Resumen de tu cuenta"}
         breadcrumb={["Kawiil", "Portal", "Inicio"]}
         icon={<LayoutDashboard />}
         actions={
@@ -103,7 +103,7 @@ export default function Inicio() {
       />
       <div className="mt-3 space-y-3">
         <Notice tone="info">
-          Solo lectura: aquí ve lo que el equipo de Kawiil ya trabaja y publica desde central para su cuenta.
+          Solo lectura: aquí ves lo que el equipo de Kawiil ya tiene listo para tu cuenta.
           En esta fase el bloque fiscal es el primero disponible; RH y emisión llegan después.
         </Notice>
         <ManagementLegend />

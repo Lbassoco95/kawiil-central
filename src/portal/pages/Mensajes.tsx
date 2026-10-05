@@ -2,9 +2,11 @@ import { useNavigate } from "react-router-dom";
 import { GlassPanel, KawiilitoGuide, PageHead, TeamChat, TeamRoster } from "../design/primitives";
 import { CHAT, TEAM } from "../lib/sampleData";
 import { portalPath } from "../lib/basePath";
+import { isDesignPreview } from "../lib/designPreview";
 
 export default function Mensajes() {
   const navigate = useNavigate();
+  const facturacionTo = isDesignPreview() ? "/facturacion" : "/facturas";
   return (
     <>
       <PageHead title="Mensajes" subtitle="Tu equipo contable y legal" />
@@ -18,11 +20,11 @@ export default function Mensajes() {
               {
                 label: "Ir a Facturación",
                 primary: true,
-                onClick: () => navigate(portalPath("/facturacion")),
+                onClick: () => navigate(portalPath(facturacionTo)),
               },
             ]}
           >
-            Escribe cuando tengas una duda contable o legal. Para pedir una factura, ve a Facturación. No hay asistente de IA.
+            Escribe cuando tengas una duda contable o legal. Para ver o pedir facturas, ve a Facturación. No hay asistente de IA.
           </KawiilitoGuide>
           <GlassPanel>
             <h3 className="kw-title">Quién te atiende</h3>

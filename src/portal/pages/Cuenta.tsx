@@ -108,9 +108,9 @@ export default function Cuenta() {
       {isAdmin && (
         <section className="mb-4 rounded-xl border bg-card p-4" aria-labelledby="csd-t">
           <h2 id="csd-t" className="text-lg">Certificado de sello digital (CSD)</h2>
-          <Notice tone="info" title="No disponible en fase espejo">
-            En esta fase Kawiil OS solo muestra la representación publicada por central. No se carga CSD, e.firma ni CIEC en el portal.
-            La emisión y el sellado no forman parte del espejo actual.
+          <Notice tone="info" title="No disponible en esta fase">
+            En esta fase solo consultas la información de tu cuenta. No se carga CSD, e.firma ni CIEC en el portal.
+            La emisión y el sellado las maneja el equipo de Kawiil.
           </Notice>
         </section>
       )}
