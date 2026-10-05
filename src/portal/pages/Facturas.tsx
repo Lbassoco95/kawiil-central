@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { usePortal } from "../lib/session";
 import { callApi, openFile } from "../lib/api";
+import { clientDetailQualityLabel, clientFlagReason } from "../lib/clientFlags";
 import { fmtDate, fmtMoney } from "../lib/format";
 import { Empty, Notice, PageTitle, StatusPill } from "../components/ui";
 
@@ -116,7 +117,7 @@ export default function Facturas() {
                       </>
                     )}
                     {" · "}
-                    {c.detail_status === "complete" ? "detalle completo" : "solo metadatos"}
+                    {clientDetailQualityLabel(undefined, c.detail_status)}
                     {" · "}
                     Categoría: {c.category_status === "confirmada" ? c.category_name : "por confirmar"}
                   </p>
@@ -124,6 +125,13 @@ export default function Facturas() {
                 <div className="text-right">
                   <p className="kw-mono text-lg font-semibold">{fmtMoney(c.total)}</p>
                   <StatusPill tone={SAT[c.sat_status]?.tone ?? "wait"}>{SAT[c.sat_status]?.label ?? c.sat_status}</StatusPill>
+                  {c.detail_status !== "complete" && (
+                    <span className="ml-1">
+                      <StatusPill tone="warn">
+                        {c.is_test ? "Solo metadatos (DEMO)" : "Detalle pendiente"}
+                      </StatusPill>
+                    </span>
+                  )}
                   {c.is_test && (
                     <span className="ml-1">
                       <StatusPill tone="warn">DEMO — sin validez fiscal</StatusPill>
@@ -133,7 +141,7 @@ export default function Facturas() {
               </div>
               {c.flags?.map((f) => (
                 <p key={f.code} className="mt-1 text-xs">
-                  <StatusPill tone="warn">Atención</StatusPill> {f.reason}
+                  <StatusPill tone="warn">Atención</StatusPill> {clientFlagReason(f)}
                 </p>
               ))}
               <div className="mt-2 flex flex-wrap gap-2">

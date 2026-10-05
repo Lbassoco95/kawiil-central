@@ -136,7 +136,7 @@ INSERT INTO public.portal_cfdi (
   'XAXX010101000', 'Bassoco, Vega, Salas, Morales, Servicios Empresariales S.C.',
   'I', NULL, 'PUE', 'MXN',
   2000, 0, 0, 0, 2320,
-  'unknown', true, '[{"code":"metadata_only","reason":"Solo metadatos en el espejo (DEMO)"}]'::jsonb,
+  'unknown', true, '[{"code":"metadata_only","reason":"Solo metadatos (DEMO)"}]'::jsonb,
   NULL, 'por_confirmar'
 ),
 (

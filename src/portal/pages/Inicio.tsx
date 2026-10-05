@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { LayoutDashboard } from "lucide-react";
 import { usePortal } from "../lib/session";
 import { callApi } from "../lib/api";
+import { clientFlagReason } from "../lib/clientFlags";
 import { fmtDate, fmtMoney, MONTHS, monthLabel } from "../lib/format";
 import { Empty, ManagementLegend, Notice, PageTitle, StatusPill } from "../components/ui";
 
@@ -236,7 +237,7 @@ export default function Inicio() {
               <ul className="space-y-2">{d.marcas.map((m) => (
                 <li key={m.cfdi_id} className="rounded-md border p-2 text-sm">
                   <div className="flex justify-between"><span>{m.emisor ?? "Proveedor"} · {fmtDate(m.fecha)}</span><span className="kw-mono">{fmtMoney(m.total)}</span></div>
-                  {m.flags.map((f) => <p key={f.code} className="mt-1"><StatusPill tone="warn">Atención</StatusPill> {f.reason}</p>)}
+                  {m.flags.map((f) => <p key={f.code} className="mt-1"><StatusPill tone="warn">Atención</StatusPill> {clientFlagReason(f)}</p>)}
                 </li>))}
               </ul>
             ) : <Empty>Sin marcas este mes.</Empty>}

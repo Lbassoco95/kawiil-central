@@ -11,6 +11,7 @@ import {
 import type { PeriodId } from "../design/types";
 import { CASHFLOW, INCOME_LINEAGE, SAMPLE_CLIENT } from "../lib/sampleData";
 import { clampPeriodIndex, notifyPeriod, periodLabel } from "../lib/periodDemo";
+import { stripEspejoJargon } from "../lib/clientFlags";
 import { shouldUseDemoFixtures } from "../lib/dataMode";
 import { usePortal } from "../lib/session";
 import { callApi } from "../lib/api";
@@ -272,7 +273,10 @@ function MirrorResumen() {
               data={cashflow}
               source="sat"
               onExplain={() => setWhy(true)}
-              footer={d?.leyenda ?? `Cifras de ${client} en solo lectura. Sin consultas al SAT desde esta pantalla.`}
+              footer={
+                (d?.leyenda ? stripEspejoJargon(d.leyenda) : "")
+                || `Cifras de ${client} en solo lectura. Sin consultas al SAT desde esta pantalla.`
+              }
             />
           ) : (
             <GlassPanel>

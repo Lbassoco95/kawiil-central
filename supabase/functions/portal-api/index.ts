@@ -806,7 +806,7 @@ const tablero: Handler = async (ctx) => {
     marcas,
     por_confirmar: inMonth.filter((r) => r.category_status !== "confirmada").length,
     espejo: true,
-    leyenda: "Estimación a partir del espejo de facturas publicadas por Kawiil. No es una declaración presentada.",
+    leyenda: "Estimación a partir de las facturas de tu cuenta. No es una declaración presentada.",
   };
 };
 

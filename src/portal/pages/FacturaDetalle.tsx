@@ -5,6 +5,7 @@ import { usePortal } from "../lib/session";
 import { callApi, openFile, PortalApiError } from "../lib/api";
 import { fmtDate, fmtMoney } from "../lib/format";
 import { Empty, Notice, PageTitle, StatusPill } from "../components/ui";
+import { clientDetailQualityLabel, clientFlagReason } from "../lib/clientFlags";
 import { DEMO_FISCAL_MARK } from "../lib/demo";
 
 interface Detalle {
@@ -56,7 +57,10 @@ export default function FacturaDetalle() {
               </div>
               <div className="text-right">
                 <p className="kw-mono text-2xl">{fmtMoney(f.total)}</p>
-                <StatusPill tone={f.detail_status === "complete" ? "ok" : "warn"}>{f.calidad === "completa" ? "Detalle completo" : "Solo metadatos"}</StatusPill>
+                <StatusPill tone={f.detail_status === "complete" ? "ok" : "warn"}>
+                  {clientDetailQualityLabel(d?.calidad, f.detail_status)}
+                  {f.is_test && f.detail_status !== "complete" ? " (DEMO)" : ""}
+                </StatusPill>
                 {f.is_test && <div className="mt-1"><StatusPill tone="warn">{DEMO_FISCAL_MARK}</StatusPill></div>}
               </div>
             </div>
@@ -68,7 +72,7 @@ export default function FacturaDetalle() {
               <div><dt className="text-muted-foreground">Estatus SAT</dt><dd>{f.sat_status}</dd></div>
               <div><dt className="text-muted-foreground">Categoría</dt><dd>{f.category_status === "confirmada" ? f.category_name : "por confirmar"}</dd></div>
             </dl>
-            {f.flags?.map((flag) => <p key={flag.code} className="mt-2 text-xs"><StatusPill tone="warn">Atención</StatusPill> {flag.reason}</p>)}
+            {f.flags?.map((flag) => <p key={flag.code} className="mt-2 text-xs"><StatusPill tone="warn">Atención</StatusPill> {clientFlagReason(flag)}</p>)}
             <div className="mt-3 flex gap-2">
               {f.xml_path && <Button size="sm" variant="outline" onClick={() => openFile("cfdi_xml", f.id)}>XML</Button>}
               {f.pdf_path && <Button size="sm" variant="outline" onClick={() => openFile("cfdi_pdf", f.id)}>PDF</Button>}
