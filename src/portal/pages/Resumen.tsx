@@ -152,17 +152,20 @@ function MirrorResumen() {
   const [ym, setYm] = useState({ y: now.getFullYear(), m: now.getMonth() + 1 });
   const [d, setD] = useState<Dash | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [why, setWhy] = useState(true);
 
   useEffect(() => {
     if (!active) return;
     setErr(null);
+    setLoading(true);
     callApi<Dash>("tablero.consultar", { client_id: active.client_id, year: ym.y, month: ym.m })
       .then(setD)
       .catch(() => {
         setErr("No se pudo leer el resumen publicado en el portal.");
         setD(null);
-      });
+      })
+      .finally(() => setLoading(false));
   }, [active, ym]);
 
   const months = Array.from({ length: 12 }, (_, i) => {
@@ -170,6 +173,7 @@ function MirrorResumen() {
     return { y: dt.getFullYear(), m: dt.getMonth() + 1 };
   });
 
+  const client = active?.client_name ?? "Espejo del servicio";
   const label = `${MONTHS[ym.m - 1]} ${ym.y}`;
   const ingreso = d?.ingreso_total ?? 0;
   const gasto = d?.gasto_total ?? 0;
@@ -184,12 +188,13 @@ function MirrorResumen() {
     emitidas: 0,
     recibidas: 0,
   }));
+  const zeroMeta = !!d && ingreso === 0 && gasto === 0;
 
   return (
     <>
       <PageHead
         title="Resumen"
-        subtitle={`${label} · ${active?.client_name ?? "Espejo del servicio"}`}
+        subtitle={`${label} · ${client} · representación publicada`}
         actions={
           <label className="kw-small">
             <span className="mr-2">Mes</span>
@@ -212,6 +217,15 @@ function MirrorResumen() {
       />
 
       {err ? <p className="kw-small" style={{ color: "var(--caution-text)", marginBottom: 16 }}>{err}</p> : null}
+      {loading ? <p className="kw-small" style={{ marginBottom: 16 }}>Cargando tablero publicado…</p> : null}
+      {zeroMeta ? (
+        <GlassPanel style={{ marginBottom: 16 }}>
+          <p className="kw-small" style={{ margin: 0 }}>
+            Totales en $0 para {client} en {label}: el espejo ya tiene CFDI publicados (p. ej. SatGo metadatos).
+            No se muestran fixtures sintéticos (Costa Maya / Aldea del Sol).
+          </p>
+        </GlassPanel>
+      ) : null}
 
       <div className="kw-grid kw-kpis" style={{ marginBottom: 24 }}>
         <KpiTile
@@ -221,7 +235,7 @@ function MirrorResumen() {
           tone="ingreso"
           spark={sparkIn.length ? sparkIn : undefined}
           source="sat"
-          note="Representación publicada en OS"
+          note={`${client} · tablero.consultar`}
           onExplain={() => setWhy(true)}
         />
         <KpiTile
@@ -231,7 +245,7 @@ function MirrorResumen() {
           tone="egreso"
           spark={sparkOut.length ? sparkOut : undefined}
           source="sat"
-          note="Representación publicada en OS"
+          note={`${client} · tablero.consultar`}
           onExplain={() => setWhy(true)}
         />
         <KpiTile
@@ -253,12 +267,23 @@ function MirrorResumen() {
 
       <div className="kw-grid kw-main-cols">
         <div className="kw-grid">
-          <CashflowChart
-            data={cashflow.length ? cashflow : CASHFLOW}
-            source="sat"
-            onExplain={() => setWhy(true)}
-            footer={d?.leyenda ?? "Solo lectura del espejo local (portal_cfdi / resumen publicado). Sin pulls a SAT ni proveedores."}
-          />
+          {cashflow.length ? (
+            <CashflowChart
+              data={cashflow}
+              source="sat"
+              onExplain={() => setWhy(true)}
+              footer={d?.leyenda ?? `Solo lectura del espejo de ${client} (portal_cfdi / resumen publicado). Sin pulls a SAT ni proveedores.`}
+            />
+          ) : (
+            <GlassPanel>
+              <p className="kw-title" style={{ fontSize: 16 }}>Flujo del periodo</p>
+              <p className="kw-small" style={{ marginTop: 8 }}>
+                {loading
+                  ? "Cargando serie publicada…"
+                  : `Sin serie mensual publicada aún para ${client}. No se usan fixtures de demo.`}
+              </p>
+            </GlassPanel>
+          )}
           <GlassPanel tone="strong">
             <div className="kw-eeff-lock">
               <div>
@@ -276,16 +301,16 @@ function MirrorResumen() {
         <div className="kw-grid">
           <KawiilitoGuide
             pose="cifras"
-            title={`${label} · representación local`}
+            title={`${label} · ${client}`}
             actions={[
               { label: "¿De dónde sale?", primary: true, onClick: () => setWhy(true) },
               { label: "Ocultar rastro", text: true, onClick: () => setWhy(false) },
             ]}
           >
-            Estos números ya están en Kawiil OS porque central los publicó. La UI no va a buscarlos afuera.
+            Estos números ya están en Kawiil OS porque central los publicó para {client}. La UI no va a buscarlos afuera.
           </KawiilitoGuide>
           {why ? (
-            <LineagePanel title="¿De dónde sale «Ingresos del mes»?" subtitle={label} steps={INCOME_LINEAGE} />
+            <LineagePanel title="¿De dónde sale «Ingresos del mes»?" subtitle={`${label} · ${client}`} steps={INCOME_LINEAGE} />
           ) : null}
         </div>
       </div>

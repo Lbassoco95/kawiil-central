@@ -14,7 +14,7 @@ Guion: [DEMO-GUION.md](DEMO-GUION.md). Arranque Polo: [ARRANQUE-POLO.md](ARRANQU
 |---|---|---|
 | **D1** | Demo en proyecto/rama propio, sin credenciales reales | Proyecto **`kawiil-os-demo`** + build con `VITE_PORTAL_*` distintos de central. Turnstile de prueba. |
 | **D2** | Datos sintéticos del servicio (bloque fiscal primero) | Semilla `kawiil-os/demo/seed.sql` + fixture: facturas, IVA/retenciones, constancia/opinión, declaración, notificación SAT, alertas EFOS/cancelación. |
-| **D3** | Marca «DEMO — sin validez fiscal» en datos fiscales | CFDI `is_test=true`; UI + banner `VITE_PORTAL_DEMO_MODE=true`. |
+| **D3** | Marca «DEMO — sin validez fiscal» en datos fiscales | CFDI `is_test=true`; UI + banner `VITE_PORTAL_DEMO_MODE=true` (solo marca/banner; **no** fuerza fixtures). Fixtures sintéticos solo en `/diseno`. Sesión autenticada lee espejo (`tablero.consultar` / `facturas.listar`). |
 | **D4** | Reinicio exacto documentado y automatizable | `npm run portal:demo-reset` / `kawiil-os:bootstrap-demo`. Prueba: `npm run test:kawiil-os-demo`. |
 | **D5** | Guion sin RH ni emisión | [DEMO-GUION.md](DEMO-GUION.md). |
 | **D6** | Aislamiento / cerco | Árbol `kawiil-os/` **sin** ref/JWT de central (denylist de `test:kawiil-os-db` intacta). Bootstrap y reset se niegan si el ref es central o el destino no es `kawiil-os-demo`. |

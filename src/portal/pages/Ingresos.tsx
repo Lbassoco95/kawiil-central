@@ -22,7 +22,7 @@ import { clampPeriodIndex, notifyPeriod, periodLabel } from "../lib/periodDemo";
 import { pushDemoToast } from "../lib/demoStore";
 import { shouldUseDemoFixtures } from "../lib/dataMode";
 import { usePortal } from "../lib/session";
-import { listMirrorInvoices, rankParties, sumTotals, toInvoiceRows } from "../lib/mirrorInvoices";
+import { listMirrorInvoices, mirrorSourceNote, rankParties, sumTotals, toInvoiceRows } from "../lib/mirrorInvoices";
 
 function FixtureIngresos() {
   const [period, setPeriod] = useState<PeriodId>("mes");
@@ -112,38 +112,68 @@ function FixtureIngresos() {
 
 function MirrorIngresos() {
   const { active } = usePortal();
-  const [rows, setRows] = useState(INCOME_INVOICES);
+  const [rows, setRows] = useState<ReturnType<typeof toInvoiceRows>>([]);
+  const [count, setCount] = useState(0);
   const [total, setTotal] = useState(0);
-  const [rank, setRank] = useState(TOP_CLIENTS);
+  const [rank, setRank] = useState<ReturnType<typeof rankParties>>([]);
+  const [sourceNote, setSourceNote] = useState("espejo local");
+  const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     if (!active) return;
+    setLoading(true);
     listMirrorInvoices(active.client_id, "emitida")
       .then((list) => {
         const vigentes = list.filter((r) => r.sat_status !== "cancelado");
         setRows(toInvoiceRows(vigentes, "emitida"));
+        setCount(vigentes.length);
         setTotal(sumTotals(vigentes));
         setRank(rankParties(vigentes, "emitida"));
+        setSourceNote(mirrorSourceNote(vigentes));
         setErr(null);
       })
-      .catch(() => setErr("No se pudo leer el espejo de facturas emitidas."));
+      .catch(() => {
+        setRows([]);
+        setCount(0);
+        setRank([]);
+        setErr("No se pudo leer el espejo de facturas emitidas.");
+      })
+      .finally(() => setLoading(false));
   }, [active]);
+
+  const zeroMeta = count > 0 && total === 0;
+  const client = active?.client_name ?? "Portal";
 
   return (
     <>
       <PageHead
         title="Ingresos"
-        subtitle={`${active?.client_name ?? "Portal"} · CFDI emitidos ya publicados`}
+        subtitle={`${client} · CFDI emitidos publicados · ${sourceNote}`}
       />
       {err ? <p className="kw-small" style={{ color: "var(--caution-text)", marginBottom: 16 }}>{err}</p> : null}
+      {loading ? <p className="kw-small" style={{ marginBottom: 16 }}>Cargando representación publicada…</p> : null}
+      {zeroMeta ? (
+        <GlassPanel style={{ marginBottom: 16 }}>
+          <p className="kw-small" style={{ margin: 0 }}>
+            Hay {count} CFDI emitidos de {client} en el espejo; los montos vienen en $0 (metadatos SatGo sin XML completo).
+            No son fixtures de demo.
+          </p>
+        </GlassPanel>
+      ) : null}
       <div className="kw-grid kw-kpis" style={{ marginBottom: 24 }}>
-        <KpiTile label="Ingresos publicados" value={total} tone="ingreso" note={`${rows.length} CFDI en el espejo`} source="sat" />
+        <KpiTile
+          label="Ingresos publicados"
+          value={total}
+          tone="ingreso"
+          note={`${count} CFDI · ${sourceNote}`}
+          source="sat"
+        />
         <KpiTile
           label="Cliente principal"
           value={rank[0]?.amount ?? 0}
           tone="ingreso"
-          note={rank[0] ? `${rank[0].name} · ${rank[0].share}%` : "Sin datos publicados aún"}
+          note={rank[0] ? `${rank[0].name} · ${rank[0].share}%` : loading ? "Cargando…" : "Sin datos publicados aún"}
           source="sat"
         />
       </div>
@@ -152,7 +182,7 @@ function MirrorIngresos() {
         <GlassPanel>
           <p className="kw-title" style={{ fontSize: 16 }}>Solo representación</p>
           <p className="kw-small" style={{ marginTop: 8 }}>
-            Lectura de `facturas.listar` sobre tablas portal. Central publica con `invoice.publish`; OS no consulta el SAT.
+            Lectura de `facturas.listar` sobre tablas portal de {client}. Central publica con `invoice.publish`; OS no consulta el SAT.
           </p>
         </GlassPanel>
       </div>

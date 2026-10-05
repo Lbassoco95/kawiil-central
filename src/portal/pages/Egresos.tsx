@@ -22,7 +22,7 @@ import { clampPeriodIndex, notifyPeriod, periodLabel } from "../lib/periodDemo";
 import { pushDemoToast } from "../lib/demoStore";
 import { shouldUseDemoFixtures } from "../lib/dataMode";
 import { usePortal } from "../lib/session";
-import { listMirrorInvoices, rankParties, sumTotals, toInvoiceRows } from "../lib/mirrorInvoices";
+import { listMirrorInvoices, mirrorSourceNote, rankParties, sumTotals, toInvoiceRows } from "../lib/mirrorInvoices";
 
 function FixtureEgresos() {
   const [period, setPeriod] = useState<PeriodId>("mes");
@@ -107,38 +107,62 @@ function FixtureEgresos() {
 
 function MirrorEgresos() {
   const { active } = usePortal();
-  const [rows, setRows] = useState(EXPENSE_INVOICES);
+  const [rows, setRows] = useState<ReturnType<typeof toInvoiceRows>>([]);
+  const [count, setCount] = useState(0);
   const [total, setTotal] = useState(0);
-  const [rank, setRank] = useState(TOP_SUPPLIERS);
+  const [rank, setRank] = useState<ReturnType<typeof rankParties>>([]);
   const [pendingAmount, setPendingAmount] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);
+  const [sourceNote, setSourceNote] = useState("espejo local");
+  const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     if (!active) return;
+    setLoading(true);
     listMirrorInvoices(active.client_id, "recibida")
       .then((list) => {
         const vigentes = list.filter((r) => r.sat_status !== "cancelado");
         const pending = vigentes.filter((r) => r.category_status !== "confirmada");
         setRows(toInvoiceRows(vigentes, "recibida"));
+        setCount(vigentes.length);
         setTotal(sumTotals(vigentes));
         setRank(rankParties(vigentes, "recibida"));
         setPendingAmount(sumTotals(pending));
         setPendingCount(pending.length);
+        setSourceNote(mirrorSourceNote(vigentes));
         setErr(null);
       })
-      .catch(() => setErr("No se pudo leer el espejo de facturas recibidas."));
+      .catch(() => {
+        setRows([]);
+        setCount(0);
+        setRank([]);
+        setErr("No se pudo leer el espejo de facturas recibidas.");
+      })
+      .finally(() => setLoading(false));
   }, [active]);
+
+  const zeroMeta = count > 0 && total === 0;
+  const client = active?.client_name ?? "Portal";
 
   return (
     <>
       <PageHead
         title="Egresos"
-        subtitle={`${active?.client_name ?? "Portal"} · CFDI recibidos ya publicados`}
+        subtitle={`${client} · CFDI recibidos publicados · ${sourceNote}`}
       />
       {err ? <p className="kw-small" style={{ color: "var(--caution-text)", marginBottom: 16 }}>{err}</p> : null}
+      {loading ? <p className="kw-small" style={{ marginBottom: 16 }}>Cargando representación publicada…</p> : null}
+      {zeroMeta ? (
+        <GlassPanel style={{ marginBottom: 16 }}>
+          <p className="kw-small" style={{ margin: 0 }}>
+            Hay {count} CFDI recibidos de {client} en el espejo; los montos vienen en $0 (metadatos SatGo sin XML completo).
+            No son fixtures de demo.
+          </p>
+        </GlassPanel>
+      ) : null}
       <div className="kw-grid kw-kpis" style={{ marginBottom: 24 }}>
-        <KpiTile label="Egresos publicados" value={total} tone="egreso" note={`${rows.length} CFDI en el espejo`} source="sat" />
+        <KpiTile label="Egresos publicados" value={total} tone="egreso" note={`${count} CFDI · ${sourceNote}`} source="sat" />
         <KpiTile label="Por clasificar" value={pendingAmount} tone="egreso" source="pendiente" note={`${pendingCount} facturas sin categoría confirmada`} />
       </div>
       <div className="kw-grid kw-two" style={{ marginBottom: 24 }}>
@@ -146,7 +170,7 @@ function MirrorEgresos() {
         <GlassPanel>
           <p className="kw-title" style={{ fontSize: 16 }}>Solo representación</p>
           <p className="kw-small" style={{ marginTop: 8 }}>
-            Lectura de `facturas.listar` sobre tablas portal. Central publica con `invoice.publish`; OS no consulta el SAT.
+            Lectura de `facturas.listar` sobre tablas portal de {client}. Central publica con `invoice.publish`; OS no consulta el SAT.
           </p>
         </GlassPanel>
       </div>
