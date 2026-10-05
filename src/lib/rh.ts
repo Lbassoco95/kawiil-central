@@ -249,7 +249,8 @@ export function getCurrentPosition(): Promise<GeoFix> {
               : "No se pudo obtener tu ubicación.";
         reject(new Error(msg));
       },
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 },
+      // Timeout corto: la ubicación no debe bloquear el check-in varios segundos.
+  { enableHighAccuracy: false, timeout: 5000, maximumAge: 60_000 },
     );
   });
 }
@@ -337,6 +338,54 @@ export interface JornadaSummary {
   nextBreakAt: number | null;
   /** Marca temporal del inicio de la pausa actual (comida o descanso), si aplica. */
   pauseStartedAt: number | null;
+}
+
+/**
+ * Si hay sesión abierta pero aún no llegan / faltan eventos, deriva un
+ * resumen "working"/"done" desde rh_attendance para no mostrar "Sin iniciar"
+ * (que invita a re-click y produce el efecto de iniciar → revertir).
+ */
+export function summarizeJornadaWithSession(
+  session: RhAttendance | null | undefined,
+  events: RhAttendanceEvent[],
+  now = Date.now(),
+): JornadaSummary {
+  const sessionEvents = session
+    ? events.filter((e) => e.attendance_id === session.id)
+    : [];
+  const summary = summarizeJornada(sessionEvents, now);
+  if (summary.state !== "none") return summary;
+  if (!session) return summary;
+
+  const checkInMs = new Date(session.check_in_at).getTime();
+  if (Number.isNaN(checkInMs)) return summary;
+
+  if (!session.check_out_at) {
+    const nextBreakAt = checkInMs + FIRST_BREAK_AFTER_HOURS * 3600_000;
+    const canBreak = now >= nextBreakAt;
+    return {
+      state: "working",
+      workedMs: Math.max(0, now - checkInMs),
+      lunchMs: 0,
+      breakMs: 0,
+      breaksTaken: 0,
+      canBreak,
+      nextBreakAt: canBreak ? null : nextBreakAt,
+      pauseStartedAt: null,
+    };
+  }
+
+  const checkOutMs = new Date(session.check_out_at).getTime();
+  return {
+    state: "done",
+    workedMs: Math.max(0, (Number.isNaN(checkOutMs) ? now : checkOutMs) - checkInMs),
+    lunchMs: 0,
+    breakMs: 0,
+    breaksTaken: 0,
+    canBreak: false,
+    nextBreakAt: null,
+    pauseStartedAt: null,
+  };
 }
 
 /**

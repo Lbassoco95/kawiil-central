@@ -74,6 +74,15 @@ export function toDateStringMX(date?: Date): string {
 }
 
 /**
+ * Medianoche del día calendario CDMX (de `date` o hoy) como ISO UTC.
+ * Alinea filtros de eventos de jornada con `work_date` en BD.
+ */
+export function startOfDayMxISO(date?: Date): string {
+  const ymd = toDateStringMX(date);
+  return fromZonedTime(`${ymd}T00:00:00`, CDMX_TZ).toISOString();
+}
+
+/**
  * Slot horario CDMX para mood/frase del día.
  * Reglas (alineadas entre AiHeroGrid y MoodCheckin):
  *  - 09:00–14:59 → "morning" del día actual
