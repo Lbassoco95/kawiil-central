@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { LayoutDashboard } from "lucide-react";
 import { usePortal } from "../lib/session";
 import { callApi } from "../lib/api";
+import { clientFlagReason } from "../lib/clientFlags";
 import { fmtDate, fmtMoney, MONTHS, monthLabel } from "../lib/format";
 import { Empty, ManagementLegend, Notice, PageTitle, StatusPill } from "../components/ui";
 
@@ -78,7 +79,7 @@ export default function Inicio() {
     <>
       <PageTitle
         title="Resumen del servicio"
-        subtitle={active ? `${active.client_name} · Espejo del servicio Kawiil` : "Espejo del servicio Kawiil"}
+        subtitle={active ? `${active.client_name} · Resumen de tu cuenta` : "Resumen de tu cuenta"}
         breadcrumb={["Kawiil", "Portal", "Inicio"]}
         icon={<LayoutDashboard />}
         actions={
@@ -103,7 +104,7 @@ export default function Inicio() {
       />
       <div className="mt-3 space-y-3">
         <Notice tone="info">
-          Solo lectura: aquí ve lo que el equipo de Kawiil ya trabaja y publica desde central para su cuenta.
+          Solo lectura: aquí ves lo que el equipo de Kawiil ya tiene listo para tu cuenta.
           En esta fase el bloque fiscal es el primero disponible; RH y emisión llegan después.
         </Notice>
         <ManagementLegend />
@@ -236,7 +237,7 @@ export default function Inicio() {
               <ul className="space-y-2">{d.marcas.map((m) => (
                 <li key={m.cfdi_id} className="rounded-md border p-2 text-sm">
                   <div className="flex justify-between"><span>{m.emisor ?? "Proveedor"} · {fmtDate(m.fecha)}</span><span className="kw-mono">{fmtMoney(m.total)}</span></div>
-                  {m.flags.map((f) => <p key={f.code} className="mt-1"><StatusPill tone="warn">Atención</StatusPill> {f.reason}</p>)}
+                  {m.flags.map((f) => <p key={f.code} className="mt-1"><StatusPill tone="warn">Atención</StatusPill> {clientFlagReason(f)}</p>)}
                 </li>))}
               </ul>
             ) : <Empty>Sin marcas este mes.</Empty>}

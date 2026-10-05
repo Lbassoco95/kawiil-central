@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { usePortal } from "../lib/session";
 import { callApi, openFile } from "../lib/api";
+import { clientDetailQualityLabel, clientFlagReason } from "../lib/clientFlags";
 import { fmtDate, fmtMoney } from "../lib/format";
 import { Empty, Notice, PageTitle, StatusPill } from "../components/ui";
 
@@ -37,13 +38,19 @@ export default function Facturas() {
   return (
     <>
       <PageTitle
-        title="Facturas"
-        subtitle="CFDI emitidos y recibidos que Kawiil ya publicó para su cuenta. En esta fase usted no carga XML ni crea facturas."
-        breadcrumb={["Kawiil", "Portal", "Facturas"]}
+        title="Facturación"
+        subtitle={
+          active
+            ? `${active.client_name} · CFDI emitidos y recibidos de tu cuenta. En esta fase solo consultas; no cargas XML ni creas facturas.`
+            : "CFDI emitidos y recibidos de tu cuenta. En esta fase solo consultas; no cargas XML ni creas facturas."
+        }
+        breadcrumb={["Kawiil", "Portal", "Facturación"]}
         icon={<FileText />}
       />
       <div className="mb-3">
-        <Notice tone="info">Parte del espejo del servicio (solo lectura). La descarga y el procesamiento viven en central; aquí consulta el detalle ya publicado.</Notice>
+        <Notice tone="info">
+          Solo lectura: aquí ves las facturas de tu cuenta que el equipo de Kawiil ya tiene listas. Si necesitas emitir o corregir algo, escríbenos por Mensajes.
+        </Notice>
       </div>
       <div role="tablist" aria-label="Tipo de factura" className="portal-pill-group mb-3">
         {(["recibida", "emitida"] as const).map((d) => (
@@ -110,7 +117,7 @@ export default function Facturas() {
                       </>
                     )}
                     {" · "}
-                    {c.detail_status === "complete" ? "detalle completo" : "solo metadatos"}
+                    {clientDetailQualityLabel(undefined, c.detail_status)}
                     {" · "}
                     Categoría: {c.category_status === "confirmada" ? c.category_name : "por confirmar"}
                   </p>
@@ -118,6 +125,13 @@ export default function Facturas() {
                 <div className="text-right">
                   <p className="kw-mono text-lg font-semibold">{fmtMoney(c.total)}</p>
                   <StatusPill tone={SAT[c.sat_status]?.tone ?? "wait"}>{SAT[c.sat_status]?.label ?? c.sat_status}</StatusPill>
+                  {c.detail_status !== "complete" && (
+                    <span className="ml-1">
+                      <StatusPill tone="warn">
+                        {c.is_test ? "Solo metadatos (DEMO)" : "Detalle pendiente"}
+                      </StatusPill>
+                    </span>
+                  )}
                   {c.is_test && (
                     <span className="ml-1">
                       <StatusPill tone="warn">DEMO — sin validez fiscal</StatusPill>
@@ -127,7 +141,7 @@ export default function Facturas() {
               </div>
               {c.flags?.map((f) => (
                 <p key={f.code} className="mt-1 text-xs">
-                  <StatusPill tone="warn">Atención</StatusPill> {f.reason}
+                  <StatusPill tone="warn">Atención</StatusPill> {clientFlagReason(f)}
                 </p>
               ))}
               <div className="mt-2 flex flex-wrap gap-2">

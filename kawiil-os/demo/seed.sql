@@ -1,6 +1,6 @@
 -- Semilla exacta del entorno de demostración del espejo fiscal (Corte 4).
 -- Idempotente: borra la empresa demo-espejo-fiscal y la recrea con IDs fijos.
--- Sin RH, sin emisión, sin credenciales reales. RFCs y UUIDs ficticios.
+-- Sin RH, sin emisión, sin credenciales reales. Representa el cliente contable BASSOCO/VEGA/SALAS/MORALES SC; RFCs de CFDI siguen siendo sintéticos (DEMO) hasta publish real.
 -- Requiere: migraciones baseline + espejo aplicadas.
 -- Cuenta: si no existe auth.users d0000000-…-0101, crea filas mínimas compatibles
 -- con el stub de CI; en Supabase real Polo debe crear antes el usuario Auth
@@ -37,7 +37,7 @@ INSERT INTO public.portal_companies (
 ) VALUES (
   'd0000000-0000-4000-8000-000000000001',
   'demo-espejo-fiscal',
-  'DEMO Espejo Fiscal SA de CV',
+  'Bassoco, Vega, Salas, Morales, Servicios Empresariales S.C.',
   'XAXX010101000',
   'premier',
   'active',
@@ -48,7 +48,7 @@ INSERT INTO public.portal_accounts (user_id, email, full_name, status)
 VALUES (
   'd0000000-0000-4000-8000-000000000101',
   'demo.cliente@kawiil-demo.invalid',
-  'Cliente Demo Espejo',
+  'Contacto demo · Bassoco SC',
   'activa'
 );
 
@@ -72,7 +72,7 @@ INSERT INTO public.portal_tax_profiles (
 ) VALUES (
   'd0000000-0000-4000-8000-000000000001',
   'XAXX010101000',
-  'DEMO Espejo Fiscal SA de CV',
+  'Bassoco, Vega, Salas, Morales, Servicios Empresariales S.C.',
   '601',
   '06600',
   true, true
@@ -108,7 +108,7 @@ INSERT INTO public.portal_cfdi (
   'D1111111-1111-4111-8111-111111111111',
   'D1111111-1111-4111-8111-111111111111',
   'emitida', 'central_mirror', 'complete', '4.0',
-  '2026-09-05T16:00:00Z', 'XAXX010101000', 'DEMO Espejo Fiscal SA de CV',
+  '2026-09-05T16:00:00Z', 'XAXX010101000', 'Bassoco, Vega, Salas, Morales, Servicios Empresariales S.C.',
   'CACX7605101P8', 'Cliente Demo Uno',
   'I', '03', 'PUE', 'MXN',
   10000, 1600, 0, 0, 11600,
@@ -121,7 +121,7 @@ INSERT INTO public.portal_cfdi (
   'D2222222-2222-4222-8222-222222222222',
   'recibida', 'central_mirror', 'complete', '4.0',
   '2026-09-08T18:30:00Z', 'IIA040805DZ4', 'Proveedor Demo Servicios',
-  'XAXX010101000', 'DEMO Espejo Fiscal SA de CV',
+  'XAXX010101000', 'Bassoco, Vega, Salas, Morales, Servicios Empresariales S.C.',
   'I', '03', 'PUE', 'MXN',
   5000, 800, 53.33, 50, 5696.67,
   'vigente', true, '[]'::jsonb, 'Gastos operativos', 'confirmada'
@@ -133,10 +133,10 @@ INSERT INTO public.portal_cfdi (
   'D3333333-3333-4333-8333-333333333333',
   'recibida', 'central_mirror', 'metadata', '4.0',
   '2026-09-12T12:00:00Z', 'ABC010101AB1', 'Proveedor Solo Metadatos',
-  'XAXX010101000', 'DEMO Espejo Fiscal SA de CV',
+  'XAXX010101000', 'Bassoco, Vega, Salas, Morales, Servicios Empresariales S.C.',
   'I', NULL, 'PUE', 'MXN',
   2000, 0, 0, 0, 2320,
-  'unknown', true, '[{"code":"metadata_only","reason":"Solo metadatos en el espejo (DEMO)"}]'::jsonb,
+  'unknown', true, '[{"code":"metadata_only","reason":"Solo metadatos (DEMO)"}]'::jsonb,
   NULL, 'por_confirmar'
 ),
 (
@@ -145,7 +145,7 @@ INSERT INTO public.portal_cfdi (
   'D4444444-4444-4444-8444-444444444444',
   'D4444444-4444-4444-8444-444444444444',
   'emitida', 'central_mirror', 'complete', '4.0',
-  '2026-09-15T15:00:00Z', 'XAXX010101000', 'DEMO Espejo Fiscal SA de CV',
+  '2026-09-15T15:00:00Z', 'XAXX010101000', 'Bassoco, Vega, Salas, Morales, Servicios Empresariales S.C.',
   'CACX7605101P8', 'Cliente Demo Uno',
   'I', '99', 'PPD', 'MXN',
   8000, 1280, 0, 0, 9280,

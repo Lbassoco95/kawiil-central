@@ -1,8 +1,8 @@
 {
-  "$comment": "Datos sintéticos del espejo fiscal (Corte 4). Sin RH ni emisión. RFCs y UUIDs ficticios.",
+  "$comment": "Representación demo del cliente contable Bassoco, Vega, Salas, Morales, Servicios Empresariales S.C. CFDI sintéticos (is_test) hasta invoice.publish real desde central.",
   "company": {
     "external_ref": "demo-espejo-fiscal",
-    "name": "DEMO Espejo Fiscal SA de CV",
+    "name": "Bassoco, Vega, Salas, Morales, Servicios Empresariales S.C.",
     "rfc": "XAXX010101000",
     "tier": "premier",
     "fiscal_enabled": true,
@@ -22,7 +22,7 @@
       "is_test": true,
       "issued_at": "2026-09-05T16:00:00Z",
       "issuer_rfc": "XAXX010101000",
-      "issuer_name": "DEMO Espejo Fiscal SA de CV",
+      "issuer_name": "Bassoco, Vega, Salas, Morales, Servicios Empresariales S.C.",
       "receiver_rfc": "CACX7605101P8",
       "receiver_name": "Cliente Demo Uno",
       "payment_form": "03",
@@ -35,10 +35,22 @@
       "category_name": "Servicios profesionales",
       "category_status": "confirmada",
       "concepts": [
-        { "description": "Consultoría fiscal (DEMO)", "quantity": 1, "unit_value": 10000, "amount": 10000 }
+        {
+          "description": "Consultoría fiscal (DEMO)",
+          "quantity": 1,
+          "unit_value": 10000,
+          "amount": 10000
+        }
       ],
       "tax_lines": [
-        { "tax": "IVA", "kind": "transfer", "rate": 0.16, "factor": "Tasa", "base": 10000, "amount": 1600 }
+        {
+          "tax": "IVA",
+          "kind": "transfer",
+          "rate": 0.16,
+          "factor": "Tasa",
+          "base": 10000,
+          "amount": 1600
+        }
       ]
     },
     {
@@ -50,7 +62,7 @@
       "issuer_rfc": "IIA040805DZ4",
       "issuer_name": "Proveedor Demo Servicios",
       "receiver_rfc": "XAXX010101000",
-      "receiver_name": "DEMO Espejo Fiscal SA de CV",
+      "receiver_name": "Bassoco, Vega, Salas, Morales, Servicios Empresariales S.C.",
       "payment_form": "03",
       "payment_method": "PUE",
       "voucher_type": "I",
@@ -63,12 +75,38 @@
       "category_name": "Gastos operativos",
       "category_status": "confirmada",
       "concepts": [
-        { "description": "Servicio de nube (DEMO)", "quantity": 1, "unit_value": 5000, "amount": 5000 }
+        {
+          "description": "Servicio de nube (DEMO)",
+          "quantity": 1,
+          "unit_value": 5000,
+          "amount": 5000
+        }
       ],
       "tax_lines": [
-        { "tax": "IVA", "kind": "transfer", "rate": 0.16, "factor": "Tasa", "base": 5000, "amount": 800 },
-        { "tax": "IVA", "kind": "withholding", "rate": 0.106667, "factor": "Tasa", "base": 5000, "amount": 53.33 },
-        { "tax": "ISR", "kind": "withholding", "rate": 0.01, "factor": "Tasa", "base": 5000, "amount": 50 }
+        {
+          "tax": "IVA",
+          "kind": "transfer",
+          "rate": 0.16,
+          "factor": "Tasa",
+          "base": 5000,
+          "amount": 800
+        },
+        {
+          "tax": "IVA",
+          "kind": "withholding",
+          "rate": 0.106667,
+          "factor": "Tasa",
+          "base": 5000,
+          "amount": 53.33
+        },
+        {
+          "tax": "ISR",
+          "kind": "withholding",
+          "rate": 0.01,
+          "factor": "Tasa",
+          "base": 5000,
+          "amount": 50
+        }
       ]
     },
     {
@@ -80,7 +118,7 @@
       "issuer_rfc": "ABC010101AB1",
       "issuer_name": "Proveedor Solo Metadatos",
       "receiver_rfc": "XAXX010101000",
-      "receiver_name": "DEMO Espejo Fiscal SA de CV",
+      "receiver_name": "Bassoco, Vega, Salas, Morales, Servicios Empresariales S.C.",
       "payment_method": "PUE",
       "subtotal": 2000,
       "vat_transferred": 0,
@@ -97,7 +135,7 @@
       "is_test": true,
       "issued_at": "2026-09-15T15:00:00Z",
       "issuer_rfc": "XAXX010101000",
-      "issuer_name": "DEMO Espejo Fiscal SA de CV",
+      "issuer_name": "Bassoco, Vega, Salas, Morales, Servicios Empresariales S.C.",
       "receiver_rfc": "CACX7605101P8",
       "receiver_name": "Cliente Demo Uno",
       "payment_form": "99",
@@ -110,13 +148,29 @@
       "category_name": "Servicios profesionales",
       "category_status": "confirmada",
       "concepts": [
-        { "description": "Proyecto PPD (DEMO)", "quantity": 1, "unit_value": 8000, "amount": 8000 }
+        {
+          "description": "Proyecto PPD (DEMO)",
+          "quantity": 1,
+          "unit_value": 8000,
+          "amount": 8000
+        }
       ],
       "tax_lines": [
-        { "tax": "IVA", "kind": "transfer", "rate": 0.16, "factor": "Tasa", "base": 8000, "amount": 1280 }
+        {
+          "tax": "IVA",
+          "kind": "transfer",
+          "rate": 0.16,
+          "factor": "Tasa",
+          "base": 8000,
+          "amount": 1280
+        }
       ],
       "payments": [
-        { "related_uuid": "D4444444-4444-4444-8444-444444444444", "paid_at": "2026-09-20T17:00:00Z", "paid_amount": 4640 }
+        {
+          "related_uuid": "D4444444-4444-4444-8444-444444444444",
+          "paid_at": "2026-09-20T17:00:00Z",
+          "paid_amount": 4640
+        }
       ]
     }
   ],
@@ -137,7 +191,11 @@
       "ingreso_total": 20880,
       "ingreso_mes_anterior": 10000,
       "iva_estimado": 2466.67,
-      "iva": { "trasladado": 2880, "acreditable": 800, "facturas_sin_desglose": 1 },
+      "iva": {
+        "trasladado": 2880,
+        "acreditable": 800,
+        "facturas_sin_desglose": 1
+      },
       "retenciones": {
         "iva_retenido_a_la_empresa": 0,
         "iva_retenido_por_la_empresa": 53.33,
@@ -145,9 +203,24 @@
         "isr_retenido_por_la_empresa": 50
       },
       "por_categoria": [
-        { "categoria": "Servicios profesionales", "por_confirmar": false, "total": 20880, "facturas": 2 },
-        { "categoria": "Gastos operativos", "por_confirmar": false, "total": 5696.67, "facturas": 1 },
-        { "categoria": "por confirmar", "por_confirmar": true, "total": 2320, "facturas": 1 }
+        {
+          "categoria": "Servicios profesionales",
+          "por_confirmar": false,
+          "total": 20880,
+          "facturas": 2
+        },
+        {
+          "categoria": "Gastos operativos",
+          "por_confirmar": false,
+          "total": 5696.67,
+          "facturas": 1
+        },
+        {
+          "categoria": "por confirmar",
+          "por_confirmar": true,
+          "total": 2320,
+          "facturas": 1
+        }
       ],
       "espejo": true,
       "leyenda": "Cifras de demostración. DEMO — sin validez fiscal."

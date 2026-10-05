@@ -44,12 +44,12 @@ export function IconBadge({
 }
 
 const SOURCES: Record<Source, { label: string; via: string; color: string }> = {
-  sat: { label: "CFDI · SAT", via: "vía Moffin", color: "var(--kawiil-blue)" },
+  sat: { label: "CFDI · SAT", via: "facturas de tu cuenta", color: "var(--kawiil-blue)" },
   savio: { label: "Savio", via: "cobranza", color: "var(--kawiil-mint)" },
-  manual: { label: "Captura manual", via: "", color: "var(--ink-muted)" },
-  estados: { label: "Estados financieros", via: "archivo cargado", color: "var(--kawiilito-orange)" },
-  buzon: { label: "Buzón tributario", via: "SAT", color: "var(--kawiilito-orange)" },
-  pendiente: { label: "Pendiente de cargar", via: "", color: "var(--caution-text)" },
+  manual: { label: "Captura manual", via: "registrado por tu equipo", color: "var(--ink-muted)" },
+  estados: { label: "Estados financieros", via: "archivo de tu cuenta", color: "var(--kawiilito-orange)" },
+  buzon: { label: "Buzón tributario", via: "avisos del SAT", color: "var(--kawiilito-orange)" },
+  pendiente: { label: "Pendiente", via: "", color: "var(--caution-text)" },
 };
 
 const TONES: Record<KpiTone, string> = {

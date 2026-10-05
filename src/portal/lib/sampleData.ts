@@ -10,7 +10,7 @@ import type {
   TeamMember,
 } from "../design/types";
 
-export const SAMPLE_CLIENT = "DEMO Espejo Fiscal SA de CV";
+export const SAMPLE_CLIENT = "Bassoco, Vega, Salas, Morales, Servicios Empresariales S.C.";
 export const SAMPLE_PERIOD = "Septiembre 2026";
 
 export const CASHFLOW: CashflowPoint[] = [
@@ -25,8 +25,8 @@ export const CASHFLOW: CashflowPoint[] = [
 export const INCOME_LINEAGE: LineageStep[] = [
   {
     state: "done",
-    title: "Descargamos tus CFDI del SAT",
-    detail: "Con la e.firma o la CIEC registrada, a través de Moffin.",
+    title: "Kawiil publicó tus CFDI en el portal",
+    detail: "El equipo de Kawiil obtuvo tus comprobantes del SAT y los dejó listos en tu cuenta para consultarlos aquí.",
     source: "sat",
     meta: "67 comprobantes en septiembre",
     uuids: ["3F9A71C2…B04E", "A1D4E8F0…77C2"],
@@ -34,13 +34,13 @@ export const INCOME_LINEAGE: LineageStep[] = [
   {
     state: "done",
     title: "Dejamos solo lo que cuenta",
-    detail: "Emitidos, vigentes y de tipo Ingreso; sin cancelados.",
+    detail: "Emitidos, vigentes y de tipo Ingreso; sin cancelados. El filtro ocurre antes de publicar.",
     meta: "26 de 31 entran",
   },
   {
     state: "done",
     title: "Sumamos por mes",
-    detail: "Total en MXN por fecha de emisión.",
+    detail: "Total en MXN por fecha de emisión, ya disponible en Facturación.",
     meta: "$571,000",
   },
   {

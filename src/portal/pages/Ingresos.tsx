@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   CashflowChart,
   ClassificationPrompt,
@@ -20,8 +20,11 @@ import {
 } from "../lib/sampleData";
 import { clampPeriodIndex, notifyPeriod, periodLabel } from "../lib/periodDemo";
 import { pushDemoToast } from "../lib/demoStore";
+import { shouldUseDemoFixtures } from "../lib/dataMode";
+import { usePortal } from "../lib/session";
+import { listMirrorInvoices, mirrorSourceNote, rankParties, sumTotals, toInvoiceRows } from "../lib/mirrorInvoices";
 
-export default function Ingresos() {
+function FixtureIngresos() {
   const [period, setPeriod] = useState<PeriodId>("mes");
   const [idx, setIdx] = useState(2);
   const label = periodLabel(period, idx);
@@ -30,7 +33,7 @@ export default function Ingresos() {
     <>
       <PageHead
         title="Ingresos"
-        subtitle={`${label} · CFDI emitidos vigentes`}
+        subtitle={`${label} · CFDI emitidos vigentes · fixture demo`}
         actions={
           <PeriodSwitch
             value={period}
@@ -64,7 +67,7 @@ export default function Ingresos() {
           data={CASHFLOW}
           title="Ingresos por mes"
           series="ingresos"
-          footer="Solo CFDI emitidos vigentes. Datos de ejemplo."
+          footer="Solo CFDI emitidos vigentes. Datos de ejemplo (vista de diseño)."
         />
       </div>
 
@@ -105,4 +108,90 @@ export default function Ingresos() {
       </div>
     </>
   );
+}
+
+function MirrorIngresos() {
+  const { active } = usePortal();
+  const [rows, setRows] = useState<ReturnType<typeof toInvoiceRows>>([]);
+  const [count, setCount] = useState(0);
+  const [total, setTotal] = useState(0);
+  const [rank, setRank] = useState<ReturnType<typeof rankParties>>([]);
+  const [sourceNote, setSourceNote] = useState("facturas de tu cuenta");
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!active) return;
+    setLoading(true);
+    listMirrorInvoices(active.client_id, "emitida")
+      .then((list) => {
+        const vigentes = list.filter((r) => r.sat_status !== "cancelado");
+        setRows(toInvoiceRows(vigentes, "emitida"));
+        setCount(vigentes.length);
+        setTotal(sumTotals(vigentes));
+        setRank(rankParties(vigentes, "emitida"));
+        setSourceNote(mirrorSourceNote(vigentes));
+        setErr(null);
+      })
+      .catch(() => {
+        setRows([]);
+        setCount(0);
+        setRank([]);
+        setErr("No se pudieron cargar las facturas emitidas de tu cuenta.");
+      })
+      .finally(() => setLoading(false));
+  }, [active]);
+
+  const zeroMeta = count > 0 && total === 0;
+  const client = active?.client_name ?? "Tu cuenta";
+
+  return (
+    <>
+      <PageHead
+        title="Ingresos"
+        subtitle={`${client} · CFDI emitidos · ${sourceNote}`}
+      />
+      {err ? <p className="kw-small" style={{ color: "var(--caution-text)", marginBottom: 16 }}>{err}</p> : null}
+      {loading ? <p className="kw-small" style={{ marginBottom: 16 }}>Cargando facturas…</p> : null}
+      {zeroMeta ? (
+        <GlassPanel style={{ marginBottom: 16 }}>
+          <p className="kw-small" style={{ margin: 0 }}>
+            Hay {count} facturas emitidas de {client}; los montos aparecen en $0 porque aún solo hay metadatos (sin XML completo).
+            Son CFDI reales de tu cuenta, no datos de ejemplo.
+          </p>
+        </GlassPanel>
+      ) : null}
+      <div className="kw-grid kw-kpis" style={{ marginBottom: 24 }}>
+        <KpiTile
+          label="Ingresos del periodo"
+          value={total}
+          tone="ingreso"
+          note={`${count} CFDI · ${sourceNote}`}
+          source="sat"
+        />
+        <KpiTile
+          label="Cliente principal"
+          value={rank[0]?.amount ?? 0}
+          tone="ingreso"
+          note={rank[0] ? `${rank[0].name} · ${rank[0].share}%` : loading ? "Cargando…" : "Sin facturas aún"}
+          source="sat"
+        />
+      </div>
+      <div className="kw-grid kw-two" style={{ marginBottom: 24 }}>
+        <RankedList title="Clientes que más compran" items={rank} tone="ingreso" />
+        <GlassPanel>
+          <p className="kw-title" style={{ fontSize: 16 }}>Solo consulta</p>
+          <p className="kw-small" style={{ marginTop: 8 }}>
+            Facturas emitidas de {client}. En esta fase no cargas XML ni creas facturas desde aquí; si necesitas algo, escribe por Mensajes.
+          </p>
+        </GlassPanel>
+      </div>
+      <InvoiceTable title="Facturas emitidas" rows={rows} partyLabel="Cliente" />
+    </>
+  );
+}
+
+export default function Ingresos() {
+  if (shouldUseDemoFixtures()) return <FixtureIngresos />;
+  return <MirrorIngresos />;
 }

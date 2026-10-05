@@ -1,4 +1,4 @@
-/** Modo demostración del espejo del servicio Kawiil (Corte 4). La marca fiscal aplica a CFDI sintéticos. */
+/** Modo demostración del portal cliente (Corte 4). La marca fiscal aplica a CFDI sintéticos. */
 export const DEMO_FISCAL_MARK = "DEMO — sin validez fiscal";
 
 export function isPortalDemoMode(): boolean {
