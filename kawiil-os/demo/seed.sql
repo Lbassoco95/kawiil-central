@@ -150,27 +150,114 @@ INSERT INTO public.portal_cfdi (
   'I', '99', 'PPD', 'MXN',
   8000, 1280, 0, 0, 9280,
   'vigente', true, '[]'::jsonb, 'Servicios profesionales', 'confirmada'
+),
+-- PPD pendiente (sin complemento) — DEMO cobranza
+(
+  'd1000000-0000-4000-8000-000000000005',
+  'd0000000-0000-4000-8000-000000000001',
+  'D5555555-5555-4555-8555-555555555555',
+  'D5555555-5555-4555-8555-555555555555',
+  'emitida', 'central_mirror', 'complete', '4.0',
+  '2026-09-18T14:00:00Z', 'XAXX010101000', 'Bassoco, Vega, Salas, Morales, Servicios Empresariales S.C.',
+  'GHC150918XY9', 'Cliente Demo Dos',
+  'I', '99', 'PPD', 'MXN',
+  20000, 3200, 0, 0, 23200,
+  'vigente', true, '[]'::jsonb, 'Servicios profesionales', 'confirmada'
+),
+-- PPD pagado completo + CFDI tipo P (complemento)
+(
+  'd1000000-0000-4000-8000-000000000006',
+  'd0000000-0000-4000-8000-000000000001',
+  'D6666666-6666-4666-8666-666666666666',
+  'D6666666-6666-4666-8666-666666666666',
+  'emitida', 'central_mirror', 'complete', '4.0',
+  '2026-09-10T13:00:00Z', 'XAXX010101000', 'Bassoco, Vega, Salas, Morales, Servicios Empresariales S.C.',
+  'STN180201ZZ2', 'Cliente Demo Tres',
+  'I', '99', 'PPD', 'MXN',
+  5000, 800, 0, 0, 5800,
+  'vigente', true, '[]'::jsonb, 'Servicios profesionales', 'confirmada'
+),
+(
+  'd1000000-0000-4000-8000-000000000007',
+  'd0000000-0000-4000-8000-000000000001',
+  'D7777777-7777-4777-8777-777777777777',
+  'D7777777-7777-4777-8777-777777777777',
+  'emitida', 'central_mirror', 'complete', '4.0',
+  '2026-09-22T16:00:00Z', 'XAXX010101000', 'Bassoco, Vega, Salas, Morales, Servicios Empresariales S.C.',
+  'STN180201ZZ2', 'Cliente Demo Tres',
+  'P', NULL, NULL, 'MXN',
+  0, 0, 0, 0, 5800,
+  'vigente', true, '[{"code":"complemento_pago","reason":"Complemento de pago (DEMO)"}]'::jsonb,
+  NULL, 'por_confirmar'
+),
+-- Complemento parcial del PPD D4444
+(
+  'd1000000-0000-4000-8000-000000000008',
+  'd0000000-0000-4000-8000-000000000001',
+  'D8888888-8888-4888-8888-888888888888',
+  'D8888888-8888-4888-8888-888888888888',
+  'emitida', 'central_mirror', 'complete', '4.0',
+  '2026-09-20T17:00:00Z', 'XAXX010101000', 'Bassoco, Vega, Salas, Morales, Servicios Empresariales S.C.',
+  'CACX7605101P8', 'Cliente Demo Uno',
+  'P', NULL, NULL, 'MXN',
+  0, 0, 0, 0, 4640,
+  'vigente', true, '[{"code":"complemento_pago","reason":"Complemento parcial (DEMO)"}]'::jsonb,
+  NULL, 'por_confirmar'
+),
+-- Nota de crédito (egreso tipo E) sobre D1111
+(
+  'd1000000-0000-4000-8000-000000000009',
+  'd0000000-0000-4000-8000-000000000001',
+  'D9999999-9999-4999-8999-999999999999',
+  'D9999999-9999-4999-8999-999999999999',
+  'emitida', 'central_mirror', 'complete', '4.0',
+  '2026-09-25T11:00:00Z', 'XAXX010101000', 'Bassoco, Vega, Salas, Morales, Servicios Empresariales S.C.',
+  'CACX7605101P8', 'Cliente Demo Uno',
+  'E', '03', 'PUE', 'MXN',
+  1000, 160, 0, 0, 1160,
+  'vigente', true,
+  '[{"code":"nota_credito","reason":"Descuento sobre D1111111-1111-4111-8111-111111111111 (DEMO)"}]'::jsonb,
+  'Descuentos', 'confirmada'
 );
 
-INSERT INTO public.portal_cfdi_concepts (cfdi_id, description, quantity, unit_value, amount) VALUES
-  ('d1000000-0000-4000-8000-000000000001', 'Consultoría fiscal (DEMO)', 1, 10000, 10000),
-  ('d1000000-0000-4000-8000-000000000002', 'Servicio de nube (DEMO)', 1, 5000, 5000),
-  ('d1000000-0000-4000-8000-000000000004', 'Proyecto PPD (DEMO)', 1, 8000, 8000);
+-- product_service_key = ClaveProdServ (catálogo SAT); description = concepto libre.
+INSERT INTO public.portal_cfdi_concepts (cfdi_id, product_service_key, description, quantity, unit_value, amount) VALUES
+  -- OK: clave de servicios profesionales + concepto coherente
+  ('d1000000-0000-4000-8000-000000000001', '80101500', 'Consultoría fiscal (DEMO)', 1, 10000, 10000),
+  -- FALTANTE: concepto legible, sin clave
+  ('d1000000-0000-4000-8000-000000000002', NULL, 'Servicio de nube (DEMO)', 1, 5000, 5000),
+  -- NO CUADRA: descripción de servicio con clave de gasolina
+  ('d1000000-0000-4000-8000-000000000004', '15101514', 'Proyecto PPD parcial — consultoría (DEMO)', 1, 8000, 8000),
+  ('d1000000-0000-4000-8000-000000000005', '80101500', 'Proyecto PPD pendiente (DEMO)', 1, 20000, 20000),
+  -- FORMATO INVÁLIDO
+  ('d1000000-0000-4000-8000-000000000006', 'ABC', 'Proyecto PPD pagado (DEMO)', 1, 5000, 5000),
+  ('d1000000-0000-4000-8000-000000000009', '80121500', 'Descuento por pronto pago (DEMO)', 1, 1000, 1000);
 
 INSERT INTO public.portal_cfdi_tax_lines (cfdi_id, tax, kind, rate, factor, base, amount) VALUES
   ('d1000000-0000-4000-8000-000000000001', 'IVA', 'transfer', 0.16, 'Tasa', 10000, 1600),
   ('d1000000-0000-4000-8000-000000000002', 'IVA', 'transfer', 0.16, 'Tasa', 5000, 800),
   ('d1000000-0000-4000-8000-000000000002', 'IVA', 'withholding', 0.106667, 'Tasa', 5000, 53.33),
   ('d1000000-0000-4000-8000-000000000002', 'ISR', 'withholding', 0.01, 'Tasa', 5000, 50),
-  ('d1000000-0000-4000-8000-000000000004', 'IVA', 'transfer', 0.16, 'Tasa', 8000, 1280);
+  ('d1000000-0000-4000-8000-000000000004', 'IVA', 'transfer', 0.16, 'Tasa', 8000, 1280),
+  ('d1000000-0000-4000-8000-000000000005', 'IVA', 'transfer', 0.16, 'Tasa', 20000, 3200),
+  ('d1000000-0000-4000-8000-000000000006', 'IVA', 'transfer', 0.16, 'Tasa', 5000, 800),
+  ('d1000000-0000-4000-8000-000000000009', 'IVA', 'transfer', 0.16, 'Tasa', 1000, 160);
 
+-- Complementos: payment_cfdi = tipo P; related = factura PPD
 INSERT INTO public.portal_payment_links (payment_cfdi_id, related_cfdi_id, paid_at, paid_amount)
-VALUES (
-  'd1000000-0000-4000-8000-000000000004',
-  'd1000000-0000-4000-8000-000000000004',
-  '2026-09-20T17:00:00Z',
-  4640
-);
+VALUES
+  (
+    'd1000000-0000-4000-8000-000000000008',
+    'd1000000-0000-4000-8000-000000000004',
+    '2026-09-20T17:00:00Z',
+    4640
+  ),
+  (
+    'd1000000-0000-4000-8000-000000000007',
+    'd1000000-0000-4000-8000-000000000006',
+    '2026-09-22T16:00:00Z',
+    5800
+  );
 
 INSERT INTO public.portal_fiscal_summaries (
   client_id, external_ref, period_year, period_month, iva_basis, payload, quality, published_at
