@@ -10,7 +10,7 @@ import {
   getCurrentPosition,
   matchOffice,
   plannedModeForToday,
-  summarizeJornada,
+  summarizeJornadaWithSession,
   type SlackStatus,
   type RhAbsenceRequest,
   type RhAbsenceType,
@@ -25,6 +25,7 @@ import {
   type RhWorkSchedule,
   type GeoFix,
 } from "@/lib/rh";
+import { startOfDayMxISO, toDateStringMX } from "@/lib/dateUtils";
 
 /** Tabla sin tipos generados aún: usamos el cast establecido en el repo. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -42,12 +43,28 @@ async function getMyOrgId(userId: string): Promise<string> {
   return data.organization_id as string;
 }
 
-const todayKey = () => {
-  // Fecha local del navegador en formato YYYY-MM-DD
-  const d = new Date();
-  const off = d.getTimezoneOffset();
-  return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
-};
+/** Día laboral RH = calendario América/Mexico_City (alineado con BD). */
+const todayKey = () => toDateStringMX();
+
+/** Medianoche CDMX en ISO — filtro de eventos de hoy. */
+const startOfTodayISO = () => startOfDayMxISO();
+
+/** Mensaje legible desde errores de PostgREST / RPC / Error nativo. */
+function rhErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof Error && err.message) {
+    const m = err.message;
+    if (/not_authenticated/i.test(m)) return "Tu sesión expiró. Vuelve a iniciar sesión.";
+    if (/no_organization/i.test(m)) return "No se pudo determinar tu organización.";
+    return m;
+  }
+  if (err && typeof err === "object") {
+    const o = err as { message?: unknown; details?: unknown; hint?: unknown; code?: unknown };
+    const parts = [o.message, o.details, o.hint].filter((x) => typeof x === "string" && x.trim());
+    if (parts.length) return (parts as string[]).join(" — ");
+    if (typeof o.code === "string" && o.code) return `${fallback} (${o.code})`;
+  }
+  return fallback;
+}
 
 /** Errores de Slack que indican que el token del usuario ya no sirve. */
 const SLACK_STATUS_FATAL_RE =
@@ -158,12 +175,6 @@ export function useMyAttendance(limit = 30) {
 /* ============================================================
  * Eventos de jornada (punches) de hoy
  * ========================================================== */
-const startOfTodayISO = () => {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString();
-};
-
 export function useTodayEvents() {
   const { user } = useAuth();
   return useQuery({
@@ -226,16 +237,44 @@ const ACTION_TOAST: Record<RhEventType, string> = {
 export function useJornada() {
   const { user } = useAuth();
   const qc = useQueryClient();
-  const { data: session } = useTodayAttendance();
-  const { data: events = [] } = useTodayEvents();
+  const attendanceQ = useTodayAttendance();
+  const eventsQ = useTodayEvents();
+  const { data: session } = attendanceQ;
+  const { data: events = [] } = eventsQ;
   const { data: schedule } = useMyWorkSchedule();
   const { data: offices = [] } = useOfficeLocations();
 
   const invalidate = () => {
-    qc.invalidateQueries({ queryKey: ["rh-today-attendance"] });
-    qc.invalidateQueries({ queryKey: ["rh-today-events"] });
-    qc.invalidateQueries({ queryKey: ["rh-my-attendance"] });
-    qc.invalidateQueries({ queryKey: ["rh-org-attendance"] });
+    void qc.invalidateQueries({ queryKey: ["rh-today-attendance"] });
+    void qc.invalidateQueries({ queryKey: ["rh-today-events"] });
+    void qc.invalidateQueries({ queryKey: ["rh-my-attendance"] });
+    void qc.invalidateQueries({ queryKey: ["rh-org-attendance"] });
+  };
+
+  const seedCachesAfterCheckIn = (attendance: RhAttendance) => {
+    const day = todayKey();
+    qc.setQueryData(["rh-today-attendance", user?.id, day], attendance);
+    const prev = (qc.getQueryData(["rh-today-events", user?.id, day]) as RhAttendanceEvent[] | undefined) ?? [];
+    const hasCheckIn = prev.some(
+      (e) => e.attendance_id === attendance.id && e.event_type === "check_in",
+    );
+    if (!hasCheckIn) {
+      const seed: RhAttendanceEvent = {
+        id: `local-check-in-${attendance.id}`,
+        attendance_id: attendance.id,
+        organization_id: attendance.organization_id,
+        user_id: attendance.user_id,
+        event_type: "check_in",
+        event_at: attendance.check_in_at,
+        lat: attendance.check_in_lat,
+        lng: attendance.check_in_lng,
+        accuracy_m: attendance.check_in_accuracy_m,
+        within_geofence: attendance.within_geofence,
+        office_location_id: attendance.office_location_id,
+        created_at: attendance.check_in_at,
+      };
+      qc.setQueryData(["rh-today-events", user?.id, day], [...prev, seed]);
+    }
   };
 
   const mutation = useMutation({
@@ -265,75 +304,40 @@ export function useJornada() {
         await syncSlackStatus(
           session.in_transit ? TRANSIT_SLACK_STATUS : WORK_MODE_SLACK_STATUS[action.workMode],
         );
-        return action.type;
+        return { type: action.type as JornadaAction["type"], alreadyActive: false };
+      }
+
+      // Entrada: RPC atómica e idempotente (attendance + punch en una txn).
+      if (action.type === "check_in") {
+        const expected = plannedModeForToday(schedule);
+        const { data, error } = await db.rpc("rh_start_jornada", {
+          p_work_mode: action.workMode,
+          p_expected_work_mode: expected,
+          p_lat: geo.fix?.lat ?? null,
+          p_lng: geo.fix?.lng ?? null,
+          p_accuracy_m: geo.fix?.accuracy ?? null,
+          p_within_geofence: geo.withinGeofence,
+          p_office_location_id: geo.officeLocationId,
+        });
+        if (error) throw error;
+        const payload = data as {
+          attendance?: RhAttendance;
+          already_active?: boolean;
+          created?: boolean;
+        } | null;
+        const attendance = payload?.attendance;
+        if (!attendance?.id) {
+          throw new Error("No se pudo iniciar la jornada. Intenta de nuevo.");
+        }
+        seedCachesAfterCheckIn(attendance);
+        await syncSlackStatus(WORK_MODE_SLACK_STATUS[action.workMode]);
+        return {
+          type: "check_in" as const,
+          alreadyActive: !!payload?.already_active,
+        };
       }
 
       let attendanceId = session?.id ?? null;
-      let createdNow = false;
-
-      if (action.type === "check_in") {
-        const expected = plannedModeForToday(schedule);
-        // Evita duplicados: no permitir abrir una jornada nueva si ya hay una
-        // de HOY (día calendario MX, vía work_date) sin cerrar. Iniciar "otra
-        // jornada" (turno adicional) sí se permite una vez cerrada la anterior.
-        const { data: openToday, error: openErr } = await db
-          .from("rh_attendance")
-          .select("id")
-          .eq("user_id", user!.id)
-          .eq("work_date", todayKey())
-          .is("check_out_at", null)
-          .order("check_in_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        if (openErr) throw openErr;
-        if (openToday) {
-          // Jornada abierta previa: si ya tiene su evento de entrada es un
-          // duplicado real. Si quedó huérfana (la app falló a mitad del
-          // registro), la adoptamos y el evento se inserta abajo: repara el
-          // estado en lugar de bloquear al usuario con "ya tienes jornada".
-          const { data: ciEvent } = await db
-            .from("rh_attendance_events")
-            .select("id")
-            .eq("attendance_id", openToday.id)
-            .eq("event_type", "check_in")
-            .limit(1)
-            .maybeSingle();
-          if (ciEvent) {
-            throw new Error("Ya tienes una jornada abierta hoy. Ciérrala antes de iniciar otra.");
-          }
-          attendanceId = openToday.id as string;
-        } else {
-          // ¿Ya hubo una jornada hoy? Entonces este es un turno adicional (sin comida).
-          const { count } = await db
-            .from("rh_attendance")
-            .select("id", { count: "exact", head: true })
-            .eq("user_id", user!.id)
-            .eq("work_date", todayKey());
-          const isAdditional = (count ?? 0) > 0;
-          const { data, error } = await db
-            .from("rh_attendance")
-            .insert({
-              user_id: user!.id,
-              organization_id: orgId,
-              work_date: todayKey(),
-              check_in_at: new Date().toISOString(),
-              work_mode: action.workMode,
-              expected_work_mode: expected,
-              check_in_lat: geo.fix?.lat ?? null,
-              check_in_lng: geo.fix?.lng ?? null,
-              check_in_accuracy_m: geo.fix?.accuracy ?? null,
-              within_geofence: geo.withinGeofence,
-              office_location_id: geo.officeLocationId,
-              is_additional_shift: isAdditional,
-            })
-            .select("id")
-            .single();
-          if (error) throw error;
-          attendanceId = data.id as string;
-          createdNow = true;
-        }
-      }
-
       if (!attendanceId) throw new Error("No hay una jornada activa.");
 
       const { error: evErr } = await db.from("rh_attendance_events").insert({
@@ -348,21 +352,10 @@ export function useJornada() {
         within_geofence: geo.withinGeofence,
         office_location_id: geo.officeLocationId,
       });
-      if (evErr) {
-        // Si la jornada se creó en esta misma acción, retirarla para no dejar
-        // una sesión "fantasma" sin eventos que bloquee el próximo check-in.
-        if (createdNow) {
-          await db
-            .from("rh_attendance")
-            .delete()
-            .eq("id", attendanceId)
-            .eq("user_id", user!.id);
-        }
-        throw evErr;
-      }
+      if (evErr) throw evErr;
 
       if (action.type === "check_out") {
-        await db
+        const { error: outErr } = await db
           .from("rh_attendance")
           .update({
             check_out_at: new Date().toISOString(),
@@ -371,14 +364,12 @@ export function useJornada() {
           })
           .eq("id", attendanceId)
           .eq("user_id", user!.id);
+        if (outErr) throw outErr;
       }
 
       // Refleja el estado en Slack según la acción (no bloqueante).
       let slack: SlackStatus | null;
       switch (action.type) {
-        case "check_in":
-          slack = WORK_MODE_SLACK_STATUS[action.workMode];
-          break;
         case "lunch_start":
           slack = PAUSE_SLACK_STATUS.lunch;
           break;
@@ -395,28 +386,42 @@ export function useJornada() {
       }
       await syncSlackStatus(slack);
 
-      return action.type;
+      return { type: action.type, alreadyActive: false };
     },
-    onSuccess: (type) => {
+    onSuccess: (result) => {
       invalidate();
-      toast.success(type === "change_mode" ? "Modalidad actualizada" : ACTION_TOAST[type]);
+      if (result.type === "change_mode") {
+        toast.success("Modalidad actualizada");
+        return;
+      }
+      if (result.type === "check_in" && result.alreadyActive) {
+        toast.success("Tu jornada ya estaba activa");
+        return;
+      }
+      toast.success(ACTION_TOAST[result.type as RhEventType] ?? "Listo");
     },
-    onError: (e: Error) => toast.error(e.message || "No se pudo registrar el evento"),
+    onError: (e: unknown) => toast.error(rhErrorMessage(e, "No se pudo registrar el evento")),
   });
 
   // Acota los eventos a la jornada (sesión) actual: si hoy se inició una
   // nueva jornada tras cerrar la anterior, solo cuenta la más reciente.
+  // Si la sesión existe pero los eventos aún no cargan, el fallback evita
+  // mostrar "Sin iniciar" sobre una jornada realmente abierta.
   const sessionEvents = session
     ? events.filter((e) => e.attendance_id === session.id)
     : [];
-  const summary = summarizeJornada(sessionEvents);
+  const summary = summarizeJornadaWithSession(session ?? null, events);
+
+  const queriesLoading =
+    (!!user && attendanceQ.isLoading) || (!!user && eventsQ.isLoading);
 
   return {
     session: session ?? null,
     events: sessionEvents,
     schedule: schedule ?? null,
     summary,
-    isPending: mutation.isPending,
+    isPending: mutation.isPending || queriesLoading,
+    isLoading: queriesLoading,
     act: mutation.mutate,
   };
 }
