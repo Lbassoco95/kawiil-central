@@ -8,17 +8,32 @@ export function clientFlagReason(flag: CfdiFlag): string {
   const raw = String(flag.reason ?? "").trim();
   const isDemo = /\bDEMO\b/i.test(raw) || /\(DEMO\)/i.test(raw);
 
+  if (code === "nota_credito") {
+    return "Nota de crédito sobre factura relacionada";
+  }
+  if (code === "complemento_pago") {
+    return /parcial/i.test(raw) ? "Complemento de pago parcial" : "Complemento de pago";
+  }
+
   if (
     code === "metadata_only"
     || /solo metadatos/i.test(raw)
     || (/metadatos/i.test(raw) && /espejo/i.test(raw))
   ) {
-    return isDemo ? "Solo metadatos (DEMO)" : "Detalle pendiente";
+    return isDemo ? "Detalle pendiente (ejemplo)" : "Detalle pendiente";
   }
 
   // Cualquier razón residual con “espejo” → versión neutra
   if (/espejo/i.test(raw)) {
-    return stripEspejoJargon(raw) || (isDemo ? "Solo metadatos (DEMO)" : "Detalle pendiente");
+    return stripEspejoJargon(raw) || (isDemo ? "Detalle pendiente (ejemplo)" : "Detalle pendiente");
+  }
+
+  // No mostrar UUIDs crudos en razones visibles.
+  if (/[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}/.test(raw)) {
+    return stripEspejoJargon(raw.replace(
+      /[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}/g,
+      "factura relacionada",
+    )).replace(/\s*\(DEMO\)\s*/gi, " ").replace(/\s{2,}/g, " ").trim() || "Atención";
   }
 
   return raw || "Atención";

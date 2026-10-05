@@ -815,36 +815,124 @@ const listarFacturas: Handler = async (ctx) => {
   await assertClientAccess(ctx, clientId, ["administrador", "operativo", "consulta"]);
   const filters = (ctx.body.filters ?? {}) as Record<string, unknown>;
   const direction = ctx.body.direction === "emitida" ? "emitida" : "recibida";
-  let query = requireUser(ctx).from("portal_cfdi_v").select("*").eq("client_id", clientId)
-    .eq("direction", direction).order("fecha", { ascending: false }).limit(200);
-  if (typeof filters.desde === "string" && filters.desde) query = query.gte("fecha", filters.desde);
-  if (typeof filters.hasta === "string" && filters.hasta) query = query.lte("fecha", `${filters.hasta}T23:59:59`);
+  let query = requireUser(ctx).from("portal_cfdi").select(
+    "id, uuid, direction, source, detail_status, issued_at, issuer_rfc, issuer_name, receiver_rfc, receiver_name, voucher_type, payment_form, payment_method, subtotal, total, sat_status, xml_path, pdf_path, is_test, flags, category_name, category_status",
+  ).eq("client_id", clientId).eq("direction", direction).order("issued_at", { ascending: false }).limit(200);
+  if (typeof filters.desde === "string" && filters.desde) query = query.gte("issued_at", filters.desde);
+  if (typeof filters.hasta === "string" && filters.hasta) query = query.lte("issued_at", `${filters.hasta}T23:59:59`);
   const rfc = typeof filters.rfc === "string" ? filters.rfc.replace(/[^A-Za-z0-9&Ñ]/g, "") : "";
-  if (rfc) query = query.or(`rfc_emisor.ilike.%${rfc}%,rfc_receptor.ilike.%${rfc}%`);
+  if (rfc) query = query.or(`issuer_rfc.ilike.%${rfc}%,receiver_rfc.ilike.%${rfc}%`);
   if (Number.isFinite(Number(filters.min)) && filters.min !== "") query = query.gte("total", Number(filters.min));
   if (Number.isFinite(Number(filters.max)) && filters.max !== "") query = query.lte("total", Number(filters.max));
   if (typeof filters.estatus === "string" && filters.estatus) query = query.eq("sat_status", filters.estatus);
-  let { data, error } = await query;
-  if (error) {
-    // Fallback si la vista aún no existe en un entorno viejo.
-    let q2 = requireUser(ctx).from("portal_cfdi").select("*").eq("client_id", clientId).eq("direction", direction).order("issued_at", { ascending: false }).limit(200);
-    if (typeof filters.desde === "string" && filters.desde) q2 = q2.gte("issued_at", filters.desde);
-    if (typeof filters.hasta === "string" && filters.hasta) q2 = q2.lte("issued_at", `${filters.hasta}T23:59:59`);
-    const alt = await q2;
-    if (alt.error) throw new ApiError(400, "consulta", "No se pudieron consultar las facturas.");
-    data = (alt.data ?? []).map((c: Record<string, unknown>) => ({
-      ...c,
+  if (typeof filters.metodo === "string" && (filters.metodo === "PUE" || filters.metodo === "PPD")) {
+    query = query.eq("payment_method", filters.metodo);
+  }
+  const { data: raw, error } = await query;
+  if (error) throw new ApiError(400, "consulta", "No se pudieron consultar las facturas.");
+  const rows = raw ?? [];
+  const ids = rows.map((r) => r.id as string);
+  const paidByRelated = new Map<string, { paid: number; count: number }>();
+  const conceptIssuesByCfdi = new Map<string, { faltante: number; invalida: number; no_cuadra: number; label: string | null }>();
+  if (ids.length) {
+    const [{ data: links }, { data: concepts }] = await Promise.all([
+      ctx.admin.from("portal_payment_links").select("related_cfdi_id, paid_amount").in("related_cfdi_id", ids),
+      ctx.admin.from("portal_cfdi_concepts").select("cfdi_id, product_service_key, description").in("cfdi_id", ids),
+    ]);
+    for (const link of links ?? []) {
+      const key = String(link.related_cfdi_id);
+      const cur = paidByRelated.get(key) ?? { paid: 0, count: 0 };
+      cur.paid += Number(link.paid_amount ?? 0);
+      cur.count += 1;
+      paidByRelated.set(key, cur);
+    }
+    const byCfdi = new Map<string, { product_service_key: string | null; description: string }[]>();
+    for (const concept of concepts ?? []) {
+      const key = String(concept.cfdi_id);
+      const list = byCfdi.get(key) ?? [];
+      list.push({
+        product_service_key: concept.product_service_key ?? null,
+        description: String(concept.description ?? ""),
+      });
+      byCfdi.set(key, list);
+    }
+    for (const [cfdiId, lines] of byCfdi) {
+      let faltante = 0;
+      let invalida = 0;
+      let no_cuadra = 0;
+      for (const line of lines) {
+        const key = String(line.product_service_key ?? "").trim();
+        if (!key) { faltante += 1; continue; }
+        if (!/^\d{8}$/.test(key)) { invalida += 1; continue; }
+        const d = line.description.toLowerCase();
+        if (["15101514", "15101505", "15101515"].includes(key) && /consultor|servicio|asesor|honorario|contab|fiscal|legal|auditor/.test(d)) {
+          no_cuadra += 1;
+        }
+      }
+      const totalIssues = faltante + invalida + no_cuadra;
+      let label: string | null = null;
+      if (totalIssues === 0) label = null;
+      else if (faltante && !invalida && !no_cuadra) label = faltante === 1 ? "Falta clave de producto" : `${faltante} partidas sin clave`;
+      else if (no_cuadra && !faltante && !invalida) label = "Clave no cuadra con el concepto";
+      else if (invalida && !faltante && !no_cuadra) label = "Clave inválida";
+      else label = "Revisar claves de producto";
+      conceptIssuesByCfdi.set(cfdiId, { faltante, invalida, no_cuadra, label });
+    }
+  }
+  const facturas = rows.map((c) => {
+    const pay = paidByRelated.get(String(c.id)) ?? { paid: 0, count: 0 };
+    const keys = conceptIssuesByCfdi.get(String(c.id)) ?? { faltante: 0, invalida: 0, no_cuadra: 0, label: null };
+    const metodo = c.payment_method === "PUE" || c.payment_method === "PPD" ? c.payment_method : null;
+    const voucher = typeof c.voucher_type === "string" ? c.voucher_type : null;
+    const total = Number(c.total ?? 0);
+    let cobranza_estado = "no_aplica";
+    let cobranza_label = "Sin dato de cobro";
+    if (voucher === "E") { cobranza_estado = "no_aplica"; cobranza_label = "Nota de crédito"; }
+    else if (voucher === "P") { cobranza_estado = "no_aplica"; cobranza_label = "Complemento"; }
+    else if (metodo === "PUE") { cobranza_estado = "pagado"; cobranza_label = "Pagado"; }
+    else if (metodo === "PPD") {
+      if (pay.paid <= 0.009) { cobranza_estado = "pendiente"; cobranza_label = "Pendiente"; }
+      else if (pay.paid + 0.009 < total) { cobranza_estado = "parcial"; cobranza_label = "Parcial"; }
+      else { cobranza_estado = "pagado"; cobranza_label = "Pagado"; }
+    }
+    return {
+      id: c.id,
+      uuid: c.uuid,
+      direction: c.direction,
+      source: c.source,
+      detail_status: c.detail_status,
       fecha: c.issued_at,
       rfc_emisor: c.issuer_rfc,
       nombre_emisor: c.issuer_name,
       rfc_receptor: c.receiver_rfc,
       nombre_receptor: c.receiver_name,
-      metodo_pago: c.payment_method,
+      voucher_type: voucher,
       forma_pago: c.payment_form,
-    }));
-    error = null;
-  }
-  return { facturas: data ?? [], espejo: MIRROR_READ_ONLY, carga_cliente_habilitada: !MIRROR_READ_ONLY };
+      metodo_pago: metodo,
+      subtotal: c.subtotal,
+      total: c.total,
+      sat_status: c.sat_status,
+      xml_path: c.xml_path,
+      pdf_path: c.pdf_path,
+      is_test: c.is_test,
+      flags: c.flags,
+      category_name: c.category_name,
+      category_status: c.category_status,
+      paid_amount: Math.round(pay.paid * 100) / 100,
+      payments_count: pay.count,
+      cobranza_estado,
+      cobranza_label,
+      clave_issues_label: keys.label,
+      clave_faltante: keys.faltante,
+      clave_invalida: keys.invalida,
+      clave_no_cuadra: keys.no_cuadra,
+    };
+  });
+  const cobranzaFilter = typeof filters.cobranza === "string" ? filters.cobranza : "";
+  const filtered = cobranzaFilter
+    ? facturas.filter((f) => f.cobranza_estado === cobranzaFilter)
+    : facturas;
+  return { facturas: filtered, espejo: MIRROR_READ_ONLY, carga_cliente_habilitada: !MIRROR_READ_ONLY };
 };
 
 const detalleFactura: Handler = async (ctx) => {
@@ -858,6 +946,41 @@ const detalleFactura: Handler = async (ctx) => {
     ctx.admin.from("portal_cfdi_concepts").select("product_service_key, description, quantity, unit_value, amount, discount").eq("cfdi_id", cfdiId),
     ctx.admin.from("portal_payment_links").select("paid_at, paid_amount, payment_cfdi_id").eq("related_cfdi_id", cfdiId),
   ]);
+  const paidAmount = (payments ?? []).reduce((s, p) => s + Number(p.paid_amount ?? 0), 0);
+  const paymentIds = [...new Set((payments ?? []).map((p) => p.payment_cfdi_id).filter(Boolean))];
+  let complementos: { id: string; uuid: string; paid_at: string; paid_amount: number }[] = [];
+  if (paymentIds.length) {
+    const { data: payCfdis } = await ctx.admin.from("portal_cfdi")
+      .select("id, uuid").in("id", paymentIds);
+    const byId = new Map((payCfdis ?? []).map((r) => [String(r.id), String(r.uuid)]));
+    complementos = (payments ?? []).map((p) => ({
+      id: String(p.payment_cfdi_id),
+      uuid: byId.get(String(p.payment_cfdi_id)) ?? String(p.payment_cfdi_id),
+      paid_at: String(p.paid_at),
+      paid_amount: Number(p.paid_amount),
+    }));
+  }
+  const flags = Array.isArray(cfdi.flags) ? cfdi.flags as { code?: string; reason?: string }[] : [];
+  const ncRelated = flags.find((f) => String(f.code ?? "").toLowerCase() === "nota_credito");
+  const ncUuidMatch = ncRelated?.reason?.match(/[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}/);
+  let notaCreditoDe: { id: string; uuid: string } | null = null;
+  if (ncUuidMatch) {
+    const { data: related } = await requireUser(ctx).from("portal_cfdi")
+      .select("id, uuid").eq("client_id", clientId).eq("uuid", ncUuidMatch[0].toUpperCase()).maybeSingle();
+    if (related) notaCreditoDe = { id: related.id, uuid: related.uuid };
+  }
+  const { data: notasSobreEsta } = await requireUser(ctx).from("portal_cfdi")
+    .select("id, uuid, total, issued_at, flags")
+    .eq("client_id", clientId)
+    .eq("voucher_type", "E");
+  const notasCredito = (notasSobreEsta ?? []).filter((n) => {
+    const reason = Array.isArray(n.flags)
+      ? (n.flags as { code?: string; reason?: string }[])
+        .find((f) => String(f.code ?? "").toLowerCase() === "nota_credito")?.reason ?? ""
+      : "";
+    return reason.toUpperCase().includes(String(cfdi.uuid).toUpperCase());
+  }).map((n) => ({ id: n.id, uuid: n.uuid, total: n.total, fecha: n.issued_at }));
+
   return {
     factura: {
       id: cfdi.id,
@@ -868,6 +991,7 @@ const detalleFactura: Handler = async (ctx) => {
       nombre_emisor: cfdi.issuer_name,
       rfc_receptor: cfdi.receiver_rfc,
       nombre_receptor: cfdi.receiver_name,
+      voucher_type: cfdi.voucher_type ?? null,
       forma_pago: cfdi.payment_form,
       metodo_pago: cfdi.payment_method,
       subtotal: cfdi.subtotal,
@@ -883,10 +1007,14 @@ const detalleFactura: Handler = async (ctx) => {
       xml_path: cfdi.xml_path,
       pdf_path: cfdi.pdf_path,
       is_test: cfdi.is_test,
+      paid_amount: Math.round(paidAmount * 100) / 100,
     },
     impuestos: taxLines ?? [],
     conceptos: concepts ?? [],
     pagos: payments ?? [],
+    complementos,
+    notas_credito: notasCredito,
+    nota_credito_de: notaCreditoDe,
     calidad: cfdi.detail_status === "complete" ? "completa" : "solo_metadatos",
     espejo: true,
   };

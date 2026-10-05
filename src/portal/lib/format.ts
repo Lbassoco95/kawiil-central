@@ -12,6 +12,13 @@ export const fmtDateTime = (d: string | Date | null | undefined) =>
   d ? new Intl.DateTimeFormat("es-MX", { timeZone: TZ, day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(d)) : "—";
 export const fmtMoney = (n: number | string | null | undefined) =>
   n === null || n === undefined || n === "" ? "—" : new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(Number(n));
+/** UUID corto en listas; el detalle muestra el folio completo. */
+export const fmtUuidShort = (uuid: string | null | undefined) => {
+  if (!uuid) return "—";
+  const u = String(uuid).trim();
+  if (u.length <= 13) return u;
+  return `${u.slice(0, 8)}…`;
+};
 export const MONTHS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 export const monthLabel = (ym: string) => {
   const [y, m] = ym.split("-").map(Number);
