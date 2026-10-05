@@ -229,7 +229,8 @@ export function ClientSatgoPanel({
         <p className="text-[11px] text-muted-foreground leading-snug max-w-3xl">
           Mismo formato para todos los clientes: carga la e.firma una vez y consulta 69-B, CSF, 32D
           y buzón tributario (comunicados / notificaciones) desde aquí. Los resultados quedan en el
-          historial del cliente.
+          historial del cliente. La descarga automática de facturas (CFDI) solo corre con e.firma
+          JWE cargada — sin FIEL no hay datos para el espejo Kawiil OS.
         </p>
       </header>
 
@@ -255,6 +256,23 @@ export function ClientSatgoPanel({
         ) : (
           <Badge variant="outline" className="text-[10px] font-normal text-amber-800 dark:text-amber-200">
             Sin e.firma JWE
+          </Badge>
+        )}
+        {satgoReady ? (
+          <Badge
+            variant="secondary"
+            className="text-[10px] font-normal bg-sky-500/10 text-sky-900 dark:text-sky-200"
+            title="Edge satgo-facturas · 08:00, 15:00 y 21:00 America/Mexico_City"
+          >
+            CFDI auto 08/15/21 CDMX
+          </Badge>
+        ) : (
+          <Badge
+            variant="outline"
+            className="text-[10px] font-normal text-muted-foreground"
+            title="Sin e.firma JWE la descarga automática no incluye a este cliente"
+          >
+            CFDI auto: bloqueado (falta FIEL)
           </Badge>
         )}
         {client?.sat_fiel_managed_by_firm !== false ? (
