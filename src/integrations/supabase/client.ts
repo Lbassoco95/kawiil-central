@@ -35,10 +35,11 @@ const getProjectRefFromJwt = (jwt: string) => {
 const expectedHost = `${EXPECTED_PROJECT_ID}.supabase.co`;
 const envHost = getHostFromUrl(envSupabaseUrl);
 const envKeyRef = getProjectRefFromJwt(envPublishableKey);
-const isSbPublishableKey = envPublishableKey.startsWith('sb_publishable_');
+// Preferimos la anon JWT legacy del proyecto: la clave sb_publishable_* del
+// entorno a veces se acepta en build pero no alinea con el cliente que ya
+// conoce el JWT embebido. Solo usamos env si el JWT apunta al mismo ref.
 const hasValidEnvConfig =
-  envHost === expectedHost &&
-  (envKeyRef === EXPECTED_PROJECT_ID || isSbPublishableKey);
+  envHost === expectedHost && envKeyRef === EXPECTED_PROJECT_ID;
 
 const SUPABASE_URL = hasValidEnvConfig ? envSupabaseUrl : EXPECTED_SUPABASE_URL;
 const SUPABASE_PUBLISHABLE_KEY = hasValidEnvConfig

@@ -22,6 +22,7 @@ import {
   LogOut,
   ChevronDown,
   Loader2,
+  AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -44,7 +45,7 @@ import { AbsenceRequestDialog } from "./AbsenceRequestDialog";
  * Siempre visible: muestra el estado y el siguiente paso de la jornada.
  */
 export function JornadaTopbarWidget() {
-  const { session, schedule, summary, isPending, act } = useJornada();
+  const { session, schedule, summary, isPending, isError, refetch, act } = useJornada();
   const plannedMode = plannedModeForToday(schedule);
   const transit = useTransitStatus();
   const navigate = useNavigate();
@@ -56,6 +57,20 @@ export function JornadaTopbarWidget() {
   const [absType, setAbsType] = useState<RhAbsenceType | undefined>(undefined);
 
   const expedientePending = expedienteProgress(docs).uploaded < EXPEDIENTE_DOC_TYPES.length;
+
+  if (isError && summary.state === "none") {
+    return (
+      <Button
+        size="sm"
+        variant="outline"
+        className="h-8 gap-1.5 border-amber-300 text-amber-700"
+        onClick={() => refetch?.()}
+      >
+        <AlertTriangle className="h-3.5 w-3.5" />
+        <span className="hidden sm:inline">Reintentar jornada</span>
+      </Button>
+    );
+  }
 
   // Sin iniciar o jornada cerrada: botón "Iniciar" con menú para elegir modalidad.
   if (summary.state === "none" || summary.state === "done") {
