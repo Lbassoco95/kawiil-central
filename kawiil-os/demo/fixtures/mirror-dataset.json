@@ -2,8 +2,8 @@
   "$comment": "Representación demo del cliente contable Bassoco, Vega, Salas, Morales, Servicios Empresariales S.C. CFDI sintéticos (is_test) hasta invoice.publish real desde central.",
   "company": {
     "external_ref": "demo-espejo-fiscal",
-    "name": "Bassoco, Vega, Salas, Morales, Servicios Empresariales S.C.",
-    "rfc": "XAXX010101000",
+    "name": "BASSOCO, VEGA, SALAS, MORALES, SERVICIOS EMPRESARIALES SC",
+    "rfc": "BVS211101H55",
     "tier": "premier",
     "fiscal_enabled": true,
     "tickets_enabled": false,
@@ -21,10 +21,10 @@
       "detail_status": "complete",
       "is_test": true,
       "issued_at": "2026-09-05T16:00:00Z",
-      "issuer_rfc": "XAXX010101000",
-      "issuer_name": "Bassoco, Vega, Salas, Morales, Servicios Empresariales S.C.",
+      "issuer_rfc": "BVS211101H55",
+      "issuer_name": "BASSOCO, VEGA, SALAS, MORALES, SERVICIOS EMPRESARIALES SC",
       "receiver_rfc": "CACX7605101P8",
-      "receiver_name": "Cliente Demo Uno",
+      "receiver_name": "Constructora Aldea del Sol",
       "payment_form": "03",
       "payment_method": "PUE",
       "voucher_type": "I",
@@ -37,7 +37,7 @@
       "concepts": [
         {
           "product_service_key": "80101500",
-          "description": "Consultoría fiscal (DEMO)",
+          "description": "Consultoría fiscal — septiembre",
           "quantity": 1,
           "unit_value": 10000,
           "amount": 10000
@@ -61,9 +61,9 @@
       "is_test": true,
       "issued_at": "2026-09-08T18:30:00Z",
       "issuer_rfc": "IIA040805DZ4",
-      "issuer_name": "Proveedor Demo Servicios",
-      "receiver_rfc": "XAXX010101000",
-      "receiver_name": "Bassoco, Vega, Salas, Morales, Servicios Empresariales S.C.",
+      "issuer_name": "Nube Operativa MX",
+      "receiver_rfc": "BVS211101H55",
+      "receiver_name": "BASSOCO, VEGA, SALAS, MORALES, SERVICIOS EMPRESARIALES SC",
       "payment_form": "03",
       "payment_method": "PUE",
       "voucher_type": "I",
@@ -78,7 +78,7 @@
       "concepts": [
         {
           "product_service_key": null,
-          "description": "Servicio de nube (DEMO)",
+          "description": "Hospedaje en nube — septiembre",
           "quantity": 1,
           "unit_value": 5000,
           "amount": 5000
@@ -118,9 +118,9 @@
       "is_test": true,
       "issued_at": "2026-09-12T12:00:00Z",
       "issuer_rfc": "ABC010101AB1",
-      "issuer_name": "Proveedor Solo Metadatos",
-      "receiver_rfc": "XAXX010101000",
-      "receiver_name": "Bassoco, Vega, Salas, Morales, Servicios Empresariales S.C.",
+      "issuer_name": "Papelería del Centro",
+      "receiver_rfc": "BVS211101H55",
+      "receiver_name": "BASSOCO, VEGA, SALAS, MORALES, SERVICIOS EMPRESARIALES SC",
       "payment_method": "PUE",
       "subtotal": 2000,
       "vat_transferred": 0,
@@ -136,10 +136,10 @@
       "detail_status": "complete",
       "is_test": true,
       "issued_at": "2026-09-15T15:00:00Z",
-      "issuer_rfc": "XAXX010101000",
-      "issuer_name": "Bassoco, Vega, Salas, Morales, Servicios Empresariales S.C.",
+      "issuer_rfc": "BVS211101H55",
+      "issuer_name": "BASSOCO, VEGA, SALAS, MORALES, SERVICIOS EMPRESARIALES SC",
       "receiver_rfc": "CACX7605101P8",
-      "receiver_name": "Cliente Demo Uno",
+      "receiver_name": "Constructora Aldea del Sol",
       "payment_form": "99",
       "payment_method": "PPD",
       "voucher_type": "I",
@@ -152,7 +152,7 @@
       "concepts": [
         {
           "product_service_key": "15101514",
-          "description": "Proyecto PPD parcial — consultoría (DEMO)",
+          "description": "Consultoría fiscal — cobro en parcialidades",
           "quantity": 1,
           "unit_value": 8000,
           "amount": 8000
@@ -175,10 +175,10 @@
       "detail_status": "complete",
       "is_test": true,
       "issued_at": "2026-09-18T14:00:00Z",
-      "issuer_rfc": "XAXX010101000",
-      "issuer_name": "Bassoco, Vega, Salas, Morales, Servicios Empresariales S.C.",
+      "issuer_rfc": "BVS211101H55",
+      "issuer_name": "BASSOCO, VEGA, SALAS, MORALES, SERVICIOS EMPRESARIALES SC",
       "receiver_rfc": "GHC150918XY9",
-      "receiver_name": "Cliente Demo Dos",
+      "receiver_name": "Grupo Horizonte Comercial",
       "payment_form": "99",
       "payment_method": "PPD",
       "voucher_type": "I",
@@ -191,7 +191,7 @@
       "concepts": [
         {
           "product_service_key": "80101500",
-          "description": "Proyecto PPD pendiente (DEMO)",
+          "description": "Asesoría contable — proyecto anual",
           "quantity": 1,
           "unit_value": 20000,
           "amount": 20000
@@ -214,10 +214,10 @@
       "detail_status": "complete",
       "is_test": true,
       "issued_at": "2026-09-10T13:00:00Z",
-      "issuer_rfc": "XAXX010101000",
-      "issuer_name": "Bassoco, Vega, Salas, Morales, Servicios Empresariales S.C.",
+      "issuer_rfc": "BVS211101H55",
+      "issuer_name": "BASSOCO, VEGA, SALAS, MORALES, SERVICIOS EMPRESARIALES SC",
       "receiver_rfc": "STN180201ZZ2",
-      "receiver_name": "Cliente Demo Tres",
+      "receiver_name": "Studio Norte Consultores",
       "payment_form": "99",
       "payment_method": "PPD",
       "voucher_type": "I",
@@ -230,7 +230,7 @@
       "concepts": [
         {
           "product_service_key": "ABC",
-          "description": "Proyecto PPD pagado (DEMO)",
+          "description": "Honorarios de auditoría interna",
           "quantity": 1,
           "unit_value": 5000,
           "amount": 5000
@@ -253,14 +253,14 @@
       "detail_status": "complete",
       "is_test": true,
       "issued_at": "2026-09-22T16:00:00Z",
-      "issuer_rfc": "XAXX010101000",
-      "issuer_name": "Bassoco, Vega, Salas, Morales, Servicios Empresariales S.C.",
+      "issuer_rfc": "BVS211101H55",
+      "issuer_name": "BASSOCO, VEGA, SALAS, MORALES, SERVICIOS EMPRESARIALES SC",
       "receiver_rfc": "STN180201ZZ2",
-      "receiver_name": "Cliente Demo Tres",
+      "receiver_name": "Studio Norte Consultores",
       "voucher_type": "P",
       "total": 5800,
       "sat_status": "vigente",
-      "flags": [{ "code": "complemento_pago", "reason": "Complemento de pago (DEMO)" }],
+      "flags": [{ "code": "complemento_pago", "reason": "Complemento de pago" }],
       "concepts": [],
       "tax_lines": [],
       "payments": [
@@ -277,14 +277,14 @@
       "detail_status": "complete",
       "is_test": true,
       "issued_at": "2026-09-20T17:00:00Z",
-      "issuer_rfc": "XAXX010101000",
-      "issuer_name": "Bassoco, Vega, Salas, Morales, Servicios Empresariales S.C.",
+      "issuer_rfc": "BVS211101H55",
+      "issuer_name": "BASSOCO, VEGA, SALAS, MORALES, SERVICIOS EMPRESARIALES SC",
       "receiver_rfc": "CACX7605101P8",
-      "receiver_name": "Cliente Demo Uno",
+      "receiver_name": "Constructora Aldea del Sol",
       "voucher_type": "P",
       "total": 4640,
       "sat_status": "vigente",
-      "flags": [{ "code": "complemento_pago", "reason": "Complemento parcial (DEMO)" }],
+      "flags": [{ "code": "complemento_pago", "reason": "Complemento de pago parcial" }],
       "concepts": [],
       "tax_lines": [],
       "payments": [
@@ -301,10 +301,10 @@
       "detail_status": "complete",
       "is_test": true,
       "issued_at": "2026-09-25T11:00:00Z",
-      "issuer_rfc": "XAXX010101000",
-      "issuer_name": "Bassoco, Vega, Salas, Morales, Servicios Empresariales S.C.",
+      "issuer_rfc": "BVS211101H55",
+      "issuer_name": "BASSOCO, VEGA, SALAS, MORALES, SERVICIOS EMPRESARIALES SC",
       "receiver_rfc": "CACX7605101P8",
-      "receiver_name": "Cliente Demo Uno",
+      "receiver_name": "Constructora Aldea del Sol",
       "payment_form": "03",
       "payment_method": "PUE",
       "voucher_type": "E",
@@ -317,13 +317,13 @@
       "flags": [
         {
           "code": "nota_credito",
-          "reason": "Descuento sobre D1111111-1111-4111-8111-111111111111 (DEMO)"
+          "reason": "Descuento sobre D1111111-1111-4111-8111-111111111111"
         }
       ],
       "concepts": [
         {
           "product_service_key": "80121500",
-          "description": "Descuento por pronto pago (DEMO)",
+          "description": "Descuento por pronto pago",
           "quantity": 1,
           "unit_value": 1000,
           "amount": 1000

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { usePortal } from "../lib/session";
 import { callApi, openFile } from "../lib/api";
 import { clientDetailQualityLabel, clientFlagReason } from "../lib/clientFlags";
 import { deriveCobranza, metodoPagoLabel, relatedUuidFromFlags, voucherTypeLabel } from "../lib/cobranza";
+import { isSparseMetadataCfdi, partitionSparse, shortUuid, visibleClientFlags } from "../lib/cfdiPresentation";
 import { fmtDate, fmtMoney } from "../lib/format";
 import { Empty, Notice, PageTitle, StatusPill } from "../components/ui";
 
@@ -31,6 +32,7 @@ interface Cfdi {
   metodo_pago?: string | null;
   voucher_type?: string | null;
   detail_status?: string;
+  source?: string | null;
   paid_amount?: number;
   payments_count?: number;
   cobranza_estado?: string;
@@ -52,6 +54,105 @@ const COBRANZA_TONE: Record<string, "ok" | "warn" | "wait" | "info"> = {
   no_aplica: "info",
 };
 
+function FacturaCard({ c, dir }: { c: Cfdi; dir: "emitida" | "recibida" }) {
+  const cobranza = deriveCobranza({
+    metodo_pago: c.metodo_pago,
+    voucher_type: c.voucher_type,
+    total: c.total,
+    paid_amount: c.paid_amount,
+    payments_count: c.payments_count,
+  });
+  const metodo = metodoPagoLabel(c.metodo_pago);
+  const tipo = voucherTypeLabel(c.voucher_type);
+  const ncDe = relatedUuidFromFlags(c.flags);
+  const sparse = isSparseMetadataCfdi(c);
+  const flags = visibleClientFlags(c.flags);
+  const quality = clientDetailQualityLabel(undefined, c.detail_status);
+  const party = dir === "recibida" ? c.nombre_emisor ?? c.rfc_emisor : c.nombre_receptor ?? c.rfc_receptor;
+  const rfc = dir === "recibida" ? c.rfc_emisor : c.rfc_receptor;
+
+  return (
+    <li className="page-list-card p-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="font-medium">{party || "Contraparte pendiente"}</p>
+          <p className="text-xs text-muted-foreground">
+            {rfc ? <span className="kw-mono">{rfc}</span> : null}
+            {rfc ? " · " : null}
+            Folio <span className="kw-mono" title={c.uuid}>{shortUuid(c.uuid)}</span>
+          </p>
+          <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+            <span>{fmtDate(c.fecha)}</span>
+            {tipo && c.voucher_type && c.voucher_type !== "I" && (
+              <StatusPill tone={c.voucher_type === "E" ? "warn" : c.voucher_type === "P" ? "info" : "ok"}>
+                {tipo}
+              </StatusPill>
+            )}
+            {metodo && (
+              <StatusPill tone={metodo === "PPD" ? "warn" : "ok"}>{metodo}</StatusPill>
+            )}
+            {cobranza.estado !== "no_aplica" && (
+              <StatusPill tone={COBRANZA_TONE[cobranza.estado] ?? "info"}>
+                Cobranza: {c.cobranza_label ?? cobranza.label}
+                {cobranza.estado === "parcial" ? ` · ${fmtMoney(cobranza.paid)} de ${fmtMoney(cobranza.total)}` : ""}
+              </StatusPill>
+            )}
+            {!sparse && quality === "Detalle completo" && (
+              <span>· {quality}</span>
+            )}
+          </p>
+          {ncDe && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Nota de crédito sobre folio <span className="kw-mono" title={ncDe}>{shortUuid(ncDe)}</span>
+            </p>
+          )}
+          {c.clave_issues_label && (
+            <p className="mt-1 text-xs">
+              <StatusPill tone="warn">{c.clave_issues_label}</StatusPill>
+            </p>
+          )}
+        </div>
+        <div className="text-right">
+          <p className="kw-mono text-lg font-semibold">{fmtMoney(c.total)}</p>
+          <StatusPill tone={SAT[c.sat_status]?.tone ?? "wait"}>{SAT[c.sat_status]?.label ?? c.sat_status}</StatusPill>
+          {(sparse || c.detail_status !== "complete") && (
+            <span className="ml-1">
+              <StatusPill tone="warn">
+                {c.is_test ? "Detalle pendiente (ejemplo)" : "Detalle pendiente"}
+              </StatusPill>
+            </span>
+          )}
+          {c.is_test && c.detail_status === "complete" && (
+            <span className="ml-1">
+              <StatusPill tone="info">Ejemplo didáctico</StatusPill>
+            </span>
+          )}
+        </div>
+      </div>
+      {flags.map((f) => (
+        <p key={f.code + f.reason} className="mt-1 text-xs">
+          <StatusPill tone="warn">Atención</StatusPill> {clientFlagReason(f)}
+        </p>
+      ))}
+      <div className="mt-2 flex flex-wrap gap-2">
+        <Button size="sm" asChild>
+          <Link to={`/facturas/${c.id}`}>Ver detalle</Link>
+        </Button>
+        {c.xml_path && (
+          <Button size="sm" variant="outline" onClick={() => openFile("cfdi_xml", c.id)}>
+            XML
+          </Button>
+        )}
+        {c.pdf_path && (
+          <Button size="sm" variant="outline" onClick={() => openFile("cfdi_pdf", c.id)}>
+            PDF
+          </Button>
+        )}
+      </div>
+    </li>
+  );
+}
+
 export default function Facturas() {
   const { active } = usePortal();
   const [dir, setDir] = useState<"recibida" | "emitida">("emitida");
@@ -66,6 +167,7 @@ export default function Facturas() {
     cobranza: "",
   });
   const [rows, setRows] = useState<Cfdi[]>([]);
+  const [showPendingDetail, setShowPendingDetail] = useState(false);
 
   const load = useCallback(async () => {
     if (!active) return;
@@ -79,6 +181,9 @@ export default function Facturas() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const { ready, pending } = useMemo(() => partitionSparse(rows), [rows]);
+  const visible = showPendingDetail ? [...ready, ...pending] : ready;
 
   return (
     <>
@@ -97,6 +202,21 @@ export default function Facturas() {
           Solo lectura: ves las facturas que el equipo de Kawiil ya tiene listas. PPD sin complemento aparece como pendiente; con complemento, pagado o parcial.
         </Notice>
       </div>
+      {pending.length > 0 && (
+        <div className="mb-3">
+          <Notice tone="warn">
+            {pending.length} factura{pending.length === 1 ? "" : "s"} con detalle pendiente (sin montos ni método publicados aún).
+            {" "}
+            <button
+              type="button"
+              className="underline font-medium"
+              onClick={() => setShowPendingDetail((v) => !v)}
+            >
+              {showPendingDetail ? "Ocultarlas" : "Mostrarlas aparte"}
+            </button>
+          </Notice>
+        </div>
+      )}
       <div role="tablist" aria-label="Ingresos o egresos" className="portal-pill-group mb-3">
         {([
           { id: "emitida" as const, label: "Ingresos (emitidas)" },
@@ -171,104 +291,27 @@ export default function Facturas() {
           </select>
         </div>
       </fieldset>
-      {rows.length === 0 ? (
-        <Empty>No hay facturas con estos filtros.</Empty>
+      {visible.length === 0 ? (
+        <Empty>
+          {pending.length > 0 && !showPendingDetail
+            ? "Solo hay facturas con detalle pendiente. Usa «Mostrarlas aparte» arriba."
+            : "No hay facturas con estos filtros."}
+        </Empty>
       ) : (
         <ul className="space-y-2">
-          {rows.map((c) => {
-            const cobranza = deriveCobranza({
-              metodo_pago: c.metodo_pago,
-              voucher_type: c.voucher_type,
-              total: c.total,
-              paid_amount: c.paid_amount,
-              payments_count: c.payments_count,
-            });
-            const metodo = metodoPagoLabel(c.metodo_pago);
-            const tipo = voucherTypeLabel(c.voucher_type);
-            const ncDe = relatedUuidFromFlags(c.flags);
-            return (
-              <li key={c.id} className="page-list-card p-3">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <p className="font-medium">
-                      {dir === "recibida" ? c.nombre_emisor ?? c.rfc_emisor : c.nombre_receptor ?? c.rfc_receptor}
-                    </p>
-                    <p className="kw-mono text-xs text-muted-foreground">
-                      {dir === "recibida" ? c.rfc_emisor : c.rfc_receptor} · {c.uuid}
-                    </p>
-                    <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                      <span>{fmtDate(c.fecha)}</span>
-                      {/* Tipo SAT solo si no es I (las pestañas ya dicen ingreso/egreso por dirección). */}
-                      {tipo && c.voucher_type && c.voucher_type !== "I" && (
-                        <StatusPill tone={c.voucher_type === "E" ? "warn" : c.voucher_type === "P" ? "info" : "ok"}>
-                          {tipo}
-                        </StatusPill>
-                      )}
-                      {metodo && (
-                        <StatusPill tone={metodo === "PPD" ? "warn" : "ok"}>{metodo}</StatusPill>
-                      )}
-                      {cobranza.estado !== "no_aplica" && (
-                        <StatusPill tone={COBRANZA_TONE[cobranza.estado] ?? "info"}>
-                          Cobranza: {c.cobranza_label ?? cobranza.label}
-                          {cobranza.estado === "parcial" ? ` · ${fmtMoney(cobranza.paid)} de ${fmtMoney(cobranza.total)}` : ""}
-                        </StatusPill>
-                      )}
-                      {cobranza.estado === "no_aplica" && metodo == null && (
-                        <StatusPill tone="info">{c.cobranza_label ?? cobranza.label}</StatusPill>
-                      )}
-                      <span>· {clientDetailQualityLabel(undefined, c.detail_status)}</span>
-                    </p>
-                    {ncDe && (
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Nota de crédito sobre <span className="kw-mono">{ncDe}</span>
-                      </p>
-                    )}
-                    {c.clave_issues_label && (
-                      <p className="mt-1 text-xs">
-                        <StatusPill tone="warn">{c.clave_issues_label}</StatusPill>
-                      </p>
-                    )}
-                  </div>
-                  <div className="text-right">
-                    <p className="kw-mono text-lg font-semibold">{fmtMoney(c.total)}</p>
-                    <StatusPill tone={SAT[c.sat_status]?.tone ?? "wait"}>{SAT[c.sat_status]?.label ?? c.sat_status}</StatusPill>
-                    {c.detail_status !== "complete" && (
-                      <span className="ml-1">
-                        <StatusPill tone="warn">
-                          {c.is_test ? "Solo metadatos (DEMO)" : "Detalle pendiente"}
-                        </StatusPill>
-                      </span>
-                    )}
-                    {c.is_test && (
-                      <span className="ml-1">
-                        <StatusPill tone="warn">DEMO — sin validez fiscal</StatusPill>
-                      </span>
-                    )}
-                  </div>
-                </div>
-                {c.flags?.map((f) => (
-                  <p key={f.code + f.reason} className="mt-1 text-xs">
-                    <StatusPill tone="warn">Atención</StatusPill> {clientFlagReason(f)}
-                  </p>
-                ))}
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <Button size="sm" asChild>
-                    <Link to={`/facturas/${c.id}`}>Ver detalle</Link>
-                  </Button>
-                  {c.xml_path && (
-                    <Button size="sm" variant="outline" onClick={() => openFile("cfdi_xml", c.id)}>
-                      XML
-                    </Button>
-                  )}
-                  {c.pdf_path && (
-                    <Button size="sm" variant="outline" onClick={() => openFile("cfdi_pdf", c.id)}>
-                      PDF
-                    </Button>
-                  )}
-                </div>
+          {ready.map((c) => (
+            <FacturaCard key={c.id} c={c} dir={dir} />
+          ))}
+          {showPendingDetail && pending.length > 0 && (
+            <>
+              <li className="pt-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Detalle pendiente · {pending.length} factura{pending.length === 1 ? "" : "s"}
               </li>
-            );
-          })}
+              {pending.map((c) => (
+                <FacturaCard key={c.id} c={c} dir={dir} />
+              ))}
+            </>
+          )}
         </ul>
       )}
     </>

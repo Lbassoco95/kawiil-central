@@ -1,6 +1,7 @@
 /** Helpers puros: CFDI del espejo → filas/rankings de UI (sin client Supabase). */
 import type { InvoiceRow } from "../design/types";
-import { fmtDate, fmtMoney } from "./format";
+import { shortUuid } from "./cfdiPresentation";
+import { fmtDate, fmtMoney, fmtUuidShort } from "./format";
 
 export interface MirrorCfdi {
   id: string;
@@ -16,21 +17,20 @@ export interface MirrorCfdi {
   category_name: string | null;
   category_status: string;
   is_test: boolean;
+  detail_status?: string | null;
+  payment_method?: string | null;
+  /** Alias API portal (`facturas.listar`). */
+  metodo_pago?: string | null;
   /** Origen de publicación en OS (p. ej. satgo_facfiel, central_mirror). */
   source?: string | null;
-}
-
-function shortUuid(uuid: string | null | undefined): string {
-  if (!uuid) return "sin UUID";
-  return `${uuid.slice(0, 8)}…`;
 }
 
 /** Contraparte legible aunque SatGo solo haya publicado metadatos (nombre/RFC nulos). */
 export function partyName(row: MirrorCfdi, direction: "emitida" | "recibida"): string {
   if (direction === "emitida") {
-    return row.nombre_receptor ?? row.rfc_receptor ?? `UUID ${shortUuid(row.uuid)}`;
+    return row.nombre_receptor ?? row.rfc_receptor ?? `Folio ${shortUuid(row.uuid)}`;
   }
-  return row.nombre_emisor ?? row.rfc_emisor ?? `UUID ${shortUuid(row.uuid)}`;
+  return row.nombre_emisor ?? row.rfc_emisor ?? `Folio ${shortUuid(row.uuid)}`;
 }
 
 export function toInvoiceRows(rows: MirrorCfdi[], direction: "emitida" | "recibida"): InvoiceRow[] {
@@ -42,7 +42,7 @@ export function toInvoiceRows(rows: MirrorCfdi[], direction: "emitida" | "recibi
       date: c.fecha ? fmtDate(c.fecha) : "—",
       party,
       rfc,
-      folio: c.uuid,
+      folio: fmtUuidShort(c.uuid),
       total: Number(c.total ?? 0),
       status,
       proposal: c.category_name

@@ -8,6 +8,7 @@ import { Empty, Notice, PageTitle, StatusPill } from "../components/ui";
 import { clientDetailQualityLabel, clientFlagReason } from "../lib/clientFlags";
 import { deriveCobranza, metodoPagoLabel, voucherTypeLabel } from "../lib/cobranza";
 import { assessClaveProdServ, summarizeConceptKeyIssues } from "../lib/claveProdServ";
+import { visibleClientFlags } from "../lib/cfdiPresentation";
 import { DEMO_FISCAL_MARK } from "../lib/demo";
 
 interface Detalle {
@@ -98,9 +99,13 @@ export default function FacturaDetalle() {
                 <p className="kw-mono text-2xl">{fmtMoney(f.total)}</p>
                 <StatusPill tone={f.detail_status === "complete" ? "ok" : "warn"}>
                   {clientDetailQualityLabel(d?.calidad, f.detail_status)}
-                  {f.is_test && f.detail_status !== "complete" ? " (DEMO)" : ""}
+                  {f.is_test && f.detail_status !== "complete" ? " (ejemplo)" : ""}
                 </StatusPill>
-                {f.is_test && <div className="mt-1"><StatusPill tone="warn">{DEMO_FISCAL_MARK}</StatusPill></div>}
+                {f.is_test && (
+                  <div className="mt-1">
+                    <StatusPill tone="info">{f.detail_status === "complete" ? "Ejemplo didáctico" : DEMO_FISCAL_MARK}</StatusPill>
+                  </div>
+                )}
               </div>
             </div>
             <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
@@ -108,14 +113,14 @@ export default function FacturaDetalle() {
               <div><dt className="text-muted-foreground">IVA trasladado</dt><dd className="kw-mono">{fmtMoney(f.vat_transferred)}</dd></div>
               <div><dt className="text-muted-foreground">IVA retenido</dt><dd className="kw-mono">{fmtMoney(f.vat_withheld)}</dd></div>
               <div><dt className="text-muted-foreground">ISR retenido</dt><dd className="kw-mono">{fmtMoney(f.income_tax_withheld)}</dd></div>
-              <div><dt className="text-muted-foreground">Estatus SAT</dt><dd>{f.sat_status}</dd></div>
+              <div><dt className="text-muted-foreground">Estatus SAT</dt><dd>{f.sat_status === "vigente" ? "Vigente" : f.sat_status === "cancelado" ? "Cancelada" : f.sat_status === "unknown" ? "Sin verificar" : f.sat_status}</dd></div>
               <div><dt className="text-muted-foreground">Categoría</dt><dd>{f.category_status === "confirmada" ? f.category_name : "por confirmar"}</dd></div>
             </dl>
-            {f.flags?.map((flag) => <p key={flag.code + flag.reason} className="mt-2 text-xs"><StatusPill tone="warn">Atención</StatusPill> {clientFlagReason(flag)}</p>)}
+            {visibleClientFlags(f.flags).map((flag) => <p key={flag.code + flag.reason} className="mt-2 text-xs"><StatusPill tone="warn">Atención</StatusPill> {clientFlagReason(flag)}</p>)}
             {d?.nota_credito_de && (
               <p className="mt-2 text-sm">
                 Nota de crédito sobre{" "}
-                <Link className="kw-mono underline" to={`/facturas/${d.nota_credito_de.id}`}>{d.nota_credito_de.uuid}</Link>
+                <Link className="underline" to={`/facturas/${d.nota_credito_de.id}`}>factura relacionada</Link>
               </p>
             )}
             <div className="mt-3 flex gap-2">
@@ -126,7 +131,7 @@ export default function FacturaDetalle() {
           <section className="rounded-xl border bg-card p-4">
             <h2 className="text-lg">Conceptos y clave de producto/servicio</h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              El concepto es la descripción libre; la clave es el código del catálogo SAT (ClaveProdServ). Pueden no coincidir.
+              El concepto es la descripción libre; la clave es el código del catálogo SAT. Pueden no coincidir.
             </p>
             {d!.conceptos.length === 0 ? (
               <Empty>
