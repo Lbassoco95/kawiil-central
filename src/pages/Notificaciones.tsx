@@ -38,6 +38,7 @@ import { renderTextWithMentionHighlights } from "@/lib/renderMentionHighlights";
 import { Badge } from "@/components/ui/badge";
 import { KAWIIL_AI_GRADIENT } from "@/lib/kawiilAi";
 import { NotificationsKawiilCard } from "@/components/notifications/NotificationsKawiilCard";
+import { GatherSmartObjectsCard } from "@/components/notifications/GatherSmartObjectsCard";
 import { PersonalRemindersPanel } from "@/components/reminders/PersonalRemindersPanel";
 import { useReminders } from "@/hooks/useReminders";
 
@@ -1194,6 +1195,7 @@ export default function Notificaciones() {
             </p>
           </div>
           <NotificationDeliveryPreferences />
+          <GatherSmartObjectsCard />
           <NotificationAiPreferences />
         </div>
       </div>
