@@ -33,14 +33,16 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
 export function useModulePermissions() {
   const { user } = useAuth();
 
-  const { data: permissions = {}, isLoading } = useQuery({
+  const { data: permissions, isLoading, isError, error, refetch, isFetched } = useQuery({
     queryKey: ["module-permissions", user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error: qErr } = await supabase
         .from("user_module_permissions")
         .select("module_key, enabled")
         .eq("user_id", user!.id);
-      if (error) return {};
+      // Antes se tragaba el error y devolvía {} → sidebar sin Correo/RH/Pipeline
+      // aunque el usuario sí tenía permisos en BD.
+      if (qErr) throw qErr;
       const map: Record<string, boolean> = {};
       for (const row of data || []) {
         map[row.module_key] = row.enabled;
@@ -49,11 +51,27 @@ export function useModulePermissions() {
     },
     enabled: !!user,
     staleTime: 3 * 60 * 1000,
+    retry: 2,
   });
 
-  const hasModule = (key: string): boolean => !!permissions[key];
+  const map = permissions ?? {};
 
-  return { permissions, hasModule, isLoading };
+  // Fail-open si la API no respondió: ocultar módulos por timeout engaña al
+  // usuario (parece que "faltan módulos"). Con datos reales, respeta enabled.
+  const hasModule = (key: string): boolean => {
+    if (!isFetched || isError) return true;
+    if (!(key in map)) return false;
+    return !!map[key];
+  };
+
+  return {
+    permissions: map,
+    hasModule,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  };
 }
 
 export function useUserModulePermissions(userId: string | undefined) {

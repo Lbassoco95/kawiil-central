@@ -227,7 +227,7 @@ function SidebarBody({
   toggle: () => void;
   onMobileNavigate?: () => void;
 }) {
-  const { hasModule } = useModulePermissions();
+  const { hasModule, isError: modulesError, refetch: refetchModules } = useModulePermissions();
   const { isTransformador } = useUserRole();
   const getBadge = useNavBadges();
 
@@ -284,6 +284,19 @@ function SidebarBody({
           </Tooltip>
         )}
       </div>
+
+      {modulesError && !collapsed && (
+        <div className="mx-2.5 mt-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-2 text-[11px] leading-snug text-amber-200">
+          No se pudieron cargar tus permisos de módulos (API lenta o caída).{" "}
+          <button
+            type="button"
+            className="underline underline-offset-2"
+            onClick={() => void refetchModules()}
+          >
+            Reintentar
+          </button>
+        </div>
+      )}
 
       {/* Search trigger */}
       <div className={cn("px-2.5 pt-2.5 pb-1", collapsed && "px-1.5")}>

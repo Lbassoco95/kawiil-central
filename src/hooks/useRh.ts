@@ -414,6 +414,7 @@ export function useJornada() {
 
   const queriesLoading =
     (!!user && attendanceQ.isLoading) || (!!user && eventsQ.isLoading);
+  const queriesError = !!(attendanceQ.isError || eventsQ.isError);
 
   return {
     session: session ?? null,
@@ -422,6 +423,11 @@ export function useJornada() {
     summary,
     isPending: mutation.isPending || queriesLoading,
     isLoading: queriesLoading,
+    isError: queriesError,
+    refetch: () => {
+      void attendanceQ.refetch();
+      void eventsQ.refetch();
+    },
     act: mutation.mutate,
   };
 }
