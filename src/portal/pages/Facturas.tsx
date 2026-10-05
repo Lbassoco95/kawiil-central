@@ -198,7 +198,8 @@ export default function Facturas() {
                     </p>
                     <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                       <span>{fmtDate(c.fecha)}</span>
-                      {tipo && (
+                      {/* Tipo SAT solo si no es I (las pestañas ya dicen ingreso/egreso por dirección). */}
+                      {tipo && c.voucher_type && c.voucher_type !== "I" && (
                         <StatusPill tone={c.voucher_type === "E" ? "warn" : c.voucher_type === "P" ? "info" : "ok"}>
                           {tipo}
                         </StatusPill>
