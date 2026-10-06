@@ -19,6 +19,7 @@ Respuesta: `{ "version": "v1", "data": … }`. Error: `{ "error": "<código>", "
 | `v1/cuenta.recuperar` | portal-api (pública) | `{ email, captcha_token }` | Turnstile + límite. Respuesta genérica. |
 | `v1/cuenta.reenviar_confirmacion` | portal-api (pública) | `{ email, captcha_token }` | Turnstile + límite. Respuesta genérica. |
 | `v1/diagnostico.cerco` | portal-api (pública) | `{}` | Booleanos del cerco de rutas y si el captcha está configurado. |
+| `v1/mercado.tipo_cambio` | portal-api (pública) | `{}` | Tipo de cambio Banxico para el header. Lee `portal_market_fx` si central ya publicó (origen: Edge `banxico-fx` SF60653/SF43718). Sin fila → `{ status: "pending_publish", valor: null, fetch_path }` — **no inventa cifra**. |
 | `v1/sesion.actual` | portal-api | `{}` | Cuenta, nivel, empresas, papel, módulos y textos pendientes. |
 | `v1/legal.aceptar` | portal-api | `{ kind, client_id?, user_agent? }` | Acepta la versión vigente y deja bitácora. |
 | `v1/sesion.registrar_acceso` | portal-api | `{}` | Registra el acceso. |
