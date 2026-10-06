@@ -211,7 +211,7 @@ function MirrorEgresos() {
         <GlassPanel>
           <p className="kw-title" style={{ fontSize: 16 }}>CFDI recibidas</p>
           <p className="kw-small" style={{ marginTop: 8 }}>
-            Facturas que te emitieron proveedores. Pedir factura desde un recibo → Facturación.
+            Facturas que te emitieron proveedores. Para que Kawiil emita a partir de un ticket → Facturación → Subir ticket.
             Aquí consultas el archivo SatGo y puedes buscar o solicitar descarga por periodo.
           </p>
         </GlassPanel>

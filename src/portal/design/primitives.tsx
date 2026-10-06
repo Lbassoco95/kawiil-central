@@ -1047,6 +1047,11 @@ export function TeamChat({
   );
 }
 
+/**
+ * Pedido manual de factura (concepto distinto a «subir ticket»).
+ * No se usa en el hub Facturación: tickets = emisión por Kawiil vía SubirTicket.
+ * Reservado si más adelante vive en otro espacio (p. ej. pedir a un proveedor).
+ */
 export function InvoiceRequestForm({
   onSubmitted,
 }: {
@@ -1137,17 +1142,17 @@ export function UploadBox({
       tone: "ok",
       text:
         source === "foto"
-          ? `Foto lista: ${next.map((f) => f.name).join(", ")}. Estatus: Solicitada → En proceso.`
-          : `Recibo(s) agregados desde ${source === "galeria" ? "galería" : "archivo"}.`,
+          ? `Foto lista: ${next.map((f) => f.name).join(", ")}. Estatus: Subido → En revisión.`
+          : `Ticket(s) agregados desde ${source === "galeria" ? "galería" : "archivo"} para que emitamos tu factura.`,
     });
   };
 
   return (
     <GlassPanel padded={false} className="kw-form" as="section">
       <div>
-        <h3 className="kw-title">Subir recibos / tickets</h3>
+        <h3 className="kw-title">Subir ticket para que emitamos tu factura</h3>
         <p className="kw-small" style={{ margin: "2px 0 0" }}>
-          Toma una foto, elige de la galería o sube un archivo. En el demo se guarda en este dispositivo.
+          Toma una foto, elige de la galería o sube un archivo. Kawiil revisa el ticket y emite tu factura. En el demo se guarda en este dispositivo.
         </p>
       </div>
       <input
@@ -1239,7 +1244,7 @@ export function RequestTracker({
   onFilterChange?: (f: RequestFilter) => void;
 }) {
   const stepsFor = (kind: RequestItem["kind"]) =>
-    kind === "recibo" ? ["Subido", "En revisión", "Registrado"] : ["Solicitada", "En proceso", "Emitida"];
+    kind === "recibo" ? ["Subido", "En revisión", "Emitida"] : ["Solicitada", "En proceso", "Emitida"];
   const counts = {
     todas: items.length,
     pendiente: items.filter((i) => filterBucket(i.step) === "pendiente").length,

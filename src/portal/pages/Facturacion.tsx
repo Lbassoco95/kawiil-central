@@ -2,13 +2,13 @@ import { Link } from "react-router-dom";
 import { FilePlus2, Upload } from "lucide-react";
 import { GlassPanel, PageHead } from "../design/primitives";
 
-/** Vista /diseno: hub Facturación = elegir Emitir o Solicitar (no archivo SatGo). */
+/** Vista /diseno: hub Facturación = Emitir o Subir ticket (Kawiil emite). */
 export default function Facturacion() {
   return (
     <>
       <PageHead
         title="Facturación"
-        subtitle="Elige emitir con Facturapi o solicitar factura subiendo un ticket"
+        subtitle="Emite con Facturapi o sube un ticket para que emitamos tu factura"
       />
       <GlassPanel style={{ marginBottom: 16 }}>
         <p className="kw-small" style={{ margin: 0 }}>
@@ -16,7 +16,7 @@ export default function Facturacion() {
           <Link className="underline" to="/diseno/ingresos">Ingresos</Link>
           {" "}y{" "}
           <Link className="underline" to="/diseno/egresos">Egresos</Link>
-          . Aquí solo emitir o solicitar — nunca crear facturas desde Ingresos.
+          . Aquí solo emitir (wizard) o subir ticket — nunca crear facturas desde Ingresos.
         </p>
       </GlassPanel>
 
@@ -28,10 +28,10 @@ export default function Facturacion() {
           <p className="mt-2 text-sm text-muted-foreground">Wizard: ingreso, complemento de pago o nota de crédito.</p>
           <span className="kw-btn kw-btn--primary mt-4 inline-flex">Empezar</span>
         </Link>
-        <Link to="/diseno/facturas/solicitar" className="block rounded-2xl border bg-card p-6 transition hover:border-[var(--kawiil-blue)]">
+        <Link to="/diseno/facturas/ticket" className="block rounded-2xl border bg-card p-6 transition hover:border-[var(--kawiil-blue)]">
           <Upload className="mb-3" style={{ color: "var(--kawiilito-orange)" }} />
-          <h2 className="text-lg font-semibold">Solicitar factura</h2>
-          <p className="mt-2 text-sm text-muted-foreground">Sube un ticket o recibo (foto, galería o archivo).</p>
+          <h2 className="text-lg font-semibold">Subir ticket</h2>
+          <p className="mt-2 text-sm text-muted-foreground">Subir ticket para que emitamos tu factura (foto, galería o archivo).</p>
           <span className="kw-btn mt-4 inline-flex">Subir ticket</span>
         </Link>
       </div>

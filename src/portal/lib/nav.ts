@@ -32,7 +32,7 @@ export const PRIMARY_NAV: NavItem[] = [
 ];
 
 /**
- * Facturación = emitir / solicitar desde recibos (no archivo SatGo).
+ * Facturación = emitir (wizard) / subir ticket para que Kawiil emita (no archivo SatGo).
  * CFDI emitidas/recibidas + cobranza viven en Ingresos / Egresos.
  * En `/diseno` Layout remapea `/facturas` → `/facturacion`.
  */
