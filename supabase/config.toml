@@ -108,6 +108,9 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = false
   [functions.satgo-monthly]
     verify_jwt = false
+  [functions.satgo-facturas]
+    # Auth en código: x-cron-secret o JWT de staff (igual que satgo-monthly / satgo-query)
+    verify_jwt = false
   [functions.analyze-improvement-suggestions]
     verify_jwt = true
   [functions.ai-chat]
