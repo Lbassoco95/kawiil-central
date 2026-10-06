@@ -22,7 +22,7 @@ import { clampPeriodIndex, notifyPeriod, periodLabel } from "../lib/periodDemo";
 import { pushDemoToast } from "../lib/demoStore";
 import { shouldUseDemoFixtures } from "../lib/dataMode";
 import { usePortal } from "../lib/session";
-import { partitionSparse } from "../lib/cfdiPresentation";
+import { isPendingDetailCfdi, partitionSparse } from "../lib/cfdiPresentation";
 import { listMirrorInvoices, mirrorSourceNote, rankParties, sumTotals, toInvoiceRows } from "../lib/mirrorInvoices";
 
 function FixtureIngresos() {
@@ -115,7 +115,8 @@ function MirrorIngresos() {
   const { active } = usePortal();
   const [rows, setRows] = useState<ReturnType<typeof toInvoiceRows>>([]);
   const [count, setCount] = useState(0);
-  const [pendingDetail, setPendingDetail] = useState(0);
+  const [didacticCount, setDidacticCount] = useState(0);
+  const [pendingAmountCount, setPendingAmountCount] = useState(0);
   const [total, setTotal] = useState(0);
   const [rank, setRank] = useState<ReturnType<typeof rankParties>>([]);
   const [sourceNote, setSourceNote] = useState("facturas de tu cuenta");
@@ -128,19 +129,21 @@ function MirrorIngresos() {
     listMirrorInvoices(active.client_id, "emitida")
       .then((list) => {
         const vigentes = list.filter((r) => r.sat_status !== "cancelado");
-        const { ready, pending } = partitionSparse(vigentes);
-        setRows(toInvoiceRows(ready, "emitida"));
-        setCount(ready.length);
-        setPendingDetail(pending.length);
-        setTotal(sumTotals(ready));
-        setRank(rankParties(ready, "emitida"));
-        setSourceNote(mirrorSourceNote(ready.length ? ready : vigentes));
+        const { ready: account, pending: didactic } = partitionSparse(vigentes);
+        setRows(toInvoiceRows(account, "emitida"));
+        setCount(account.length);
+        setDidacticCount(didactic.length);
+        setPendingAmountCount(account.filter(isPendingDetailCfdi).length);
+        setTotal(sumTotals(account));
+        setRank(rankParties(account, "emitida"));
+        setSourceNote(mirrorSourceNote(account.length ? account : vigentes));
         setErr(null);
       })
       .catch(() => {
         setRows([]);
         setCount(0);
-        setPendingDetail(0);
+        setDidacticCount(0);
+        setPendingAmountCount(0);
         setRank([]);
         setErr("No se pudieron cargar las facturas emitidas de tu cuenta.");
       })
@@ -148,6 +151,9 @@ function MirrorIngresos() {
   }, [active]);
 
   const client = active?.client_name ?? "Tu cuenta";
+  const kpiNote = total > 0
+    ? `${count} CFDI · ${sourceNote}`
+    : `${count} CFDI · montos aún no publicados · ${sourceNote}`;
 
   return (
     <>
@@ -157,11 +163,19 @@ function MirrorIngresos() {
       />
       {err ? <p className="kw-small" style={{ color: "var(--caution-text)", marginBottom: 16 }}>{err}</p> : null}
       {loading ? <p className="kw-small" style={{ marginBottom: 16 }}>Cargando facturas…</p> : null}
-      {pendingDetail > 0 ? (
+      {pendingAmountCount > 0 ? (
         <GlassPanel style={{ marginBottom: 16 }}>
           <p className="kw-small" style={{ margin: 0 }}>
-            {pendingDetail} factura{pendingDetail === 1 ? "" : "s"} de tu cuenta aún tienen detalle pendiente (sin montos publicados).
-            No se muestran en el listado hasta que el equipo publique el desglose. En Facturación puedes verlas aparte.
+            {pendingAmountCount} factura{pendingAmountCount === 1 ? "" : "s"} reales de tu cuenta aparecen con «Detalle pendiente»
+            (folio, fecha y contraparte sí; monto/método aún no publicados). Mejor vacío real que un ejemplo inventado.
+          </p>
+        </GlassPanel>
+      ) : null}
+      {didacticCount > 0 ? (
+        <GlassPanel style={{ marginBottom: 16 }}>
+          <p className="kw-small" style={{ margin: 0 }}>
+            {didacticCount} ejemplo{didacticCount === 1 ? "" : "s"} didáctico{didacticCount === 1 ? "" : "s"} quedan fuera del listado principal
+            (no son clientes de esta cuenta). En Facturación puedes verlos aparte si hace falta.
           </p>
         </GlassPanel>
       ) : null}
@@ -170,7 +184,7 @@ function MirrorIngresos() {
           label="Ingresos del periodo"
           value={total}
           tone="ingreso"
-          note={`${count} CFDI · ${sourceNote}`}
+          note={kpiNote}
           source="sat"
         />
         <KpiTile
