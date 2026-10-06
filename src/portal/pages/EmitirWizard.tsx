@@ -150,16 +150,35 @@ export default function EmitirWizard() {
     })();
   }, [active, design]);
 
+  const lineTaxes = useMemo(() => conceptos.map((c) => {
+    const base = Math.round(c.cantidad * c.valorUnitario * 100) / 100;
+    const tasa = c.objetoImp === "02" && typeof c.ivaTasa === "number" ? c.ivaTasa : null;
+    const iva = tasa != null ? Math.round(base * tasa * 100) / 100 : 0;
+    return {
+      base,
+      iva,
+      total: Math.round((base + iva) * 100) / 100,
+      tasa,
+      label: tasa == null ? "No objeto de impuesto" : `IVA ${(tasa * 100).toFixed(0)} %`,
+    };
+  }), [conceptos]);
+
   const totales = useMemo(() => {
-    let sub = 0;
-    let iva = 0;
-    for (const c of conceptos) {
-      const imp = Math.round(c.cantidad * c.valorUnitario * 100) / 100;
-      sub += imp;
-      if (c.objetoImp === "02" && typeof c.ivaTasa === "number") iva += Math.round(imp * c.ivaTasa * 100) / 100;
+    const subtotal = Math.round(lineTaxes.reduce((s, l) => s + l.base, 0) * 100) / 100;
+    const iva = Math.round(lineTaxes.reduce((s, l) => s + l.iva, 0) * 100) / 100;
+    const byRate = new Map<string, number>();
+    for (const l of lineTaxes) {
+      if (l.tasa == null) continue;
+      const key = `IVA ${(l.tasa * 100).toFixed(0)} %`;
+      byRate.set(key, Math.round(((byRate.get(key) ?? 0) + l.iva) * 100) / 100);
     }
-    return { subtotal: Math.round(sub * 100) / 100, iva: Math.round(iva * 100) / 100, total: Math.round((sub + iva) * 100) / 100 };
-  }, [conceptos]);
+    return {
+      subtotal,
+      iva,
+      total: Math.round((subtotal + iva) * 100) / 100,
+      desglose: [...byRate.entries()].map(([label, amount]) => ({ label, amount })),
+    };
+  }, [lineTaxes]);
 
   if (!canAdmin) {
     return <Notice tone="warn">Solo un administrador del cliente puede emitir.</Notice>;
@@ -398,7 +417,10 @@ export default function EmitirWizard() {
       {/* ── Ingreso / NC: conceptos ── */}
       {(tipo === "I" || tipo === "E") && step === 1 && (
         <section className="space-y-3 rounded-xl border p-4">
-          <h2 className="font-semibold">2. Conceptos y montos</h2>
+          <h2 className="font-semibold">2. Conceptos, impuestos y montos</h2>
+          <p className="text-sm text-muted-foreground">
+            Captura el producto, revisa la clave SAT (búsqueda aproximada) y el IVA de cada partida antes de continuar.
+          </p>
           {concepts.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {concepts.map((c) => (
@@ -408,27 +430,19 @@ export default function EmitirWizard() {
               ))}
             </div>
           )}
-          {conceptos.map((c, i) => (
-            <div key={i} className="grid gap-2 rounded-lg border p-3 md:grid-cols-6">
-              <div className="md:col-span-2">
-                <Label>Descripción</Label>
-                <Input value={c.descripcion} onChange={(e) => setC(i, { descripcion: e.target.value })} />
-              </div>
-              <div className="md:col-span-2">
-                {design ? (
-                  <>
-                    <Label>Clave SAT</Label>
-                    <Input className="kw-mono" value={c.claveProdServ} onChange={(e) => setC(i, { claveProdServ: e.target.value.replace(/\D/g, "") })} />
-                    <ul className="mt-1 text-sm">
-                      <li><button type="button" className="text-left underline" onClick={() => setC(i, { claveProdServ: "80131500" })}>80131500 · Contabilidad</button></li>
-                      <li><button type="button" className="text-left underline" onClick={() => setC(i, { claveProdServ: "80101500" })}>80101500 · Consultoría</button></li>
-                    </ul>
-                  </>
-                ) : (
+          {conceptos.map((c, i) => {
+            const tax = lineTaxes[i];
+            return (
+              <div key={i} className="grid gap-2 rounded-lg border p-3 md:grid-cols-6">
+                <div className="md:col-span-3">
+                  <Label>Descripción (concepto)</Label>
+                  <Input value={c.descripcion} onChange={(e) => setC(i, { descripcion: e.target.value })} placeholder="Ej. Servicios de contabilidad mensual" />
+                </div>
+                <div className="md:col-span-3">
                   <CatalogSuggest
-                    clientId={clientId}
+                    clientId={clientId || "design"}
                     catalog="c_ClaveProdServ"
-                    label="Clave SAT"
+                    label="Clave SAT (ClaveProdServ)"
                     value={c.claveProdServ}
                     descripcionHint={c.descripcion}
                     mono
@@ -436,12 +450,46 @@ export default function EmitirWizard() {
                     onChange={(clave) => setC(i, { claveProdServ: clave })}
                     onPick={(hit) => setC(i, { claveProdServ: hit.clave, descripcion: c.descripcion || hit.descripcion })}
                   />
+                </div>
+                <div>
+                  <Label>Cantidad</Label>
+                  <Input inputMode="decimal" value={c.cantidad} onChange={(e) => setC(i, { cantidad: Number(e.target.value) })} />
+                </div>
+                <div>
+                  <Label>Precio unitario (sin IVA)</Label>
+                  <Input inputMode="decimal" value={c.valorUnitario} onChange={(e) => setC(i, { valorUnitario: Number(e.target.value) })} />
+                </div>
+                <div className="md:col-span-2">
+                  <Label>Impuesto (IVA)</Label>
+                  <select
+                    className="h-10 w-full rounded-md border px-2"
+                    value={c.objetoImp === "01" ? "no" : String(c.ivaTasa)}
+                    onChange={(e) => setC(i, e.target.value === "no"
+                      ? { objetoImp: "01", ivaTasa: undefined }
+                      : { objetoImp: "02", ivaTasa: Number(e.target.value) as 0.16 | 0.08 | 0 })}
+                  >
+                    <option value="0.16">IVA 16 %</option>
+                    <option value="0.08">IVA 8 % (frontera)</option>
+                    <option value="0">IVA 0 %</option>
+                    <option value="no">No objeto de impuesto</option>
+                  </select>
+                </div>
+                <div className="md:col-span-2 rounded-md bg-muted/40 px-3 py-2 text-sm" data-testid={`impuestos-linea-${i}`}>
+                  <p className="font-medium">Desglose partida {i + 1}</p>
+                  <p>Base <span className="kw-mono">{fmtMoney(tax.base)}</span></p>
+                  <p>{tax.label} <span className="kw-mono">{fmtMoney(tax.iva)}</span></p>
+                  <p>Partida <span className="kw-mono">{fmtMoney(tax.total)}</span></p>
+                </div>
+                {conceptos.length > 1 && (
+                  <div className="md:col-span-6">
+                    <Button type="button" variant="ghost" size="sm" onClick={() => setConceptos(conceptos.filter((_, j) => j !== i))}>
+                      Quitar concepto
+                    </Button>
+                  </div>
                 )}
               </div>
-              <div><Label>Cantidad</Label><Input inputMode="decimal" value={c.cantidad} onChange={(e) => setC(i, { cantidad: Number(e.target.value) })} /></div>
-              <div><Label>Precio (sin IVA)</Label><Input inputMode="decimal" value={c.valorUnitario} onChange={(e) => setC(i, { valorUnitario: Number(e.target.value) })} /></div>
-            </div>
-          ))}
+            );
+          })}
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="outline" size="sm" onClick={() => setConceptos([...conceptos, emptyConcept()])}>Agregar concepto</Button>
             <label className="flex items-center gap-2 text-sm">
@@ -449,7 +497,19 @@ export default function EmitirWizard() {
               Guardar conceptos y montos
             </label>
           </div>
-          <p className="text-sm">Subtotal {fmtMoney(totales.subtotal)} · IVA {fmtMoney(totales.iva)} · <strong>Total {fmtMoney(totales.total)}</strong></p>
+          <div className="rounded-xl border p-4 text-sm" data-testid="impuestos-totales">
+            <p className="mb-2 font-medium">Impuestos desglosados</p>
+            <ul className="mb-2 space-y-1">
+              <li>Subtotal <span className="kw-mono">{fmtMoney(totales.subtotal)}</span></li>
+              {totales.desglose.length === 0 ? (
+                <li>Sin IVA trasladado</li>
+              ) : totales.desglose.map((d) => (
+                <li key={d.label}>{d.label} <span className="kw-mono">{fmtMoney(d.amount)}</span></li>
+              ))}
+              <li>IVA total <span className="kw-mono">{fmtMoney(totales.iva)}</span></li>
+              <li><strong>Total <span className="kw-mono">{fmtMoney(totales.total)}</span></strong></li>
+            </ul>
+          </div>
           {nav}
         </section>
       )}
@@ -542,13 +602,34 @@ export default function EmitirWizard() {
             {tipo !== "P" && (
               <>
                 <li>Cliente: {receptor.nombre} · <span className="kw-mono">{receptor.rfc}</span></li>
-                <li>Total: <span className="kw-mono">{fmtMoney(totales.total)}</span></li>
               </>
             )}
             {tipo === "I" && <li>Método: {metodoPago} · Forma: {formaPago}</li>}
             {tipo === "P" && <li>Monto complemento: <span className="kw-mono">{fmtMoney(Number(payAmount) || 0)}</span></li>}
             {tipo === "E" && relatedUuid && <li>Relacionada: <span className="kw-mono">{relatedUuid}</span></li>}
           </ul>
+          {tipo !== "P" && (
+            <div className="rounded-xl border bg-muted/30 p-4 text-sm" data-testid="impuestos-revisar">
+              <p className="mb-2 font-medium">Conceptos e impuestos</p>
+              <ul className="mb-3 space-y-2">
+                {conceptos.map((c, i) => (
+                  <li key={i} className="border-b border-border/60 pb-2 last:border-0">
+                    <span className="font-medium">{c.descripcion || "Sin descripción"}</span>
+                    {" · "}
+                    <span className="kw-mono text-xs">{c.claveProdServ || "—"}</span>
+                    <br />
+                    Base {fmtMoney(lineTaxes[i].base)} · {lineTaxes[i].label} {fmtMoney(lineTaxes[i].iva)} · Partida {fmtMoney(lineTaxes[i].total)}
+                  </li>
+                ))}
+              </ul>
+              <p>Subtotal <span className="kw-mono">{fmtMoney(totales.subtotal)}</span></p>
+              {totales.desglose.map((d) => (
+                <p key={d.label}>{d.label} <span className="kw-mono">{fmtMoney(d.amount)}</span></p>
+              ))}
+              <p>IVA total <span className="kw-mono">{fmtMoney(totales.iva)}</span></p>
+              <p><strong>Total <span className="kw-mono">{fmtMoney(totales.total)}</span></strong></p>
+            </div>
+          )}
           <p className="text-xs text-muted-foreground">Los datos guardados se pueden cambiar en cualquier emisión futura.</p>
           {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
           {nav}

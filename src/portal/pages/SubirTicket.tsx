@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   GlassPanel,
-  InvoiceRequestForm,
   KawiilitoGuide,
   RequestTracker,
   UploadBox,
@@ -23,17 +22,21 @@ function todayLabel() {
   }).format(new Date());
 }
 
-function makeRequest(partial: Omit<DemoRequest, "id" | "createdAt" | "statusLabel">): DemoRequest {
+function makeTicketRequest(partial: Omit<DemoRequest, "id" | "createdAt" | "statusLabel" | "kind">): DemoRequest {
   return {
     ...partial,
+    kind: "recibo",
     id: `auth-${Date.now()}`,
     createdAt: new Date().toISOString(),
-    statusLabel: partial.kind === "recibo" ? "Subido" : "Solicitada",
+    statusLabel: "Subido",
   };
 }
 
-/** Solicitar factura subiendo ticket/recibo (no emite CFDI). */
-export default function SolicitarFactura() {
+/**
+ * Subir ticket/recibo para que Kawiil emita la factura del cliente.
+ * No es «solicitar factura» a un proveedor.
+ */
+export default function SubirTicket() {
   const design = isDesignPreview();
   const [items, setItems] = useState<DemoRequest[]>([]);
   const [filter, setFilter] = useState<RequestFilter>("todas");
@@ -44,7 +47,8 @@ export default function SolicitarFactura() {
       const raw = localStorage.getItem(AUTH_REQ_KEY);
       if (!raw) { setItems([]); return; }
       const parsed = JSON.parse(raw) as DemoRequest[];
-      setItems(Array.isArray(parsed) ? parsed : []);
+      // Solo tickets/recibos en este espacio (emisión por Kawiil).
+      setItems(Array.isArray(parsed) ? parsed.filter((p) => p.kind === "recibo") : []);
     } catch {
       setItems([]);
     }
@@ -53,7 +57,12 @@ export default function SolicitarFactura() {
   const refresh = (next: DemoRequest) => {
     setItems((prev) => {
       const merged = [next, ...prev.filter((p) => p.id !== next.id)];
-      try { localStorage.setItem(AUTH_REQ_KEY, JSON.stringify(merged)); } catch { /* ignore */ }
+      try {
+        const raw = localStorage.getItem(AUTH_REQ_KEY);
+        const all = raw ? (JSON.parse(raw) as DemoRequest[]) : [];
+        const nonRecibo = Array.isArray(all) ? all.filter((p) => p.kind !== "recibo") : [];
+        localStorage.setItem(AUTH_REQ_KEY, JSON.stringify([...merged, ...nonRecibo]));
+      } catch { /* ignore */ }
       return merged;
     });
   };
@@ -61,29 +70,17 @@ export default function SolicitarFactura() {
   return (
     <>
       <PageTitle
-        title="Solicitar factura"
-        subtitle="Sube un ticket o recibo, o pide factura a un cliente · seguimiento aquí"
+        title="Subir ticket"
+        subtitle="Sube un ticket o recibo para que emitamos tu factura · seguimiento aquí"
         actions={<Link className="text-sm underline" to={back}>Volver a Facturación</Link>}
       />
 
       <div className="kw-grid kw-main-cols">
         <div className="kw-grid">
-          <InvoiceRequestForm
-            onSubmitted={({ cliente, monto, concepto }) => {
-              refresh(makeRequest({
-                kind: "factura",
-                title: `Factura a ${cliente} por $${monto}`,
-                date: todayLabel(),
-                detail: concepto,
-                step: 0,
-              }));
-            }}
-          />
           <UploadBox
             onUploaded={(files) => {
-              refresh(makeRequest({
-                kind: "recibo",
-                title: `Recibo · ${files.length} archivo${files.length === 1 ? "" : "s"} (${files[0]?.source})`,
+              refresh(makeTicketRequest({
+                title: `Ticket · ${files.length} archivo${files.length === 1 ? "" : "s"} (${files[0]?.source})`,
                 date: todayLabel(),
                 detail: files.map((f) => f.name).join(", "),
                 step: 0,
@@ -91,22 +88,22 @@ export default function SolicitarFactura() {
             }}
           />
           <GlassPanel>
-            <h3 className="kw-title" style={{ fontSize: 16 }}>Cómo se lee el reporte</h3>
+            <h3 className="kw-title" style={{ fontSize: 16 }}>Qué pasa después</h3>
             <p className="kw-small" style={{ margin: "6px 0 0" }}>
-              Solicitudes y recibos quedan en seguimiento aquí. Emitir CFDI con Facturapi es otra acción en Facturación.
+              El equipo de Kawiil revisa el ticket y emite tu factura. Para emitir tú mismo con Facturapi (ingreso, complemento o nota de crédito), vuelve al hub y elige «Emitir factura».
             </p>
           </GlassPanel>
         </div>
         <div className="kw-grid">
           <KawiilitoGuide pose="listo" title="Aquí sabes cuándo está lista">
-            Solicitada → En proceso → Emitida (facturas). Subido → En revisión → Registrado (recibos).
+            Subido → En revisión → Factura emitida. No es pedir factura a un proveedor: nosotros la emitimos por ti.
           </KawiilitoGuide>
           <RequestTracker
             items={items}
             filter={filter}
             onFilterChange={setFilter}
-            title="Cuáles ya se hicieron"
-            subtitle="Pendiente / en proceso / hecha"
+            title="Tickets en seguimiento"
+            subtitle="Pendiente / en proceso / emitida"
           />
         </div>
       </div>

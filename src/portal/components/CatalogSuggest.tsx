@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { callApi, PortalApiError } from "../lib/api";
+import { isDesignPreview } from "../lib/designPreview";
+import { suggestSatCatalogLocal } from "../lib/satCatalogLocal";
 
 export type CatalogHit = { clave: string; descripcion: string; score?: number };
 
@@ -19,11 +21,13 @@ type Props = {
 };
 
 /**
- * Escribe un concepto aproximado → sugiere clave SAT desde sat_catalog_entries.
+ * Escribe un concepto aproximado → sugiere clave SAT
+ * (RPC portal_sat_catalog_suggest o índice local en /diseno).
  */
 export default function CatalogSuggest({
   clientId, catalog, label, value, descripcionHint, onPick, onChange, id, mono, maxLength,
 }: Props) {
+  const design = isDesignPreview();
   const [q, setQ] = useState(descripcionHint ?? "");
   const [hits, setHits] = useState<CatalogHit[]>([]);
   const [err, setErr] = useState<string | null>(null);
@@ -35,26 +39,34 @@ export default function CatalogSuggest({
 
   useEffect(() => {
     const term = (q || value).trim();
-    if (term.length < 2 || !clientId) {
+    if (term.length < 2) {
       setHits([]);
       return;
     }
+
+    if (design || !clientId) {
+      setHits(suggestSatCatalogLocal(catalog, term, 8));
+      setErr(null);
+      return;
+    }
+
     const t = window.setTimeout(() => {
       void (async () => {
         try {
           const r = await callApi<{ results: CatalogHit[] }>("catalogos.buscar", {
             client_id: clientId, catalog, q: term, limit: 8,
           });
-          setHits(r.results ?? []);
+          const apiHits = r.results ?? [];
+          setHits(apiHits.length > 0 ? apiHits : suggestSatCatalogLocal(catalog, term, 8));
           setErr(null);
         } catch (e) {
-          setHits([]);
-          setErr(e instanceof PortalApiError ? e.message : "No se pudo buscar en el catálogo.");
+          setHits(suggestSatCatalogLocal(catalog, term, 8));
+          setErr(e instanceof PortalApiError ? e.message : "Catálogo remoto no disponible; mostrando sugerencias locales.");
         }
       })();
     }, 280);
     return () => window.clearTimeout(t);
-  }, [q, value, clientId, catalog]);
+  }, [q, value, clientId, catalog, design]);
 
   return (
     <div className="space-y-1">
@@ -69,13 +81,13 @@ export default function CatalogSuggest({
           onChange(v);
           setQ(v);
         }}
-        placeholder={catalog === "c_ClaveProdServ" ? "Escribe concepto o clave" : "Unidad SAT"}
+        placeholder={catalog === "c_ClaveProdServ" ? "Clave o escribe algo aproximado…" : "Unidad SAT"}
         autoComplete="off"
       />
       {catalog === "c_ClaveProdServ" && (
         <Input
-          aria-label="Buscar por descripción"
-          placeholder="O busca por texto: consultoría, contabilidad…"
+          aria-label="Buscar concepto aproximado"
+          placeholder="Texto aproximado: conta, consultoría, nómina…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           className="mt-1"
@@ -102,6 +114,11 @@ export default function CatalogSuggest({
         </ul>
       )}
       {err && <p className="text-xs text-muted-foreground">{err}</p>}
+      {catalog === "c_ClaveProdServ" && (
+        <p className="text-xs text-muted-foreground">
+          Búsqueda aproximada: no hace falta la clave exacta; escribe el concepto en lenguaje natural.
+        </p>
+      )}
     </div>
   );
 }
