@@ -573,6 +573,128 @@ Deno.serve(async (req) => {
             enrichFail += 1;
           }
         }
+        // Segunda pasada: facturas referenciadas por complementos P que aún no están en central.
+        const { data: missingRels } = await admin
+          .from("satgo_cfdi_payment_links")
+          .select("related_uuid")
+          .eq("client_id", job.client_id)
+          .limit(80);
+        const relatedUuids = [
+          ...new Set(
+            (missingRels ?? [])
+              .map((r) => String(r.related_uuid ?? "").toUpperCase())
+              .filter(Boolean),
+          ),
+        ];
+        let relatedFetched = 0;
+        for (const relatedUuid of relatedUuids.slice(0, 25)) {
+          const { data: exists } = await admin
+            .from("satgo_cfdi_items")
+            .select("id")
+            .eq("client_id", job.client_id)
+            .eq("uuid", relatedUuid)
+            .maybeSingle();
+          if (exists?.id) continue;
+          // Probar emitidos y recibidos (dirección desconocida fuera del lote).
+          let fetched = false;
+          for (const tipo of ["emitidos", "recibidos"] as SatgoFacTipo[]) {
+            const res = await fetchSatgoFacFielWithJwe({
+              bearer,
+              rfc: job.rfc,
+              tipo,
+              certBytes,
+              keyJwe: job.satgo_key_jwe,
+              passwordJwe: job.satgo_password_jwe,
+              tipoBusqueda: 0,
+              uuid: relatedUuid,
+              estatusFactura: -1,
+              solicitaMetadata: false,
+              descargaComprobantes: true,
+              descargaPdfs: false,
+              requestId,
+            });
+            if (!res.ok) continue;
+            if (res.requestId) requestId = res.requestId;
+            const comps = extractSatgoFacComprobantes(res.json);
+            if (!comps.length) continue;
+            const direction = mapDirection(tipo);
+            const enriched = enrichSatgoComprobante(comps[0], relatedUuid);
+            const persisted = await persistEnriched(
+              admin,
+              job,
+              runId,
+              direction,
+              enriched,
+            );
+            if (persisted.itemId) {
+              upserted += 1;
+              relatedFetched += 1;
+              if (enriched.sourceXml) enrichedXml += 1;
+              if (
+                await publishEnriched(
+                  mirrorCfg,
+                  job.portal_company_ref,
+                  direction,
+                  enriched,
+                )
+              ) {
+                published += 1;
+              }
+              fetched = true;
+              break;
+            }
+          }
+          if (!fetched) {
+            /* complementary invoice outside SATgo reach for this RFC/tipo */
+          }
+        }
+
+        // Re-publicar complementos P ahora que las relacionadas pueden existir en OS.
+        const { data: pagoItems } = await admin
+          .from("satgo_cfdi_items")
+          .select("uuid, direction, sat_status")
+          .eq("client_id", job.client_id)
+          .eq("voucher_type", "P")
+          .limit(40);
+        let paymentsRepublished = 0;
+        for (const row of pagoItems ?? []) {
+          const uuid = String(row.uuid ?? "").toUpperCase();
+          const direction = row.direction === "emitida" ? "emitida" : "recibida";
+          const tipo: SatgoFacTipo =
+            direction === "emitida" ? "emitidos" : "recibidos";
+          const res = await fetchSatgoFacFielWithJwe({
+            bearer,
+            rfc: job.rfc,
+            tipo,
+            certBytes,
+            keyJwe: job.satgo_key_jwe,
+            passwordJwe: job.satgo_password_jwe,
+            tipoBusqueda: 0,
+            uuid,
+            estatusFactura: -1,
+            solicitaMetadata: false,
+            descargaComprobantes: true,
+            descargaPdfs: false,
+            requestId,
+          });
+          if (!res.ok) continue;
+          if (res.requestId) requestId = res.requestId;
+          const comps = extractSatgoFacComprobantes(res.json);
+          const enriched = enrichSatgoComprobante(comps[0] ?? { uuid }, uuid);
+          await persistEnriched(admin, job, runId, direction, enriched);
+          if (
+            await publishEnriched(
+              mirrorCfg,
+              job.portal_company_ref,
+              direction,
+              enriched,
+            )
+          ) {
+            paymentsRepublished += 1;
+            published += 1;
+          }
+        }
+
         results.push({
           clientId: job.client_id,
           mode: "enrich",
@@ -580,6 +702,8 @@ Deno.serve(async (req) => {
           pending: (pending ?? []).length,
           enrichOk,
           enrichFail,
+          relatedFetched,
+          paymentsRepublished,
         });
       }
     } else {
