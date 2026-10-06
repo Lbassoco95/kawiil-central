@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { Archive, Eye, HandHelping, Moon, Sun } from "lucide-react";
 import { GlassPanel, IconBadge, KwButton } from "../design/primitives";
-import { LOGO, POSE_SRC } from "../design/assets";
+import { POSE_SRC } from "../design/assets";
+import BrandLogo from "../design/BrandLogo";
 import { useTheme } from "../design/ThemeProvider";
 import { DEMO_FISCAL_MARK, isPortalDemoMode } from "../lib/demo";
 import { db } from "../lib/supabase";
@@ -67,12 +68,14 @@ export default function Ingresar() {
           </div>
 
           <div className="kw-login__brand">
-            <img
-              src={theme === "dark" ? LOGO.wordWhite : LOGO.wordBlue}
-              alt="Kawiil Mx"
-              style={{ height: 36, margin: "0 auto" }}
-            />
-            <h1>Kawiil OS</h1>
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
+              <BrandLogo
+                variant="horizontal"
+                tone={theme === "dark" ? "white" : "blue"}
+                height={56}
+              />
+            </div>
+            <h1 className="sr-only">Kawiil OS</h1>
             <p className="kw-login__lead">La aplicación que tu empresa necesita para ver su negocio.</p>
             <p className="kw-login__support">
               Detrás está Kawiil: te ayudamos a interpretar tu información, decidir y conservarla, mientras tú te enfocas en tu negocio.
