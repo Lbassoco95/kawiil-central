@@ -27,15 +27,16 @@ export function dayPart(now = new Date()): DayPart {
   return { greeting: "Buenas noches", emoji: "🌙", hour };
 }
 
-/** Fecha larga para el header, p. ej. «martes 6 de octubre de 2026». */
+/** Fecha larga para el header, p. ej. «Martes 6 de octubre de 2026». */
 export function mexicoDateLabel(now = new Date()): string {
-  return new Intl.DateTimeFormat("es-MX", {
+  const raw = new Intl.DateTimeFormat("es-MX", {
     timeZone: TZ,
     weekday: "long",
     day: "numeric",
     month: "long",
     year: "numeric",
   }).format(now);
+  return raw.replace(/^(\p{L})/u, (ch) => ch.toLocaleUpperCase("es-MX"));
 }
 
 /** Nombre corto para «Hola! {nombre}». */

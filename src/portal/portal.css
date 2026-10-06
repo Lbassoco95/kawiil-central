@@ -300,7 +300,6 @@
   .kw-header__date {
     font: 500 13px/18px var(--font-sans);
     color: var(--ink-muted);
-    text-transform: capitalize;
   }
 
   .kw-header__tc {
