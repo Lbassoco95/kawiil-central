@@ -17,7 +17,13 @@ export default defineConfig({
   root: path.resolve(__dirname, "portal"),
   envDir: path.resolve(__dirname),
   publicDir: path.resolve(__dirname, "portal/public"),
-  server: { host: "::", port: 8081, hmr: { overlay: false } },
+  server: {
+    host: "::",
+    port: 8081,
+    hmr: { overlay: false },
+    // Entrada portal/index.html → ../src/portal (fuera del root Vite).
+    fs: { allow: [path.resolve(__dirname)] },
+  },
   preview: { port: 8081 },
   plugins: [react()],
   css: {

@@ -5,13 +5,14 @@ import { usePortal } from "../lib/session";
 import { DEMO_FISCAL_MARK, isPortalDemoMode } from "../lib/demo";
 import { db } from "../lib/supabase";
 import { ALL_NAV, MORE_NAV, PRIMARY_NAV } from "../lib/nav";
-import BrandLogo, { BrandLogoThemePair } from "../design/BrandLogo";
+import BrandLogo from "../design/BrandLogo";
 import { GlassPanel, IconBadge, KawiilitoDock, SourceChip } from "../design/primitives";
 import { useTheme } from "../design/ThemeProvider";
 import { isDesignPreview } from "../lib/designPreview";
 import { portalPath } from "../lib/basePath";
 import DemoToastHost from "./DemoToast";
 import DemoModal from "./DemoModal";
+import HeaderChrome from "./HeaderChrome";
 
 const SIDE_KEY = "kawiil-os-demo-sidebar-collapsed";
 
@@ -75,32 +76,32 @@ export default function Layout() {
             >
               <Menu size={18} strokeWidth={1.75} />
             </button>
-            <div className="kw-header__brand">
-              <BrandLogoThemePair variant="horizontal" height={32} />
-              {demo && <span className="kw-caption">DEMO</span>}
-            </div>
+            {demo && <span className="kw-caption kw-header__demo">DEMO</span>}
 
-            <div className="ml-auto flex items-center gap-2">
+            <HeaderChrome
+              companySwitcher={
+                (me?.clients?.length ?? 0) > 1 ? (
+                  <label className="kw-header__company-switch">
+                    <span className="sr-only">Empresa activa</span>
+                    <select
+                      className="kw-field"
+                      style={{ minHeight: 36, width: "auto", maxWidth: "16rem" }}
+                      value={active?.client_id ?? ""}
+                      onChange={(e) => setActive(e.target.value)}
+                    >
+                      {me!.clients!.map((c) => (
+                        <option key={c.client_id} value={c.client_id}>
+                          {c.client_name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : undefined
+              }
+            />
+
+            <div className="kw-header__actions">
               <SourceChip source="sat" label="SAT al día" via="ejemplo" onClick={() => setOriginOpen(true)} />
-              {(me?.clients?.length ?? 0) > 1 ? (
-                <label className="flex items-center gap-2 text-sm">
-                  <span className="sr-only">Cliente</span>
-                  <select
-                    className="kw-field"
-                    style={{ minHeight: 40, width: "auto", maxWidth: "10rem" }}
-                    value={active?.client_id ?? ""}
-                    onChange={(e) => setActive(e.target.value)}
-                  >
-                    {me!.clients!.map((c) => (
-                      <option key={c.client_id} value={c.client_id}>
-                        {c.client_name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : (
-                <span className="kw-small max-w-[10rem] truncate">{active?.client_name || "Cliente demo"}</span>
-              )}
               <button type="button" className="kw-iconbtn" onClick={toggle} aria-label={theme === "light" ? "Activar modo oscuro" : "Activar modo claro"}>
                 {theme === "light" ? <Moon size={16} strokeWidth={1.75} /> : <Sun size={16} strokeWidth={1.75} />}
               </button>

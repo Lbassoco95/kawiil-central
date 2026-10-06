@@ -1710,14 +1710,65 @@ const planBajaCuenta: Handler = async (ctx) => {
   return data;
 };
 
+/**
+ * Tipo de cambio Banxico para el header del portal.
+ * No inventa cifras: lee `portal_market_fx` si central ya publicó; si no, placeholder + camino.
+ * Fuente en central: Edge `banxico-fx` (SF60653 / SF43718).
+ */
+const TC_FETCH_PATH =
+  "kawiil-central Edge banxico-fx (SF60653 solventar obligaciones / SF43718 FIX) → publicar a portal_market_fx → portal-api v1/mercado.tipo_cambio";
+
+const tipoCambioMercado: Handler = async (ctx) => {
+  const pending = {
+    status: "pending_publish" as const,
+    valor: null,
+    fecha: null,
+    serie: "SF60653",
+    label: "Para solventar obligaciones",
+    fetch_path: TC_FETCH_PATH,
+    source: "banxico" as const,
+    fix_valor: null,
+    fix_fecha: null,
+  };
+  try {
+    const { data, error } = await ctx.admin
+      .from("portal_market_fx")
+      .select("valor, fecha, serie, label, fix_valor, fix_fecha, published_at")
+      .order("fecha", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error || !data || data.valor == null) return pending;
+    return {
+      status: "ok" as const,
+      valor: Number(data.valor),
+      fecha: data.fecha ? String(data.fecha) : null,
+      serie: String(data.serie ?? "SF60653"),
+      label: String(data.label ?? "Para solventar obligaciones"),
+      fetch_path: TC_FETCH_PATH,
+      source: "portal_market_fx" as const,
+      fix_valor: data.fix_valor != null ? Number(data.fix_valor) : null,
+      fix_fecha: data.fix_fecha ? String(data.fix_fecha) : null,
+    };
+  } catch {
+    return pending;
+  }
+};
+
 /** Únicas operaciones sin sesión. Todas las demás responden 401 sin JWT válido (V3). */
-const PUBLIC_OPS = new Set(["cuenta.registrar", "cuenta.recuperar", "cuenta.reenviar_confirmacion", "diagnostico.cerco"]);
+const PUBLIC_OPS = new Set([
+  "cuenta.registrar",
+  "cuenta.recuperar",
+  "cuenta.reenviar_confirmacion",
+  "diagnostico.cerco",
+  "mercado.tipo_cambio",
+]);
 
 const ROUTES: Record<string, Handler> = {
   "cuenta.registrar": registrar,
   "cuenta.recuperar": recuperar,
   "cuenta.reenviar_confirmacion": reenviarConfirmacion,
   "diagnostico.cerco": diagnosticoCerco,
+  "mercado.tipo_cambio": tipoCambioMercado,
   "sesion.actual": sesionActual,
   "sesion.registrar_acceso": registrarAcceso,
   "legal.actual": legalActual,
