@@ -1,4 +1,4 @@
-/** Presentación cliente de CFDI: cuenta real primero; fixtures didácticos aparte. */
+/** Presentación cliente de CFDI: sesión auth = solo cuenta real (satgo_facfiel / publicados). */
 
 export type SparseCfdiLike = {
   detail_status?: string | null;
@@ -20,7 +20,10 @@ export function shortUuid(uuid: string | null | undefined): string {
   return `${u.slice(0, 8)}…`;
 }
 
-/** Fixtures inventados (`is_test`): no van al KPI/ranking/listado principal de la sesión autenticada. */
+/**
+ * Fixtures inventados (`is_test`: Aldea del Sol, Horizonte, etc.).
+ * En sesión autenticada se descartan por completo (cero UI); solo viven en `/diseno`.
+ */
 export function isDidacticFixtureCfdi(row: SparseCfdiLike): boolean {
   return row.is_test === true;
 }
@@ -45,16 +48,16 @@ export function isPendingDetailCfdi(row: SparseCfdiLike): boolean {
 }
 
 /**
- * @deprecated Usar `isDidacticFixtureCfdi`. Antes ocultaba SatGo $0; ahora aísla fixtures didácticos.
+ * @deprecated Usar `isDidacticFixtureCfdi`. Antes ocultaba SatGo $0; ahora marca fixtures didácticos.
  */
 export function isSparseMetadataCfdi(row: SparseCfdiLike): boolean {
   return isDidacticFixtureCfdi(row);
 }
 
 /**
- * Particiona filas de sesión autenticada:
+ * Particiona filas:
  * - `ready` / cuenta = CFDI reales (incl. SatGo solo-metadatos $0)
- * - `pending` / didácticos = fixtures `is_test` (Aldea del Sol, etc.)
+ * - `pending` / didácticos = fixtures `is_test` (descartados en sesión auth)
  */
 export function partitionSparse<T extends SparseCfdiLike>(rows: T[]): { ready: T[]; pending: T[] } {
   const ready: T[] = [];
@@ -64,6 +67,11 @@ export function partitionSparse<T extends SparseCfdiLike>(rows: T[]): { ready: T
     else ready.push(row);
   }
   return { ready, pending };
+}
+
+/** Solo CFDI de la cuenta (excluye is_test). Usar en Ingresos/Egresos/Facturación autenticados. */
+export function accountOnlyCfdi<T extends SparseCfdiLike>(rows: T[]): T[] {
+  return partitionSparse(rows).ready;
 }
 
 export function partitionAccountCfdi<T extends SparseCfdiLike>(rows: T[]): { account: T[]; didactic: T[] } {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  accountOnlyCfdi,
   isDidacticFixtureCfdi,
   isPendingDetailCfdi,
   isSparseMetadataCfdi,
@@ -68,7 +69,7 @@ describe("cfdiPresentation", () => {
   });
 
   it("particiona cuenta real vs ejemplos didácticos", () => {
-    const { ready, pending } = partitionSparse([
+    const rows = [
       { source: "central_mirror", detail_status: "complete", total: 100, is_test: true, metodo_pago: "PPD" },
       { source: "satgo_facfiel", detail_status: "metadata", total: 0, is_test: false },
       {
@@ -78,10 +79,13 @@ describe("cfdiPresentation", () => {
         is_test: false,
         nombre_receptor: "DOCTOCLIQ MEXICO",
       },
-    ]);
+    ];
+    const { ready, pending } = partitionSparse(rows);
     expect(ready).toHaveLength(2);
     expect(pending).toHaveLength(1);
     expect(pending[0].is_test).toBe(true);
+    expect(accountOnlyCfdi(rows)).toHaveLength(2);
+    expect(accountOnlyCfdi(rows).every((r) => r.is_test !== true)).toBe(true);
   });
 
   it("oculta flags ya representados por badges", () => {

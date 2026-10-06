@@ -9,7 +9,6 @@ import { clientDetailQualityLabel, clientFlagReason } from "../lib/clientFlags";
 import { deriveCobranza, metodoPagoLabel, voucherTypeLabel } from "../lib/cobranza";
 import { assessClaveProdServ, summarizeConceptKeyIssues } from "../lib/claveProdServ";
 import { visibleClientFlags } from "../lib/cfdiPresentation";
-import { DEMO_FISCAL_MARK } from "../lib/demo";
 
 interface Detalle {
   factura: {
@@ -52,7 +51,8 @@ export default function FacturaDetalle() {
       .catch((e) => setErr(e instanceof PortalApiError ? e.message : "No se pudo cargar el detalle."));
   }, [active, id]);
 
-  const f = d?.factura;
+  const f = d?.factura && !d.factura.is_test ? d.factura : null;
+  const blockedDidactic = Boolean(d?.factura?.is_test);
   const cobranza = f
     ? deriveCobranza({
       metodo_pago: f.metodo_pago,
@@ -73,6 +73,12 @@ export default function FacturaDetalle() {
       />
       {err && <Notice tone="bad">{err}</Notice>}
       {!err && !d && <Empty>Cargando…</Empty>}
+      {blockedDidactic && (
+        <Empty>
+          Esta factura no pertenece a tu cuenta.{" "}
+          <Link className="underline" to="/facturas">Volver a Facturación</Link>
+        </Empty>
+      )}
       {f && (
         <div className="mt-4 space-y-4">
           <section className="rounded-xl border bg-card p-4">
@@ -99,13 +105,7 @@ export default function FacturaDetalle() {
                 <p className="kw-mono text-2xl">{fmtMoney(f.total)}</p>
                 <StatusPill tone={f.detail_status === "complete" ? "ok" : "warn"}>
                   {clientDetailQualityLabel(d?.calidad, f.detail_status)}
-                  {f.is_test && f.detail_status !== "complete" ? " (ejemplo)" : ""}
                 </StatusPill>
-                {f.is_test && (
-                  <div className="mt-1">
-                    <StatusPill tone="info">{f.detail_status === "complete" ? "Ejemplo didáctico" : DEMO_FISCAL_MARK}</StatusPill>
-                  </div>
-                )}
               </div>
             </div>
             <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
