@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { shouldUseDemoFixtures } from "../../portal/lib/dataMode";
+import { shouldHideDidacticFixtures, shouldUseDemoFixtures } from "../../portal/lib/dataMode";
 import { isPortalDemoMode } from "../../portal/lib/demo";
 import { partyName, rankParties, type MirrorCfdi } from "../../portal/lib/mirrorInvoiceMap";
 
@@ -14,6 +14,10 @@ describe("dataMode (fase 1 espejo)", () => {
     // En vitest la env de build no activa demo; la regla de producto es: fixtures ≠ demo banner.
     expect(isPortalDemoMode()).toBe(false);
     expect(shouldUseDemoFixtures()).toBe(false);
+  });
+
+  it("oculta didácticos por defecto en sesión autenticada", () => {
+    expect(shouldHideDidacticFixtures()).toBe(true);
   });
 
   it("usa fixtures solo en /diseno", () => {

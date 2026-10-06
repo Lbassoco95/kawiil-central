@@ -68,7 +68,7 @@ describe("cfdiPresentation", () => {
     ).toBe(false);
   });
 
-  it("particiona cuenta real vs ejemplos didácticos", () => {
+  it("particiona cuenta real vs ejemplos didácticos y accountOnly los excluye", () => {
     const rows = [
       { source: "central_mirror", detail_status: "complete", total: 100, is_test: true, metodo_pago: "PPD" },
       { source: "satgo_facfiel", detail_status: "metadata", total: 0, is_test: false },

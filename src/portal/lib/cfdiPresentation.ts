@@ -69,7 +69,7 @@ export function partitionSparse<T extends SparseCfdiLike>(rows: T[]): { ready: T
   return { ready, pending };
 }
 
-/** Solo CFDI de la cuenta (excluye is_test). Usar en Ingresos/Egresos/Facturación autenticados. */
+/** Solo CFDI de la cuenta (excluye `is_test`). Usar en Ingresos/Egresos/Facturación autenticados. */
 export function accountOnlyCfdi<T extends SparseCfdiLike>(rows: T[]): T[] {
   return partitionSparse(rows).ready;
 }

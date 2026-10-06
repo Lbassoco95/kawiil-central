@@ -47,7 +47,8 @@ function periodBounds(year: number, month: number): { start: string; end: string
 
 async function loadMirrorInvoices(ctx: Ctx, clientId: string): Promise<{ invoices: FiscalInvoice[]; rows: Record<string, unknown>[] }> {
   const user = requireUser(ctx);
-  const { data: rows, error } = await user.from("portal_cfdi").select("id, direction, issued_at, payment_method, subtotal, total, vat_transferred, vat_withheld, income_tax_withheld, detail_status, sat_status, issuer_rfc, issuer_name, receiver_rfc, receiver_name, flags, category_name, category_status, uuid").eq("client_id", clientId).limit(5000);
+  // Sesión autenticada: nunca mezclar fixtures didácticos (is_test) con CFDI reales.
+  const { data: rows, error } = await user.from("portal_cfdi").select("id, direction, issued_at, payment_method, subtotal, total, vat_transferred, vat_withheld, income_tax_withheld, detail_status, sat_status, issuer_rfc, issuer_name, receiver_rfc, receiver_name, flags, category_name, category_status, uuid").eq("client_id", clientId).or("is_test.is.null,is_test.eq.false").limit(5000);
   if (error) throw new ApiError(400, "consulta", "No se pudieron consultar las facturas del espejo.");
   const ids = (rows ?? []).map((r: { id: string }) => r.id);
   const taxByCfdi = new Map<string, { tax: string; kind: "transfer" | "withholding"; rate: number | null; amount: number }[]>();
@@ -720,10 +721,16 @@ const tablero: Handler = async (ctx) => {
   const ivaBasis = settings?.iva_basis === "issuance" ? "issuance" as const : "cash_flow" as const;
 
   // Preferir resumen publicado por central si existe (espejo).
+  // Ignorar resúmenes didácticos / smoke (is_test) que contaminan KPI del demo Bassoco.
   const publishedRes = await requireUser(ctx).from("portal_fiscal_summaries")
     .select("payload, quality, iva_basis, published_at").eq("client_id", clientId).eq("period_year", year).eq("period_month", month).maybeSingle();
   const published = publishedRes.error ? null : publishedRes.data;
-  if (published?.payload && typeof published.payload === "object") {
+  const publishedQuality = published?.quality && typeof published.quality === "object"
+    ? published.quality as Record<string, unknown>
+    : null;
+  const publishedIsTest = publishedQuality?.is_test === true
+    || /demostraci[oó]n|sin validez fiscal|smoke/i.test(String((published?.payload as { leyenda?: string } | null)?.leyenda ?? ""));
+  if (published?.payload && typeof published.payload === "object" && !publishedIsTest) {
     return {
       ...(published.payload as object),
       iva_basis: published.iva_basis ?? ivaBasis,
@@ -817,7 +824,7 @@ const listarFacturas: Handler = async (ctx) => {
   const direction = ctx.body.direction === "emitida" ? "emitida" : "recibida";
   let query = requireUser(ctx).from("portal_cfdi").select(
     "id, uuid, direction, source, detail_status, issued_at, issuer_rfc, issuer_name, receiver_rfc, receiver_name, voucher_type, payment_form, payment_method, subtotal, total, sat_status, xml_path, pdf_path, is_test, flags, category_name, category_status",
-  ).eq("client_id", clientId).eq("direction", direction).order("issued_at", { ascending: false }).limit(200);
+  ).eq("client_id", clientId).eq("direction", direction).or("is_test.is.null,is_test.eq.false").order("issued_at", { ascending: false }).limit(200);
   if (typeof filters.desde === "string" && filters.desde) query = query.gte("issued_at", filters.desde);
   if (typeof filters.hasta === "string" && filters.hasta) query = query.lte("issued_at", `${filters.hasta}T23:59:59`);
   const rfc = typeof filters.rfc === "string" ? filters.rfc.replace(/[^A-Za-z0-9&Ñ]/g, "") : "";
