@@ -20,7 +20,11 @@ import {
   ApiError, assertClientAccess, audit, b64ToBytes, buildCtx, corsHeaders, json, requireUser, str, uuid, type Ctx,
 } from "../_shared/portal/http.ts";
 import { directionForClient, toPortalCfdiRow, validateCfdiXml } from "../_shared/portal/cfdiXml.ts";
-import { crearEmisor, EmisionRechazada, PacNoConfigurado, type BorradorFactura } from "../_shared/portal/emission/index.ts";
+import {
+  crearEmisor, EmisionRechazada, PacNoConfigurado, FacturapiError,
+  facturapiConfigFromEnv, createInvoice, paymentSummary,
+  type BorradorFactura,
+} from "../_shared/portal/emission/index.ts";
 import { publicCsdView } from "../_shared/portal/csd.ts";
 import { registerCsd } from "../_shared/portal/csdRegister.ts";
 import { suggestCategory } from "../_shared/portal/openclaw.ts";
@@ -40,6 +44,24 @@ const SIGNED_URL_SECONDS = 120;
 const PORTAL_URL = (Deno.env.get("PORTAL_PUBLIC_URL") ?? "").replace(/\/+$/, "");
 /** Fase espejo (Corte 3): el cliente no carga XML ni emite; solo lee lo publicado por central. */
 const MIRROR_READ_ONLY = (Deno.env.get("PORTAL_MIRROR_READ_ONLY") ?? "true").toLowerCase() !== "false";
+const PORTAL_EMISOR_MODE = (Deno.env.get("PORTAL_EMISOR") ?? "prueba").trim().toLowerCase();
+/** Emisión Facturapi autorizada por Polo: puede operar aunque el espejo SatGo siga en solo lectura. */
+const FACTURAPI_EMISSION_ALLOWED = PORTAL_EMISOR_MODE === "facturapi" && !!facturapiConfigFromEnv();
+
+function assertEmissionWritable() {
+  if (!MIRROR_READ_ONLY || FACTURAPI_EMISSION_ALLOWED) return;
+  throw new ApiError(403, "espejo_solo_lectura", "La emisión no está disponible en la fase espejo.");
+}
+
+type TaxProfileNorm = { rfc: string; razon_social: string; regimen_fiscal: string; cp_fiscal: string };
+
+function normalizeTaxProfile(row: Record<string, unknown> | null | undefined): TaxProfileNorm | null {
+  if (!row?.rfc) return null;
+  const razon = String(row.razon_social ?? row.legal_name ?? "").trim();
+  const regimen = String(row.regimen_fiscal ?? row.fiscal_regime ?? "").trim();
+  const cp = String(row.cp_fiscal ?? row.fiscal_postal_code ?? "").trim();
+  return { rfc: String(row.rfc), razon_social: razon, regimen_fiscal: regimen, cp_fiscal: cp };
+}
 
 type Handler = (ctx: Ctx) => Promise<unknown>;
 
@@ -310,19 +332,56 @@ const cargarFacturas: Handler = async (ctx) => {
 };
 
 async function emissionContext(ctx: Ctx, clientId: string) {
-  const { data: tp } = await ctx.admin.from("portal_tax_profiles")
-    .select("rfc, razon_social, regimen_fiscal, cp_fiscal").eq("client_id", clientId).eq("is_default", true).eq("active", true).maybeSingle();
-  const { data: reg } = await ctx.admin.from("portal_csd_registry")
-    .select("id, certificate_id, cert_serial, cert_not_before, cert_not_after, revoked_at, use_count")
-    .eq("client_id", clientId).is("revoked_at", null).order("cert_not_after", { ascending: false }).limit(1).maybeSingle();
+  // Esquema OS (legal_name/fiscal_*) o central (razon_social/regimen_fiscal).
+  let tpRaw: Record<string, unknown> | null = null;
+  {
+    const a = await ctx.admin.from("portal_tax_profiles")
+      .select("rfc, legal_name, fiscal_regime, fiscal_postal_code, razon_social, regimen_fiscal, cp_fiscal")
+      .eq("client_id", clientId).eq("is_default", true).eq("active", true).maybeSingle();
+    if (!a.error) tpRaw = (a.data as Record<string, unknown> | null) ?? null;
+    else {
+      const b = await ctx.admin.from("portal_tax_profiles")
+        .select("rfc, legal_name, fiscal_regime, fiscal_postal_code")
+        .eq("client_id", clientId).eq("is_default", true).eq("active", true).maybeSingle();
+      tpRaw = (b.data as Record<string, unknown> | null) ?? null;
+    }
+  }
+  const tp = normalizeTaxProfile(tpRaw);
+  let reg: {
+    id: string; certificate_id?: string; cert_serial: string | null;
+    cert_not_before: string | null; cert_not_after: string | null; revoked_at: string | null; use_count?: number;
+  } | null = null;
+  {
+    const r = await ctx.admin.from("portal_csd_registry")
+      .select("id, certificate_id, cert_serial, cert_not_before, cert_not_after, revoked_at, use_count")
+      .eq("client_id", clientId).is("revoked_at", null).order("cert_not_after", { ascending: false }).limit(1).maybeSingle();
+    if (!r.error) reg = r.data as typeof reg;
+  }
   const { data: settings } = await ctx.admin.from("portal_client_settings").select("emission_enabled, origin").eq("client_id", clientId).maybeSingle();
   const user = requireUser(ctx);
-  const { data: dossier } = await user.rpc("portal_emission_dossier", { _client_id: clientId });
-  const { data: usage } = await user.rpc("portal_basic_usage", { _client_id: clientId });
+  let dossier: { complete?: boolean; checks?: unknown[]; origin?: string } | null = null;
+  let usage: { usadas?: number; limite?: number; origin?: string } | null = null;
+  try {
+    const d = await user.rpc("portal_emission_dossier", { _client_id: clientId });
+    if (!d.error) dossier = d.data as typeof dossier;
+  } catch { /* OS baseline sin RPC */ }
+  try {
+    const u = await user.rpc("portal_basic_usage", { _client_id: clientId });
+    if (!u.error) usage = u.data as typeof usage;
+  } catch { /* OS baseline sin RPC */ }
+  // Facturapi: expediente mínimo = perfil fiscal + emisión habilitada (CSD en org Facturapi).
+  if (!dossier && PORTAL_EMISOR_MODE === "facturapi") {
+    const checks = [
+      { key: "perfil_fiscal", ok: !!(tp?.rfc && tp.razon_social && tp.regimen_fiscal && tp.cp_fiscal), label: "Datos fiscales", detail: tp?.rfc ?? "Falta perfil" },
+      { key: "facturapi", ok: FACTURAPI_EMISSION_ALLOWED, label: "Facturapi", detail: FACTURAPI_EMISSION_ALLOWED ? "Configurado" : "Kawiil conectará la organización Facturapi" },
+      { key: "emision", ok: !!settings?.emission_enabled, label: "Emisión", detail: settings?.emission_enabled ? "Activa" : "Apagada hasta activación" },
+    ];
+    dossier = { complete: checks.every((c) => c.ok), checks, origin: "facturapi" };
+  }
   return { tp, reg, settings, dossier, usage };
 }
 
-function borradorFrom(ctx: Ctx, tp: { rfc: string; razon_social: string; regimen_fiscal: string; cp_fiscal: string } | null): BorradorFactura {
+function borradorFrom(ctx: Ctx, tp: TaxProfileNorm | null): BorradorFactura {
   const b = (ctx.body.borrador ?? {}) as Partial<BorradorFactura>;
   // El emisor SIEMPRE sale del perfil fiscal verificado, no del navegador.
   return {
@@ -333,64 +392,407 @@ function borradorFrom(ctx: Ctx, tp: { rfc: string; razon_social: string; regimen
 }
 
 const validarFactura: Handler = async (ctx) => {
+  assertEmissionWritable();
   const clientId = uuid(ctx.body.client_id, "el cliente");
   await assertClientAccess(ctx, clientId, ["administrador"]);
   const e = await emissionContext(ctx, clientId);
   const emisor = crearEmisor(Deno.env.get("PORTAL_EMISOR"));
+  const omitirCsd = emisor.nombre === "facturapi";
   const v = await emisor.validar(borradorFrom(ctx, e.tp), {
     csd: e.reg ? { serial: e.reg.cert_serial, notBefore: e.reg.cert_not_before, notAfter: e.reg.cert_not_after, revoked: !!e.reg.revoked_at } : null,
+    omitirCsd,
   });
   return { validacion: v, expediente: e.dossier, emision_habilitada: !!e.settings?.emission_enabled, uso_basico: e.usage, emisor: emisor.nombre };
 };
 
 const crearFactura: Handler = async (ctx) => {
+  assertEmissionWritable();
   const clientId = uuid(ctx.body.client_id, "el cliente");
   await assertClientAccess(ctx, clientId, ["administrador"], false);
   const e = await emissionContext(ctx, clientId);
   if (!e.settings?.emission_enabled) throw new ApiError(403, "emision_apagada", "La emisión no está habilitada para este cliente. Kawiil la activa cuando el expediente está completo.");
-  if (!e.dossier?.complete) throw new ApiError(403, "expediente_incompleto", "El expediente de emisión está incompleto.", e.dossier);
+  if (e.dossier && e.dossier.complete === false) throw new ApiError(403, "expediente_incompleto", "El expediente de emisión está incompleto.", e.dossier);
   if (e.usage?.origin === "basico" && Number(e.usage.usadas) >= Number(e.usage.limite)) {
     throw new ApiError(402, "limite_basico", `Llegó al límite de ${e.usage.limite} facturas incluidas en el nivel básico. Para seguir facturando, contrate un plan con Kawiil desde «Mensajes».`);
   }
   const emisor = crearEmisor(Deno.env.get("PORTAL_EMISOR"));
   const borrador = borradorFrom(ctx, e.tp);
-  const ectx = { csd: e.reg ? { serial: e.reg.cert_serial, notBefore: e.reg.cert_not_before, notAfter: e.reg.cert_not_after, revoked: !!e.reg.revoked_at } : null };
+  const ectx = {
+    csd: e.reg ? { serial: e.reg.cert_serial, notBefore: e.reg.cert_not_before, notAfter: e.reg.cert_not_after, revoked: !!e.reg.revoked_at } : null,
+    omitirCsd: emisor.nombre === "facturapi",
+  };
   try {
     const out = await emisor.emitir(borrador, ectx);
+    const facturapiId = (out as { facturapiId?: string }).facturapiId ?? null;
     const { org } = await clientRfcs(ctx, clientId);
     const xmlPath = `${org}/${clientId}/emitidas/${out.uuid}.xml`;
-    await upload(ctx, "portal", xmlPath, new TextEncoder().encode(out.xml), "application/xml");
+    try {
+      await upload(ctx, "portal", xmlPath, new TextEncoder().encode(out.xml), "application/xml");
+    } catch { /* bucket opcional en OS */ }
     const { data: cfdi, error } = await ctx.admin.from("portal_cfdi").insert({
-      organization_id: org, client_id: clientId, uuid: out.uuid, direction: "emitida",
-      source: out.esPrueba ? "emision_prueba" : "emision_portal", is_test: out.esPrueba, version: "4.0",
-      fecha: out.fechaTimbrado, rfc_emisor: borrador.emisor.rfc, nombre_emisor: borrador.emisor.nombre,
-      rfc_receptor: normalizeRfc(borrador.receptor.rfc), nombre_receptor: borrador.receptor.nombre, tipo_comprobante: "I",
-      uso_cfdi: borrador.receptor.uso, forma_pago: borrador.formaPago, metodo_pago: borrador.metodoPago, moneda: "MXN",
-      subtotal: out.totales.subtotal, iva_trasladado: out.totales.iva, total: out.totales.total,
-      clave_prod_serv: borrador.conceptos[0]?.claveProdServ, descripcion: borrador.conceptos[0]?.descripcion,
-      sat_status: out.esPrueba ? "desconocido" : "vigente", xml_path: xmlPath, created_by: ctx.userId,
+      client_id: clientId,
+      uuid: out.uuid,
+      direction: "emitida",
+      source: out.esPrueba ? "emision_prueba" : (emisor.nombre === "facturapi" ? "emision_facturapi" : "emision_portal"),
+      is_test: out.esPrueba,
+      version: "4.0",
+      issued_at: out.fechaTimbrado,
+      issuer_rfc: borrador.emisor.rfc,
+      issuer_name: borrador.emisor.nombre,
+      receiver_rfc: normalizeRfc(borrador.receptor.rfc),
+      receiver_name: borrador.receptor.nombre,
+      voucher_type: "I",
+      payment_form: borrador.formaPago,
+      payment_method: borrador.metodoPago,
+      currency: "MXN",
+      subtotal: out.totales.subtotal,
+      vat_transferred: out.totales.iva,
+      total: out.totales.total,
+      detail_status: "complete",
+      sat_status: out.esPrueba ? "unknown" : "vigente",
+      xml_path: xmlPath,
     }).select("id").single();
     if (error) throw new ApiError(500, "registro", error.message);
     await ctx.admin.from("portal_emissions").insert({
-      organization_id: org, client_id: clientId, requested_by: ctx.userId, emisor: emisor.nombre, status: "emitida", draft: borrador, cfdi_id: cfdi.id,
+      client_id: clientId, requested_by: ctx.userId, emisor: emisor.nombre, status: "emitida", draft: borrador, cfdi_id: cfdi.id,
+      facturapi_invoice_id: facturapiId,
     });
-    if (!out.esPrueba && e.reg) {
-      // Uso real de la llave del CSD (solo el emisor PAC sella).
+    if (facturapiId) {
+      await ctx.admin.from("portal_facturapi_invoices").upsert({
+        client_id: clientId, cfdi_id: cfdi.id, facturapi_id: facturapiId, uuid: out.uuid, tipo: "I",
+        livemode: !out.esPrueba, status: out.esPrueba ? "valid" : "valid", payload: { totales: out.totales },
+      }, { onConflict: "client_id,facturapi_id" });
+    }
+    if (!out.esPrueba && e.reg && emisor.nombre !== "facturapi") {
       await ctx.admin.from("portal_csd_registry").update({ last_used_at: new Date().toISOString(), use_count: (e.reg.use_count ?? 0) + 1 }).eq("id", e.reg.id);
       await audit(ctx, "csd_uso", clientId, "portal_csd_registry", e.reg.id, { uuid: out.uuid });
     }
     await audit(ctx, "emision", clientId, "portal_cfdi", cfdi.id, { uuid: out.uuid, emisor: emisor.nombre, prueba: out.esPrueba, total: out.totales.total });
-    return { cfdi_id: cfdi.id, uuid: out.uuid, prueba: out.esPrueba, totales: out.totales };
+    return { cfdi_id: cfdi.id, uuid: out.uuid, prueba: out.esPrueba, totales: out.totales, facturapi_id: facturapiId, emisor: emisor.nombre };
   } catch (err) {
     if (err instanceof EmisionRechazada) {
-      const { org } = await clientRfcs(ctx, clientId);
-      await ctx.admin.from("portal_emissions").insert({ organization_id: org, client_id: clientId, requested_by: ctx.userId, emisor: emisor.nombre, status: "rechazada", draft: borrador, errors: err.errores });
+      await ctx.admin.from("portal_emissions").insert({
+        client_id: clientId, requested_by: ctx.userId, emisor: emisor.nombre, status: "rechazada", draft: borrador, errors: err.errores,
+      });
       await audit(ctx, "emision_rechazada", clientId, "portal_emissions", null, { errores: err.errores.length });
       throw new ApiError(422, "validacion", err.message, err.errores);
     }
     if (err instanceof PacNoConfigurado) throw new ApiError(503, "pac_no_configurado", err.message);
+    if (err instanceof FacturapiError) throw new ApiError(err.status >= 400 && err.status < 600 ? err.status : 502, err.code, err.message, err.details);
     throw err;
   }
+};
+
+/** Complemento de pago (CFDI tipo P) vía Facturapi — docs/guides/invoices/pago */
+const crearComplementoPago: Handler = async (ctx) => {
+  assertEmissionWritable();
+  if (PORTAL_EMISOR_MODE !== "facturapi") {
+    throw new ApiError(503, "facturapi_requerido", "El complemento de pago requiere PORTAL_EMISOR=facturapi.");
+  }
+  const cfg = facturapiConfigFromEnv();
+  if (!cfg) throw new ApiError(503, "facturapi_not_configured", "Falta FACTURAPI_SECRET_KEY en secretos (central/ensayo).");
+  const clientId = uuid(ctx.body.client_id, "el cliente");
+  await assertClientAccess(ctx, clientId, ["administrador"], false);
+  const e = await emissionContext(ctx, clientId);
+  if (!e.settings?.emission_enabled) throw new ApiError(403, "emision_apagada", "La emisión no está habilitada para este cliente.");
+
+  const formaPago = str(ctx.body.forma_pago ?? ctx.body.payment_form ?? "03", "la forma de pago", 3);
+  const related = Array.isArray(ctx.body.related) ? ctx.body.related as Record<string, unknown>[] : [];
+  if (related.length === 0) throw new ApiError(400, "dato_invalido", "Indica al menos una factura PPD a pagar.");
+
+  const related_documents = [];
+  for (const item of related) {
+    const amount = Number(item.amount);
+    if (!(amount > 0)) throw new ApiError(400, "dato_invalido", "Cada pago debe tener monto mayor a cero.");
+    let facturapiId = typeof item.facturapi_id === "string" ? item.facturapi_id : "";
+    const relatedUuid = typeof item.uuid === "string" ? item.uuid.trim().toUpperCase() : "";
+    if (!facturapiId && relatedUuid) {
+      const { data: link } = await ctx.admin.from("portal_facturapi_invoices")
+        .select("facturapi_id").eq("client_id", clientId).eq("uuid", relatedUuid).maybeSingle();
+      facturapiId = link?.facturapi_id ?? "";
+    }
+    if (facturapiId) {
+      related_documents.push(await paymentSummary(cfg, facturapiId, amount));
+    } else if (relatedUuid) {
+      // Fallback manual si la factura no se emitió por Facturapi en esta org.
+      const installment = Number(item.installment) || 1;
+      const lastBalance = Number(item.last_balance ?? amount);
+      const taxes = Array.isArray(item.taxes) ? item.taxes : [{ base: Math.round((amount / 1.16) * 100) / 100, type: "IVA", rate: 0.16 }];
+      related_documents.push({ uuid: relatedUuid, amount, installment, last_balance: lastBalance, taxes });
+    } else {
+      throw new ApiError(400, "dato_invalido", "Cada partida necesita facturapi_id o uuid de la factura PPD.");
+    }
+  }
+
+  const customer = (ctx.body.customer ?? {}) as Record<string, unknown>;
+  const taxId = normalizeRfc(String(customer.tax_id ?? customer.rfc ?? ""));
+  const legalName = String(customer.legal_name ?? customer.nombre ?? "").trim();
+  const taxSystem = String(customer.tax_system ?? customer.regimen ?? "601");
+  const zip = String(customer.zip ?? customer.cp ?? "").trim();
+  if (!taxId || !legalName || !zip) {
+    throw new ApiError(400, "dato_invalido", "Faltan datos del receptor (RFC, nombre, CP) para el complemento.");
+  }
+
+  const created = await createInvoice(cfg, {
+    type: "P",
+    customer: {
+      legal_name: legalName,
+      tax_id: taxId,
+      tax_system: taxSystem,
+      address: { zip, country: "MEX" },
+    },
+    complements: [{ type: "pago", data: [{ payment_form: formaPago, related_documents }] }],
+  });
+
+  const uuidPago = (created.uuid ?? crypto.randomUUID()).toUpperCase();
+  const paidAmount = related_documents.reduce((s, d) => s + Number((d as { amount?: number }).amount ?? 0), 0);
+  const { data: cfdi, error } = await ctx.admin.from("portal_cfdi").insert({
+    client_id: clientId,
+    uuid: uuidPago,
+    direction: "emitida",
+    source: "emision_facturapi",
+    is_test: created.livemode === false,
+    version: "4.0",
+    issued_at: created.stamp?.date ?? new Date().toISOString(),
+    issuer_rfc: e.tp?.rfc ?? null,
+    issuer_name: e.tp?.razon_social ?? null,
+    receiver_rfc: taxId,
+    receiver_name: legalName,
+    voucher_type: "P",
+    payment_form: formaPago,
+    payment_method: null,
+    currency: "MXN",
+    subtotal: 0,
+    total: 0,
+    detail_status: "complete",
+    sat_status: created.livemode === false ? "unknown" : "vigente",
+  }).select("id").single();
+  if (error) throw new ApiError(500, "registro", error.message);
+
+  await ctx.admin.from("portal_facturapi_invoices").upsert({
+    client_id: clientId, cfdi_id: cfdi.id, facturapi_id: created.id, uuid: uuidPago, tipo: "P",
+    livemode: !!created.livemode, status: created.status ?? "valid",
+    related_uuid: (related_documents[0] as { uuid?: string })?.uuid ?? null,
+    payload: { related_documents, paid_amount: paidAmount },
+  }, { onConflict: "client_id,facturapi_id" });
+
+  // Vincular pagos a CFDI PPD locales si existen.
+  for (const doc of related_documents as { uuid?: string; amount?: number }[]) {
+    if (!doc.uuid) continue;
+    const { data: relatedCfdi } = await ctx.admin.from("portal_cfdi")
+      .select("id").eq("client_id", clientId).eq("uuid", doc.uuid.toUpperCase()).maybeSingle();
+    if (relatedCfdi) {
+      await ctx.admin.from("portal_payment_links").insert({
+        payment_cfdi_id: cfdi.id,
+        related_cfdi_id: relatedCfdi.id,
+        paid_at: created.stamp?.date ?? new Date().toISOString(),
+        paid_amount: Number(doc.amount ?? 0),
+      });
+    }
+  }
+
+  await audit(ctx, "emision", clientId, "portal_cfdi", cfdi.id, { uuid: uuidPago, tipo: "P", facturapi_id: created.id, paid_amount: paidAmount });
+  return {
+    cfdi_id: cfdi.id,
+    uuid: uuidPago,
+    facturapi_id: created.id,
+    prueba: created.livemode === false,
+    paid_amount: paidAmount,
+    related_documents,
+  };
+};
+
+const catalogosBuscar: Handler = async (ctx) => {
+  const clientId = uuid(ctx.body.client_id, "el cliente");
+  await assertClientAccess(ctx, clientId, ["administrador", "operativo", "consulta"]);
+  const catalog = str(ctx.body.catalog ?? "c_ClaveProdServ", "el catálogo", 40);
+  const q = str(ctx.body.q ?? ctx.body.query ?? "", "la búsqueda", 200);
+  const limit = Math.min(40, Math.max(1, Number(ctx.body.limit) || 12));
+  const { data, error } = await requireUser(ctx).rpc("portal_sat_catalog_suggest", {
+    _catalog: catalog, _q: q, _limit: limit,
+  });
+  if (error) throw new ApiError(400, "catalogo", error.message);
+  return { catalog, q, results: data ?? [] };
+};
+
+const plantillasListar: Handler = async (ctx) => {
+  const clientId = uuid(ctx.body.client_id, "el cliente");
+  await assertClientAccess(ctx, clientId, ["administrador", "operativo", "consulta"]);
+  const kind = ctx.body.kind === "concepto" ? "concepto" : "factura";
+  const table = kind === "concepto" ? "portal_concept_templates" : "portal_invoice_templates";
+  const { data, error } = await requireUser(ctx).from(table).select("*").eq("client_id", clientId).order("updated_at", { ascending: false }).limit(100);
+  if (error) throw new ApiError(400, "plantillas", error.message);
+  return { kind, plantillas: data ?? [] };
+};
+
+const plantillasGuardar: Handler = async (ctx) => {
+  const clientId = uuid(ctx.body.client_id, "el cliente");
+  await assertClientAccess(ctx, clientId, ["administrador", "operativo"]);
+  const kind = ctx.body.kind === "concepto" ? "concepto" : "factura";
+  let internalId = String(ctx.body.internal_id ?? "").trim();
+  if (!internalId) internalId = `auto-${crypto.randomUUID().slice(0, 8)}`;
+  const label = str(ctx.body.label ?? internalId, "la etiqueta", 120);
+
+  if (kind === "concepto") {
+    const row = {
+      client_id: clientId,
+      internal_id: internalId,
+      label,
+      descripcion: str(ctx.body.descripcion, "la descripción", 1000),
+      clave_prod_serv: str(ctx.body.clave_prod_serv, "la clave SAT", 8).replace(/\D/g, ""),
+      clave_unidad: String(ctx.body.clave_unidad ?? "E48").toUpperCase(),
+      cantidad: Number(ctx.body.cantidad) || 1,
+      valor_unitario: Number(ctx.body.valor_unitario) || 0,
+      objeto_imp: ctx.body.objeto_imp === "01" ? "01" : "02",
+      iva_tasa: ctx.body.objeto_imp === "01" ? null : (Number(ctx.body.iva_tasa) || 0.16),
+      created_by: ctx.userId,
+      updated_at: new Date().toISOString(),
+    };
+    const { data, error } = await ctx.admin.from("portal_concept_templates").upsert(row, { onConflict: "client_id,internal_id" }).select("*").single();
+    if (error) throw new ApiError(400, "plantillas", error.message);
+    return { kind, plantilla: data };
+  }
+
+  const row = {
+    client_id: clientId,
+    internal_id: internalId,
+    label,
+    receptor_rfc: ctx.body.receptor_rfc ? normalizeRfc(String(ctx.body.receptor_rfc)) : null,
+    receptor_nombre: ctx.body.receptor_nombre ? String(ctx.body.receptor_nombre).toUpperCase() : null,
+    receptor_regimen: ctx.body.receptor_regimen ? String(ctx.body.receptor_regimen) : null,
+    receptor_cp: ctx.body.receptor_cp ? String(ctx.body.receptor_cp) : null,
+    uso_cfdi: String(ctx.body.uso_cfdi ?? "G03"),
+    forma_pago: String(ctx.body.forma_pago ?? "03"),
+    metodo_pago: ctx.body.metodo_pago === "PPD" ? "PPD" : "PUE",
+    conceptos: Array.isArray(ctx.body.conceptos) ? ctx.body.conceptos : [],
+    created_by: ctx.userId,
+    updated_at: new Date().toISOString(),
+  };
+  const { data, error } = await ctx.admin.from("portal_invoice_templates").upsert(row, { onConflict: "client_id,internal_id" }).select("*").single();
+  if (error) throw new ApiError(400, "plantillas", error.message);
+  return { kind, plantilla: data };
+};
+
+const plantillasCargar: Handler = async (ctx) => {
+  const clientId = uuid(ctx.body.client_id, "el cliente");
+  await assertClientAccess(ctx, clientId, ["administrador", "operativo", "consulta"]);
+  const kind = ctx.body.kind === "concepto" ? "concepto" : "factura";
+  const internalId = str(ctx.body.internal_id, "el id interno", 80);
+  const table = kind === "concepto" ? "portal_concept_templates" : "portal_invoice_templates";
+  const { data, error } = await requireUser(ctx).from(table).select("*").eq("client_id", clientId).eq("internal_id", internalId).maybeSingle();
+  if (error) throw new ApiError(400, "plantillas", error.message);
+  if (!data) throw new ApiError(404, "no_encontrada", "No hay plantilla con ese id interno.");
+  return { kind, plantilla: data };
+};
+
+const clientesListar: Handler = async (ctx) => {
+  const clientId = uuid(ctx.body.client_id, "el cliente");
+  await assertClientAccess(ctx, clientId, ["administrador", "operativo", "consulta"]);
+  const { data, error } = await requireUser(ctx).from("portal_customers")
+    .select("*").eq("client_id", clientId).order("updated_at", { ascending: false }).limit(100);
+  if (error) throw new ApiError(400, "clientes", error.message);
+  return { clientes: data ?? [] };
+};
+
+const clientesGuardar: Handler = async (ctx) => {
+  const clientId = uuid(ctx.body.client_id, "el cliente");
+  await assertClientAccess(ctx, clientId, ["administrador", "operativo"]);
+  let internalId = String(ctx.body.internal_id ?? "").trim();
+  if (!internalId) internalId = `cli-${crypto.randomUUID().slice(0, 8)}`;
+  const row = {
+    client_id: clientId,
+    internal_id: internalId,
+    label: str(ctx.body.label ?? ctx.body.nombre ?? internalId, "la etiqueta", 120),
+    rfc: normalizeRfc(str(ctx.body.rfc, "el RFC", 13)),
+    nombre: str(ctx.body.nombre, "el nombre", 300).toUpperCase(),
+    regimen: String(ctx.body.regimen ?? "601"),
+    cp: str(ctx.body.cp, "el CP", 5),
+    uso_cfdi: String(ctx.body.uso_cfdi ?? "G03"),
+    email: ctx.body.email ? String(ctx.body.email) : null,
+    created_by: ctx.userId,
+    updated_at: new Date().toISOString(),
+  };
+  const { data, error } = await ctx.admin.from("portal_customers").upsert(row, { onConflict: "client_id,internal_id" }).select("*").single();
+  if (error) throw new ApiError(400, "clientes", error.message);
+  return { cliente: data };
+};
+
+/** Nota de crédito (CFDI tipo E) vía Facturapi. */
+const crearNotaCredito: Handler = async (ctx) => {
+  assertEmissionWritable();
+  if (PORTAL_EMISOR_MODE !== "facturapi") {
+    throw new ApiError(503, "facturapi_requerido", "La nota de crédito requiere PORTAL_EMISOR=facturapi.");
+  }
+  const cfg = facturapiConfigFromEnv();
+  if (!cfg) throw new ApiError(503, "facturapi_not_configured", "Falta FACTURAPI_SECRET_KEY.");
+  const clientId = uuid(ctx.body.client_id, "el cliente");
+  await assertClientAccess(ctx, clientId, ["administrador"], false);
+  const e = await emissionContext(ctx, clientId);
+  if (!e.settings?.emission_enabled) throw new ApiError(403, "emision_apagada", "La emisión no está habilitada para este cliente.");
+  const borrador = borradorFrom(ctx, e.tp);
+  const relatedUuid = typeof ctx.body.related_uuid === "string" ? ctx.body.related_uuid.trim().toUpperCase() : "";
+  const body: Record<string, unknown> = {
+    type: "E",
+    use: borrador.receptor.uso || "G02",
+    payment_form: borrador.formaPago || "03",
+    payment_method: borrador.metodoPago || "PUE",
+    currency: "MXN",
+    customer: {
+      legal_name: borrador.receptor.nombre.trim(),
+      tax_id: borrador.receptor.rfc.trim().toUpperCase(),
+      tax_system: borrador.receptor.regimen,
+      address: { zip: borrador.receptor.cp, country: "MEX" },
+    },
+    items: borrador.conceptos.map((c) => ({
+      quantity: Number(c.cantidad),
+      product: {
+        description: c.descripcion.trim(),
+        product_key: c.claveProdServ,
+        unit_key: c.claveUnidad || "E48",
+        price: Number(c.valorUnitario),
+        tax_included: false,
+        taxability: c.objetoImp,
+        taxes: c.objetoImp === "02" && typeof c.ivaTasa === "number"
+          ? [{ type: "IVA", rate: c.ivaTasa }]
+          : [],
+      },
+    })),
+  };
+  if (relatedUuid) {
+    body.related_documents = [{ relationship: "01", documents: [relatedUuid] }];
+  }
+  const created = await createInvoice(cfg, body);
+  const uuidNc = (created.uuid ?? crypto.randomUUID()).toUpperCase();
+  const total = Number(created.total ?? 0);
+  const { data: cfdi, error } = await ctx.admin.from("portal_cfdi").insert({
+    client_id: clientId,
+    uuid: uuidNc,
+    direction: "emitida",
+    source: "emision_facturapi",
+    is_test: created.livemode === false,
+    version: "4.0",
+    issued_at: created.stamp?.date ?? new Date().toISOString(),
+    issuer_rfc: e.tp?.rfc ?? null,
+    issuer_name: e.tp?.razon_social ?? null,
+    receiver_rfc: normalizeRfc(borrador.receptor.rfc),
+    receiver_name: borrador.receptor.nombre,
+    voucher_type: "E",
+    payment_form: borrador.formaPago,
+    payment_method: borrador.metodoPago,
+    currency: "MXN",
+    subtotal: Number(borrador.conceptos.reduce((s, c) => s + c.cantidad * c.valorUnitario, 0).toFixed(2)),
+    total,
+    detail_status: "complete",
+    sat_status: created.livemode === false ? "unknown" : "vigente",
+  }).select("id").single();
+  if (error) throw new ApiError(500, "registro", error.message);
+  await ctx.admin.from("portal_facturapi_invoices").upsert({
+    client_id: clientId, cfdi_id: cfdi.id, facturapi_id: created.id, uuid: uuidNc, tipo: "E",
+    livemode: !!created.livemode, status: created.status ?? "valid",
+    related_uuid: relatedUuid || null, payload: { type: "E" },
+  }, { onConflict: "client_id,facturapi_id" });
+  await audit(ctx, "emision", clientId, "portal_cfdi", cfdi.id, { uuid: uuidNc, tipo: "E", facturapi_id: created.id });
+  return { cfdi_id: cfdi.id, uuid: uuidNc, facturapi_id: created.id, prueba: created.livemode === false, total };
 };
 
 /**
@@ -1341,14 +1743,16 @@ const ROUTES: Record<string, Handler> = {
     if (MIRROR_READ_ONLY) throw new ApiError(403, "espejo_solo_lectura", "En esta fase el cliente no carga XML; las facturas las publica Kawiil desde central.");
     return cargarFacturas(ctx);
   },
-  "facturas.validar": async (ctx) => {
-    if (MIRROR_READ_ONLY) throw new ApiError(403, "espejo_solo_lectura", "La emisión no está disponible en la fase espejo.");
-    return validarFactura(ctx);
-  },
-  "facturas.crear": async (ctx) => {
-    if (MIRROR_READ_ONLY) throw new ApiError(403, "espejo_solo_lectura", "La emisión no está disponible en la fase espejo.");
-    return crearFactura(ctx);
-  },
+  "facturas.validar": validarFactura,
+  "facturas.crear": crearFactura,
+  "facturas.complemento_pago": crearComplementoPago,
+  "facturas.nota_credito": crearNotaCredito,
+  "catalogos.buscar": catalogosBuscar,
+  "plantillas.listar": plantillasListar,
+  "plantillas.guardar": plantillasGuardar,
+  "plantillas.cargar": plantillasCargar,
+  "clientes.listar": clientesListar,
+  "clientes.guardar": clientesGuardar,
   "facturas.solicitar_cancelacion": async (ctx) => {
     if (MIRROR_READ_ONLY) throw new ApiError(403, "espejo_solo_lectura", "Las cancelaciones las gestiona Kawiil en central durante la fase espejo.");
     return solicitarCancelacion(ctx);
