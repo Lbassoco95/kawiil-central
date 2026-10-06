@@ -99,13 +99,18 @@ export default function Facturas() {
         </GlassPanel>
         {isAdmin ? (
           <GlassPanel>
-            <p className="kw-title" style={{ fontSize: 16 }}>Emitir factura de ingreso</p>
+            <p className="kw-title" style={{ fontSize: 16 }}>Emitir con Facturapi</p>
             <p className="kw-small" style={{ marginTop: 8 }}>
-              Genera una factura nueva a tu cliente (cuando la emisión esté activa para tu cuenta).
+              Factura de ingreso guiada (campos SAT con etiquetas simples), plantillas frecuentes y complemento de pago PPD.
             </p>
-            <Link className="kw-btn kw-btn--primary mt-3 inline-flex" to="/facturas/nueva">
-              Crear factura
-            </Link>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Link className="kw-btn kw-btn--primary inline-flex" to="/facturas/nueva">
+                Crear factura
+              </Link>
+              <Link className="kw-btn inline-flex" to="/facturas/complemento">
+                Complemento de pago
+              </Link>
+            </div>
           </GlassPanel>
         ) : (
           <GlassPanel>

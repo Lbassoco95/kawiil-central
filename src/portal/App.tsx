@@ -19,6 +19,7 @@ import Buzon from "./pages/Buzon";
 import Facturas from "./pages/Facturas";
 import FacturaDetalle from "./pages/FacturaDetalle";
 import NuevaFactura from "./pages/NuevaFactura";
+import ComplementoPago from "./pages/ComplementoPago";
 import Documentos from "./pages/Documentos";
 import Alertas from "./pages/Alertas";
 import Mensajes from "./pages/Mensajes";
@@ -98,6 +99,8 @@ function AppRoutes() {
         <Route path="buzon" element={<Buzon />} />
         <Route path="mensajes" element={<Mensajes />} />
         <Route path="facturacion" element={<Facturacion />} />
+        <Route path="facturas/nueva" element={<NuevaFactura />} />
+        <Route path="facturas/complemento" element={<ComplementoPago />} />
         <Route path="origen" element={<Origen />} />
         <Route path="hallazgos" element={<Hallazgos />} />
       </Route>
@@ -114,6 +117,7 @@ function AppRoutes() {
         <Route path="hallazgos" element={<Hallazgos />} />
         <Route path="facturas" element={<Facturas />} />
         <Route path="facturas/nueva" element={<NuevaFactura />} />
+        <Route path="facturas/complemento" element={<ComplementoPago />} />
         <Route path="facturas/:id" element={<FacturaDetalle />} />
         <Route path="documentos" element={<Documentos />} />
         <Route path="alertas" element={<Alertas />} />

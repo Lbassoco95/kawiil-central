@@ -37,7 +37,7 @@ export default function Facturacion() {
     <>
       <PageHead
         title="Facturación"
-        subtitle="Pide una factura o sube recibos/tickets · lectura del avance en esta misma vista"
+        subtitle="Emite facturas, complemento de pago y solicita desde recibos · no es el archivo SatGo"
       />
       <GlassPanel style={{ marginBottom: 16 }}>
         <p className="kw-small" style={{ margin: 0 }}>
@@ -45,7 +45,7 @@ export default function Facturacion() {
           <Link className="underline" to="/diseno/ingresos">Ingresos</Link>
           {" "}y{" "}
           <Link className="underline" to="/diseno/egresos">Egresos</Link>
-          . Aquí solo emisión y solicitudes desde recibos.
+          . Aquí: emisión Facturapi, complemento de pago PPD y solicitudes desde recibos.
         </p>
       </GlassPanel>
       <div className="kw-grid kw-main-cols">
