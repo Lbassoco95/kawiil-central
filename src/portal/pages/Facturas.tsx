@@ -8,7 +8,7 @@ import { usePortal } from "../lib/session";
 import { callApi, openFile } from "../lib/api";
 import { clientDetailQualityLabel, clientFlagReason } from "../lib/clientFlags";
 import { deriveCobranza, metodoPagoLabel, relatedUuidFromFlags, voucherTypeLabel } from "../lib/cobranza";
-import { isDidacticFixtureCfdi, isPendingDetailCfdi, partitionSparse, shortUuid, visibleClientFlags } from "../lib/cfdiPresentation";
+import { accountOnlyCfdi, isPendingDetailCfdi, shortUuid, visibleClientFlags } from "../lib/cfdiPresentation";
 import { fmtDate, fmtMoney } from "../lib/format";
 import { Empty, Notice, PageTitle, StatusPill } from "../components/ui";
 
@@ -65,8 +65,7 @@ function FacturaCard({ c, dir }: { c: Cfdi; dir: "emitida" | "recibida" }) {
   const metodo = metodoPagoLabel(c.metodo_pago);
   const tipo = voucherTypeLabel(c.voucher_type);
   const ncDe = relatedUuidFromFlags(c.flags);
-  const didactic = isDidacticFixtureCfdi(c);
-  const pendingDetail = isPendingDetailCfdi(c) || (didactic && c.detail_status !== "complete");
+  const pendingDetail = isPendingDetailCfdi(c);
   const flags = visibleClientFlags(c.flags);
   const quality = clientDetailQualityLabel(undefined, c.detail_status);
   const party = dir === "recibida" ? c.nombre_emisor ?? c.rfc_emisor : c.nombre_receptor ?? c.rfc_receptor;
@@ -99,7 +98,7 @@ function FacturaCard({ c, dir }: { c: Cfdi; dir: "emitida" | "recibida" }) {
                 {cobranza.estado === "parcial" ? ` · ${fmtMoney(cobranza.paid)} de ${fmtMoney(cobranza.total)}` : ""}
               </StatusPill>
             )}
-            {!pendingDetail && !didactic && quality === "Detalle completo" && (
+            {!pendingDetail && quality === "Detalle completo" && (
               <span>· {quality}</span>
             )}
           </p>
@@ -119,14 +118,7 @@ function FacturaCard({ c, dir }: { c: Cfdi; dir: "emitida" | "recibida" }) {
           <StatusPill tone={SAT[c.sat_status]?.tone ?? "wait"}>{SAT[c.sat_status]?.label ?? c.sat_status}</StatusPill>
           {pendingDetail && (
             <span className="ml-1">
-              <StatusPill tone="warn">
-                {didactic ? "Detalle pendiente (ejemplo)" : "Detalle pendiente"}
-              </StatusPill>
-            </span>
-          )}
-          {didactic && (
-            <span className="ml-1">
-              <StatusPill tone="info">Ejemplo didáctico</StatusPill>
+              <StatusPill tone="warn">Detalle pendiente</StatusPill>
             </span>
           )}
         </div>
@@ -169,7 +161,6 @@ export default function Facturas() {
     cobranza: "",
   });
   const [rows, setRows] = useState<Cfdi[]>([]);
-  const [showDidactic, setShowDidactic] = useState(false);
 
   const load = useCallback(async () => {
     if (!active) return;
@@ -184,12 +175,11 @@ export default function Facturas() {
     void load();
   }, [load]);
 
-  const { ready: account, pending: didactic } = useMemo(() => partitionSparse(rows), [rows]);
+  const account = useMemo(() => accountOnlyCfdi(rows), [rows]);
   const pendingAmountCount = useMemo(
     () => account.filter((c) => isPendingDetailCfdi(c)).length,
     [account],
   );
-  const visible = showDidactic ? [...account, ...didactic] : account;
 
   return (
     <>
@@ -213,22 +203,6 @@ export default function Facturas() {
           <Notice tone="warn">
             {pendingAmountCount} factura{pendingAmountCount === 1 ? "" : "s"} reales con «Detalle pendiente»
             (contraparte, folio y fecha visibles; monto/método aún no publicados).
-          </Notice>
-        </div>
-      )}
-      {didactic.length > 0 && (
-        <div className="mb-3">
-          <Notice tone="info">
-            {didactic.length} ejemplo{didactic.length === 1 ? "" : "s"} didáctico{didactic.length === 1 ? "" : "s"}
-            {" "}(clientes inventados; no son de esta cuenta).
-            {" "}
-            <button
-              type="button"
-              className="underline font-medium"
-              onClick={() => setShowDidactic((v) => !v)}
-            >
-              {showDidactic ? "Ocultar ejemplos" : "Mostrar ejemplos aparte"}
-            </button>
           </Notice>
         </div>
       )}
@@ -306,27 +280,13 @@ export default function Facturas() {
           </select>
         </div>
       </fieldset>
-      {visible.length === 0 ? (
-        <Empty>
-          {didactic.length > 0 && !showDidactic
-            ? "No hay facturas reales con estos filtros. Usa «Mostrar ejemplos aparte» si quieres ver los didácticos."
-            : "No hay facturas con estos filtros."}
-        </Empty>
+      {account.length === 0 ? (
+        <Empty>No hay facturas con estos filtros.</Empty>
       ) : (
         <ul className="space-y-2">
           {account.map((c) => (
             <FacturaCard key={c.id} c={c} dir={dir} />
           ))}
-          {showDidactic && didactic.length > 0 && (
-            <>
-              <li className="pt-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Ejemplos didácticos · {didactic.length} factura{didactic.length === 1 ? "" : "s"} (no son de esta cuenta)
-              </li>
-              {didactic.map((c) => (
-                <FacturaCard key={c.id} c={c} dir={dir} />
-              ))}
-            </>
-          )}
         </ul>
       )}
     </>

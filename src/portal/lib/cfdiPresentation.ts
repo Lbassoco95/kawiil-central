@@ -1,4 +1,4 @@
-/** Presentación cliente de CFDI: cuenta real primero; fixtures didácticos aparte. */
+/** Presentación cliente de CFDI: cuenta real; fixtures didácticos ocultos por defecto. */
 
 export type SparseCfdiLike = {
   detail_status?: string | null;
@@ -20,7 +20,7 @@ export function shortUuid(uuid: string | null | undefined): string {
   return `${u.slice(0, 8)}…`;
 }
 
-/** Fixtures inventados (`is_test`): no van al KPI/ranking/listado principal de la sesión autenticada. */
+/** Fixtures inventados (`is_test`): Aldea del Sol, Horizonte, etc. */
 export function isDidacticFixtureCfdi(row: SparseCfdiLike): boolean {
   return row.is_test === true;
 }
@@ -54,7 +54,7 @@ export function isSparseMetadataCfdi(row: SparseCfdiLike): boolean {
 /**
  * Particiona filas de sesión autenticada:
  * - `ready` / cuenta = CFDI reales (incl. SatGo solo-metadatos $0)
- * - `pending` / didácticos = fixtures `is_test` (Aldea del Sol, etc.)
+ * - `pending` / didácticos = fixtures `is_test` (nunca van a KPI/ranking)
  */
 export function partitionSparse<T extends SparseCfdiLike>(rows: T[]): { ready: T[]; pending: T[] } {
   const ready: T[] = [];
@@ -64,6 +64,11 @@ export function partitionSparse<T extends SparseCfdiLike>(rows: T[]): { ready: T
     else ready.push(row);
   }
   return { ready, pending };
+}
+
+/** Solo CFDI de la cuenta (excluye `is_test`). */
+export function accountOnlyCfdi<T extends SparseCfdiLike>(rows: T[]): T[] {
+  return partitionSparse(rows).ready;
 }
 
 export function partitionAccountCfdi<T extends SparseCfdiLike>(rows: T[]): { account: T[]; didactic: T[] } {
