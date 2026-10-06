@@ -1,6 +1,6 @@
 /** Helpers puros: CFDI del espejo → filas/rankings de UI (sin client Supabase). */
 import type { InvoiceRow } from "../design/types";
-import { shortUuid } from "./cfdiPresentation";
+import { isPendingDetailCfdi, shortUuid } from "./cfdiPresentation";
 import { fmtDate, fmtMoney, fmtUuidShort } from "./format";
 
 export interface MirrorCfdi {
@@ -38,6 +38,21 @@ export function toInvoiceRows(rows: MirrorCfdi[], direction: "emitida" | "recibi
     const party = partyName(c, direction);
     const rfc = direction === "emitida" ? (c.rfc_receptor ?? "") : (c.rfc_emisor ?? "");
     const status: InvoiceRow["status"] = c.sat_status === "cancelado" ? "cancelado" : "vigente";
+    const pendingDetail = isPendingDetailCfdi(c);
+    let proposal: InvoiceRow["proposal"];
+    if (c.category_name) {
+      proposal = {
+        account: c.category_name,
+        code: "",
+        status: c.category_status === "confirmada"
+          ? "confirmada"
+          : c.category_status === "sugerida"
+            ? "sugerida"
+            : "revisar",
+      };
+    } else if (pendingDetail) {
+      proposal = { account: "Detalle pendiente", code: "", status: "revisar" };
+    }
     return {
       date: c.fecha ? fmtDate(c.fecha) : "—",
       party,
@@ -45,13 +60,7 @@ export function toInvoiceRows(rows: MirrorCfdi[], direction: "emitida" | "recibi
       folio: fmtUuidShort(c.uuid),
       total: Number(c.total ?? 0),
       status,
-      proposal: c.category_name
-        ? {
-            account: c.category_name,
-            code: "",
-            status: c.category_status === "confirmada" ? "confirmada" : c.category_status === "sugerida" ? "sugerida" : "revisar",
-          }
-        : undefined,
+      proposal,
     };
   });
 }

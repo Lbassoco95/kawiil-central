@@ -53,6 +53,11 @@ describe("demo espejo (Corte 4)", () => {
     expect(seed).toContain("'constancia'");
     expect(seed).toContain("'opinion_cumplimiento'");
     expect(seed).toContain("'declaracion'");
+    expect(seed).toContain("satgo_facfiel");
+    expect(seed).not.toMatch(/Constructora Aldea del Sol/);
+    expect(seed).not.toMatch(/Grupo Horizonte/);
+    const didactic = readFileSync(resolve(root, "kawiil-os/demo/seed-didactic.sql"), "utf8");
+    expect(didactic).toContain("Constructora Aldea del Sol");
   });
 
   it("el árbol kawiil-os (incl. demo) no embebe ref ni JWT de central", () => {
