@@ -501,7 +501,8 @@ Deno.serve(async (req) => {
         .from("satgo_cfdi_items")
         .select("uuid, direction, sat_status")
         .eq("client_id", job.client_id)
-        .or("detail_status.eq.metadata,total.eq.0,payment_method.is.null")
+        // Solo metadata: tipo P complete tiene total=0 / sin MetodoPago y no debe re-encolarse.
+        .eq("detail_status", "metadata")
         .order("issued_at", { ascending: false, nullsFirst: false })
         .limit(limit);
       if (pendErr) {

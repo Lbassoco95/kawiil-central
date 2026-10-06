@@ -74,7 +74,12 @@ export function invoicePublishIdempotencyKey(
   const cents = Math.round(Number(invoice.total ?? 0) * 100);
   const method = String(invoice.payment_method ?? "na").toUpperCase();
   const concepts = Array.isArray(invoice.concepts) ? invoice.concepts.length : 0;
-  return `satgo-cfdi:${companyRef}:${uuid}:${invoice.direction}:${detail}:${cents}:${method}:c${concepts}`;
+  const payments = Array.isArray(invoice.payments) ? invoice.payments.length : 0;
+  const paidCents = Math.round(
+    (invoice.payments ?? []).reduce((s, p) => s + Number(p.paid_amount ?? 0), 0) * 100,
+  );
+  // Incluye pagos para poder republicar CFDI P cuando las relacionadas ya existen.
+  return `satgo-cfdi:${companyRef}:${uuid}:${invoice.direction}:${detail}:${cents}:${method}:c${concepts}:p${payments}:${paidCents}`;
 }
 
 export async function publishInvoiceToOs(
