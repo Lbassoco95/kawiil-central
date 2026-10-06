@@ -10,9 +10,11 @@ import {
   UploadBox,
 } from "../design/primitives";
 import type { RequestFilter } from "../design/types";
-import { addDemoRequest, loadDemoRequests, type DemoRequest } from "../lib/demoStore";
+import type { DemoRequest } from "../lib/demoStore";
 import { usePortal } from "../lib/session";
 import { PageTitle } from "../components/ui";
+
+const AUTH_REQ_KEY = "kawiil-os-auth-requests-v1";
 
 function todayLabel() {
   return new Intl.DateTimeFormat("es-MX", {
@@ -21,6 +23,19 @@ function todayLabel() {
     year: "numeric",
     timeZone: "America/Mexico_City",
   }).format(new Date());
+}
+
+function makeRequest(
+  partial: Omit<DemoRequest, "id" | "createdAt" | "statusLabel">,
+): DemoRequest {
+  const statusLabel: DemoRequest["statusLabel"] =
+    partial.kind === "recibo" ? "Subido" : "Solicitada";
+  return {
+    ...partial,
+    id: `auth-${Date.now()}`,
+    createdAt: new Date().toISOString(),
+    statusLabel,
+  };
 }
 
 /**
@@ -34,11 +49,28 @@ export default function Facturas() {
   const isAdmin = active?.role === "administrador";
 
   useEffect(() => {
-    setItems(loadDemoRequests());
+    // Sesión auth: sin seeds inventados (Aldea/Horizonte). Solo lo que el usuario registre aquí.
+    try {
+      const raw = localStorage.getItem(AUTH_REQ_KEY);
+      if (!raw) {
+        setItems([]);
+        return;
+      }
+      const parsed = JSON.parse(raw) as DemoRequest[];
+      setItems(Array.isArray(parsed) ? parsed : []);
+    } catch {
+      setItems([]);
+    }
   }, []);
 
   const refresh = (next: DemoRequest) => {
-    setItems((prev) => [next, ...prev.filter((p) => p.id !== next.id)]);
+    setItems((prev) => {
+      const merged = [next, ...prev.filter((p) => p.id !== next.id)];
+      try {
+        localStorage.setItem(AUTH_REQ_KEY, JSON.stringify(merged));
+      } catch { /* ignore */ }
+      return merged;
+    });
   };
 
   return (
@@ -94,26 +126,24 @@ export default function Facturas() {
         <div className="kw-grid">
           <InvoiceRequestForm
             onSubmitted={({ cliente, monto, concepto }) => {
-              const item = addDemoRequest({
+              refresh(makeRequest({
                 kind: "factura",
                 title: `Factura a ${cliente} por $${monto}`,
                 date: todayLabel(),
                 detail: concepto,
                 step: 0,
-              });
-              refresh(item);
+              }));
             }}
           />
           <UploadBox
             onUploaded={(files) => {
-              const item = addDemoRequest({
+              refresh(makeRequest({
                 kind: "recibo",
                 title: `Recibo · ${files.length} archivo${files.length === 1 ? "" : "s"} (${files[0]?.source})`,
                 date: todayLabel(),
                 detail: files.map((f) => f.name).join(", "),
                 step: 0,
-              });
-              refresh(item);
+              }));
             }}
           />
           <GlassPanel>
