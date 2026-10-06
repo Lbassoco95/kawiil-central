@@ -578,7 +578,9 @@ export function RankedList({
                 {it.name}
               </span>
               <span className="kw-figure" style={{ fontSize: 16 }}>
-                {money(it.amount)}
+                {Number(it.amount) <= 0.009 && it.meta?.includes("monto no publicado")
+                  ? "—"
+                  : money(it.amount)}
               </span>
             </div>
             <div className="kw-rank__bar">
@@ -638,7 +640,11 @@ export function InvoiceTable({
                   {r.rfc ? <span className="kw-inv__rfc kw-mono">{r.rfc}</span> : null}
                 </td>
                 <td className="kw-mono">{r.folio}</td>
-                <td className="kw-inv__total">{money(r.total, true)}</td>
+                <td className="kw-inv__total">
+                  {r.proposal?.account === "Detalle pendiente" && Number(r.total) <= 0.009
+                    ? "Detalle pendiente"
+                    : money(r.total, true)}
+                </td>
                 <td>
                   <span className="kw-status" style={{ color: r.status === "vigente" ? "var(--positive-text)" : "var(--ink-muted)" }}>
                     {r.status === "vigente" ? "Vigente" : "Cancelado"}
@@ -657,7 +663,11 @@ export function InvoiceTable({
               <p className="kw-caption">{r.date}</p>
               <p className="kw-title" style={{ fontSize: 16, marginTop: 4 }}>{r.party}</p>
               <p className="kw-mono kw-small" style={{ marginTop: 4 }}>{r.folio}</p>
-              <p className="kw-figure" style={{ fontSize: 22, marginTop: 8 }}>{money(r.total, true)}</p>
+              <p className="kw-figure" style={{ fontSize: 22, marginTop: 8 }}>
+                {r.proposal?.account === "Detalle pendiente" && Number(r.total) <= 0.009
+                  ? "Detalle pendiente"
+                  : money(r.total, true)}
+              </p>
               <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 8 }}>
                 <span className="kw-status" style={{ color: r.status === "vigente" ? "var(--positive-text)" : "var(--ink-muted)" }}>
                   {r.status === "vigente" ? "Vigente" : "Cancelado"}
