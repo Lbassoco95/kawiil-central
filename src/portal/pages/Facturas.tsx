@@ -1,77 +1,19 @@
-import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { FileText } from "lucide-react";
-import {
-  GlassPanel,
-  InvoiceRequestForm,
-  KawiilitoGuide,
-  PageHead,
-  RequestTracker,
-  UploadBox,
-} from "../design/primitives";
-import type { RequestFilter } from "../design/types";
-import type { DemoRequest } from "../lib/demoStore";
+import { FilePlus2, FileText, Upload } from "lucide-react";
+import { GlassPanel } from "../design/primitives";
 import { usePortal } from "../lib/session";
+import { isDesignPreview } from "../lib/designPreview";
 import { PageTitle } from "../components/ui";
 
-const AUTH_REQ_KEY = "kawiil-os-auth-requests-v1";
-
-function todayLabel() {
-  return new Intl.DateTimeFormat("es-MX", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    timeZone: "America/Mexico_City",
-  }).format(new Date());
-}
-
-function makeRequest(
-  partial: Omit<DemoRequest, "id" | "createdAt" | "statusLabel">,
-): DemoRequest {
-  const statusLabel: DemoRequest["statusLabel"] =
-    partial.kind === "recibo" ? "Subido" : "Solicitada";
-  return {
-    ...partial,
-    id: `auth-${Date.now()}`,
-    createdAt: new Date().toISOString(),
-    statusLabel,
-  };
-}
-
 /**
- * Facturación = emitir / solicitar factura desde recibos.
- * El archivo SatGo (CFDI + cobranza) vive en Ingresos y Egresos.
+ * Hub Facturación: solo elegir Emitir o Solicitar.
+ * Ingresos = archivo SatGo; aquí no se listan CFDI.
  */
 export default function Facturas() {
   const { active } = usePortal();
-  const [items, setItems] = useState<DemoRequest[]>([]);
-  const [filter, setFilter] = useState<RequestFilter>("todas");
-  const isAdmin = active?.role === "administrador";
-
-  useEffect(() => {
-    // Sesión auth: sin seeds inventados (Aldea/Horizonte). Solo lo que el usuario registre aquí.
-    try {
-      const raw = localStorage.getItem(AUTH_REQ_KEY);
-      if (!raw) {
-        setItems([]);
-        return;
-      }
-      const parsed = JSON.parse(raw) as DemoRequest[];
-      setItems(Array.isArray(parsed) ? parsed : []);
-    } catch {
-      setItems([]);
-    }
-  }, []);
-
-  const refresh = (next: DemoRequest) => {
-    setItems((prev) => {
-      const merged = [next, ...prev.filter((p) => p.id !== next.id)];
-      try {
-        localStorage.setItem(AUTH_REQ_KEY, JSON.stringify(merged));
-      } catch { /* ignore */ }
-      return merged;
-    });
-  };
+  const design = isDesignPreview();
+  const isAdmin = design || active?.role === "administrador";
+  const base = design ? "/diseno" : "";
 
   return (
     <>
@@ -79,93 +21,61 @@ export default function Facturas() {
         title="Facturación"
         subtitle={
           active
-            ? `${active.client_name} · Emite facturas nuevas o pide factura desde un recibo. Los CFDI del SAT están en Ingresos y Egresos.`
-            : "Emite facturas nuevas o pide factura desde un recibo. Los CFDI del SAT están en Ingresos y Egresos."
+            ? `${active.client_name} · Emite con Facturapi o pide factura subiendo un ticket. Los CFDI del SAT están solo en Ingresos y Egresos.`
+            : "Emite con Facturapi o pide factura subiendo un ticket. Los CFDI del SAT están solo en Ingresos y Egresos."
         }
         breadcrumb={["Kawiil", "Portal", "Facturación"]}
         icon={<FileText />}
       />
 
-      <div className="mb-4 grid gap-3 md:grid-cols-2">
-        <GlassPanel>
-          <p className="kw-title" style={{ fontSize: 16 }}>CFDI de tu cuenta</p>
-          <p className="kw-small" style={{ marginTop: 8 }}>
-            Facturas emitidas y recibidas (SatGo), cobranza PUE/PPD y descarga por periodo están en{" "}
-            <Link className="underline" to="/ingresos">Ingresos</Link>
-            {" "}y{" "}
-            <Link className="underline" to="/egresos">Egresos</Link>
-            — no en esta pantalla.
-          </p>
-        </GlassPanel>
+      <GlassPanel style={{ marginBottom: 16 }}>
+        <p className="kw-small" style={{ margin: 0 }}>
+          Aquí no verás el archivo SatGo. Para CFDI ya publicados y cobranza PUE/PPD ve a{" "}
+          <Link className="underline" to={design ? "/diseno/ingresos" : "/ingresos"}>Ingresos</Link>
+          {" "}o{" "}
+          <Link className="underline" to={design ? "/diseno/egresos" : "/egresos"}>Egresos</Link>.
+        </p>
+      </GlassPanel>
+
+      <p className="mb-3 text-sm font-medium" style={{ color: "var(--ink)" }}>¿Qué quieres hacer?</p>
+
+      <div className="grid gap-4 md:grid-cols-2">
         {isAdmin ? (
-          <GlassPanel>
-            <p className="kw-title" style={{ fontSize: 16 }}>Emitir factura de ingreso</p>
-            <p className="kw-small" style={{ marginTop: 8 }}>
-              Genera una factura nueva a tu cliente (cuando la emisión esté activa para tu cuenta).
+          <Link
+            to={`${base}/facturas/emitir`}
+            className="block rounded-2xl border bg-card p-6 transition hover:border-[var(--kawiil-blue)] hover:shadow-sm"
+          >
+            <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full" style={{ background: "color-mix(in srgb, var(--kawiil-blue) 12%, white)" }}>
+              <FilePlus2 style={{ color: "var(--kawiil-blue)" }} size={22} />
+            </div>
+            <h2 className="text-lg font-semibold">Emitir factura</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Wizard paso a paso: factura de ingreso, complemento de pago o nota de crédito. Reutiliza clientes, conceptos y montos.
             </p>
-            <Link className="kw-btn kw-btn--primary mt-3 inline-flex" to="/facturas/nueva">
-              Crear factura
-            </Link>
-          </GlassPanel>
+            <span className="kw-btn kw-btn--primary mt-4 inline-flex">Empezar</span>
+          </Link>
         ) : (
           <GlassPanel>
-            <p className="kw-title" style={{ fontSize: 16 }}>Emisión</p>
-            <p className="kw-small" style={{ marginTop: 8 }}>
-              Solo un administrador del cliente puede emitir. Puedes subir recibos o pedir factura abajo.
+            <h2 className="text-lg font-semibold">Emitir factura</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Solo un administrador del cliente puede emitir. Puedes solicitar factura subiendo un ticket.
             </p>
           </GlassPanel>
         )}
-      </div>
 
-      <PageHead
-        title="Solicitudes y recibos"
-        subtitle="Pide una factura o sube recibos/tickets · seguimiento en esta misma vista"
-      />
-
-      <div className="kw-grid kw-main-cols">
-        <div className="kw-grid">
-          <InvoiceRequestForm
-            onSubmitted={({ cliente, monto, concepto }) => {
-              refresh(makeRequest({
-                kind: "factura",
-                title: `Factura a ${cliente} por $${monto}`,
-                date: todayLabel(),
-                detail: concepto,
-                step: 0,
-              }));
-            }}
-          />
-          <UploadBox
-            onUploaded={(files) => {
-              refresh(makeRequest({
-                kind: "recibo",
-                title: `Recibo · ${files.length} archivo${files.length === 1 ? "" : "s"} (${files[0]?.source})`,
-                date: todayLabel(),
-                detail: files.map((f) => f.name).join(", "),
-                step: 0,
-              }));
-            }}
-          />
-          <GlassPanel>
-            <h3 className="kw-title" style={{ fontSize: 16 }}>Cómo se lee el reporte</h3>
-            <p className="kw-small" style={{ margin: "6px 0 0" }}>
-              Solicitudes y recibos quedan en seguimiento aquí. El archivo de CFDI del SAT (emitidas/recibidas,
-              montos y cobranza) se consulta en Ingresos y Egresos.
-            </p>
-          </GlassPanel>
-        </div>
-        <div className="kw-grid">
-          <KawiilitoGuide pose="listo" title="Aquí sabes cuándo está lista">
-            Solicitada → En proceso → Emitida (facturas). Subido → En revisión → Registrado (recibos).
-          </KawiilitoGuide>
-          <RequestTracker
-            items={items}
-            filter={filter}
-            onFilterChange={setFilter}
-            title="Cuáles ya se hicieron"
-            subtitle="Pendiente / en proceso / hecha"
-          />
-        </div>
+        <Link
+          to={`${base}/facturas/solicitar`}
+          className="block rounded-2xl border bg-card p-6 transition hover:border-[var(--kawiil-blue)] hover:shadow-sm"
+        >
+          <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full" style={{ background: "color-mix(in srgb, var(--kawiilito-orange) 14%, white)" }}>
+            <Upload style={{ color: "var(--kawiilito-orange)" }} size={22} />
+          </div>
+          <h2 className="text-lg font-semibold">Solicitar factura</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Sube un ticket o recibo (foto, galería o archivo) para que te facturen.
+          </p>
+          <span className="kw-btn mt-4 inline-flex">Subir ticket</span>
+        </Link>
       </div>
     </>
   );

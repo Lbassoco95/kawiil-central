@@ -244,7 +244,8 @@ function MirrorIngresos() {
             <strong>PUE</strong> entra en el mes de emisión (cobrado).{" "}
             <strong>PPD</strong> entra en el mes del complemento de pago (cobrado o parcial).{" "}
             PPD sin complemento queda pendiente por cobrar y no suma al KPI.
-            Emisión de facturas nuevas → Facturación.
+            Emitir facturas nuevas, complementos o notas de crédito solo en{" "}
+            <a className="underline" href="/facturas">Facturación</a> — nunca aquí.
           </p>
         </GlassPanel>
       </div>
