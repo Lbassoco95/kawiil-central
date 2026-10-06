@@ -23,6 +23,7 @@ import { pushDemoToast } from "../lib/demoStore";
 import { shouldUseDemoFixtures } from "../lib/dataMode";
 import { usePortal } from "../lib/session";
 import { accountOnlyCfdi, isPendingDetailCfdi } from "../lib/cfdiPresentation";
+import { brutoAudienceHint } from "../lib/fiscalAudienceCopy";
 import { listMirrorInvoices, mirrorSourceNote, rankParties, toInvoiceRows } from "../lib/mirrorInvoices";
 import { calendarMonthBounds, sumPeriodRecognizedIncome } from "../lib/periodIncome";
 import CfdiList, { type CfdiRow } from "../components/CfdiList";
@@ -153,8 +154,8 @@ function MirrorIngresos() {
         ].filter(Boolean);
         setIncomeNote(
           bits.length
-            ? `${bits.join(" · ")} · PUE en emisión · PPD en complemento`
-            : `Sin cobros reconocidos en ${bounds.label} · PUE en emisión · PPD en complemento`,
+            ? `${bits.join(" · ")} · bruto = subtotal · PUE en emisión · PPD en complemento`
+            : `Sin cobros reconocidos en ${bounds.label} · bruto = subtotal · IVA aparte`,
         );
         setRank(rankParties(account, "emitida"));
         setSourceNote(mirrorSourceNote(account));
@@ -222,7 +223,7 @@ function MirrorIngresos() {
       ) : null}
       <div className="kw-grid kw-kpis" style={{ marginBottom: 24 }}>
         <KpiTile
-          label="Ingresos del periodo"
+          label="Ingreso bruto del periodo"
           value={income}
           tone="ingreso"
           note={kpiNote}
@@ -239,13 +240,17 @@ function MirrorIngresos() {
       <div className="kw-grid kw-two" style={{ marginBottom: 24 }}>
         <RankedList title="Clientes que más compran" items={rank} tone="ingreso" />
         <GlassPanel>
-          <p className="kw-title" style={{ fontSize: 16 }}>Cómo se cuenta el ingreso</p>
+          <p className="kw-title" style={{ fontSize: 16 }}>Cómo se cuenta el ingreso bruto</p>
           <p className="kw-small" style={{ marginTop: 8 }}>
-            <strong>PUE</strong> entra en el mes de emisión (cobrado).{" "}
-            <strong>PPD</strong> entra en el mes del complemento de pago (cobrado o parcial).{" "}
-            PPD sin complemento queda pendiente por cobrar y no suma al KPI.
-            Emitir facturas nuevas, complementos o notas de crédito solo en{" "}
-            <a className="underline" href="/facturas">Facturación</a> — nunca aquí.
+            KPI = <strong>base gravable (subtotal)</strong>, sin IVA.{" "}
+            <strong>PUE</strong> entra en el mes de emisión.{" "}
+            <strong>PPD</strong> entra en el mes del complemento (porción bruta del pago).{" "}
+            PPD sin complemento queda pendiente por cobrar y no suma. El IVA va al cuadro del Resumen.
+            Emitir facturas nuevas o complementos solo en{" "}
+            <a className="underline" href="/facturas">Facturación</a>.
+          </p>
+          <p className="kw-small" style={{ marginTop: 8, color: "var(--muted-foreground, #64748b)" }}>
+            {brutoAudienceHint(active?.origin)}
           </p>
         </GlassPanel>
       </div>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   CashflowChart,
   GlassPanel,
@@ -15,14 +16,33 @@ import { stripEspejoJargon } from "../lib/clientFlags";
 import { shouldUseDemoFixtures } from "../lib/dataMode";
 import { usePortal } from "../lib/session";
 import { callApi } from "../lib/api";
-import { MONTHS } from "../lib/format";
+import { fmtMoney, MONTHS } from "../lib/format";
+import {
+  brutoAudienceHint,
+  ivaAudienceNote,
+  ivaEstimateExplain,
+} from "../lib/fiscalAudienceCopy";
 
 interface Dash {
   gasto_total: number;
+  gasto_subtotal?: number;
   gasto_mes_anterior: number;
   ingreso_total: number;
+  ingreso_bruto?: number;
   ingreso_mes_anterior: number;
+  ingreso_basis?: string;
+  gasto_basis?: string;
   por_mes: { mes: string; gasto: number | null; ingreso: number | null }[];
+  iva?: { trasladado: number; acreditable: number; facturas_sin_desglose: number };
+  iva_estimado?: number;
+  iva_basis?: "cash_flow" | "issuance";
+  iva_basis_label?: string;
+  iva_flujo?: {
+    trasladado?: number;
+    acreditable?: number;
+    estimado?: number;
+    pendientes_de_pago?: string[];
+  };
   espejo?: boolean;
   leyenda?: string;
 }
@@ -68,23 +88,23 @@ function FixtureResumen() {
 
       <div className="kw-grid kw-kpis" style={{ marginBottom: 24 }}>
         <KpiTile
-          label="Ingresos del mes"
+          label="Ingreso bruto del mes"
           value={571000}
           delta={14.7}
           tone="ingreso"
           spark={[412, 465, 438, 520, 498, 571]}
           source="sat"
-          note="26 CFDI emitidos · fixture demo"
+          note="26 CFDI · subtotal · fixture demo"
           onExplain={() => setWhy(true)}
         />
         <KpiTile
-          label="Egresos del mes"
+          label="Gasto subtotal del mes"
           value={389000}
           delta={-3.9}
           tone="egreso"
           spark={[298, 331, 352, 361, 405, 389]}
           source="sat"
-          note="41 CFDI recibidos · fixture demo"
+          note="41 CFDI · subtotal · fixture demo"
           onExplain={() => setWhy(true)}
         />
         <KpiTile
@@ -94,14 +114,14 @@ function FixtureResumen() {
           tone="neto"
           spark={[114, 134, 86, 159, 93, 182]}
           source="sat"
-          note="Ingresos − egresos"
+          note="Ingreso bruto − gasto subtotal"
         />
         <KpiTile
-          label="Estados financieros"
-          value={null}
+          label="IVA estimado"
+          value={29120}
           tone="impuesto"
-          source="pendiente"
-          note="Disponible desde enero 2027"
+          source="sat"
+          note="Trasladado − acreditable · fixture"
         />
       </div>
 
@@ -139,7 +159,7 @@ function FixtureResumen() {
             En el demo estas cifras son de ejemplo. Con tu sesión verás las cifras reales de tu cuenta.
           </KawiilitoGuide>
           {why ? (
-            <LineagePanel title="¿De dónde sale «Ingresos del mes»?" subtitle={label} steps={INCOME_LINEAGE} />
+            <LineagePanel title="¿De dónde sale «Ingreso bruto del mes»?" subtitle={label} steps={INCOME_LINEAGE} />
           ) : null}
         </div>
       </div>
@@ -176,9 +196,13 @@ function MirrorResumen() {
 
   const client = active?.client_name ?? "Tu cuenta";
   const label = `${MONTHS[ym.m - 1]} ${ym.y}`;
-  const ingreso = d?.ingreso_total ?? 0;
-  const gasto = d?.gasto_total ?? 0;
+  const ingreso = d?.ingreso_bruto ?? d?.ingreso_total ?? 0;
+  const gasto = d?.gasto_subtotal ?? d?.gasto_total ?? 0;
   const neto = ingreso - gasto;
+  const ivaTrasladado = d?.iva?.trasladado ?? d?.iva_flujo?.trasladado ?? 0;
+  const ivaAcreditable = d?.iva?.acreditable ?? d?.iva_flujo?.acreditable ?? 0;
+  const ivaEstimado = d?.iva_estimado ?? d?.iva_flujo?.estimado ?? (ivaTrasladado - ivaAcreditable);
+  const sinDesglose = d?.iva?.facturas_sin_desglose ?? 0;
   const sparkIn = (d?.por_mes ?? []).map((r) => Math.round((r.ingreso ?? 0) / 1000)).slice(-6);
   const sparkOut = (d?.por_mes ?? []).map((r) => Math.round((r.gasto ?? 0) / 1000)).slice(-6);
   const sparkNet = (d?.por_mes ?? []).map((r) => Math.round(((r.ingreso ?? 0) - (r.gasto ?? 0)) / 1000)).slice(-6);
@@ -190,6 +214,7 @@ function MirrorResumen() {
     recibidas: 0,
   }));
   const zeroMeta = !!d && ingreso === 0 && gasto === 0;
+  const origin = active?.origin;
 
   return (
     <>
@@ -223,30 +248,30 @@ function MirrorResumen() {
         <GlassPanel style={{ marginBottom: 16 }}>
           <p className="kw-small" style={{ margin: 0 }}>
             Totales en $0 para {client} en {label}: ya hay facturas de tu cuenta, pero algunos montos aún vienen solo como metadatos.
-            No se muestran datos de ejemplo (hoteles Tulum / constructora ficticia).
+            No se muestran datos de ejemplo.
           </p>
         </GlassPanel>
       ) : null}
 
       <div className="kw-grid kw-kpis" style={{ marginBottom: 24 }}>
         <KpiTile
-          label="Ingresos del mes"
+          label="Ingreso bruto del mes"
           value={ingreso}
           delta={pctDelta(ingreso, d?.ingreso_mes_anterior ?? 0)}
           tone="ingreso"
           spark={sparkIn.length ? sparkIn : undefined}
           source="sat"
-          note={`${client} · CFDI de tu cuenta`}
+          note={`${client} · subtotal · PUE emisión / PPD complemento`}
           onExplain={() => setWhy(true)}
         />
         <KpiTile
-          label="Egresos del mes"
+          label="Gasto subtotal del mes"
           value={gasto}
           delta={pctDelta(gasto, d?.gasto_mes_anterior ?? 0)}
           tone="egreso"
           spark={sparkOut.length ? sparkOut : undefined}
           source="sat"
-          note={`${client} · CFDI de tu cuenta`}
+          note={`${client} · subtotal (sin IVA)`}
           onExplain={() => setWhy(true)}
         />
         <KpiTile
@@ -255,16 +280,58 @@ function MirrorResumen() {
           tone="neto"
           spark={sparkNet.length ? sparkNet : undefined}
           source="sat"
-          note="Ingresos − egresos"
+          note="Ingreso bruto − gasto subtotal"
         />
         <KpiTile
-          label="Estados financieros"
-          value={null}
+          label={ivaEstimado >= 0 ? "IVA por pagar (est.)" : "IVA a favor (est.)"}
+          value={Math.abs(ivaEstimado)}
           tone="impuesto"
-          source="pendiente"
-          note="Disponible desde enero 2027"
+          source="sat"
+          note={`Trasladado ${fmtMoney(ivaTrasladado)} − acreditable ${fmtMoney(ivaAcreditable)}`}
         />
       </div>
+
+      <GlassPanel style={{ marginBottom: 24 }} tone="strong">
+        <p className="kw-title" style={{ fontSize: 16 }}>IVA del periodo</p>
+        <p className="kw-small" style={{ marginTop: 6 }}>
+          {d?.iva_basis_label ?? "Flujo de efectivo (PUE en emisión; PPD al cobro/pago)."}
+        </p>
+        <div className="kw-grid" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 16, marginTop: 16 }}>
+          <div>
+            <p className="kw-caption">IVA trasladado</p>
+            <p className="kw-mono" style={{ fontSize: 20, margin: "4px 0 0" }}>{fmtMoney(ivaTrasladado)}</p>
+            <p className="kw-small" style={{ marginTop: 4 }}>Cobrado al cliente</p>
+          </div>
+          <div>
+            <p className="kw-caption">IVA acreditable</p>
+            <p className="kw-mono" style={{ fontSize: 20, margin: "4px 0 0" }}>{fmtMoney(ivaAcreditable)}</p>
+            <p className="kw-small" style={{ marginTop: 4 }}>En pagos / compras</p>
+          </div>
+          <div>
+            <p className="kw-caption">{ivaEstimado >= 0 ? "Estimado por pagar" : "Estimado a favor"}</p>
+            <p className="kw-mono" style={{ fontSize: 20, margin: "4px 0 0" }}>{fmtMoney(Math.abs(ivaEstimado))}</p>
+            <p className="kw-small" style={{ marginTop: 4 }}>Trasladado − acreditable</p>
+          </div>
+        </div>
+        <p className="kw-small" style={{ marginTop: 14 }}>
+          {ivaEstimateExplain(origin)}
+          {sinDesglose > 0
+            ? ` ${sinDesglose} factura(s) sin desglose de IVA no cuentan en el estimado.`
+            : ""}
+        </p>
+        {(d?.iva_flujo?.pendientes_de_pago?.length ?? 0) > 0 ? (
+          <p className="kw-small" style={{ marginTop: 8 }}>
+            {d!.iva_flujo!.pendientes_de_pago!.length} PPD del periodo aún sin complemento publicado.{" "}
+            <Link className="underline" to="/ingresos">Ver en Ingresos</Link>
+          </p>
+        ) : null}
+        <p className="kw-small" style={{ marginTop: 10, color: "var(--muted-foreground, #64748b)" }}>
+          {ivaAudienceNote(origin)}
+        </p>
+        <p className="kw-small" style={{ marginTop: 6, color: "var(--muted-foreground, #64748b)" }}>
+          {brutoAudienceHint(origin)}
+        </p>
+      </GlassPanel>
 
       <div className="kw-grid kw-main-cols">
         <div className="kw-grid">
@@ -275,7 +342,7 @@ function MirrorResumen() {
               onExplain={() => setWhy(true)}
               footer={
                 (d?.leyenda ? stripEspejoJargon(d.leyenda) : "")
-                || `Cifras de ${client} en solo lectura. Sin consultas al SAT desde esta pantalla.`
+                || `Cifras de ${client} en solo lectura. Ingreso/gasto = subtotal; IVA en el cuadro de arriba.`
               }
             />
           ) : (
@@ -311,10 +378,16 @@ function MirrorResumen() {
               { label: "Ocultar rastro", text: true, onClick: () => setWhy(false) },
             ]}
           >
-            Estas cifras son de {client}: el equipo de Kawiil ya las tiene listas aquí. En esta fase solo consultas.
+            {origin === "kawiil"
+              ? `Estas cifras son de ${client}. Tu contador de Kawiil te apoya con lo deducible y el tratamiento correcto.`
+              : `Estas cifras son estimadas a partir de los CFDI de ${client}. No son consejo fiscal; consulta a un contador.`}
           </KawiilitoGuide>
           {why ? (
-            <LineagePanel title="¿De dónde sale «Ingresos del mes»?" subtitle={`${label} · ${client}`} steps={INCOME_LINEAGE} />
+            <LineagePanel
+              title="¿De dónde sale «Ingreso bruto del mes»?"
+              subtitle={`${label} · ${client}`}
+              steps={INCOME_LINEAGE}
+            />
           ) : null}
         </div>
       </div>

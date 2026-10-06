@@ -120,14 +120,15 @@ describe("espejo fiscal — casos adicionales", () => {
     expect(CENTRAL_SAT_DOCUMENT_PATH.publish_op).toBe("sat_document.publish");
   });
 
-  it("ingreso del periodo: PUE por emisión y PPD por complemento", () => {
+  it("ingreso bruto del periodo: PUE subtotal y PPD porción bruta del complemento", () => {
     const income = calculatePeriodIncome([
       invoice({
         id: "pue",
         direction: "emitida",
         paymentMethod: "PUE",
         issuedAt: "2026-09-10",
-        total: 1000,
+        subtotal: 1000,
+        total: 1160,
         detailComplete: true,
       }),
       invoice({
@@ -135,6 +136,7 @@ describe("espejo fiscal — casos adicionales", () => {
         direction: "emitida",
         paymentMethod: "PPD",
         issuedAt: "2026-08-01",
+        subtotal: 1000,
         total: 2000,
         detailComplete: true,
         payments: [{ paidAt: "2026-09-15", amount: 800 }],
@@ -149,7 +151,10 @@ describe("espejo fiscal — casos adicionales", () => {
         payments: [],
       }),
     ], "2026-09-01", "2026-09-30");
-    expect(income.ingreso_total).toBe(1800);
+    // PUE 1000 + PPD 800×(1000/2000)=400 → 1400
+    expect(income.ingreso_total).toBe(1400);
+    expect(income.ingreso_bruto).toBe(1400);
+    expect(income.basis).toBe("subtotal");
     expect(income.pue_count).toBe(1);
     expect(income.ppd_complement_count).toBe(1);
     expect(income.pending_cobranza).toBe(1);

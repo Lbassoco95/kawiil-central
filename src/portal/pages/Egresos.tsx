@@ -23,8 +23,9 @@ import { pushDemoToast } from "../lib/demoStore";
 import { shouldUseDemoFixtures } from "../lib/dataMode";
 import { usePortal } from "../lib/session";
 import { accountOnlyCfdi, isPendingDetailCfdi } from "../lib/cfdiPresentation";
-import { listMirrorInvoices, mirrorSourceNote, rankParties, sumTotals, toInvoiceRows } from "../lib/mirrorInvoices";
-import { calendarMonthBounds } from "../lib/periodIncome";
+import { brutoAudienceHint } from "../lib/fiscalAudienceCopy";
+import { listMirrorInvoices, mirrorSourceNote, rankParties, sumSubtotals, toInvoiceRows } from "../lib/mirrorInvoices";
+import { calendarMonthBounds, sumPeriodRecognizedExpense } from "../lib/periodIncome";
 import CfdiList, { type CfdiRow } from "../components/CfdiList";
 import PeriodDownloadSearch, { type PeriodSearchResult } from "../components/PeriodDownloadSearch";
 
@@ -136,17 +137,14 @@ function MirrorEgresos() {
       .then((list) => {
         const vigentes = list.filter((r) => r.sat_status !== "cancelado");
         const account = accountOnlyCfdi(vigentes);
-        const inPeriod = account.filter((r) => {
-          const d = String(r.fecha ?? "").slice(0, 10);
-          return d >= bounds.start && d <= bounds.end;
-        });
+        const expense = sumPeriodRecognizedExpense(account, bounds.start, bounds.end);
         const unclassified = account.filter((r) => r.category_status !== "confirmada");
         setRows(toInvoiceRows(account, "recibida"));
         setCount(account.length);
         setPendingAmountCount(account.filter(isPendingDetailCfdi).length);
-        setTotal(sumTotals(inPeriod.length ? inPeriod : account));
+        setTotal(expense.total);
         setRank(rankParties(account, "recibida"));
-        setPendingAmount(sumTotals(unclassified));
+        setPendingAmount(sumSubtotals(unclassified));
         setPendingCount(unclassified.length);
         setSourceNote(mirrorSourceNote(account));
         setErr(null);
@@ -163,7 +161,7 @@ function MirrorEgresos() {
 
   const client = active?.client_name ?? "Tu cuenta";
   const kpiNote = total > 0
-    ? `${count} CFDI · ${bounds.label} · ${sourceNote}`
+    ? `${count} CFDI · gasto = subtotal · ${bounds.label} · ${sourceNote}`
     : `${count} CFDI · montos aún no publicados · ${sourceNote}`;
 
   function shiftMonth(delta: number) {
@@ -203,16 +201,21 @@ function MirrorEgresos() {
         </GlassPanel>
       ) : null}
       <div className="kw-grid kw-kpis" style={{ marginBottom: 24 }}>
-        <KpiTile label="Egresos del periodo" value={total} tone="egreso" note={kpiNote} source="sat" />
-        <KpiTile label="Por clasificar" value={pendingAmount} tone="egreso" source="pendiente" note={`${pendingCount} facturas sin categoría confirmada`} />
+        <KpiTile label="Gasto subtotal del periodo" value={total} tone="egreso" note={kpiNote} source="sat" />
+        <KpiTile label="Por clasificar" value={pendingAmount} tone="egreso" source="pendiente" note={`${pendingCount} facturas sin categoría confirmada · subtotal`} />
       </div>
       <div className="kw-grid kw-two" style={{ marginBottom: 24 }}>
         <RankedList title="Proveedores principales" items={rank} tone="egreso" />
         <GlassPanel>
-          <p className="kw-title" style={{ fontSize: 16 }}>CFDI recibidas</p>
+          <p className="kw-title" style={{ fontSize: 16 }}>CFDI recibidas · gasto subtotal</p>
           <p className="kw-small" style={{ marginTop: 8 }}>
-            Facturas que te emitieron proveedores. Pedir factura desde un recibo → Facturación.
+            Facturas que te emitieron proveedores. El KPI usa la <strong>base gravable (subtotal)</strong>;
+            el IVA acreditable se ve en el Resumen, no se mezcla aquí.
+            Para que Kawiil emita a partir de un ticket → Facturación → Subir ticket.
             Aquí consultas el archivo SatGo y puedes buscar o solicitar descarga por periodo.
+          </p>
+          <p className="kw-small" style={{ marginTop: 8, color: "var(--muted-foreground, #64748b)" }}>
+            {brutoAudienceHint(active?.origin)}
           </p>
         </GlassPanel>
       </div>
