@@ -685,6 +685,116 @@ const plantillasCargar: Handler = async (ctx) => {
   return { kind, plantilla: data };
 };
 
+const clientesListar: Handler = async (ctx) => {
+  const clientId = uuid(ctx.body.client_id, "el cliente");
+  await assertClientAccess(ctx, clientId, ["administrador", "operativo", "consulta"]);
+  const { data, error } = await requireUser(ctx).from("portal_customers")
+    .select("*").eq("client_id", clientId).order("updated_at", { ascending: false }).limit(100);
+  if (error) throw new ApiError(400, "clientes", error.message);
+  return { clientes: data ?? [] };
+};
+
+const clientesGuardar: Handler = async (ctx) => {
+  const clientId = uuid(ctx.body.client_id, "el cliente");
+  await assertClientAccess(ctx, clientId, ["administrador", "operativo"]);
+  let internalId = String(ctx.body.internal_id ?? "").trim();
+  if (!internalId) internalId = `cli-${crypto.randomUUID().slice(0, 8)}`;
+  const row = {
+    client_id: clientId,
+    internal_id: internalId,
+    label: str(ctx.body.label ?? ctx.body.nombre ?? internalId, "la etiqueta", 120),
+    rfc: normalizeRfc(str(ctx.body.rfc, "el RFC", 13)),
+    nombre: str(ctx.body.nombre, "el nombre", 300).toUpperCase(),
+    regimen: String(ctx.body.regimen ?? "601"),
+    cp: str(ctx.body.cp, "el CP", 5),
+    uso_cfdi: String(ctx.body.uso_cfdi ?? "G03"),
+    email: ctx.body.email ? String(ctx.body.email) : null,
+    created_by: ctx.userId,
+    updated_at: new Date().toISOString(),
+  };
+  const { data, error } = await ctx.admin.from("portal_customers").upsert(row, { onConflict: "client_id,internal_id" }).select("*").single();
+  if (error) throw new ApiError(400, "clientes", error.message);
+  return { cliente: data };
+};
+
+/** Nota de crédito (CFDI tipo E) vía Facturapi. */
+const crearNotaCredito: Handler = async (ctx) => {
+  assertEmissionWritable();
+  if (PORTAL_EMISOR_MODE !== "facturapi") {
+    throw new ApiError(503, "facturapi_requerido", "La nota de crédito requiere PORTAL_EMISOR=facturapi.");
+  }
+  const cfg = facturapiConfigFromEnv();
+  if (!cfg) throw new ApiError(503, "facturapi_not_configured", "Falta FACTURAPI_SECRET_KEY.");
+  const clientId = uuid(ctx.body.client_id, "el cliente");
+  await assertClientAccess(ctx, clientId, ["administrador"], false);
+  const e = await emissionContext(ctx, clientId);
+  if (!e.settings?.emission_enabled) throw new ApiError(403, "emision_apagada", "La emisión no está habilitada para este cliente.");
+  const borrador = borradorFrom(ctx, e.tp);
+  const relatedUuid = typeof ctx.body.related_uuid === "string" ? ctx.body.related_uuid.trim().toUpperCase() : "";
+  const body: Record<string, unknown> = {
+    type: "E",
+    use: borrador.receptor.uso || "G02",
+    payment_form: borrador.formaPago || "03",
+    payment_method: borrador.metodoPago || "PUE",
+    currency: "MXN",
+    customer: {
+      legal_name: borrador.receptor.nombre.trim(),
+      tax_id: borrador.receptor.rfc.trim().toUpperCase(),
+      tax_system: borrador.receptor.regimen,
+      address: { zip: borrador.receptor.cp, country: "MEX" },
+    },
+    items: borrador.conceptos.map((c) => ({
+      quantity: Number(c.cantidad),
+      product: {
+        description: c.descripcion.trim(),
+        product_key: c.claveProdServ,
+        unit_key: c.claveUnidad || "E48",
+        price: Number(c.valorUnitario),
+        tax_included: false,
+        taxability: c.objetoImp,
+        taxes: c.objetoImp === "02" && typeof c.ivaTasa === "number"
+          ? [{ type: "IVA", rate: c.ivaTasa }]
+          : [],
+      },
+    })),
+  };
+  if (relatedUuid) {
+    body.related_documents = [{ relationship: "01", documents: [relatedUuid] }];
+  }
+  const created = await createInvoice(cfg, body);
+  const uuidNc = (created.uuid ?? crypto.randomUUID()).toUpperCase();
+  const total = Number(created.total ?? 0);
+  const { data: cfdi, error } = await ctx.admin.from("portal_cfdi").insert({
+    client_id: clientId,
+    uuid: uuidNc,
+    direction: "emitida",
+    source: "emision_facturapi",
+    is_test: created.livemode === false,
+    version: "4.0",
+    issued_at: created.stamp?.date ?? new Date().toISOString(),
+    issuer_rfc: e.tp?.rfc ?? null,
+    issuer_name: e.tp?.razon_social ?? null,
+    receiver_rfc: normalizeRfc(borrador.receptor.rfc),
+    receiver_name: borrador.receptor.nombre,
+    voucher_type: "E",
+    payment_form: borrador.formaPago,
+    payment_method: borrador.metodoPago,
+    currency: "MXN",
+    subtotal: Number(borrador.conceptos.reduce((s, c) => s + c.cantidad * c.valorUnitario, 0).toFixed(2)),
+    total,
+    detail_status: "complete",
+    sat_status: created.livemode === false ? "unknown" : "vigente",
+  }).select("id").single();
+  if (error) throw new ApiError(500, "registro", error.message);
+  await ctx.admin.from("portal_facturapi_invoices").upsert({
+    client_id: clientId, cfdi_id: cfdi.id, facturapi_id: created.id, uuid: uuidNc, tipo: "E",
+    livemode: !!created.livemode, status: created.status ?? "valid",
+    related_uuid: relatedUuid || null, payload: { type: "E" },
+  }, { onConflict: "client_id,facturapi_id" });
+  await audit(ctx, "emision", clientId, "portal_cfdi", cfdi.id, { uuid: uuidNc, tipo: "E", facturapi_id: created.id });
+  return { cfdi_id: cfdi.id, uuid: uuidNc, facturapi_id: created.id, prueba: created.livemode === false, total };
+};
+
 /**
  * Carga del CSD (C1, C2, C5): autorización previa → validación en memoria →
  * cifrado con secretos propios → guardado en una transacción. Si algo falla no
@@ -1636,10 +1746,13 @@ const ROUTES: Record<string, Handler> = {
   "facturas.validar": validarFactura,
   "facturas.crear": crearFactura,
   "facturas.complemento_pago": crearComplementoPago,
+  "facturas.nota_credito": crearNotaCredito,
   "catalogos.buscar": catalogosBuscar,
   "plantillas.listar": plantillasListar,
   "plantillas.guardar": plantillasGuardar,
   "plantillas.cargar": plantillasCargar,
+  "clientes.listar": clientesListar,
+  "clientes.guardar": clientesGuardar,
   "facturas.solicitar_cancelacion": async (ctx) => {
     if (MIRROR_READ_ONLY) throw new ApiError(403, "espejo_solo_lectura", "Las cancelaciones las gestiona Kawiil en central durante la fase espejo.");
     return solicitarCancelacion(ctx);
