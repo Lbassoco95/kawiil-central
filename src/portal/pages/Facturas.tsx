@@ -99,9 +99,7 @@ function FacturaCard({ c, dir }: { c: Cfdi; dir: "emitida" | "recibida" }) {
             )}
             {showCobranza && (
               <StatusPill tone={isNc ? "warn" : (COBRANZA_TONE[cobranza.estado] ?? "info")}>
-                {isNc
-                  ? `Acción: ${c.cobranza_label ?? cobranza.label}`
-                  : `Cobranza: ${c.cobranza_label ?? cobranza.label}`}
+                {isNc ? `Acción: ${cobranza.label}` : `Cobranza: ${cobranza.label}`}
                 {cobranza.estado === "parcial" ? ` · ${fmtMoney(cobranza.paid)} de ${fmtMoney(cobranza.total)}` : ""}
               </StatusPill>
             )}
