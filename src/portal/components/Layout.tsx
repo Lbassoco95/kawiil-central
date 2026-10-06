@@ -5,7 +5,7 @@ import { usePortal } from "../lib/session";
 import { DEMO_FISCAL_MARK, isPortalDemoMode } from "../lib/demo";
 import { db } from "../lib/supabase";
 import { ALL_NAV, MORE_NAV, PRIMARY_NAV } from "../lib/nav";
-import { LOGO } from "../design/assets";
+import BrandLogo, { BrandLogoThemePair } from "../design/BrandLogo";
 import { GlassPanel, IconBadge, KawiilitoDock, SourceChip } from "../design/primitives";
 import { useTheme } from "../design/ThemeProvider";
 import { isDesignPreview } from "../lib/designPreview";
@@ -76,8 +76,7 @@ export default function Layout() {
               <Menu size={18} strokeWidth={1.75} />
             </button>
             <div className="kw-header__brand">
-              <img className="logo-light" src={LOGO.wordBlue} alt="Kawiil Mx" />
-              <img className="logo-dark" src={LOGO.wordWhite} alt="Kawiil Mx" />
+              <BrandLogoThemePair variant="horizontal" height={32} />
               {demo && <span className="kw-caption">DEMO</span>}
             </div>
 
@@ -127,7 +126,11 @@ export default function Layout() {
         <aside className={`kw-side${collapsed ? " kw-side--collapsed" : ""}`} aria-label="Navegación">
           <GlassPanel padded={false} className="kw-side__panel">
             <div className="kw-side__top">
-              {!collapsed ? <p className="kw-caption">Kawiil OS</p> : <span className="sr-only">Kawiil OS</span>}
+              {collapsed ? (
+                <BrandLogo variant="symbol" tone={theme === "dark" ? "white" : "blue"} height={28} decorative />
+              ) : (
+                <BrandLogo variant="horizontal" tone={theme === "dark" ? "white" : "blue"} height={28} />
+              )}
               <button
                 type="button"
                 className="kw-iconbtn"
