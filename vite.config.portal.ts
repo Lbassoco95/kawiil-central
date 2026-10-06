@@ -17,7 +17,7 @@ export default defineConfig({
   root: path.resolve(__dirname, "portal"),
   envDir: path.resolve(__dirname),
   publicDir: path.resolve(__dirname, "portal/public"),
-  server: { host: "::", port: 8081, hmr: { overlay: false } },
+  server: { host: "::", port: 8081, hmr: { overlay: false }, fs: { allow: ["../"] } },
   preview: { port: 8081 },
   plugins: [react()],
   css: {
