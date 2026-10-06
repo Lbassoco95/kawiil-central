@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { calculateFiscalEstimate, ivaBasisLabel, type FiscalInvoice } from "../../portal/lib/fiscalEstimate";
+import {
+  calculateFiscalEstimate,
+  calculatePeriodIncome,
+  ivaBasisLabel,
+  type FiscalInvoice,
+} from "../../portal/lib/fiscalEstimate";
 import { dataQualityFromInvoices, mapDocTypeToStorage, vatByRateFromTaxLines, CENTRAL_SAT_DOCUMENT_PATH } from "../../../supabase/functions/_shared/portal/fiscalMirror.ts";
 
 const invoice = (patch: Partial<FiscalInvoice>): FiscalInvoice => ({
@@ -113,5 +118,45 @@ describe("espejo fiscal — casos adicionales", () => {
     expect(mapDocTypeToStorage("compliance_opinion", "sat_document.publish")).toBe("opinion_cumplimiento");
     expect(CENTRAL_SAT_DOCUMENT_PATH.table).toBe("public.moffin_consults");
     expect(CENTRAL_SAT_DOCUMENT_PATH.publish_op).toBe("sat_document.publish");
+  });
+
+  it("ingreso bruto del periodo: PUE subtotal y PPD porción bruta del complemento", () => {
+    const income = calculatePeriodIncome([
+      invoice({
+        id: "pue",
+        direction: "emitida",
+        paymentMethod: "PUE",
+        issuedAt: "2026-09-10",
+        subtotal: 1000,
+        total: 1160,
+        detailComplete: true,
+      }),
+      invoice({
+        id: "ppd",
+        direction: "emitida",
+        paymentMethod: "PPD",
+        issuedAt: "2026-08-01",
+        subtotal: 1000,
+        total: 2000,
+        detailComplete: true,
+        payments: [{ paidAt: "2026-09-15", amount: 800 }],
+      }),
+      invoice({
+        id: "ppd-pendiente",
+        direction: "emitida",
+        paymentMethod: "PPD",
+        issuedAt: "2026-09-05",
+        total: 500,
+        detailComplete: true,
+        payments: [],
+      }),
+    ], "2026-09-01", "2026-09-30");
+    // PUE 1000 + PPD 800×(1000/2000)=400 → 1400
+    expect(income.ingreso_total).toBe(1400);
+    expect(income.ingreso_bruto).toBe(1400);
+    expect(income.basis).toBe("subtotal");
+    expect(income.pue_count).toBe(1);
+    expect(income.ppd_complement_count).toBe(1);
+    expect(income.pending_cobranza).toBe(1);
   });
 });

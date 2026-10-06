@@ -98,10 +98,12 @@ export function validarBorrador(b: BorradorFactura, ctx: ContextoEmision): Resul
 
   // Certificado del emisor.
   const ahora = ctx?.ahora ?? new Date();
-  if (!ctx?.csd) add("csd", "No hay certificado de sello digital cargado.");
-  else if (ctx.csd.revoked) add("csd", "El certificado de sello digital fue revocado.");
-  else if (!ctx.csd.notAfter || new Date(ctx.csd.notAfter) <= ahora) add("csd", "El certificado de sello digital está vencido.");
-  else if (ctx.csd.notBefore && new Date(ctx.csd.notBefore) > ahora) add("csd", "El certificado de sello digital aún no es vigente.");
+  if (!ctx?.omitirCsd) {
+    if (!ctx?.csd) add("csd", "No hay certificado de sello digital cargado.");
+    else if (ctx.csd.revoked) add("csd", "El certificado de sello digital fue revocado.");
+    else if (!ctx.csd.notAfter || new Date(ctx.csd.notAfter) <= ahora) add("csd", "El certificado de sello digital está vencido.");
+    else if (ctx.csd.notBefore && new Date(ctx.csd.notBefore) > ahora) add("csd", "El certificado de sello digital aún no es vigente.");
+  }
 
   const totales = calcularTotales(b ?? ({ conceptos: [] } as unknown as BorradorFactura));
   if (totales.total <= 0 && e.length === 0) add("total", "El total de la factura debe ser mayor a cero.");

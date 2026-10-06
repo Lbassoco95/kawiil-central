@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   CashflowChart,
   ClassificationPrompt,
@@ -22,7 +22,12 @@ import { clampPeriodIndex, notifyPeriod, periodLabel } from "../lib/periodDemo";
 import { pushDemoToast } from "../lib/demoStore";
 import { shouldUseDemoFixtures } from "../lib/dataMode";
 import { usePortal } from "../lib/session";
-import { listMirrorInvoices, mirrorSourceNote, rankParties, sumTotals, toInvoiceRows } from "../lib/mirrorInvoices";
+import { accountOnlyCfdi, isPendingDetailCfdi } from "../lib/cfdiPresentation";
+import { brutoAudienceHint } from "../lib/fiscalAudienceCopy";
+import { listMirrorInvoices, mirrorSourceNote, rankParties, toInvoiceRows } from "../lib/mirrorInvoices";
+import { calendarMonthBounds, sumPeriodRecognizedIncome } from "../lib/periodIncome";
+import CfdiList, { type CfdiRow } from "../components/CfdiList";
+import PeriodDownloadSearch, { type PeriodSearchResult } from "../components/PeriodDownloadSearch";
 
 function FixtureIngresos() {
   const [period, setPeriod] = useState<PeriodId>("mes");
@@ -112,13 +117,23 @@ function FixtureIngresos() {
 
 function MirrorIngresos() {
   const { active } = usePortal();
+  const now = new Date();
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth() + 1);
   const [rows, setRows] = useState<ReturnType<typeof toInvoiceRows>>([]);
   const [count, setCount] = useState(0);
-  const [total, setTotal] = useState(0);
+  const [pendingAmountCount, setPendingAmountCount] = useState(0);
+  const [pendingCobranzaCount, setPendingCobranzaCount] = useState(0);
+  const [income, setIncome] = useState(0);
+  const [incomeNote, setIncomeNote] = useState("");
   const [rank, setRank] = useState<ReturnType<typeof rankParties>>([]);
   const [sourceNote, setSourceNote] = useState("facturas de tu cuenta");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  const [periodRows, setPeriodRows] = useState<CfdiRow[] | null>(null);
+  const [periodDefaults, setPeriodDefaults] = useState<{ desde: string; hasta: string } | null>(null);
+
+  const bounds = useMemo(() => calendarMonthBounds(year, month), [year, month]);
 
   useEffect(() => {
     if (!active) return;
@@ -126,47 +141,92 @@ function MirrorIngresos() {
     listMirrorInvoices(active.client_id, "emitida")
       .then((list) => {
         const vigentes = list.filter((r) => r.sat_status !== "cancelado");
-        setRows(toInvoiceRows(vigentes, "emitida"));
-        setCount(vigentes.length);
-        setTotal(sumTotals(vigentes));
-        setRank(rankParties(vigentes, "emitida"));
-        setSourceNote(mirrorSourceNote(vigentes));
+        const account = accountOnlyCfdi(vigentes);
+        const recognized = sumPeriodRecognizedIncome(account, bounds.start, bounds.end);
+        setRows(toInvoiceRows(account, "emitida"));
+        setCount(account.length);
+        setPendingAmountCount(account.filter(isPendingDetailCfdi).length);
+        setPendingCobranzaCount(recognized.pendingCobranzaCount);
+        setIncome(recognized.total);
+        const bits = [
+          recognized.pueCount ? `${recognized.pueCount} PUE` : null,
+          recognized.ppdComplementCount ? `${recognized.ppdComplementCount} PPD cobrado` : null,
+        ].filter(Boolean);
+        setIncomeNote(
+          bits.length
+            ? `${bits.join(" · ")} · bruto = subtotal · PUE en emisión · PPD en complemento`
+            : `Sin cobros reconocidos en ${bounds.label} · bruto = subtotal · IVA aparte`,
+        );
+        setRank(rankParties(account, "emitida"));
+        setSourceNote(mirrorSourceNote(account));
         setErr(null);
       })
       .catch(() => {
         setRows([]);
         setCount(0);
+        setPendingAmountCount(0);
+        setPendingCobranzaCount(0);
+        setIncome(0);
         setRank([]);
         setErr("No se pudieron cargar las facturas emitidas de tu cuenta.");
       })
       .finally(() => setLoading(false));
-  }, [active]);
+  }, [active, bounds.start, bounds.end, bounds.label]);
 
-  const zeroMeta = count > 0 && total === 0;
   const client = active?.client_name ?? "Tu cuenta";
+  const kpiNote = income > 0
+    ? `${incomeNote} · ${count} CFDI · ${sourceNote}`
+    : `${incomeNote} · ${count} CFDI · ${sourceNote}`;
+
+  function shiftMonth(delta: number) {
+    const d = new Date(Date.UTC(year, month - 1 + delta, 1));
+    setYear(d.getUTCFullYear());
+    setMonth(d.getUTCMonth() + 1);
+  }
+
+  function onPeriodResult(r: PeriodSearchResult) {
+    setPeriodDefaults({ desde: r.desde, hasta: r.hasta });
+    setPeriodRows(r.coverage === "con_datos" ? r.facturas : []);
+  }
 
   return (
     <>
       <PageHead
         title="Ingresos"
-        subtitle={`${client} · CFDI emitidos · ${sourceNote}`}
+        subtitle={`${client} · CFDI emitidas · cobranza PUE/PPD · ${sourceNote}`}
+        actions={
+          <PeriodSwitch
+            value="mes"
+            onChange={() => { /* solo mes calendario real */ }}
+            label={bounds.label}
+            onPrev={() => shiftMonth(-1)}
+            onNext={() => shiftMonth(1)}
+          />
+        }
       />
       {err ? <p className="kw-small" style={{ color: "var(--caution-text)", marginBottom: 16 }}>{err}</p> : null}
       {loading ? <p className="kw-small" style={{ marginBottom: 16 }}>Cargando facturas…</p> : null}
-      {zeroMeta ? (
+      {pendingAmountCount > 0 ? (
         <GlassPanel style={{ marginBottom: 16 }}>
           <p className="kw-small" style={{ margin: 0 }}>
-            Hay {count} facturas emitidas de {client}; los montos aparecen en $0 porque aún solo hay metadatos (sin XML completo).
-            Son CFDI reales de tu cuenta, no datos de ejemplo.
+            {pendingAmountCount} factura{pendingAmountCount === 1 ? "" : "s"} con «Detalle pendiente»
+            (folio/fecha/contraparte sí; monto/método aún no publicados). Eso no es «pendiente por cobrar».
+          </p>
+        </GlassPanel>
+      ) : null}
+      {pendingCobranzaCount > 0 ? (
+        <GlassPanel style={{ marginBottom: 16 }}>
+          <p className="kw-small" style={{ margin: 0 }}>
+            {pendingCobranzaCount} PPD del periodo aún <strong>pendiente por cobrar</strong> (sin complemento) — no entran al KPI de ingresos.
           </p>
         </GlassPanel>
       ) : null}
       <div className="kw-grid kw-kpis" style={{ marginBottom: 24 }}>
         <KpiTile
-          label="Ingresos del periodo"
-          value={total}
+          label="Ingreso bruto del periodo"
+          value={income}
           tone="ingreso"
-          note={`${count} CFDI · ${sourceNote}`}
+          note={kpiNote}
           source="sat"
         />
         <KpiTile
@@ -180,13 +240,30 @@ function MirrorIngresos() {
       <div className="kw-grid kw-two" style={{ marginBottom: 24 }}>
         <RankedList title="Clientes que más compran" items={rank} tone="ingreso" />
         <GlassPanel>
-          <p className="kw-title" style={{ fontSize: 16 }}>Solo consulta</p>
+          <p className="kw-title" style={{ fontSize: 16 }}>Cómo se cuenta el ingreso bruto</p>
           <p className="kw-small" style={{ marginTop: 8 }}>
-            Facturas emitidas de {client}. En esta fase no cargas XML ni creas facturas desde aquí; si necesitas algo, escribe por Mensajes.
+            KPI = <strong>base gravable (subtotal)</strong>, sin IVA.{" "}
+            <strong>PUE</strong> entra en el mes de emisión.{" "}
+            <strong>PPD</strong> entra en el mes del complemento (porción bruta del pago).{" "}
+            PPD sin complemento queda pendiente por cobrar y no suma. El IVA va al cuadro del Resumen.
+            Emitir facturas nuevas o complementos solo en{" "}
+            <a className="underline" href="/facturas">Facturación</a>.
+          </p>
+          <p className="kw-small" style={{ marginTop: 8, color: "var(--muted-foreground, #64748b)" }}>
+            {brutoAudienceHint(active?.origin)}
           </p>
         </GlassPanel>
       </div>
-      <InvoiceTable title="Facturas emitidas" rows={rows} partyLabel="Cliente" />
+      <InvoiceTable title="Resumen de emitidas" rows={rows} partyLabel="Cliente" />
+      <div style={{ marginTop: 28 }}>
+        <h2 className="kw-title" style={{ fontSize: 18, marginBottom: 12 }}>CFDI emitidas · cobranza</h2>
+        <PeriodDownloadSearch direction="emitida" onResult={onPeriodResult} />
+        <CfdiList
+          direction="emitida"
+          rows={periodRows}
+          periodDefaults={periodDefaults}
+        />
+      </div>
     </>
   );
 }

@@ -22,6 +22,24 @@ BEGIN
   END IF;
 END $$;
 
+-- Prod demo Bassoco: NO sembrar CFDI inventados (Aldea/Horizonte/etc.).
+-- Si ya hay satgo_facfiel reales, abortar para no borrar/contaminar.
+DO $$
+DECLARE
+  n_satgo int;
+BEGIN
+  SELECT count(*) INTO n_satgo
+  FROM public.portal_cfdi c
+  JOIN public.portal_companies pc ON pc.id = c.client_id
+  WHERE pc.external_ref = 'demo-espejo-fiscal' AND c.source = 'satgo_facfiel';
+  IF n_satgo > 0 THEN
+    RAISE EXCEPTION 'ABORT: demo-espejo-fiscal ya tiene % CFDI satgo_facfiel. No correr seed.sql (borra la empresa). Usa seed solo en ensayo vacío; didácticos → seed-didactic.sql', n_satgo;
+  END IF;
+END $$;
+
+-- CFDI / conceptos / payment_links didácticos: ver kawiil-os/demo/seed-didactic.sql
+-- (opt-in CI/ensayo). El demo prod Bassoco usa solo SatGo publicados.
+
 -- Limpieza exacta de la empresa demo (cascadas en FKs).
 DELETE FROM public.portal_companies WHERE external_ref = 'demo-espejo-fiscal';
 DELETE FROM public.portal_accounts WHERE user_id = 'd0000000-0000-4000-8000-000000000101'::uuid;
@@ -37,8 +55,8 @@ INSERT INTO public.portal_companies (
 ) VALUES (
   'd0000000-0000-4000-8000-000000000001',
   'demo-espejo-fiscal',
-  'Bassoco, Vega, Salas, Morales, Servicios Empresariales S.C.',
-  'XAXX010101000',
+  'BASSOCO, VEGA, SALAS, MORALES, SERVICIOS EMPRESARIALES SC',
+  'BVS211101H55',
   'premier',
   'active',
   true, false, false, true, 5
@@ -71,8 +89,8 @@ INSERT INTO public.portal_tax_profiles (
   client_id, rfc, legal_name, fiscal_regime, fiscal_postal_code, active, is_default
 ) VALUES (
   'd0000000-0000-4000-8000-000000000001',
-  'XAXX010101000',
-  'Bassoco, Vega, Salas, Morales, Servicios Empresariales S.C.',
+  'BVS211101H55',
+  'BASSOCO, VEGA, SALAS, MORALES, SERVICIOS EMPRESARIALES SC',
   '601',
   '06600',
   true, true
@@ -93,120 +111,6 @@ SELECT
 FROM public.portal_legal_documents d
 WHERE d.kind IN ('aviso_privacidad', 'terminos') AND d.version = 'demo-1'
 ON CONFLICT DO NOTHING;
-
--- Facturas (todas is_test = true → marca DEMO).
-INSERT INTO public.portal_cfdi (
-  id, client_id, uuid, external_ref, direction, source, detail_status, version,
-  issued_at, issuer_rfc, issuer_name, receiver_rfc, receiver_name,
-  voucher_type, payment_form, payment_method, currency,
-  subtotal, vat_transferred, vat_withheld, income_tax_withheld, total,
-  sat_status, is_test, flags, category_name, category_status
-) VALUES
-(
-  'd1000000-0000-4000-8000-000000000001',
-  'd0000000-0000-4000-8000-000000000001',
-  'D1111111-1111-4111-8111-111111111111',
-  'D1111111-1111-4111-8111-111111111111',
-  'emitida', 'central_mirror', 'complete', '4.0',
-  '2026-09-05T16:00:00Z', 'XAXX010101000', 'Bassoco, Vega, Salas, Morales, Servicios Empresariales S.C.',
-  'CACX7605101P8', 'Cliente Demo Uno',
-  'I', '03', 'PUE', 'MXN',
-  10000, 1600, 0, 0, 11600,
-  'vigente', true, '[]'::jsonb, 'Servicios profesionales', 'confirmada'
-),
-(
-  'd1000000-0000-4000-8000-000000000002',
-  'd0000000-0000-4000-8000-000000000001',
-  'D2222222-2222-4222-8222-222222222222',
-  'D2222222-2222-4222-8222-222222222222',
-  'recibida', 'central_mirror', 'complete', '4.0',
-  '2026-09-08T18:30:00Z', 'IIA040805DZ4', 'Proveedor Demo Servicios',
-  'XAXX010101000', 'Bassoco, Vega, Salas, Morales, Servicios Empresariales S.C.',
-  'I', '03', 'PUE', 'MXN',
-  5000, 800, 53.33, 50, 5696.67,
-  'vigente', true, '[]'::jsonb, 'Gastos operativos', 'confirmada'
-),
-(
-  'd1000000-0000-4000-8000-000000000003',
-  'd0000000-0000-4000-8000-000000000001',
-  'D3333333-3333-4333-8333-333333333333',
-  'D3333333-3333-4333-8333-333333333333',
-  'recibida', 'central_mirror', 'metadata', '4.0',
-  '2026-09-12T12:00:00Z', 'ABC010101AB1', 'Proveedor Solo Metadatos',
-  'XAXX010101000', 'Bassoco, Vega, Salas, Morales, Servicios Empresariales S.C.',
-  'I', NULL, 'PUE', 'MXN',
-  2000, 0, 0, 0, 2320,
-  'unknown', true, '[{"code":"metadata_only","reason":"Solo metadatos (DEMO)"}]'::jsonb,
-  NULL, 'por_confirmar'
-),
-(
-  'd1000000-0000-4000-8000-000000000004',
-  'd0000000-0000-4000-8000-000000000001',
-  'D4444444-4444-4444-8444-444444444444',
-  'D4444444-4444-4444-8444-444444444444',
-  'emitida', 'central_mirror', 'complete', '4.0',
-  '2026-09-15T15:00:00Z', 'XAXX010101000', 'Bassoco, Vega, Salas, Morales, Servicios Empresariales S.C.',
-  'CACX7605101P8', 'Cliente Demo Uno',
-  'I', '99', 'PPD', 'MXN',
-  8000, 1280, 0, 0, 9280,
-  'vigente', true, '[]'::jsonb, 'Servicios profesionales', 'confirmada'
-);
-
-INSERT INTO public.portal_cfdi_concepts (cfdi_id, description, quantity, unit_value, amount) VALUES
-  ('d1000000-0000-4000-8000-000000000001', 'Consultoría fiscal (DEMO)', 1, 10000, 10000),
-  ('d1000000-0000-4000-8000-000000000002', 'Servicio de nube (DEMO)', 1, 5000, 5000),
-  ('d1000000-0000-4000-8000-000000000004', 'Proyecto PPD (DEMO)', 1, 8000, 8000);
-
-INSERT INTO public.portal_cfdi_tax_lines (cfdi_id, tax, kind, rate, factor, base, amount) VALUES
-  ('d1000000-0000-4000-8000-000000000001', 'IVA', 'transfer', 0.16, 'Tasa', 10000, 1600),
-  ('d1000000-0000-4000-8000-000000000002', 'IVA', 'transfer', 0.16, 'Tasa', 5000, 800),
-  ('d1000000-0000-4000-8000-000000000002', 'IVA', 'withholding', 0.106667, 'Tasa', 5000, 53.33),
-  ('d1000000-0000-4000-8000-000000000002', 'ISR', 'withholding', 0.01, 'Tasa', 5000, 50),
-  ('d1000000-0000-4000-8000-000000000004', 'IVA', 'transfer', 0.16, 'Tasa', 8000, 1280);
-
-INSERT INTO public.portal_payment_links (payment_cfdi_id, related_cfdi_id, paid_at, paid_amount)
-VALUES (
-  'd1000000-0000-4000-8000-000000000004',
-  'd1000000-0000-4000-8000-000000000004',
-  '2026-09-20T17:00:00Z',
-  4640
-);
-
-INSERT INTO public.portal_fiscal_summaries (
-  client_id, external_ref, period_year, period_month, iva_basis, payload, quality, published_at
-) VALUES (
-  'd0000000-0000-4000-8000-000000000001',
-  '2026-09',
-  2026, 9, 'cash_flow',
-  '{
-    "gasto_total": 8016.67,
-    "gasto_mes_anterior": 4200,
-    "ingreso_total": 20880,
-    "ingreso_mes_anterior": 10000,
-    "iva_estimado": 2466.67,
-    "iva": {"trasladado": 2880, "acreditable": 800, "facturas_sin_desglose": 1},
-    "retenciones": {
-      "iva_retenido_a_la_empresa": 0,
-      "iva_retenido_por_la_empresa": 53.33,
-      "isr_retenido_a_la_empresa": 0,
-      "isr_retenido_por_la_empresa": 50
-    },
-    "por_categoria": [
-      {"categoria": "Servicios profesionales", "por_confirmar": false, "total": 20880, "facturas": 2},
-      {"categoria": "Gastos operativos", "por_confirmar": false, "total": 5696.67, "facturas": 1},
-      {"categoria": "por confirmar", "por_confirmar": true, "total": 2320, "facturas": 1}
-    ],
-    "espejo": true,
-    "leyenda": "Cifras de demostración. DEMO — sin validez fiscal."
-  }'::jsonb,
-  '{
-    "complete": 3,
-    "metadata_only": 1,
-    "quality_label": "media",
-    "quality_note": "1 de 4 factura(s) solo traen metadatos; el IVA estimado no las incluye."
-  }'::jsonb,
-  '2026-09-21T12:00:00Z'
-);
 
 INSERT INTO public.portal_documents (
   client_id, external_ref, title, doc_type, obtained_at, period_year, period_month,

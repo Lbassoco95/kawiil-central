@@ -24,7 +24,7 @@ export default function Mensajes() {
               },
             ]}
           >
-            Escribe cuando tengas una duda contable o legal. Para ver o pedir facturas, ve a Facturación. No hay asistente de IA.
+            Escribe cuando tengas una duda contable o legal. Para emitir con Facturapi o subir un ticket para que emitamos tu factura, ve a Facturación. Los CFDI del SAT están en Ingresos y Egresos. No hay asistente de IA.
           </KawiilitoGuide>
           <GlassPanel>
             <h3 className="kw-title">Quién te atiende</h3>

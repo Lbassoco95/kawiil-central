@@ -17,6 +17,20 @@ export interface CfdiConcepto {
   claveProdServ: string | null;
   descripcion: string | null;
   importe: number | null;
+  cantidad?: number | null;
+  valorUnitario?: number | null;
+  descuento?: number | null;
+}
+
+export interface CfdiPaymentDoc {
+  relatedUuid: string;
+  paidAt: string | null;
+  paidAmount: number | null;
+}
+
+export interface CfdiRelation {
+  relatedUuid: string;
+  relationType: string | null;
 }
 
 export interface CfdiParsed {
@@ -43,6 +57,10 @@ export interface CfdiParsed {
   ivaTrasladado: number | null;
   ivaRetenido: number | null;
   isrRetenido: number | null;
+  /** Complemento de pago (tipo P): docs relacionados con monto cobrado. */
+  payments: CfdiPaymentDoc[];
+  /** CFDI relacionados (p. ej. nota de crédito → factura). */
+  relations: CfdiRelation[];
 }
 
 export interface CfdiValidation {
@@ -116,6 +134,9 @@ export function parseCfdiXml(xmlRaw: string): CfdiParsed | null {
     claveProdServ: s(c.ClaveProdServ),
     descripcion: s(c.Descripcion),
     importe: num(c.Importe),
+    cantidad: num(c.Cantidad),
+    valorUnitario: num(c.ValorUnitario),
+    descuento: num(c.Descuento),
   }));
 
   // Impuestos del comprobante: fuera de Conceptos y de Complemento.
@@ -129,6 +150,39 @@ export function parseCfdiXml(xmlRaw: string): CfdiParsed | null {
   };
   const impAttrs = firstTag(impBlock, "Impuestos") ?? {};
   const ivaT = sum(traslados, "002") ?? (traslados.length === 0 && num(impAttrs.TotalImpuestosTrasladados) === 0 ? 0 : null);
+
+  const payments: CfdiPaymentDoc[] = [];
+  const pagoBlocks = xml.matchAll(
+    /<(?:[A-Za-z0-9_]+:)?Pago\b([^>]*)>([\s\S]*?)<\/(?:[A-Za-z0-9_]+:)?Pago>/g,
+  );
+  for (const m of pagoBlocks) {
+    const pagoAttrs = parseAttrs(m[1] ?? "");
+    const paidAt = s(pagoAttrs.FechaPago);
+    const docs = allTags(m[2] ?? "", "DoctoRelacionado");
+    for (const d of docs) {
+      const relatedUuid = s(d.IdDocumento)?.toUpperCase() ?? null;
+      if (!relatedUuid || !UUID_RE.test(relatedUuid)) continue;
+      payments.push({
+        relatedUuid,
+        paidAt,
+        paidAmount: num(d.ImpPagado) ?? num(pagoAttrs.Monto),
+      });
+    }
+  }
+
+  const relations: CfdiRelation[] = [];
+  const relGroups = xml.matchAll(
+    /<(?:[A-Za-z0-9_]+:)?CfdiRelacionados\b([^>]*)>([\s\S]*?)<\/(?:[A-Za-z0-9_]+:)?CfdiRelacionados>/g,
+  );
+  for (const m of relGroups) {
+    const groupAttrs = parseAttrs(m[1] ?? "");
+    const relationType = s(groupAttrs.TipoRelacion);
+    for (const r of allTags(m[2] ?? "", "CfdiRelacionado")) {
+      const relatedUuid = s(r.UUID)?.toUpperCase() ?? null;
+      if (!relatedUuid || !UUID_RE.test(relatedUuid)) continue;
+      relations.push({ relatedUuid, relationType });
+    }
+  }
 
   return {
     version: s(comp.Version) ?? s(comp.version),
@@ -160,6 +214,8 @@ export function parseCfdiXml(xmlRaw: string): CfdiParsed | null {
     ivaTrasladado: ivaT,
     ivaRetenido: sum(retenciones, "002"),
     isrRetenido: sum(retenciones, "001"),
+    payments,
+    relations,
   };
 }
 
