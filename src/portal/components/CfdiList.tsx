@@ -75,6 +75,9 @@ function FacturaCard({ c, dir }: { c: CfdiRow; dir: "emitida" | "recibida" }) {
   const rfc = dir === "recibida" ? c.rfc_emisor : c.rfc_receptor;
   const totalLabel = pendingDetail && Number(c.total ?? 0) <= 0.009 ? "Detalle pendiente" : fmtMoney(c.total);
   const showCobranza = !pendingDetail && (cobranza.estado !== "no_aplica" || isNc);
+  const payments = (c.payments ?? []).filter((p) => Number(p.paid_amount ?? 0) > 0.009 || p.paid_at);
+  const hasComplement = metodo === "PPD" && (payments.length > 0 || Number(c.payments_count ?? 0) > 0 || Number(c.paid_amount ?? 0) > 0.009);
+  const from = dir === "emitida" ? "ingresos" : "egresos";
 
   return (
     <li className="page-list-card p-3">
@@ -110,10 +113,38 @@ function FacturaCard({ c, dir }: { c: CfdiRow; dir: "emitida" | "recibida" }) {
             <p className="mt-1 text-xs text-muted-foreground">
               Descuento sobre folio <span className="kw-mono" title={ncDe}>{shortUuid(ncDe)}</span>
               {" · "}
-              <Link className="underline" to={`/facturas/${c.id}?from=${dir === "emitida" ? "ingresos" : "egresos"}`}>
+              <Link className="underline" to={`/facturas/${c.id}?from=${from}`}>
                 Ver vínculo y acciones
               </Link>
             </p>
+          )}
+          {hasComplement && (
+            <div className="mt-2 rounded-md border border-border/60 bg-muted/30 px-2.5 py-2 text-xs">
+              <p className="font-medium text-foreground">Complemento de pago</p>
+              {payments.length > 0 ? (
+                <ul className="mt-1 space-y-1 text-muted-foreground">
+                  {payments.slice(0, 4).map((p, i) => (
+                    <li key={`${p.paid_at}-${i}`} className="flex flex-wrap justify-between gap-2">
+                      <span>{fmtDate(p.paid_at) || "Fecha pendiente"}</span>
+                      <span className="kw-mono text-foreground">{fmtMoney(p.paid_amount)}</span>
+                    </li>
+                  ))}
+                  {payments.length > 4 ? (
+                    <li className="text-muted-foreground">+{payments.length - 4} complemento(s) más</li>
+                  ) : null}
+                </ul>
+              ) : (
+                <p className="mt-1 text-muted-foreground">
+                  Cobrado {fmtMoney(c.paid_amount)} ·{" "}
+                  <Link className="underline" to={`/facturas/${c.id}?from=${from}`}>ver fechas y vínculos</Link>
+                </p>
+              )}
+              <p className="mt-1">
+                <Link className="underline" to={`/facturas/${c.id}?from=${from}`}>
+                  Ver complemento completo
+                </Link>
+              </p>
+            </div>
           )}
           {c.clave_issues_label && (
             <p className="mt-1 text-xs">
@@ -138,7 +169,7 @@ function FacturaCard({ c, dir }: { c: CfdiRow; dir: "emitida" | "recibida" }) {
       ))}
       <div className="mt-2 flex flex-wrap gap-2">
         <Button size="sm" asChild>
-          <Link to={`/facturas/${c.id}?from=${dir === "emitida" ? "ingresos" : "egresos"}`}>Ver detalle</Link>
+          <Link to={`/facturas/${c.id}?from=${from}`}>Ver detalle</Link>
         </Button>
         {c.xml_path && (
           <Button size="sm" variant="outline" onClick={() => openFile("cfdi_xml", c.id)}>

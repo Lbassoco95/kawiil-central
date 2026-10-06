@@ -33,6 +33,7 @@ import { clientIp, GENERIC_ACCOUNT_MESSAGE, guardPublic, registerAccount, turnst
 import { sha256Hex } from "../_shared/portal/hash.ts";
 import {
   calculateFiscalEstimate,
+  calculatePeriodExpense,
   calculatePeriodIncome,
   ivaBasisLabel,
   type FiscalInvoice,
@@ -1158,10 +1159,11 @@ const tablero: Handler = async (ctx) => {
     const d = String(r.issued_at ?? "").slice(0, 10);
     return d >= start && d <= end;
   });
-  const gasto = inMonth.filter((r) => r.direction === "recibida").reduce((s, r) => s + Number(r.total ?? 0), 0);
-  // Ingreso del periodo = cobranza: PUE por emisión; PPD por fecha(s) de complemento.
+  // Gasto / ingreso del periodo = base gravable (subtotal); IVA en cuadro aparte.
+  const periodExpense = calculatePeriodExpense(invoices, start, end);
+  const gasto = periodExpense.gasto_subtotal;
   const periodIncome = calculatePeriodIncome(invoices, start, end);
-  const ingreso = periodIncome.ingreso_total;
+  const ingreso = periodIncome.ingreso_bruto;
   const marcas = inMonth.filter((r) => Array.isArray(r.flags) && (r.flags as unknown[]).length > 0).map((r) => ({
     cfdi_id: r.id, emisor: r.issuer_name ?? r.issuer_rfc, total: r.total, fecha: r.issued_at, flags: r.flags,
   }));
@@ -1173,9 +1175,14 @@ const tablero: Handler = async (ctx) => {
   if (!rpcError && rpcData && typeof rpcData === "object") {
     return {
       ...rpcData,
-      // Sobrescribe ingreso con regla de cobranza (PUE emisión / PPD complemento).
+      // Sobrescribe con regla Polo: bruto = subtotal; IVA en cuadro aparte.
+      gasto_total: gasto,
+      gasto_subtotal: gasto,
+      gasto_basis: "subtotal",
       ingreso_total: ingreso,
-      ingreso_regla: "pue_emision_ppd_complemento",
+      ingreso_bruto: ingreso,
+      ingreso_basis: "subtotal",
+      ingreso_regla: "pue_emision_ppd_complemento_subtotal",
       ingreso_pue_count: periodIncome.pue_count,
       ingreso_ppd_complement_count: periodIncome.ppd_complement_count,
       ingreso_pendiente_cobranza: periodIncome.pending_cobranza,
@@ -1187,6 +1194,8 @@ const tablero: Handler = async (ctx) => {
         isr_retenido_a_la_empresa: estimate.incomeTaxWithheldFromCompany,
         isr_retenido_por_la_empresa: estimate.incomeTaxWithheldByCompany,
       },
+      iva: { trasladado: estimate.vatTransferred, acreditable: estimate.vatCreditable, facturas_sin_desglose: quality.metadata_only },
+      iva_estimado: estimate.estimatedVat,
       iva_flujo: {
         trasladado: estimate.vatTransferred,
         acreditable: estimate.vatCreditable,
@@ -1201,9 +1210,13 @@ const tablero: Handler = async (ctx) => {
 
   return {
     gasto_total: Math.round(gasto * 100) / 100,
+    gasto_subtotal: Math.round(gasto * 100) / 100,
+    gasto_basis: "subtotal",
     gasto_mes_anterior: 0,
     ingreso_total: Math.round(ingreso * 100) / 100,
-    ingreso_regla: "pue_emision_ppd_complemento",
+    ingreso_bruto: Math.round(ingreso * 100) / 100,
+    ingreso_basis: "subtotal",
+    ingreso_regla: "pue_emision_ppd_complemento_subtotal",
     ingreso_pue_count: periodIncome.pue_count,
     ingreso_ppd_complement_count: periodIncome.ppd_complement_count,
     ingreso_pendiente_cobranza: periodIncome.pending_cobranza,
@@ -1232,7 +1245,7 @@ const tablero: Handler = async (ctx) => {
     marcas,
     por_confirmar: inMonth.filter((r) => r.category_status !== "confirmada").length,
     espejo: true,
-    leyenda: "Estimación a partir de las facturas de tu cuenta. No es una declaración presentada.",
+    leyenda: "Estimación a partir de las facturas de tu cuenta (ingreso/gasto = subtotal; IVA aparte). No es una declaración presentada.",
   };
 };
 

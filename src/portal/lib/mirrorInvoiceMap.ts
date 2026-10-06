@@ -24,8 +24,11 @@ export interface MirrorCfdi {
   /** Origen de publicación en OS (p. ej. satgo_facfiel, central_mirror). */
   source?: string | null;
   voucher_type?: string | null;
+  /** Base gravable publicada (KPI bruto / gasto subtotal). */
+  subtotal?: number | null;
   paid_amount?: number | null;
   payments?: { paid_at: string; paid_amount: number }[] | null;
+  payments_count?: number | null;
   cobranza_estado?: string | null;
   cobranza_label?: string | null;
 }
@@ -71,8 +74,16 @@ export function toInvoiceRows(rows: MirrorCfdi[], direction: "emitida" | "recibi
   });
 }
 
+/** Suma totales con IVA (uso puntual; KPIs Polo prefieren `sumSubtotals`). */
 export function sumTotals(rows: MirrorCfdi[]): number {
   return rows.reduce((acc, r) => acc + Number(r.total ?? 0), 0);
+}
+
+/** Suma base gravable / subtotal (KPI ingreso bruto y gasto subtotal). */
+export function sumSubtotals(rows: MirrorCfdi[]): number {
+  return Math.round(
+    rows.reduce((acc, r) => acc + Number(r.subtotal ?? 0), 0) * 100,
+  ) / 100;
 }
 
 export function mirrorSourceNote(rows: MirrorCfdi[]): string {
@@ -87,7 +98,9 @@ export function rankParties(rows: MirrorCfdi[], direction: "emitida" | "recibida
   for (const r of rows) {
     const name = partyName(r, direction);
     const cur = map.get(name) ?? { name, amount: 0, count: 0 };
-    cur.amount += Number(r.total ?? 0);
+    // Ranking por base gravable; si no hay subtotal publicado, cae a total (metadatos).
+    const base = Number(r.subtotal ?? 0) > 0.009 ? Number(r.subtotal) : Number(r.total ?? 0);
+    cur.amount += base;
     cur.count += 1;
     map.set(name, cur);
   }

@@ -10,6 +10,8 @@ import { deriveCobranza, metodoPagoLabel, voucherTypeLabel } from "../lib/cobran
 import { assessClaveProdServ, summarizeConceptKeyIssues } from "../lib/claveProdServ";
 import { isPendingDetailCfdi, visibleClientFlags } from "../lib/cfdiPresentation";
 import { pushDemoToast } from "../lib/demoStore";
+import { taxKindLabel, taxNameLabel, taxRateLabel, summarizeTaxLines } from "../lib/taxPresentation";
+import { ivaAudienceNote } from "../lib/fiscalAudienceCopy";
 
 interface Detalle {
   factura: {
@@ -81,6 +83,15 @@ export default function FacturaDetalle() {
   const tipo = f ? voucherTypeLabel(f.voucher_type) : null;
   const isNc = String(f?.voucher_type ?? "").toUpperCase() === "E";
   const hasNcLinks = Boolean(d?.nota_credito_de || (d?.notas_credito?.length ?? 0) > 0);
+  const taxSummary = d?.impuestos?.length ? summarizeTaxLines(d.impuestos) : null;
+  const complementRows = (d?.complementos?.length
+    ? d.complementos
+    : (d?.pagos ?? []).map((p, i) => ({
+      id: String(i),
+      uuid: "",
+      paid_at: p.paid_at,
+      paid_amount: p.paid_amount,
+    }))) ?? [];
 
   function takeNcAction(kind: DocAction) {
     setActionDone(kind);
@@ -219,46 +230,99 @@ export default function FacturaDetalle() {
             )}
           </section>
           <section className="rounded-xl border bg-card p-4">
-            <h2 className="text-lg">Impuestos</h2>
-            {d!.impuestos.length === 0 ? <Empty>Sin desglose de impuestos.</Empty> : (
-              <table className="mt-2 w-full text-sm">
-                <thead><tr className="text-left text-muted-foreground"><th>Impuesto</th><th>Tipo</th><th>Tasa</th><th className="text-right">Base</th><th className="text-right">Importe</th></tr></thead>
-                <tbody>{d!.impuestos.map((t, i) => (
-                  <tr key={i} className="border-t"><td>{t.tax}</td><td>{t.kind}</td><td className="kw-mono">{t.rate ?? "—"}</td><td className="kw-mono text-right">{fmtMoney(t.base)}</td><td className="kw-mono text-right">{fmtMoney(t.amount)}</td></tr>
-                ))}</tbody>
+            <h2 className="text-lg">Impuestos desglosados</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Subtotal {fmtMoney(f.subtotal)} · Total {fmtMoney(f.total)}. El KPI de ingreso/gasto usa el subtotal; el IVA no se mezcla ahí.
+            </p>
+            {taxSummary && d!.impuestos.length > 0 ? (
+              <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
+                <div>
+                  <dt className="text-muted-foreground">IVA trasladado</dt>
+                  <dd className="kw-mono">{fmtMoney(taxSummary.ivaTrasladado || f.vat_transferred)}</dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">IVA retenido</dt>
+                  <dd className="kw-mono">{fmtMoney(taxSummary.ivaRetenido || f.vat_withheld)}</dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">ISR retenido</dt>
+                  <dd className="kw-mono">{fmtMoney(taxSummary.isrRetenido || f.income_tax_withheld)}</dd>
+                </div>
+              </dl>
+            ) : null}
+            {d!.impuestos.length === 0 ? (
+              <Empty>
+                Sin desglose de impuestos publicado.
+                {(f.vat_transferred > 0 || f.vat_withheld > 0) && (
+                  <> Cabecera: IVA trasladado {fmtMoney(f.vat_transferred)} · IVA retenido {fmtMoney(f.vat_withheld)}.</>
+                )}
+              </Empty>
+            ) : (
+              <table className="mt-3 w-full text-sm">
+                <thead>
+                  <tr className="text-left text-muted-foreground">
+                    <th>Impuesto</th>
+                    <th>Tipo</th>
+                    <th>Tasa</th>
+                    <th className="text-right">Base</th>
+                    <th className="text-right">Importe</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {d!.impuestos.map((t, i) => (
+                    <tr key={i} className="border-t">
+                      <td>{taxNameLabel(t.tax)}</td>
+                      <td>{taxKindLabel(t.kind)}</td>
+                      <td className="kw-mono">{taxRateLabel(t.rate)}</td>
+                      <td className="kw-mono text-right">{fmtMoney(t.base)}</td>
+                      <td className="kw-mono text-right">{fmtMoney(t.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
               </table>
             )}
+            <p className="mt-3 text-xs text-muted-foreground">{ivaAudienceNote(active?.origin)}</p>
           </section>
           <section className="rounded-xl border bg-card p-4">
             <h2 className="text-lg">Complementos de pago (PPD)</h2>
-            {(d!.complementos?.length ?? 0) === 0 && d!.pagos.length === 0 ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Fechas, montos y folio del CFDI de pago publicados en tu cuenta.
+              Si hay cobranza con complemento, aquí debe verse el detalle — no solo la etiqueta.
+            </p>
+            {complementRows.length === 0 ? (
               <Empty>
                 {f.metodo_pago === "PPD"
                   ? "Sin complemento de pago vinculado — pendiente por cobrar (no es «Detalle pendiente»)."
                   : "Sin complementos de pago vinculados."}
               </Empty>
             ) : (
-              <ul className="mt-2 space-y-1 text-sm">
-                {(d!.complementos?.length ? d!.complementos : d!.pagos.map((p, i) => ({
-                  id: String(i),
-                  uuid: "",
-                  paid_at: p.paid_at,
-                  paid_amount: p.paid_amount,
-                }))).map((p) => (
-                  <li key={p.id + p.paid_at} className="flex flex-wrap justify-between gap-2 border-t pt-2">
-                    <span>
-                      {fmtDate(p.paid_at)}
-                      {p.uuid && (
-                        <>
-                          {" · "}
-                          <Link className="kw-mono underline" to={`/facturas/${p.id}`}>{p.uuid}</Link>
-                        </>
-                      )}
-                    </span>
-                    <span className="kw-mono">{fmtMoney(p.paid_amount)}</span>
+              <ul className="mt-2 space-y-2 text-sm">
+                {complementRows.map((p) => (
+                  <li key={p.id + p.paid_at} className="rounded-md border border-border/60 px-3 py-2">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <p className="font-medium">Pago {fmtDate(p.paid_at) || "sin fecha"}</p>
+                        {p.uuid ? (
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            CFDI complemento{" "}
+                            <Link className="kw-mono underline" to={`/facturas/${p.id}`}>{p.uuid}</Link>
+                          </p>
+                        ) : (
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            Monto publicado en el vínculo de pago (UUID del complemento pendiente de publicar).
+                          </p>
+                        )}
+                      </div>
+                      <span className="kw-mono text-base font-semibold">{fmtMoney(p.paid_amount)}</span>
+                    </div>
                   </li>
                 ))}
               </ul>
+            )}
+            {f.metodo_pago === "PPD" && (f.paid_amount ?? 0) > 0 && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Cobrado acumulado {fmtMoney(f.paid_amount)} de {fmtMoney(f.total)}.
+              </p>
             )}
           </section>
           <section className="rounded-xl border bg-card p-4">
