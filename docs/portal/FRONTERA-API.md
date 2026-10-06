@@ -15,7 +15,7 @@ Los 29 accesos directos encontrados en la base original se agruparon así:
 | Sesión y acceso | 2 RPC | `sesion.actual`, `sesion.registrar_acceso` |
 | Textos legales y activación | 4 RPC | `legal.actual`, `legal.aceptar`, `cuenta.activar_basico` |
 | Tablero | 1 RPC | `tablero.consultar` |
-| Facturas | vista + RPC | `facturas.listar`, `facturas.cargar`, `facturas.solicitar_cancelacion` |
+| Facturas | vista + RPC | `facturas.listar`, `facturas.periodo`, `facturas.cargar`, `facturas.solicitar_cancelacion` |
 | Tickets | 2 tablas, Storage y 2 RPC | `tickets.listar`, `tickets.registrar` |
 | Documentos | tabla y RPC | `documentos.listar`, `documentos.descargar` |
 | Mensajes | 3 tablas, Storage y 5 RPC | `mensajes.listar`, `mensajes.leer`, `mensajes.enviar` |
@@ -77,7 +77,7 @@ Toda petición exige `idempotency_key` en el cuerpo. El receptor guarda la clave
 
 ### Lecturas del navegador (espejo)
 
-En la fase espejo (`PORTAL_MIRROR_READ_ONLY=true` por omisión) el cliente solo lee: `tablero.consultar`, `facturas.listar`, `facturas.detalle`, `documentos.*`, `alertas.listar`, `sat.notificaciones`. Las operaciones de carga/emisión/cancelación desde el portal responden `403 espejo_solo_lectura`.
+En la fase espejo (`PORTAL_MIRROR_READ_ONLY=true` por omisión) el cliente lee: `tablero.consultar`, `facturas.listar`, `facturas.periodo` (consulta + solicitud persistida de descarga por periodo), `facturas.detalle`, `documentos.*`, `alertas.listar`, `sat.notificaciones`. Las operaciones de carga/emisión/cancelación desde el portal responden `403 espejo_solo_lectura`. CFDI SatGo + cobranza UI → **Ingresos / Egresos**; **Facturación** = emisión / solicitud desde recibos.
 
 ## API Kawiil OS → central
 

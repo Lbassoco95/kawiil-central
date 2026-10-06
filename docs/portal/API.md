@@ -30,7 +30,8 @@ Respuesta: `{ "version": "v1", "data": … }`. Error: `{ "error": "<código>", "
 ### Facturas (fase espejo)
 | Operación | Puerta | Cuerpo | Notas |
 |---|---|---|---|
-| `v1/facturas.listar` | portal-api | `{ client_id, direction, filters? }` | Espejo de emitidas/recibidas publicadas por central. |
+| `v1/facturas.listar` | portal-api | `{ client_id, direction, filters? }` | CFDI publicados (UI: Ingresos=emitidas, Egresos=recibidas). |
+| `v1/facturas.periodo` | portal-api | `{ client_id, direction, period_kind, desde, hasta, solicitar? }` | Busca CFDI del periodo en OS; si no hay y `solicitar`, persiste `portal_cfdi_period_requests`. |
 | `v1/facturas.detalle` | portal-api | `{ client_id, cfdi_id }` | Conceptos, impuestos, pagos PPD e indicador de calidad. |
 | `v1/tablero.consultar` | portal-api | `{ client_id, year, month }` | IVA, retenciones, regla PUE/PPD (`iva_basis`), calidad de datos. Prioriza `portal_fiscal_summaries` si central publicó el periodo. |
 | `v1/alertas.listar` | portal-api | `{ client_id }` | EFOS, cancelaciones, 69-B. |

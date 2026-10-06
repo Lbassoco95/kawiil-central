@@ -834,27 +834,9 @@ const tablero: Handler = async (ctx) => {
   };
 };
 
-const listarFacturas: Handler = async (ctx) => {
-  const clientId = uuid(ctx.body.client_id, "el cliente");
-  await assertClientAccess(ctx, clientId, ["administrador", "operativo", "consulta"]);
-  const filters = (ctx.body.filters ?? {}) as Record<string, unknown>;
-  const direction = ctx.body.direction === "emitida" ? "emitida" : "recibida";
-  let query = requireUser(ctx).from("portal_cfdi").select(
-    "id, uuid, direction, source, detail_status, issued_at, issuer_rfc, issuer_name, receiver_rfc, receiver_name, voucher_type, payment_form, payment_method, subtotal, total, sat_status, xml_path, pdf_path, is_test, flags, category_name, category_status",
-  ).eq("client_id", clientId).eq("direction", direction).or("is_test.is.null,is_test.eq.false").order("issued_at", { ascending: false }).limit(200);
-  if (typeof filters.desde === "string" && filters.desde) query = query.gte("issued_at", filters.desde);
-  if (typeof filters.hasta === "string" && filters.hasta) query = query.lte("issued_at", `${filters.hasta}T23:59:59`);
-  const rfc = typeof filters.rfc === "string" ? filters.rfc.replace(/[^A-Za-z0-9&Ñ]/g, "") : "";
-  if (rfc) query = query.or(`issuer_rfc.ilike.%${rfc}%,receiver_rfc.ilike.%${rfc}%`);
-  if (Number.isFinite(Number(filters.min)) && filters.min !== "") query = query.gte("total", Number(filters.min));
-  if (Number.isFinite(Number(filters.max)) && filters.max !== "") query = query.lte("total", Number(filters.max));
-  if (typeof filters.estatus === "string" && filters.estatus) query = query.eq("sat_status", filters.estatus);
-  if (typeof filters.metodo === "string" && (filters.metodo === "PUE" || filters.metodo === "PPD")) {
-    query = query.eq("payment_method", filters.metodo);
-  }
-  const { data: raw, error } = await query;
-  if (error) throw new ApiError(400, "consulta", "No se pudieron consultar las facturas.");
-  const rows = raw ?? [];
+type CfdiListRow = Record<string, unknown> & { id: string };
+
+async function enrichFacturasCobranza(ctx: Ctx, rows: CfdiListRow[]) {
   const ids = rows.map((r) => r.id as string);
   const paidByRelated = new Map<string, { paid: number; count: number; payments: { paid_at: string; paid_amount: number }[] }>();
   const conceptIssuesByCfdi = new Map<string, { faltante: number; invalida: number; no_cuadra: number; label: string | null }>();
@@ -905,7 +887,7 @@ const listarFacturas: Handler = async (ctx) => {
       conceptIssuesByCfdi.set(cfdiId, { faltante, invalida, no_cuadra, label });
     }
   }
-  const facturas = rows.map((c) => {
+  return rows.map((c) => {
     const pay = paidByRelated.get(String(c.id)) ?? { paid: 0, count: 0, payments: [] as { paid_at: string; paid_amount: number }[] };
     const keys = conceptIssuesByCfdi.get(String(c.id)) ?? { faltante: 0, invalida: 0, no_cuadra: 0, label: null };
     const metodo = c.payment_method === "PUE" || c.payment_method === "PPD" ? c.payment_method : null;
@@ -959,11 +941,138 @@ const listarFacturas: Handler = async (ctx) => {
       clave_no_cuadra: keys.no_cuadra,
     };
   });
+}
+
+const listarFacturas: Handler = async (ctx) => {
+  const clientId = uuid(ctx.body.client_id, "el cliente");
+  await assertClientAccess(ctx, clientId, ["administrador", "operativo", "consulta"]);
+  const filters = (ctx.body.filters ?? {}) as Record<string, unknown>;
+  const direction = ctx.body.direction === "emitida" ? "emitida" : "recibida";
+  let query = requireUser(ctx).from("portal_cfdi").select(
+    "id, uuid, direction, source, detail_status, issued_at, issuer_rfc, issuer_name, receiver_rfc, receiver_name, voucher_type, payment_form, payment_method, subtotal, total, sat_status, xml_path, pdf_path, is_test, flags, category_name, category_status",
+  ).eq("client_id", clientId).eq("direction", direction).or("is_test.is.null,is_test.eq.false").order("issued_at", { ascending: false }).limit(200);
+  if (typeof filters.desde === "string" && filters.desde) query = query.gte("issued_at", filters.desde);
+  if (typeof filters.hasta === "string" && filters.hasta) query = query.lte("issued_at", `${filters.hasta}T23:59:59`);
+  const rfc = typeof filters.rfc === "string" ? filters.rfc.replace(/[^A-Za-z0-9&Ñ]/g, "") : "";
+  if (rfc) query = query.or(`issuer_rfc.ilike.%${rfc}%,receiver_rfc.ilike.%${rfc}%`);
+  if (Number.isFinite(Number(filters.min)) && filters.min !== "") query = query.gte("total", Number(filters.min));
+  if (Number.isFinite(Number(filters.max)) && filters.max !== "") query = query.lte("total", Number(filters.max));
+  if (typeof filters.estatus === "string" && filters.estatus) query = query.eq("sat_status", filters.estatus);
+  if (typeof filters.metodo === "string" && (filters.metodo === "PUE" || filters.metodo === "PPD")) {
+    query = query.eq("payment_method", filters.metodo);
+  }
+  const { data: raw, error } = await query;
+  if (error) throw new ApiError(400, "consulta", "No se pudieron consultar las facturas.");
+  const facturas = await enrichFacturasCobranza(ctx, (raw ?? []) as CfdiListRow[]);
   const cobranzaFilter = typeof filters.cobranza === "string" ? filters.cobranza : "";
   const filtered = cobranzaFilter
     ? facturas.filter((f) => f.cobranza_estado === cobranzaFilter)
     : facturas;
   return { facturas: filtered, espejo: MIRROR_READ_ONLY, carga_cliente_habilitada: !MIRROR_READ_ONLY };
+};
+
+/** Buscar CFDI del periodo en representación local; si no hay, persistir solicitud de descarga. */
+const periodoFacturas: Handler = async (ctx) => {
+  const clientId = uuid(ctx.body.client_id, "el cliente");
+  await assertClientAccess(ctx, clientId, ["administrador", "operativo", "consulta"]);
+  const direction = ctx.body.direction === "emitida" ? "emitida" : "recibida";
+  const periodKind = ctx.body.period_kind === "semana" || ctx.body.period_kind === "rango"
+    ? ctx.body.period_kind
+    : "mes";
+  const desde = str(ctx.body.desde, "la fecha inicial", 10);
+  const hasta = str(ctx.body.hasta, "la fecha final", 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(desde) || !/^\d{4}-\d{2}-\d{2}$/.test(hasta)) {
+    throw new ApiError(400, "dato_invalido", "Usa fechas YYYY-MM-DD.");
+  }
+  if (hasta < desde) throw new ApiError(400, "dato_invalido", "La fecha final debe ser ≥ inicial.");
+  const solicitar = ctx.body.solicitar === true;
+
+  const { data: raw, error } = await requireUser(ctx).from("portal_cfdi").select(
+    "id, uuid, direction, source, detail_status, issued_at, issuer_rfc, issuer_name, receiver_rfc, receiver_name, voucher_type, payment_form, payment_method, subtotal, total, sat_status, xml_path, pdf_path, is_test, flags, category_name, category_status",
+  ).eq("client_id", clientId).eq("direction", direction)
+    .or("is_test.is.null,is_test.eq.false")
+    .gte("issued_at", desde)
+    .lte("issued_at", `${hasta}T23:59:59`)
+    .order("issued_at", { ascending: false })
+    .limit(200);
+  if (error) throw new ApiError(400, "consulta", "No se pudieron consultar las facturas del periodo.");
+
+  const facturas = await enrichFacturasCobranza(ctx, (raw ?? []) as CfdiListRow[]);
+
+  const { data: existingRows } = await ctx.admin.from("portal_cfdi_period_requests")
+    .select("id, status, created_at, period_start, period_end")
+    .eq("client_id", clientId)
+    .eq("direction", direction)
+    .eq("period_start", desde)
+    .eq("period_end", hasta)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  const existingReq = existingRows?.[0] ?? null;
+
+  if (facturas.length > 0) {
+    if (existingReq && existingReq.status !== "lista") {
+      await ctx.admin.from("portal_cfdi_period_requests")
+        .update({ status: "lista", updated_at: new Date().toISOString() })
+        .eq("id", existingReq.id);
+    }
+    await audit(ctx, "cfdi_periodo_consulta", clientId, "portal_cfdi_period_requests", existingReq?.id ?? null, {
+      direction, desde, hasta, count: facturas.length, coverage: "con_datos",
+    });
+    return {
+      coverage: "con_datos",
+      count: facturas.length,
+      facturas,
+      desde,
+      hasta,
+      request: existingReq
+        ? { id: existingReq.id, status: "lista", created_at: existingReq.created_at }
+        : null,
+      requested_now: false,
+      message: `${facturas.length} factura${facturas.length === 1 ? "" : "s"} ya descargada${facturas.length === 1 ? "" : "s"} en tu cuenta (${desde} → ${hasta}).`,
+    };
+  }
+
+  let request = existingReq
+    ? { id: existingReq.id as string, status: String(existingReq.status), created_at: String(existingReq.created_at) }
+    : null;
+  let requestedNow = false;
+
+  if (solicitar) {
+    await assertClientAccess(ctx, clientId, ["administrador", "operativo"]);
+    const { data: inserted, error: insErr } = await ctx.admin.from("portal_cfdi_period_requests").insert({
+      client_id: clientId,
+      direction,
+      period_kind: periodKind,
+      period_start: desde,
+      period_end: hasta,
+      status: "solicitada",
+      requested_by: ctx.userId,
+      note: `Solicitud desde ${direction === "emitida" ? "Ingresos" : "Egresos"}`,
+    }).select("id, status, created_at").single();
+    if (insErr || !inserted) {
+      throw new ApiError(400, "solicitud", insErr?.message ?? "No se pudo guardar la solicitud de descarga.");
+    }
+    request = { id: inserted.id, status: inserted.status, created_at: inserted.created_at };
+    requestedNow = true;
+    await audit(ctx, "cfdi_periodo_solicitud", clientId, "portal_cfdi_period_requests", inserted.id, {
+      direction, desde, hasta, period_kind: periodKind,
+    });
+  }
+
+  return {
+    coverage: "sin_datos",
+    count: 0,
+    facturas: [],
+    desde,
+    hasta,
+    request,
+    requested_now: requestedNow,
+    message: requestedNow
+      ? `Descarga solicitada para ${desde} → ${hasta}. Queda registrada; cuando Kawiil la publique, vuelve a buscar.`
+      : request
+        ? `Sin facturas aún en ${desde} → ${hasta}. Ya hay una solicitud (${request.status}).`
+        : `Sin facturas descargadas en ${desde} → ${hasta}. Puedes solicitar la descarga.`,
+  };
 };
 
 const detalleFactura: Handler = async (ctx) => {
@@ -1226,6 +1335,7 @@ const ROUTES: Record<string, Handler> = {
   "archivos.enlace": enlaceArchivo,
   "tablero.consultar": tablero,
   "facturas.listar": listarFacturas,
+  "facturas.periodo": periodoFacturas,
   "facturas.detalle": detalleFactura,
   "facturas.cargar": async (ctx) => {
     if (MIRROR_READ_ONLY) throw new ApiError(403, "espejo_solo_lectura", "En esta fase el cliente no carga XML; las facturas las publica Kawiil desde central.");
