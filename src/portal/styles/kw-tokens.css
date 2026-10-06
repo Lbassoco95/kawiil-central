@@ -6,10 +6,12 @@
   --font-sans: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
   --kawiil-blue: #0075ef;
+  --kawiil-navy: #0000a1;
   --kawiil-mint: #00ffa1;
   --kawiilito-orange: #fd8209;
-  --canvas: #eaf3fc;
-  --canvas-deep: #d6e8fa;
+  --kawiil-canvas: #f4f6fb;
+  --canvas: #f4f6fb;
+  --canvas-deep: #e8ecf6;
   --surface-glass: rgba(255,255,255,0.62);
   --surface-glass-strong: rgba(255,255,255,0.84);
   --surface-glass-tint: rgba(0,117,239,0.10);
@@ -90,8 +92,10 @@
 [data-theme="dark"] {
   color-scheme: dark;
   --kawiil-blue: #0075ef;
+  --kawiil-navy: #0000a1;
   --kawiil-mint: #00ffa1;
   --kawiilito-orange: #fd8209;
+  --kawiil-canvas: #06101f;
   --canvas: #06101f;
   --canvas-deep: #030a14;
   --surface-glass: rgba(14,32,56,0.58);
