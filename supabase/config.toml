@@ -108,6 +108,9 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = false
   [functions.satgo-monthly]
     verify_jwt = false
+  [functions.satgo-facturas]
+    # Auth en código: x-cron-secret o JWT de staff (igual que satgo-monthly / satgo-query)
+    verify_jwt = false
   [functions.analyze-improvement-suggestions]
     verify_jwt = true
   [functions.ai-chat]
@@ -171,4 +174,19 @@ project_id = "qppfampapbxdgednkofc"
   [functions.mtg-minutes-draft]
     verify_jwt = true
   [functions.mtg-transcribe-recording]
+    verify_jwt = true
+  # Portal del cliente: el JWT se valida dentro (hay rutas públicas y de cron).
+  [functions.portal-api]
+    verify_jwt = false
+  [functions.portal-notify]
+    verify_jwt = false
+  [functions.portal-dropbox-sync]
+    verify_jwt = false
+  [functions.portal-system-api]
+    verify_jwt = false
+  [functions.portal-system-dispatch]
+    verify_jwt = false
+  [functions.central-portal-api]
+    verify_jwt = false
+  [functions.facturapi-api]
     verify_jwt = true

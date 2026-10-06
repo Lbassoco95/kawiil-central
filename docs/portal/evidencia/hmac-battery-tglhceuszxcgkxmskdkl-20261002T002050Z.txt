@@ -1,0 +1,21 @@
+hmac-battery portal-system-api
+project_ref=tglhceuszxcgkxmskdkl
+base=https://tglhceuszxcgkxmskdkl.supabase.co/functions/v1/portal-system-api
+started_utc=20261002T002050Z
+secret_meta=CENTRAL_TO_OS_SIGNING_SECRET: len=64 sha256_6=b6b116
+==> 1) firma válida
+PASS | firma_valida | esperado~200 | obtenido=200 {"ok":true,"duplicate":true}
+==> 2) firma alterada
+PASS | firma_alterada | esperado~signature_invalid | obtenido=401 {"error":"signature_invalid"}
+==> 3) timestamp vencido
+PASS | timestamp_vencido | esperado~timestamp_invalid | obtenido=401 {"error":"timestamp_invalid"}
+==> 4) nonce repetido
+PASS | nonce_repetido | esperado~duplicate | obtenido=200 {"ok":true,"duplicate":true}
+inbox_count idem=hmac-battery-20261002T002050Z-idem-nonce2 after_nonce_reuse=NA (esperado 0 o NA)
+PASS | nonce_repetido_sin_fila | count=NA
+==> 5) reintento misma idempotency key
+PASS | idempotency_reintento | esperado~duplicate | obtenido=200 {"ok":true,"duplicate":true}
+inbox_count idem=hmac-battery-20261002T002050Z-idem before_retry=NA after_retry=NA
+SKIP | idempotency_count | sin KAWIIL_OS_DB_URL usable; confiar en duplicate:true
+finished_utc=20261002T002054Z
+summary pass=6 fail=0

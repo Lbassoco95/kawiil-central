@@ -1,0 +1,455 @@
+{
+  "$comment": "Representación demo del cliente contable Bassoco, Vega, Salas, Morales, Servicios Empresariales S.C. CFDI sintéticos (is_test) hasta invoice.publish real desde central.",
+  "company": {
+    "external_ref": "demo-espejo-fiscal",
+    "name": "BASSOCO, VEGA, SALAS, MORALES, SERVICIOS EMPRESARIALES SC",
+    "rfc": "BVS211101H55",
+    "tier": "premier",
+    "fiscal_enabled": true,
+    "tickets_enabled": false,
+    "rh_enabled": false
+  },
+  "settings": {
+    "demo_mode": true,
+    "emission_enabled": false,
+    "iva_basis": "cash_flow"
+  },
+  "invoices": [
+    {
+      "uuid": "D1111111-1111-4111-8111-111111111111",
+      "direction": "emitida",
+      "detail_status": "complete",
+      "is_test": true,
+      "issued_at": "2026-09-05T16:00:00Z",
+      "issuer_rfc": "BVS211101H55",
+      "issuer_name": "BASSOCO, VEGA, SALAS, MORALES, SERVICIOS EMPRESARIALES SC",
+      "receiver_rfc": "CACX7605101P8",
+      "receiver_name": "Constructora Aldea del Sol",
+      "payment_form": "03",
+      "payment_method": "PUE",
+      "voucher_type": "I",
+      "subtotal": 10000,
+      "vat_transferred": 1600,
+      "total": 11600,
+      "sat_status": "vigente",
+      "category_name": "Servicios profesionales",
+      "category_status": "confirmada",
+      "concepts": [
+        {
+          "product_service_key": "80101500",
+          "description": "Consultoría fiscal — septiembre",
+          "quantity": 1,
+          "unit_value": 10000,
+          "amount": 10000
+        }
+      ],
+      "tax_lines": [
+        {
+          "tax": "IVA",
+          "kind": "transfer",
+          "rate": 0.16,
+          "factor": "Tasa",
+          "base": 10000,
+          "amount": 1600
+        }
+      ]
+    },
+    {
+      "uuid": "D2222222-2222-4222-8222-222222222222",
+      "direction": "recibida",
+      "detail_status": "complete",
+      "is_test": true,
+      "issued_at": "2026-09-08T18:30:00Z",
+      "issuer_rfc": "IIA040805DZ4",
+      "issuer_name": "Nube Operativa MX",
+      "receiver_rfc": "BVS211101H55",
+      "receiver_name": "BASSOCO, VEGA, SALAS, MORALES, SERVICIOS EMPRESARIALES SC",
+      "payment_form": "03",
+      "payment_method": "PUE",
+      "voucher_type": "I",
+      "subtotal": 5000,
+      "vat_transferred": 800,
+      "vat_withheld": 53.33,
+      "income_tax_withheld": 50,
+      "total": 5696.67,
+      "sat_status": "vigente",
+      "category_name": "Gastos operativos",
+      "category_status": "confirmada",
+      "concepts": [
+        {
+          "product_service_key": null,
+          "description": "Hospedaje en nube — septiembre",
+          "quantity": 1,
+          "unit_value": 5000,
+          "amount": 5000
+        }
+      ],
+      "tax_lines": [
+        {
+          "tax": "IVA",
+          "kind": "transfer",
+          "rate": 0.16,
+          "factor": "Tasa",
+          "base": 5000,
+          "amount": 800
+        },
+        {
+          "tax": "IVA",
+          "kind": "withholding",
+          "rate": 0.106667,
+          "factor": "Tasa",
+          "base": 5000,
+          "amount": 53.33
+        },
+        {
+          "tax": "ISR",
+          "kind": "withholding",
+          "rate": 0.01,
+          "factor": "Tasa",
+          "base": 5000,
+          "amount": 50
+        }
+      ]
+    },
+    {
+      "uuid": "D3333333-3333-4333-8333-333333333333",
+      "direction": "recibida",
+      "detail_status": "metadata",
+      "is_test": true,
+      "issued_at": "2026-09-12T12:00:00Z",
+      "issuer_rfc": "ABC010101AB1",
+      "issuer_name": "Papelería del Centro",
+      "receiver_rfc": "BVS211101H55",
+      "receiver_name": "BASSOCO, VEGA, SALAS, MORALES, SERVICIOS EMPRESARIALES SC",
+      "payment_method": "PUE",
+      "subtotal": 2000,
+      "vat_transferred": 0,
+      "total": 2320,
+      "sat_status": "unknown",
+      "category_status": "por_confirmar",
+      "concepts": [],
+      "tax_lines": []
+    },
+    {
+      "uuid": "D4444444-4444-4444-8444-444444444444",
+      "direction": "emitida",
+      "detail_status": "complete",
+      "is_test": true,
+      "issued_at": "2026-09-15T15:00:00Z",
+      "issuer_rfc": "BVS211101H55",
+      "issuer_name": "BASSOCO, VEGA, SALAS, MORALES, SERVICIOS EMPRESARIALES SC",
+      "receiver_rfc": "CACX7605101P8",
+      "receiver_name": "Constructora Aldea del Sol",
+      "payment_form": "99",
+      "payment_method": "PPD",
+      "voucher_type": "I",
+      "subtotal": 8000,
+      "vat_transferred": 1280,
+      "total": 9280,
+      "sat_status": "vigente",
+      "category_name": "Servicios profesionales",
+      "category_status": "confirmada",
+      "concepts": [
+        {
+          "product_service_key": "15101514",
+          "description": "Consultoría fiscal — cobro en parcialidades",
+          "quantity": 1,
+          "unit_value": 8000,
+          "amount": 8000
+        }
+      ],
+      "tax_lines": [
+        {
+          "tax": "IVA",
+          "kind": "transfer",
+          "rate": 0.16,
+          "factor": "Tasa",
+          "base": 8000,
+          "amount": 1280
+        }
+      ]
+    },
+    {
+      "uuid": "D5555555-5555-4555-8555-555555555555",
+      "direction": "emitida",
+      "detail_status": "complete",
+      "is_test": true,
+      "issued_at": "2026-09-18T14:00:00Z",
+      "issuer_rfc": "BVS211101H55",
+      "issuer_name": "BASSOCO, VEGA, SALAS, MORALES, SERVICIOS EMPRESARIALES SC",
+      "receiver_rfc": "GHC150918XY9",
+      "receiver_name": "Grupo Horizonte Comercial",
+      "payment_form": "99",
+      "payment_method": "PPD",
+      "voucher_type": "I",
+      "subtotal": 20000,
+      "vat_transferred": 3200,
+      "total": 23200,
+      "sat_status": "vigente",
+      "category_name": "Servicios profesionales",
+      "category_status": "confirmada",
+      "concepts": [
+        {
+          "product_service_key": "80101500",
+          "description": "Asesoría contable — proyecto anual",
+          "quantity": 1,
+          "unit_value": 20000,
+          "amount": 20000
+        }
+      ],
+      "tax_lines": [
+        {
+          "tax": "IVA",
+          "kind": "transfer",
+          "rate": 0.16,
+          "factor": "Tasa",
+          "base": 20000,
+          "amount": 3200
+        }
+      ]
+    },
+    {
+      "uuid": "D6666666-6666-4666-8666-666666666666",
+      "direction": "emitida",
+      "detail_status": "complete",
+      "is_test": true,
+      "issued_at": "2026-09-10T13:00:00Z",
+      "issuer_rfc": "BVS211101H55",
+      "issuer_name": "BASSOCO, VEGA, SALAS, MORALES, SERVICIOS EMPRESARIALES SC",
+      "receiver_rfc": "STN180201ZZ2",
+      "receiver_name": "Studio Norte Consultores",
+      "payment_form": "99",
+      "payment_method": "PPD",
+      "voucher_type": "I",
+      "subtotal": 5000,
+      "vat_transferred": 800,
+      "total": 5800,
+      "sat_status": "vigente",
+      "category_name": "Servicios profesionales",
+      "category_status": "confirmada",
+      "concepts": [
+        {
+          "product_service_key": "ABC",
+          "description": "Honorarios de auditoría interna",
+          "quantity": 1,
+          "unit_value": 5000,
+          "amount": 5000
+        }
+      ],
+      "tax_lines": [
+        {
+          "tax": "IVA",
+          "kind": "transfer",
+          "rate": 0.16,
+          "factor": "Tasa",
+          "base": 5000,
+          "amount": 800
+        }
+      ]
+    },
+    {
+      "uuid": "D7777777-7777-4777-8777-777777777777",
+      "direction": "emitida",
+      "detail_status": "complete",
+      "is_test": true,
+      "issued_at": "2026-09-22T16:00:00Z",
+      "issuer_rfc": "BVS211101H55",
+      "issuer_name": "BASSOCO, VEGA, SALAS, MORALES, SERVICIOS EMPRESARIALES SC",
+      "receiver_rfc": "STN180201ZZ2",
+      "receiver_name": "Studio Norte Consultores",
+      "voucher_type": "P",
+      "total": 5800,
+      "sat_status": "vigente",
+      "flags": [{ "code": "complemento_pago", "reason": "Complemento de pago" }],
+      "concepts": [],
+      "tax_lines": [],
+      "payments": [
+        {
+          "related_uuid": "D6666666-6666-4666-8666-666666666666",
+          "paid_at": "2026-09-22T16:00:00Z",
+          "paid_amount": 5800
+        }
+      ]
+    },
+    {
+      "uuid": "D8888888-8888-4888-8888-888888888888",
+      "direction": "emitida",
+      "detail_status": "complete",
+      "is_test": true,
+      "issued_at": "2026-09-20T17:00:00Z",
+      "issuer_rfc": "BVS211101H55",
+      "issuer_name": "BASSOCO, VEGA, SALAS, MORALES, SERVICIOS EMPRESARIALES SC",
+      "receiver_rfc": "CACX7605101P8",
+      "receiver_name": "Constructora Aldea del Sol",
+      "voucher_type": "P",
+      "total": 4640,
+      "sat_status": "vigente",
+      "flags": [{ "code": "complemento_pago", "reason": "Complemento de pago parcial" }],
+      "concepts": [],
+      "tax_lines": [],
+      "payments": [
+        {
+          "related_uuid": "D4444444-4444-4444-8444-444444444444",
+          "paid_at": "2026-09-20T17:00:00Z",
+          "paid_amount": 4640
+        }
+      ]
+    },
+    {
+      "uuid": "D9999999-9999-4999-8999-999999999999",
+      "direction": "emitida",
+      "detail_status": "complete",
+      "is_test": true,
+      "issued_at": "2026-09-25T11:00:00Z",
+      "issuer_rfc": "BVS211101H55",
+      "issuer_name": "BASSOCO, VEGA, SALAS, MORALES, SERVICIOS EMPRESARIALES SC",
+      "receiver_rfc": "CACX7605101P8",
+      "receiver_name": "Constructora Aldea del Sol",
+      "payment_form": "03",
+      "payment_method": "PUE",
+      "voucher_type": "E",
+      "subtotal": 1000,
+      "vat_transferred": 160,
+      "total": 1160,
+      "sat_status": "vigente",
+      "category_name": "Descuentos",
+      "category_status": "confirmada",
+      "flags": [
+        {
+          "code": "nota_credito",
+          "reason": "Descuento sobre D1111111-1111-4111-8111-111111111111"
+        }
+      ],
+      "concepts": [
+        {
+          "product_service_key": "80121500",
+          "description": "Descuento por pronto pago",
+          "quantity": 1,
+          "unit_value": 1000,
+          "amount": 1000
+        }
+      ],
+      "tax_lines": [
+        {
+          "tax": "IVA",
+          "kind": "transfer",
+          "rate": 0.16,
+          "factor": "Tasa",
+          "base": 1000,
+          "amount": 160
+        }
+      ]
+    }
+  ],
+  "fiscal_summary": {
+    "external_ref": "2026-09",
+    "period_year": 2026,
+    "period_month": 9,
+    "iva_basis": "cash_flow",
+    "quality": {
+      "complete": 3,
+      "metadata_only": 1,
+      "quality_label": "media",
+      "quality_note": "1 de 4 factura(s) solo traen metadatos; el IVA estimado no las incluye."
+    },
+    "summary": {
+      "gasto_total": 8016.67,
+      "gasto_mes_anterior": 4200,
+      "ingreso_total": 20880,
+      "ingreso_mes_anterior": 10000,
+      "iva_estimado": 2466.67,
+      "iva": {
+        "trasladado": 2880,
+        "acreditable": 800,
+        "facturas_sin_desglose": 1
+      },
+      "retenciones": {
+        "iva_retenido_a_la_empresa": 0,
+        "iva_retenido_por_la_empresa": 53.33,
+        "isr_retenido_a_la_empresa": 0,
+        "isr_retenido_por_la_empresa": 50
+      },
+      "por_categoria": [
+        {
+          "categoria": "Servicios profesionales",
+          "por_confirmar": false,
+          "total": 20880,
+          "facturas": 2
+        },
+        {
+          "categoria": "Gastos operativos",
+          "por_confirmar": false,
+          "total": 5696.67,
+          "facturas": 1
+        },
+        {
+          "categoria": "por confirmar",
+          "por_confirmar": true,
+          "total": 2320,
+          "facturas": 1
+        }
+      ],
+      "espejo": true,
+      "leyenda": "Cifras de demostración. DEMO — sin validez fiscal."
+    }
+  },
+  "documents": [
+    {
+      "external_ref": "demo-csf-2026-09",
+      "doc_type": "constancia",
+      "title": "Constancia de situación fiscal (DEMO)",
+      "obtained_at": "2026-09-01T10:00:00Z",
+      "storage_path": "demo/espejo/csf-2026-09.pdf",
+      "file_name": "csf-demo.pdf"
+    },
+    {
+      "external_ref": "demo-opinion-2026-09",
+      "doc_type": "opinion_cumplimiento",
+      "title": "Opinión de cumplimiento 32-D (DEMO)",
+      "obtained_at": "2026-09-02T11:00:00Z",
+      "opinion_result": "positiva",
+      "storage_path": "demo/espejo/opinion-2026-09.pdf",
+      "file_name": "opinion-demo.pdf"
+    },
+    {
+      "external_ref": "demo-decl-2026-08",
+      "doc_type": "declaracion",
+      "title": "Declaración provisional IVA ago 2026 (DEMO)",
+      "obtained_at": "2026-09-10T09:00:00Z",
+      "period_year": 2026,
+      "period_month": 8,
+      "storage_path": "demo/espejo/decl-2026-08.pdf",
+      "file_name": "declaracion-demo.pdf"
+    }
+  ],
+  "alerts": [
+    {
+      "external_ref": "demo-alerta-efos-1",
+      "alert_type": "efos",
+      "severity": "critical",
+      "title": "Posible coincidencia EFOS (DEMO)",
+      "detail": "El RFC IIA040805DZ4 aparece en un listado de demostración. Sin validez fiscal.",
+      "related_uuid": "D2222222-2222-4222-8222-222222222222",
+      "detected_at": "2026-09-18T08:00:00Z"
+    },
+    {
+      "external_ref": "demo-alerta-cancel-1",
+      "alert_type": "cancelacion",
+      "severity": "warn",
+      "title": "Cancelación detectada (DEMO)",
+      "detail": "Se simuló una cancelación de CFDI para el guion de demostración.",
+      "related_uuid": "D3333333-3333-4333-8333-333333333333",
+      "detected_at": "2026-09-19T14:00:00Z"
+    }
+  ],
+  "sat_notifications": [
+    {
+      "external_ref": "demo-sat-notif-1",
+      "title": "Aviso SAT de demostración",
+      "body": "Notificación sintética del buzón tributario. DEMO — sin validez fiscal.",
+      "notification_type": "sat",
+      "notified_at": "2026-09-07T12:00:00Z",
+      "obtained_at": "2026-09-07T12:05:00Z"
+    }
+  ]
+}

@@ -61,9 +61,14 @@ if (!hasValidEnvConfig && typeof window !== 'undefined') {
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
+const safeAuthStorage =
+  typeof localStorage !== 'undefined' && typeof localStorage.getItem === 'function'
+    ? localStorage
+    : undefined;
+
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
-    storage: localStorage,
+    storage: safeAuthStorage,
     persistSession: true,
     autoRefreshToken: true,
   }
