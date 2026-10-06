@@ -286,8 +286,8 @@ export default function FacturaDetalle() {
           <section className="rounded-xl border bg-card p-4">
             <h2 className="text-lg">Complementos de pago (PPD)</h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              Fechas, montos y vínculos desde <span className="kw-mono">portal_payment_links</span> publicados.
-              Si hay badge de cobranza con complemento, aquí debe verse el detalle — no solo la etiqueta.
+              Fechas, montos y folio del CFDI de pago publicados en tu cuenta.
+              Si hay cobranza con complemento, aquí debe verse el detalle — no solo la etiqueta.
             </p>
             {complementRows.length === 0 ? (
               <Empty>
