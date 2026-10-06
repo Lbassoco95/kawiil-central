@@ -93,9 +93,13 @@ function fromParsed(p: CfdiParsed, listSatStatus: string): EnrichedCfdi {
     });
   }
   const hasAmount = Number.isFinite(total) && Math.abs(total) > 0.009;
-  const hasMethod = !!paymentMethod || voucherType === "P" || voucherType === "E";
+  // Tipo P suele traer Total=0 en el comprobante; el detalle está en payments[].
+  const paymentComplementOk = voucherType === "P" && payments.length > 0;
   const detailStatus: "metadata" | "complete" =
-    hasAmount && (hasMethod || concepts.length > 0) ? "complete" : "metadata";
+    paymentComplementOk ||
+    (hasAmount && (!!paymentMethod || voucherType === "E" || concepts.length > 0))
+      ? "complete"
+      : "metadata";
 
   return {
     uuid,
