@@ -3,8 +3,8 @@ import { partitionSparse } from "../../portal/lib/cfdiPresentation";
 import type { MirrorCfdi } from "../../portal/lib/mirrorInvoiceMap";
 import { toInvoiceRows } from "../../portal/lib/mirrorInvoiceMap";
 
-describe("Ingresos/Egresos listado presentable", () => {
-  it("oculta SatGo $0 y acorta folio en filas DEMO", () => {
+describe("Ingresos/Egresos listado cuenta real", () => {
+  it("prioriza SatGo real y aísla fixtures Aldea del Sol", () => {
     const rows: MirrorCfdi[] = [
       {
         id: "1",
@@ -46,7 +46,11 @@ describe("Ingresos/Egresos listado presentable", () => {
     const { ready, pending } = partitionSparse(rows);
     expect(ready).toHaveLength(1);
     expect(pending).toHaveLength(1);
-    expect(toInvoiceRows(ready, "emitida")[0].folio).toBe("D1111111…");
-    expect(toInvoiceRows(ready, "emitida")[0].party).toBe("Constructora Aldea del Sol");
+    expect(ready[0].nombre_receptor).toBe("DOCTOCLIQ MEXICO");
+    expect(pending[0].nombre_receptor).toBe("Constructora Aldea del Sol");
+    const mapped = toInvoiceRows(ready, "emitida")[0];
+    expect(mapped.folio).toBe("280F1953…");
+    expect(mapped.party).toBe("DOCTOCLIQ MEXICO");
+    expect(mapped.proposal?.account).toBe("Detalle pendiente");
   });
 });

@@ -8,7 +8,7 @@ import { usePortal } from "../lib/session";
 import { callApi, openFile } from "../lib/api";
 import { clientDetailQualityLabel, clientFlagReason } from "../lib/clientFlags";
 import { deriveCobranza, metodoPagoLabel, relatedUuidFromFlags, voucherTypeLabel } from "../lib/cobranza";
-import { isSparseMetadataCfdi, partitionSparse, shortUuid, visibleClientFlags } from "../lib/cfdiPresentation";
+import { isDidacticFixtureCfdi, isPendingDetailCfdi, partitionSparse, shortUuid, visibleClientFlags } from "../lib/cfdiPresentation";
 import { fmtDate, fmtMoney } from "../lib/format";
 import { Empty, Notice, PageTitle, StatusPill } from "../components/ui";
 
@@ -65,11 +65,13 @@ function FacturaCard({ c, dir }: { c: Cfdi; dir: "emitida" | "recibida" }) {
   const metodo = metodoPagoLabel(c.metodo_pago);
   const tipo = voucherTypeLabel(c.voucher_type);
   const ncDe = relatedUuidFromFlags(c.flags);
-  const sparse = isSparseMetadataCfdi(c);
+  const didactic = isDidacticFixtureCfdi(c);
+  const pendingDetail = isPendingDetailCfdi(c) || (didactic && c.detail_status !== "complete");
   const flags = visibleClientFlags(c.flags);
   const quality = clientDetailQualityLabel(undefined, c.detail_status);
   const party = dir === "recibida" ? c.nombre_emisor ?? c.rfc_emisor : c.nombre_receptor ?? c.rfc_receptor;
   const rfc = dir === "recibida" ? c.rfc_emisor : c.rfc_receptor;
+  const totalLabel = pendingDetail && Number(c.total ?? 0) <= 0.009 ? "Detalle pendiente" : fmtMoney(c.total);
 
   return (
     <li className="page-list-card p-3">
@@ -97,7 +99,7 @@ function FacturaCard({ c, dir }: { c: Cfdi; dir: "emitida" | "recibida" }) {
                 {cobranza.estado === "parcial" ? ` · ${fmtMoney(cobranza.paid)} de ${fmtMoney(cobranza.total)}` : ""}
               </StatusPill>
             )}
-            {!sparse && quality === "Detalle completo" && (
+            {!pendingDetail && !didactic && quality === "Detalle completo" && (
               <span>· {quality}</span>
             )}
           </p>
@@ -113,16 +115,16 @@ function FacturaCard({ c, dir }: { c: Cfdi; dir: "emitida" | "recibida" }) {
           )}
         </div>
         <div className="text-right">
-          <p className="kw-mono text-lg font-semibold">{fmtMoney(c.total)}</p>
+          <p className="kw-mono text-lg font-semibold">{totalLabel}</p>
           <StatusPill tone={SAT[c.sat_status]?.tone ?? "wait"}>{SAT[c.sat_status]?.label ?? c.sat_status}</StatusPill>
-          {(sparse || c.detail_status !== "complete") && (
+          {pendingDetail && (
             <span className="ml-1">
               <StatusPill tone="warn">
-                {c.is_test ? "Detalle pendiente (ejemplo)" : "Detalle pendiente"}
+                {didactic ? "Detalle pendiente (ejemplo)" : "Detalle pendiente"}
               </StatusPill>
             </span>
           )}
-          {c.is_test && c.detail_status === "complete" && (
+          {didactic && (
             <span className="ml-1">
               <StatusPill tone="info">Ejemplo didáctico</StatusPill>
             </span>
@@ -167,7 +169,7 @@ export default function Facturas() {
     cobranza: "",
   });
   const [rows, setRows] = useState<Cfdi[]>([]);
-  const [showPendingDetail, setShowPendingDetail] = useState(false);
+  const [showDidactic, setShowDidactic] = useState(false);
 
   const load = useCallback(async () => {
     if (!active) return;
@@ -182,8 +184,12 @@ export default function Facturas() {
     void load();
   }, [load]);
 
-  const { ready, pending } = useMemo(() => partitionSparse(rows), [rows]);
-  const visible = showPendingDetail ? [...ready, ...pending] : ready;
+  const { ready: account, pending: didactic } = useMemo(() => partitionSparse(rows), [rows]);
+  const pendingAmountCount = useMemo(
+    () => account.filter((c) => isPendingDetailCfdi(c)).length,
+    [account],
+  );
+  const visible = showDidactic ? [...account, ...didactic] : account;
 
   return (
     <>
@@ -199,20 +205,29 @@ export default function Facturas() {
       />
       <div className="mb-3">
         <Notice tone="info">
-          Solo lectura: ves las facturas que el equipo de Kawiil ya tiene listas. PPD sin complemento aparece como pendiente; con complemento, pagado o parcial.
+          Solo lectura: ves las facturas reales de tu cuenta (SatGo / publicadas). PPD sin complemento aparece como pendiente; con complemento, pagado o parcial.
         </Notice>
       </div>
-      {pending.length > 0 && (
+      {pendingAmountCount > 0 && (
         <div className="mb-3">
           <Notice tone="warn">
-            {pending.length} factura{pending.length === 1 ? "" : "s"} con detalle pendiente (sin montos ni método publicados aún).
+            {pendingAmountCount} factura{pendingAmountCount === 1 ? "" : "s"} reales con «Detalle pendiente»
+            (contraparte, folio y fecha visibles; monto/método aún no publicados).
+          </Notice>
+        </div>
+      )}
+      {didactic.length > 0 && (
+        <div className="mb-3">
+          <Notice tone="info">
+            {didactic.length} ejemplo{didactic.length === 1 ? "" : "s"} didáctico{didactic.length === 1 ? "" : "s"}
+            {" "}(clientes inventados; no son de esta cuenta).
             {" "}
             <button
               type="button"
               className="underline font-medium"
-              onClick={() => setShowPendingDetail((v) => !v)}
+              onClick={() => setShowDidactic((v) => !v)}
             >
-              {showPendingDetail ? "Ocultarlas" : "Mostrarlas aparte"}
+              {showDidactic ? "Ocultar ejemplos" : "Mostrar ejemplos aparte"}
             </button>
           </Notice>
         </div>
@@ -293,21 +308,21 @@ export default function Facturas() {
       </fieldset>
       {visible.length === 0 ? (
         <Empty>
-          {pending.length > 0 && !showPendingDetail
-            ? "Solo hay facturas con detalle pendiente. Usa «Mostrarlas aparte» arriba."
+          {didactic.length > 0 && !showDidactic
+            ? "No hay facturas reales con estos filtros. Usa «Mostrar ejemplos aparte» si quieres ver los didácticos."
             : "No hay facturas con estos filtros."}
         </Empty>
       ) : (
         <ul className="space-y-2">
-          {ready.map((c) => (
+          {account.map((c) => (
             <FacturaCard key={c.id} c={c} dir={dir} />
           ))}
-          {showPendingDetail && pending.length > 0 && (
+          {showDidactic && didactic.length > 0 && (
             <>
               <li className="pt-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Detalle pendiente · {pending.length} factura{pending.length === 1 ? "" : "s"}
+                Ejemplos didácticos · {didactic.length} factura{didactic.length === 1 ? "" : "s"} (no son de esta cuenta)
               </li>
-              {pending.map((c) => (
+              {didactic.map((c) => (
                 <FacturaCard key={c.id} c={c} dir={dir} />
               ))}
             </>
