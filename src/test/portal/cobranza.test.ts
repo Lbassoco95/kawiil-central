@@ -7,40 +7,49 @@ import {
 } from "../../portal/lib/cobranza";
 
 describe("deriveCobranza", () => {
-  it("PUE → pagado", () => {
-    expect(deriveCobranza({ metodo_pago: "PUE", total: 11600 }).estado).toBe("pagado");
+  it("PUE → cobrado", () => {
+    const c = deriveCobranza({ metodo_pago: "PUE", total: 11600 });
+    expect(c.estado).toBe("pagado");
+    expect(c.label).toBe("Cobrado");
   });
 
-  it("PPD sin complemento → pendiente", () => {
+  it("PPD sin complemento → pendiente por cobrar", () => {
     const c = deriveCobranza({ metodo_pago: "PPD", total: 9280, paid_amount: 0 });
     expect(c.estado).toBe("pendiente");
-    expect(c.label).toBe("Pendiente");
+    expect(c.label).toBe("Pendiente por cobrar");
   });
 
-  it("PPD con pago parcial → parcial", () => {
+  it("PPD con pago parcial → cobrado parcial", () => {
     const c = deriveCobranza({ metodo_pago: "PPD", total: 9280, paid_amount: 4640 });
     expect(c.estado).toBe("parcial");
+    expect(c.label).toBe("Cobrado parcial");
     expect(c.pendiente).toBe(4640);
   });
 
-  it("PPD con complemento completo → pagado", () => {
-    expect(deriveCobranza({ metodo_pago: "PPD", total: 9280, paid_amount: 9280 }).estado).toBe("pagado");
+  it("PPD con complemento completo → cobrado", () => {
+    expect(deriveCobranza({ metodo_pago: "PPD", total: 9280, paid_amount: 9280 }).label).toBe("Cobrado");
   });
 
-  it("nota de crédito / complemento → no_aplica", () => {
-    expect(deriveCobranza({ voucher_type: "E", total: 1000 }).estado).toBe("no_aplica");
+  it("nota de crédito → descuento", () => {
+    expect(deriveCobranza({ voucher_type: "E", total: 1000 }).label).toBe("Descuento");
     expect(deriveCobranza({ voucher_type: "P", total: 4640 }).label).toBe("Complemento");
   });
 
-  it("sin método (metadatos) → sin dato de cobro", () => {
-    expect(deriveCobranza({ total: 0 }).label).toBe("Sin dato de cobro");
+  it("metadatos sin método → sin dato de cobro (Detalle pendiente en UI)", () => {
+    expect(deriveCobranza({ total: 0, detail_pending: true }).label).toBe("Sin dato de cobro");
+  });
+
+  it("monto sin método → por revisar (cobranza de negocio)", () => {
+    const c = deriveCobranza({ total: 5000 });
+    expect(c.estado).toBe("por_revisar");
+    expect(c.label).toBe("Por revisar");
   });
 });
 
 describe("labels y flags", () => {
   it("etiquetas de tipo y método", () => {
     expect(voucherTypeLabel("I")).toBe("Ingreso");
-    expect(voucherTypeLabel("E")).toBe("Nota de crédito");
+    expect(voucherTypeLabel("E")).toBe("Descuento (nota de crédito)");
     expect(metodoPagoLabel("PPD")).toBe("PPD");
   });
 

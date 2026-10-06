@@ -95,3 +95,48 @@ export function ivaBasisLabel(basis: "cash_flow" | "issuance"): string {
     ? "Flujo de efectivo (PUE en emisión; PPD al cobro/pago)"
     : "Fecha de emisión (PUE y PPD al emitir)";
 }
+
+/**
+ * Ingreso del periodo (cobranza): PUE por fecha de emisión; PPD por fecha(s) de complemento.
+ * No suma PPD sin complemento ni CFDI sin método publicado.
+ */
+export function calculatePeriodIncome(
+  invoices: FiscalInvoice[],
+  start: string,
+  end: string,
+): { ingreso_total: number; pue_count: number; ppd_complement_count: number; pending_cobranza: number } {
+  let ingreso = 0;
+  let pueCount = 0;
+  let ppdComplementCount = 0;
+  let pendingCobranza = 0;
+  for (const invoice of invoices) {
+    if (invoice.direction !== "emitida") continue;
+    if (invoice.paymentMethod === "PUE") {
+      if (inPeriod(invoice.issuedAt.slice(0, 10), start, end)) {
+        ingreso += invoice.total;
+        pueCount += 1;
+      }
+      continue;
+    }
+    if (invoice.paymentMethod === "PPD") {
+      let periodPaid = 0;
+      for (const payment of invoice.payments ?? []) {
+        if (inPeriod(payment.paidAt.slice(0, 10), start, end)) periodPaid += payment.amount;
+      }
+      if (periodPaid > 0) {
+        ingreso += periodPaid;
+        ppdComplementCount += 1;
+      }
+      const lifetime = (invoice.payments ?? []).reduce((s, p) => s + p.amount, 0);
+      if (lifetime <= 0 && inPeriod(invoice.issuedAt.slice(0, 10), start, end) && invoice.total > 0) {
+        pendingCobranza += 1;
+      }
+    }
+  }
+  return {
+    ingreso_total: round(ingreso),
+    pue_count: pueCount,
+    ppd_complement_count: ppdComplementCount,
+    pending_cobranza: pendingCobranza,
+  };
+}

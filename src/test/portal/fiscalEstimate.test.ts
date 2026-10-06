@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { calculateFiscalEstimate, ivaBasisLabel, type FiscalInvoice } from "../../portal/lib/fiscalEstimate";
+import {
+  calculateFiscalEstimate,
+  calculatePeriodIncome,
+  ivaBasisLabel,
+  type FiscalInvoice,
+} from "../../portal/lib/fiscalEstimate";
 import { dataQualityFromInvoices, mapDocTypeToStorage, vatByRateFromTaxLines, CENTRAL_SAT_DOCUMENT_PATH } from "../../../supabase/functions/_shared/portal/fiscalMirror.ts";
 
 const invoice = (patch: Partial<FiscalInvoice>): FiscalInvoice => ({
@@ -113,5 +118,40 @@ describe("espejo fiscal — casos adicionales", () => {
     expect(mapDocTypeToStorage("compliance_opinion", "sat_document.publish")).toBe("opinion_cumplimiento");
     expect(CENTRAL_SAT_DOCUMENT_PATH.table).toBe("public.moffin_consults");
     expect(CENTRAL_SAT_DOCUMENT_PATH.publish_op).toBe("sat_document.publish");
+  });
+
+  it("ingreso del periodo: PUE por emisión y PPD por complemento", () => {
+    const income = calculatePeriodIncome([
+      invoice({
+        id: "pue",
+        direction: "emitida",
+        paymentMethod: "PUE",
+        issuedAt: "2026-09-10",
+        total: 1000,
+        detailComplete: true,
+      }),
+      invoice({
+        id: "ppd",
+        direction: "emitida",
+        paymentMethod: "PPD",
+        issuedAt: "2026-08-01",
+        total: 2000,
+        detailComplete: true,
+        payments: [{ paidAt: "2026-09-15", amount: 800 }],
+      }),
+      invoice({
+        id: "ppd-pendiente",
+        direction: "emitida",
+        paymentMethod: "PPD",
+        issuedAt: "2026-09-05",
+        total: 500,
+        detailComplete: true,
+        payments: [],
+      }),
+    ], "2026-09-01", "2026-09-30");
+    expect(income.ingreso_total).toBe(1800);
+    expect(income.pue_count).toBe(1);
+    expect(income.ppd_complement_count).toBe(1);
+    expect(income.pending_cobranza).toBe(1);
   });
 });

@@ -27,7 +27,12 @@ import { suggestCategory } from "../_shared/portal/openclaw.ts";
 import { normalizeRfc } from "../_shared/portal/validate.ts";
 import { clientIp, GENERIC_ACCOUNT_MESSAGE, guardPublic, registerAccount, turnstileSiteverify, type PublicKind } from "../_shared/portal/publicAuth.ts";
 import { sha256Hex } from "../_shared/portal/hash.ts";
-import { calculateFiscalEstimate, ivaBasisLabel, type FiscalInvoice } from "../_shared/portal/fiscalEstimate.ts";
+import {
+  calculateFiscalEstimate,
+  calculatePeriodIncome,
+  ivaBasisLabel,
+  type FiscalInvoice,
+} from "../_shared/portal/fiscalEstimate.ts";
 import { dataQualityFromInvoices, vatByRateFromTaxLines } from "../_shared/portal/fiscalMirror.ts";
 
 const API_VERSION = "v1";
@@ -752,7 +757,9 @@ const tablero: Handler = async (ctx) => {
     return d >= start && d <= end;
   });
   const gasto = inMonth.filter((r) => r.direction === "recibida").reduce((s, r) => s + Number(r.total ?? 0), 0);
-  const ingreso = inMonth.filter((r) => r.direction === "emitida").reduce((s, r) => s + Number(r.total ?? 0), 0);
+  // Ingreso del periodo = cobranza: PUE por emisión; PPD por fecha(s) de complemento.
+  const periodIncome = calculatePeriodIncome(invoices, start, end);
+  const ingreso = periodIncome.ingreso_total;
   const marcas = inMonth.filter((r) => Array.isArray(r.flags) && (r.flags as unknown[]).length > 0).map((r) => ({
     cfdi_id: r.id, emisor: r.issuer_name ?? r.issuer_rfc, total: r.total, fecha: r.issued_at, flags: r.flags,
   }));
@@ -764,6 +771,12 @@ const tablero: Handler = async (ctx) => {
   if (!rpcError && rpcData && typeof rpcData === "object") {
     return {
       ...rpcData,
+      // Sobrescribe ingreso con regla de cobranza (PUE emisión / PPD complemento).
+      ingreso_total: ingreso,
+      ingreso_regla: "pue_emision_ppd_complemento",
+      ingreso_pue_count: periodIncome.pue_count,
+      ingreso_ppd_complement_count: periodIncome.ppd_complement_count,
+      ingreso_pendiente_cobranza: periodIncome.pending_cobranza,
       iva_basis: ivaBasis,
       iva_basis_label: ivaBasisLabel(ivaBasis),
       retenciones: {
@@ -788,6 +801,10 @@ const tablero: Handler = async (ctx) => {
     gasto_total: Math.round(gasto * 100) / 100,
     gasto_mes_anterior: 0,
     ingreso_total: Math.round(ingreso * 100) / 100,
+    ingreso_regla: "pue_emision_ppd_complemento",
+    ingreso_pue_count: periodIncome.pue_count,
+    ingreso_ppd_complement_count: periodIncome.ppd_complement_count,
+    ingreso_pendiente_cobranza: periodIncome.pending_cobranza,
     ingreso_mes_anterior: 0,
     por_categoria: [],
     por_proveedor: [],
@@ -839,18 +856,20 @@ const listarFacturas: Handler = async (ctx) => {
   if (error) throw new ApiError(400, "consulta", "No se pudieron consultar las facturas.");
   const rows = raw ?? [];
   const ids = rows.map((r) => r.id as string);
-  const paidByRelated = new Map<string, { paid: number; count: number }>();
+  const paidByRelated = new Map<string, { paid: number; count: number; payments: { paid_at: string; paid_amount: number }[] }>();
   const conceptIssuesByCfdi = new Map<string, { faltante: number; invalida: number; no_cuadra: number; label: string | null }>();
   if (ids.length) {
     const [{ data: links }, { data: concepts }] = await Promise.all([
-      ctx.admin.from("portal_payment_links").select("related_cfdi_id, paid_amount").in("related_cfdi_id", ids),
+      ctx.admin.from("portal_payment_links").select("related_cfdi_id, paid_at, paid_amount").in("related_cfdi_id", ids),
       ctx.admin.from("portal_cfdi_concepts").select("cfdi_id, product_service_key, description").in("cfdi_id", ids),
     ]);
     for (const link of links ?? []) {
       const key = String(link.related_cfdi_id);
-      const cur = paidByRelated.get(key) ?? { paid: 0, count: 0 };
-      cur.paid += Number(link.paid_amount ?? 0);
+      const cur = paidByRelated.get(key) ?? { paid: 0, count: 0, payments: [] };
+      const amount = Number(link.paid_amount ?? 0);
+      cur.paid += amount;
       cur.count += 1;
+      cur.payments.push({ paid_at: String(link.paid_at ?? ""), paid_amount: amount });
       paidByRelated.set(key, cur);
     }
     const byCfdi = new Map<string, { product_service_key: string | null; description: string }[]>();
@@ -887,20 +906,24 @@ const listarFacturas: Handler = async (ctx) => {
     }
   }
   const facturas = rows.map((c) => {
-    const pay = paidByRelated.get(String(c.id)) ?? { paid: 0, count: 0 };
+    const pay = paidByRelated.get(String(c.id)) ?? { paid: 0, count: 0, payments: [] as { paid_at: string; paid_amount: number }[] };
     const keys = conceptIssuesByCfdi.get(String(c.id)) ?? { faltante: 0, invalida: 0, no_cuadra: 0, label: null };
     const metodo = c.payment_method === "PUE" || c.payment_method === "PPD" ? c.payment_method : null;
     const voucher = typeof c.voucher_type === "string" ? c.voucher_type : null;
     const total = Number(c.total ?? 0);
+    const detailPending = c.detail_status !== "complete" && total <= 0.009 && !metodo;
     let cobranza_estado = "no_aplica";
     let cobranza_label = "Sin dato de cobro";
-    if (voucher === "E") { cobranza_estado = "no_aplica"; cobranza_label = "Nota de crédito"; }
+    if (voucher === "E") { cobranza_estado = "no_aplica"; cobranza_label = "Descuento"; }
     else if (voucher === "P") { cobranza_estado = "no_aplica"; cobranza_label = "Complemento"; }
-    else if (metodo === "PUE") { cobranza_estado = "pagado"; cobranza_label = "Pagado"; }
+    else if (metodo === "PUE") { cobranza_estado = "pagado"; cobranza_label = "Cobrado"; }
     else if (metodo === "PPD") {
-      if (pay.paid <= 0.009) { cobranza_estado = "pendiente"; cobranza_label = "Pendiente"; }
-      else if (pay.paid + 0.009 < total) { cobranza_estado = "parcial"; cobranza_label = "Parcial"; }
-      else { cobranza_estado = "pagado"; cobranza_label = "Pagado"; }
+      if (pay.paid <= 0.009) { cobranza_estado = "pendiente"; cobranza_label = "Pendiente por cobrar"; }
+      else if (pay.paid + 0.009 < total) { cobranza_estado = "parcial"; cobranza_label = "Cobrado parcial"; }
+      else { cobranza_estado = "pagado"; cobranza_label = "Cobrado"; }
+    } else if (!detailPending && total > 0.009) {
+      cobranza_estado = "por_revisar";
+      cobranza_label = "Por revisar";
     }
     return {
       id: c.id,
@@ -927,6 +950,7 @@ const listarFacturas: Handler = async (ctx) => {
       category_status: c.category_status,
       paid_amount: Math.round(pay.paid * 100) / 100,
       payments_count: pay.count,
+      payments: pay.payments,
       cobranza_estado,
       cobranza_label,
       clave_issues_label: keys.label,

@@ -8,7 +8,8 @@ import { Empty, Notice, PageTitle, StatusPill } from "../components/ui";
 import { clientDetailQualityLabel, clientFlagReason } from "../lib/clientFlags";
 import { deriveCobranza, metodoPagoLabel, voucherTypeLabel } from "../lib/cobranza";
 import { assessClaveProdServ, summarizeConceptKeyIssues } from "../lib/claveProdServ";
-import { visibleClientFlags } from "../lib/cfdiPresentation";
+import { isPendingDetailCfdi, visibleClientFlags } from "../lib/cfdiPresentation";
+import { pushDemoToast } from "../lib/demoStore";
 
 interface Detalle {
   factura: {
@@ -38,11 +39,14 @@ interface Detalle {
   calidad: string;
 }
 
+type DocAction = "descuento" | "otra";
+
 export default function FacturaDetalle() {
   const { id } = useParams();
   const { active } = usePortal();
   const [d, setD] = useState<Detalle | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [actionDone, setActionDone] = useState<DocAction | null>(null);
 
   useEffect(() => {
     if (!active || !id) return;
@@ -53,16 +57,30 @@ export default function FacturaDetalle() {
 
   const f = d?.factura && !d.factura.is_test ? d.factura : null;
   const blockedDidactic = Boolean(d?.factura?.is_test);
+  const pendingDetail = f ? isPendingDetailCfdi(f) : false;
   const cobranza = f
     ? deriveCobranza({
       metodo_pago: f.metodo_pago,
       voucher_type: f.voucher_type,
       total: f.total,
       paid_amount: f.paid_amount ?? d?.pagos.reduce((s, p) => s + Number(p.paid_amount), 0),
+      detail_pending: pendingDetail,
     })
     : null;
   const metodo = f ? metodoPagoLabel(f.metodo_pago) : null;
   const tipo = f ? voucherTypeLabel(f.voucher_type) : null;
+  const isNc = String(f?.voucher_type ?? "").toUpperCase() === "E";
+  const hasNcLinks = Boolean(d?.nota_credito_de || (d?.notas_credito?.length ?? 0) > 0);
+
+  function takeNcAction(kind: DocAction) {
+    setActionDone(kind);
+    pushDemoToast({
+      tone: "ok",
+      text: kind === "descuento"
+        ? "Acción registrada: aplicar como descuento. Tu contador la verá en central."
+        : "Acción registrada para el documento asociado. Tu contador la verá en central.",
+    });
+  }
 
   return (
     <>
@@ -90,19 +108,25 @@ export default function FacturaDetalle() {
                   <span>· {f.direction === "emitida" ? "Ingreso (emitida)" : "Egreso (recibida)"}</span>
                   {tipo && <StatusPill tone={f.voucher_type === "E" ? "warn" : "info"}>{tipo}</StatusPill>}
                   {metodo && <StatusPill tone={metodo === "PPD" ? "warn" : "ok"}>{metodo}</StatusPill>}
-                  {cobranza && cobranza.estado !== "no_aplica" && (
-                    <StatusPill tone={cobranza.tone}>Cobranza: {cobranza.label}</StatusPill>
+                  {cobranza && !pendingDetail && (cobranza.estado !== "no_aplica" || isNc) && (
+                    <StatusPill tone={cobranza.tone}>
+                      {isNc ? `Acción: ${cobranza.label}` : `Cobranza: ${cobranza.label}`}
+                    </StatusPill>
                   )}
+                  {pendingDetail && <StatusPill tone="warn">Detalle pendiente</StatusPill>}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Forma <span className="kw-mono">{f.forma_pago ?? "—"}</span>
                   {cobranza && cobranza.estado === "parcial" && (
-                    <> · Pagado {fmtMoney(cobranza.paid)} · Pendiente {fmtMoney(cobranza.pendiente)}</>
+                    <> · Cobrado {fmtMoney(cobranza.paid)} · Pendiente por cobrar {fmtMoney(cobranza.pendiente)}</>
+                  )}
+                  {cobranza && cobranza.estado === "pendiente" && (
+                    <> · Pendiente por cobrar {fmtMoney(cobranza.pendiente)}</>
                   )}
                 </p>
               </div>
               <div className="text-right">
-                <p className="kw-mono text-2xl">{fmtMoney(f.total)}</p>
+                <p className="kw-mono text-2xl">{pendingDetail && f.total <= 0.009 ? "Detalle pendiente" : fmtMoney(f.total)}</p>
                 <StatusPill tone={f.detail_status === "complete" ? "ok" : "warn"}>
                   {clientDetailQualityLabel(d?.calidad, f.detail_status)}
                 </StatusPill>
@@ -119,7 +143,7 @@ export default function FacturaDetalle() {
             {visibleClientFlags(f.flags).map((flag) => <p key={flag.code + flag.reason} className="mt-2 text-xs"><StatusPill tone="warn">Atención</StatusPill> {clientFlagReason(flag)}</p>)}
             {d?.nota_credito_de && (
               <p className="mt-2 text-sm">
-                Nota de crédito sobre{" "}
+                Descuento (nota de crédito) sobre{" "}
                 <Link className="underline" to={`/facturas/${d.nota_credito_de.id}`}>factura relacionada</Link>
               </p>
             )}
@@ -200,7 +224,7 @@ export default function FacturaDetalle() {
             {(d!.complementos?.length ?? 0) === 0 && d!.pagos.length === 0 ? (
               <Empty>
                 {f.metodo_pago === "PPD"
-                  ? "Sin complemento de pago vinculado — cobranza pendiente."
+                  ? "Sin complemento de pago vinculado — pendiente por cobrar (no es «Detalle pendiente»)."
                   : "Sin complementos de pago vinculados."}
               </Empty>
             ) : (
@@ -228,18 +252,52 @@ export default function FacturaDetalle() {
             )}
           </section>
           <section className="rounded-xl border bg-card p-4">
-            <h2 className="text-lg">Notas de crédito</h2>
-            {(d!.notas_credito?.length ?? 0) === 0 ? (
+            <h2 className="text-lg">Documentos asociados · notas de crédito</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Una nota de crédito se trata como <strong>descuento</strong> sobre la factura vinculada. Otras acciones quedan listas para ampliar.
+            </p>
+            {(d!.notas_credito?.length ?? 0) === 0 && !d?.nota_credito_de ? (
               <Empty>Sin notas de crédito vinculadas.</Empty>
             ) : (
-              <ul className="mt-2 space-y-1 text-sm">
+              <ul className="mt-2 space-y-2 text-sm">
+                {d?.nota_credito_de && (
+                  <li className="flex flex-wrap items-center justify-between gap-2 border-t pt-2">
+                    <span>
+                      Este doc descuenta la factura{" "}
+                      <Link className="kw-mono underline" to={`/facturas/${d.nota_credito_de.id}`}>{d.nota_credito_de.uuid}</Link>
+                    </span>
+                    <StatusPill tone="warn">Descuento</StatusPill>
+                  </li>
+                )}
                 {d!.notas_credito!.map((n) => (
-                  <li key={n.id} className="flex justify-between border-t pt-2">
+                  <li key={n.id} className="flex flex-wrap items-center justify-between gap-2 border-t pt-2">
                     <Link className="kw-mono underline" to={`/facturas/${n.id}`}>{n.uuid}</Link>
-                    <span className="kw-mono">{fmtMoney(n.total)} · {fmtDate(n.fecha)}</span>
+                    <span className="kw-mono">{fmtMoney(n.total)} · {fmtDate(n.fecha)} · Descuento</span>
                   </li>
                 ))}
               </ul>
+            )}
+            {(isNc || hasNcLinks) && (
+              <div className="mt-3 flex flex-wrap gap-2 border-t pt-3">
+                <Button
+                  size="sm"
+                  disabled={actionDone === "descuento"}
+                  onClick={() => takeNcAction("descuento")}
+                >
+                  {actionDone === "descuento" ? "Descuento registrado" : "Aplicar como descuento"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={actionDone === "otra"}
+                  onClick={() => takeNcAction("otra")}
+                >
+                  Otra acción…
+                </Button>
+                <Button size="sm" variant="ghost" asChild>
+                  <Link to="/mensajes">Escribir a Kawiil</Link>
+                </Button>
+              </div>
             )}
           </section>
         </div>

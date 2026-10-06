@@ -35,6 +35,7 @@ interface Cfdi {
   source?: string | null;
   paid_amount?: number;
   payments_count?: number;
+  payments?: { paid_at: string; paid_amount: number }[];
   cobranza_estado?: string;
   cobranza_label?: string;
   clave_issues_label?: string | null;
@@ -51,26 +52,30 @@ const COBRANZA_TONE: Record<string, "ok" | "warn" | "wait" | "info"> = {
   pagado: "ok",
   parcial: "warn",
   pendiente: "wait",
+  por_revisar: "warn",
   no_aplica: "info",
 };
 
 function FacturaCard({ c, dir }: { c: Cfdi; dir: "emitida" | "recibida" }) {
+  const pendingDetail = isPendingDetailCfdi(c);
   const cobranza = deriveCobranza({
     metodo_pago: c.metodo_pago,
     voucher_type: c.voucher_type,
     total: c.total,
     paid_amount: c.paid_amount,
     payments_count: c.payments_count,
+    detail_pending: pendingDetail,
   });
   const metodo = metodoPagoLabel(c.metodo_pago);
   const tipo = voucherTypeLabel(c.voucher_type);
   const ncDe = relatedUuidFromFlags(c.flags);
-  const pendingDetail = isPendingDetailCfdi(c);
+  const isNc = String(c.voucher_type ?? "").toUpperCase() === "E" || Boolean(ncDe);
   const flags = visibleClientFlags(c.flags);
   const quality = clientDetailQualityLabel(undefined, c.detail_status);
   const party = dir === "recibida" ? c.nombre_emisor ?? c.rfc_emisor : c.nombre_receptor ?? c.rfc_receptor;
   const rfc = dir === "recibida" ? c.rfc_emisor : c.rfc_receptor;
   const totalLabel = pendingDetail && Number(c.total ?? 0) <= 0.009 ? "Detalle pendiente" : fmtMoney(c.total);
+  const showCobranza = !pendingDetail && (cobranza.estado !== "no_aplica" || isNc);
 
   return (
     <li className="page-list-card p-3">
@@ -92,9 +97,11 @@ function FacturaCard({ c, dir }: { c: Cfdi; dir: "emitida" | "recibida" }) {
             {metodo && (
               <StatusPill tone={metodo === "PPD" ? "warn" : "ok"}>{metodo}</StatusPill>
             )}
-            {cobranza.estado !== "no_aplica" && (
-              <StatusPill tone={COBRANZA_TONE[cobranza.estado] ?? "info"}>
-                Cobranza: {c.cobranza_label ?? cobranza.label}
+            {showCobranza && (
+              <StatusPill tone={isNc ? "warn" : (COBRANZA_TONE[cobranza.estado] ?? "info")}>
+                {isNc
+                  ? `Acción: ${c.cobranza_label ?? cobranza.label}`
+                  : `Cobranza: ${c.cobranza_label ?? cobranza.label}`}
                 {cobranza.estado === "parcial" ? ` · ${fmtMoney(cobranza.paid)} de ${fmtMoney(cobranza.total)}` : ""}
               </StatusPill>
             )}
@@ -104,7 +111,9 @@ function FacturaCard({ c, dir }: { c: Cfdi; dir: "emitida" | "recibida" }) {
           </p>
           {ncDe && (
             <p className="mt-1 text-xs text-muted-foreground">
-              Nota de crédito sobre folio <span className="kw-mono" title={ncDe}>{shortUuid(ncDe)}</span>
+              Descuento sobre folio <span className="kw-mono" title={ncDe}>{shortUuid(ncDe)}</span>
+              {" · "}
+              <Link className="underline" to={`/facturas/${c.id}`}>Ver vínculo y acciones</Link>
             </p>
           )}
           {c.clave_issues_label && (
@@ -181,6 +190,10 @@ export default function Facturas() {
     () => account.filter((c) => isPendingDetailCfdi(c)).length,
     [account],
   );
+  const pendingCobranzaCount = useMemo(
+    () => account.filter((c) => !isPendingDetailCfdi(c) && (c.cobranza_estado === "pendiente" || c.cobranza_estado === "por_revisar")).length,
+    [account],
+  );
 
   return (
     <>
@@ -188,22 +201,30 @@ export default function Facturas() {
         title="Facturación"
         subtitle={
           active
-            ? `${active.client_name} · Ingresos y egresos de tu cuenta. Cobranza según PUE/PPD y complementos de pago.`
-            : "Ingresos y egresos de tu cuenta. Cobranza según PUE/PPD y complementos de pago."
+            ? `${active.client_name} · Ingresos y egresos de tu cuenta. Cobranza: PUE = cobrado; PPD = según complemento.`
+            : "Ingresos y egresos de tu cuenta. Cobranza: PUE = cobrado; PPD = según complemento."
         }
         breadcrumb={["Kawiil", "Portal", "Facturación"]}
         icon={<FileText />}
       />
       <div className="mb-3">
         <Notice tone="info">
-          Solo lectura: ves las facturas reales de tu cuenta (SatGo / publicadas). PPD sin complemento aparece como pendiente; con complemento, pagado o parcial.
+          Cobranza de negocio: PUE siempre cobrado; PPD sin complemento = pendiente por cobrar; con complemento = cobrado o parcial.
+          «Detalle pendiente» es otra cosa: falta monto/método publicados (metadatos).
         </Notice>
       </div>
       {pendingAmountCount > 0 && (
         <div className="mb-3">
           <Notice tone="warn">
-            {pendingAmountCount} factura{pendingAmountCount === 1 ? "" : "s"} reales con «Detalle pendiente»
-            (contraparte, folio y fecha visibles; monto/método aún no publicados).
+            {pendingAmountCount} factura{pendingAmountCount === 1 ? "" : "s"} con «Detalle pendiente»
+            (contraparte, folio y fecha visibles; monto/método aún no publicados). No es «pendiente por cobrar».
+          </Notice>
+        </div>
+      )}
+      {pendingCobranzaCount > 0 && (
+        <div className="mb-3">
+          <Notice tone="info">
+            {pendingCobranzaCount} factura{pendingCobranzaCount === 1 ? "" : "s"} con cobranza «Pendiente por cobrar» o «Por revisar».
           </Notice>
         </div>
       )}
@@ -275,9 +296,10 @@ export default function Facturas() {
             onChange={(e) => setQ({ ...q, cobranza: e.target.value })}
           >
             <option value="">Todas</option>
-            <option value="pendiente">Pendiente</option>
-            <option value="parcial">Parcial</option>
-            <option value="pagado">Pagado</option>
+            <option value="pendiente">Pendiente por cobrar</option>
+            <option value="por_revisar">Por revisar</option>
+            <option value="parcial">Cobrado parcial</option>
+            <option value="pagado">Cobrado</option>
           </select>
         </div>
       </fieldset>

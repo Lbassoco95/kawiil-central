@@ -526,6 +526,18 @@ export function ProposalBadge({
   note?: string;
 }) {
   if (!account && !status && !note) return <span className="kw-small">—</span>;
+  const detailPending = account === "Detalle pendiente";
+  // «Detalle pendiente» = metadatos SatGo; «Por revisar» = cobranza de negocio (no mezclar).
+  if (detailPending) {
+    return (
+      <span className="kw-prop">
+        <span className="kw-prop__acct">{account}</span>
+        <span className="kw-prop__state" style={{ color: "var(--caution-text)" }}>
+          Falta monto/método publicados
+        </span>
+      </span>
+    );
+  }
   const p = PROPOSAL[status || (note ? "cliente" : "sugerida")];
   return (
     <span className="kw-prop">

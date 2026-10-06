@@ -18,13 +18,13 @@ describe("clientFlagReason", () => {
     expect(clientFlagReason({ code: "other", reason: "Dato del espejo del servicio" })).not.toMatch(/espejo/i);
   });
 
-  it("no expone UUID crudo en nota de crédito", () => {
+  it("nota de crédito = descuento (sin UUID crudo)", () => {
     expect(
       clientFlagReason({
         code: "nota_credito",
         reason: "Descuento sobre D1111111-1111-4111-8111-111111111111 (DEMO)",
       }),
-    ).toBe("Nota de crédito sobre factura relacionada");
+    ).toBe("Descuento (nota de crédito) sobre factura relacionada");
   });
 });
 

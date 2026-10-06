@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   CashflowChart,
   ClassificationPrompt,
@@ -23,7 +23,8 @@ import { pushDemoToast } from "../lib/demoStore";
 import { shouldUseDemoFixtures } from "../lib/dataMode";
 import { usePortal } from "../lib/session";
 import { accountOnlyCfdi, isPendingDetailCfdi } from "../lib/cfdiPresentation";
-import { listMirrorInvoices, mirrorSourceNote, rankParties, sumTotals, toInvoiceRows } from "../lib/mirrorInvoices";
+import { listMirrorInvoices, mirrorSourceNote, rankParties, toInvoiceRows } from "../lib/mirrorInvoices";
+import { calendarMonthBounds, sumPeriodRecognizedIncome } from "../lib/periodIncome";
 
 function FixtureIngresos() {
   const [period, setPeriod] = useState<PeriodId>("mes");
@@ -113,14 +114,21 @@ function FixtureIngresos() {
 
 function MirrorIngresos() {
   const { active } = usePortal();
+  const now = new Date();
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth() + 1);
   const [rows, setRows] = useState<ReturnType<typeof toInvoiceRows>>([]);
   const [count, setCount] = useState(0);
   const [pendingAmountCount, setPendingAmountCount] = useState(0);
-  const [total, setTotal] = useState(0);
+  const [pendingCobranzaCount, setPendingCobranzaCount] = useState(0);
+  const [income, setIncome] = useState(0);
+  const [incomeNote, setIncomeNote] = useState("");
   const [rank, setRank] = useState<ReturnType<typeof rankParties>>([]);
   const [sourceNote, setSourceNote] = useState("facturas de tu cuenta");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+
+  const bounds = useMemo(() => calendarMonthBounds(year, month), [year, month]);
 
   useEffect(() => {
     if (!active) return;
@@ -129,10 +137,21 @@ function MirrorIngresos() {
       .then((list) => {
         const vigentes = list.filter((r) => r.sat_status !== "cancelado");
         const account = accountOnlyCfdi(vigentes);
+        const recognized = sumPeriodRecognizedIncome(account, bounds.start, bounds.end);
         setRows(toInvoiceRows(account, "emitida"));
         setCount(account.length);
         setPendingAmountCount(account.filter(isPendingDetailCfdi).length);
-        setTotal(sumTotals(account));
+        setPendingCobranzaCount(recognized.pendingCobranzaCount);
+        setIncome(recognized.total);
+        const bits = [
+          recognized.pueCount ? `${recognized.pueCount} PUE` : null,
+          recognized.ppdComplementCount ? `${recognized.ppdComplementCount} PPD cobrado` : null,
+        ].filter(Boolean);
+        setIncomeNote(
+          bits.length
+            ? `${bits.join(" · ")} · PUE en emisión · PPD en complemento`
+            : `Sin cobros reconocidos en ${bounds.label} · PUE en emisión · PPD en complemento`,
+        );
         setRank(rankParties(account, "emitida"));
         setSourceNote(mirrorSourceNote(account));
         setErr(null);
@@ -141,37 +160,61 @@ function MirrorIngresos() {
         setRows([]);
         setCount(0);
         setPendingAmountCount(0);
+        setPendingCobranzaCount(0);
+        setIncome(0);
         setRank([]);
         setErr("No se pudieron cargar las facturas emitidas de tu cuenta.");
       })
       .finally(() => setLoading(false));
-  }, [active]);
+  }, [active, bounds.start, bounds.end, bounds.label]);
 
   const client = active?.client_name ?? "Tu cuenta";
-  const kpiNote = total > 0
-    ? `${count} CFDI · ${sourceNote}`
-    : `${count} CFDI · montos aún no publicados · ${sourceNote}`;
+  const kpiNote = income > 0
+    ? `${incomeNote} · ${count} CFDI · ${sourceNote}`
+    : `${incomeNote} · ${count} CFDI · ${sourceNote}`;
+
+  function shiftMonth(delta: number) {
+    const d = new Date(Date.UTC(year, month - 1 + delta, 1));
+    setYear(d.getUTCFullYear());
+    setMonth(d.getUTCMonth() + 1);
+  }
 
   return (
     <>
       <PageHead
         title="Ingresos"
-        subtitle={`${client} · CFDI emitidos · ${sourceNote}`}
+        subtitle={`${client} · ${bounds.label} · cobrado (PUE/PPD) · ${sourceNote}`}
+        actions={
+          <PeriodSwitch
+            value="mes"
+            onChange={() => { /* solo mes calendario real */ }}
+            label={bounds.label}
+            onPrev={() => shiftMonth(-1)}
+            onNext={() => shiftMonth(1)}
+          />
+        }
       />
       {err ? <p className="kw-small" style={{ color: "var(--caution-text)", marginBottom: 16 }}>{err}</p> : null}
       {loading ? <p className="kw-small" style={{ marginBottom: 16 }}>Cargando facturas…</p> : null}
       {pendingAmountCount > 0 ? (
         <GlassPanel style={{ marginBottom: 16 }}>
           <p className="kw-small" style={{ margin: 0 }}>
-            {pendingAmountCount} factura{pendingAmountCount === 1 ? "" : "s"} reales de tu cuenta aparecen con «Detalle pendiente»
-            (folio, fecha y contraparte sí; monto/método aún no publicados). Mejor vacío real que un ejemplo inventado.
+            {pendingAmountCount} factura{pendingAmountCount === 1 ? "" : "s"} con «Detalle pendiente»
+            (folio/fecha/contraparte sí; monto/método aún no publicados). Eso no es «pendiente por cobrar».
+          </p>
+        </GlassPanel>
+      ) : null}
+      {pendingCobranzaCount > 0 ? (
+        <GlassPanel style={{ marginBottom: 16 }}>
+          <p className="kw-small" style={{ margin: 0 }}>
+            {pendingCobranzaCount} PPD del periodo aún <strong>pendiente por cobrar</strong> (sin complemento) — no entran al KPI de ingresos.
           </p>
         </GlassPanel>
       ) : null}
       <div className="kw-grid kw-kpis" style={{ marginBottom: 24 }}>
         <KpiTile
           label="Ingresos del periodo"
-          value={total}
+          value={income}
           tone="ingreso"
           note={kpiNote}
           source="sat"
@@ -187,9 +230,11 @@ function MirrorIngresos() {
       <div className="kw-grid kw-two" style={{ marginBottom: 24 }}>
         <RankedList title="Clientes que más compran" items={rank} tone="ingreso" />
         <GlassPanel>
-          <p className="kw-title" style={{ fontSize: 16 }}>Solo consulta</p>
+          <p className="kw-title" style={{ fontSize: 16 }}>Cómo se cuenta el ingreso</p>
           <p className="kw-small" style={{ marginTop: 8 }}>
-            Facturas emitidas de {client}. En esta fase no cargas XML ni creas facturas desde aquí; si necesitas algo, escribe por Mensajes.
+            <strong>PUE</strong> entra en el mes de emisión (cobrado).{" "}
+            <strong>PPD</strong> entra en el mes del complemento de pago (cobrado o parcial).{" "}
+            PPD sin complemento queda pendiente por cobrar y no suma al KPI.
           </p>
         </GlassPanel>
       </div>

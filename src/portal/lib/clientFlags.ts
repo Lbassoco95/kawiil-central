@@ -9,7 +9,7 @@ export function clientFlagReason(flag: CfdiFlag): string {
   const isDemo = /\bDEMO\b/i.test(raw) || /\(DEMO\)/i.test(raw);
 
   if (code === "nota_credito") {
-    return "Nota de crédito sobre factura relacionada";
+    return "Descuento (nota de crédito) sobre factura relacionada";
   }
   if (code === "complemento_pago") {
     return /parcial/i.test(raw) ? "Complemento de pago parcial" : "Complemento de pago";

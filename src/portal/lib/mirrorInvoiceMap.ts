@@ -23,6 +23,11 @@ export interface MirrorCfdi {
   metodo_pago?: string | null;
   /** Origen de publicación en OS (p. ej. satgo_facfiel, central_mirror). */
   source?: string | null;
+  voucher_type?: string | null;
+  paid_amount?: number | null;
+  payments?: { paid_at: string; paid_amount: number }[] | null;
+  cobranza_estado?: string | null;
+  cobranza_label?: string | null;
 }
 
 /** Contraparte legible aunque SatGo solo haya publicado metadatos (nombre/RFC nulos). */
@@ -51,7 +56,8 @@ export function toInvoiceRows(rows: MirrorCfdi[], direction: "emitida" | "recibi
             : "revisar",
       };
     } else if (pendingDetail) {
-      proposal = { account: "Detalle pendiente", code: "", status: "revisar" };
+      // Metadatos SatGo incompletos — no usar «Por revisar» (eso es cobranza de negocio).
+      proposal = { account: "Detalle pendiente", code: "", status: "sugerida", note: undefined };
     }
     return {
       date: c.fecha ? fmtDate(c.fecha) : "—",
