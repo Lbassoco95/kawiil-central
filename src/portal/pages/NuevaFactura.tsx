@@ -63,7 +63,7 @@ export default function NuevaFactura() {
 
   return (
     <>
-      <PageTitle title="Crear factura de ingreso" subtitle="Solo facturas de ingreso. Para recibos, complementos de pago o notas de crédito, escriba a su equipo." actions={<Link className="text-sm underline" to="/facturas">Volver a facturas</Link>} />
+      <PageTitle title="Crear factura de ingreso" subtitle="Solo facturas de ingreso. Los CFDI del SAT están en Ingresos/Egresos. Para recibos o notas de crédito, escriba a su equipo." actions={<Link className="text-sm underline" to="/facturas">Volver a Facturación</Link>} />
       {v && (
         <section className="mb-4 rounded-xl border bg-card p-4" aria-labelledby="exp-t">
           <h2 id="exp-t" className="text-lg">Expediente de emisión</h2>
