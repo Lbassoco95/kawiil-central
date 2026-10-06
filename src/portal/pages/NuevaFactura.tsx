@@ -153,6 +153,10 @@ export default function NuevaFactura() {
   };
 
   const emit = async () => {
+    if (design) {
+      setMsg({ tone: "warn", text: "Vista diseño: no se emite a Facturapi." });
+      return;
+    }
     if (!active) return;
     setBusy(true);
     setMsg(null);
