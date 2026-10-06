@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   CashflowChart,
   ClassificationPrompt,
@@ -24,6 +24,9 @@ import { shouldUseDemoFixtures } from "../lib/dataMode";
 import { usePortal } from "../lib/session";
 import { accountOnlyCfdi, isPendingDetailCfdi } from "../lib/cfdiPresentation";
 import { listMirrorInvoices, mirrorSourceNote, rankParties, sumTotals, toInvoiceRows } from "../lib/mirrorInvoices";
+import { calendarMonthBounds } from "../lib/periodIncome";
+import CfdiList, { type CfdiRow } from "../components/CfdiList";
+import PeriodDownloadSearch, { type PeriodSearchResult } from "../components/PeriodDownloadSearch";
 
 function FixtureEgresos() {
   const [period, setPeriod] = useState<PeriodId>("mes");
@@ -108,6 +111,9 @@ function FixtureEgresos() {
 
 function MirrorEgresos() {
   const { active } = usePortal();
+  const now = new Date();
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth() + 1);
   const [rows, setRows] = useState<ReturnType<typeof toInvoiceRows>>([]);
   const [count, setCount] = useState(0);
   const [pendingAmountCount, setPendingAmountCount] = useState(0);
@@ -118,6 +124,10 @@ function MirrorEgresos() {
   const [sourceNote, setSourceNote] = useState("facturas de tu cuenta");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  const [periodRows, setPeriodRows] = useState<CfdiRow[] | null>(null);
+  const [periodDefaults, setPeriodDefaults] = useState<{ desde: string; hasta: string } | null>(null);
+
+  const bounds = useMemo(() => calendarMonthBounds(year, month), [year, month]);
 
   useEffect(() => {
     if (!active) return;
@@ -126,11 +136,15 @@ function MirrorEgresos() {
       .then((list) => {
         const vigentes = list.filter((r) => r.sat_status !== "cancelado");
         const account = accountOnlyCfdi(vigentes);
+        const inPeriod = account.filter((r) => {
+          const d = String(r.fecha ?? "").slice(0, 10);
+          return d >= bounds.start && d <= bounds.end;
+        });
         const unclassified = account.filter((r) => r.category_status !== "confirmada");
         setRows(toInvoiceRows(account, "recibida"));
         setCount(account.length);
         setPendingAmountCount(account.filter(isPendingDetailCfdi).length);
-        setTotal(sumTotals(account));
+        setTotal(sumTotals(inPeriod.length ? inPeriod : account));
         setRank(rankParties(account, "recibida"));
         setPendingAmount(sumTotals(unclassified));
         setPendingCount(unclassified.length);
@@ -145,18 +159,38 @@ function MirrorEgresos() {
         setErr("No se pudieron cargar las facturas recibidas de tu cuenta.");
       })
       .finally(() => setLoading(false));
-  }, [active]);
+  }, [active, bounds.start, bounds.end]);
 
   const client = active?.client_name ?? "Tu cuenta";
   const kpiNote = total > 0
-    ? `${count} CFDI · ${sourceNote}`
+    ? `${count} CFDI · ${bounds.label} · ${sourceNote}`
     : `${count} CFDI · montos aún no publicados · ${sourceNote}`;
+
+  function shiftMonth(delta: number) {
+    const d = new Date(Date.UTC(year, month - 1 + delta, 1));
+    setYear(d.getUTCFullYear());
+    setMonth(d.getUTCMonth() + 1);
+  }
+
+  function onPeriodResult(r: PeriodSearchResult) {
+    setPeriodDefaults({ desde: r.desde, hasta: r.hasta });
+    setPeriodRows(r.coverage === "con_datos" ? r.facturas : []);
+  }
 
   return (
     <>
       <PageHead
         title="Egresos"
-        subtitle={`${client} · CFDI recibidos · ${sourceNote}`}
+        subtitle={`${client} · CFDI recibidas · ${sourceNote}`}
+        actions={
+          <PeriodSwitch
+            value="mes"
+            onChange={() => {}}
+            label={bounds.label}
+            onPrev={() => shiftMonth(-1)}
+            onNext={() => shiftMonth(1)}
+          />
+        }
       />
       {err ? <p className="kw-small" style={{ color: "var(--caution-text)", marginBottom: 16 }}>{err}</p> : null}
       {loading ? <p className="kw-small" style={{ marginBottom: 16 }}>Cargando facturas…</p> : null}
@@ -175,13 +209,23 @@ function MirrorEgresos() {
       <div className="kw-grid kw-two" style={{ marginBottom: 24 }}>
         <RankedList title="Proveedores principales" items={rank} tone="egreso" />
         <GlassPanel>
-          <p className="kw-title" style={{ fontSize: 16 }}>Solo consulta</p>
+          <p className="kw-title" style={{ fontSize: 16 }}>CFDI recibidas</p>
           <p className="kw-small" style={{ marginTop: 8 }}>
-            Facturas recibidas de {client}. En esta fase no cargas XML desde aquí; si necesitas algo, escribe por Mensajes.
+            Facturas que te emitieron proveedores. Pedir factura desde un recibo → Facturación.
+            Aquí consultas el archivo SatGo y puedes buscar o solicitar descarga por periodo.
           </p>
         </GlassPanel>
       </div>
-      <InvoiceTable title="Facturas recibidas" rows={rows} partyLabel="Proveedor" />
+      <InvoiceTable title="Resumen de recibidas" rows={rows} partyLabel="Proveedor" />
+      <div style={{ marginTop: 28 }}>
+        <h2 className="kw-title" style={{ fontSize: 18, marginBottom: 12 }}>CFDI recibidas · estatus</h2>
+        <PeriodDownloadSearch direction="recibida" onResult={onPeriodResult} />
+        <CfdiList
+          direction="recibida"
+          rows={periodRows}
+          periodDefaults={periodDefaults}
+        />
+      </div>
     </>
   );
 }

@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { usePortal } from "../lib/session";
 import { callApi, openFile, PortalApiError } from "../lib/api";
@@ -43,6 +43,7 @@ type DocAction = "descuento" | "otra";
 
 export default function FacturaDetalle() {
   const { id } = useParams();
+  const [search] = useSearchParams();
   const { active } = usePortal();
   const [d, setD] = useState<Detalle | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -57,6 +58,15 @@ export default function FacturaDetalle() {
 
   const f = d?.factura && !d.factura.is_test ? d.factura : null;
   const blockedDidactic = Boolean(d?.factura?.is_test);
+  const backTo = useMemo(() => {
+    const from = search.get("from");
+    if (from === "ingresos") return "/ingresos";
+    if (from === "egresos") return "/egresos";
+    if (f?.direction === "emitida") return "/ingresos";
+    if (f?.direction === "recibida") return "/egresos";
+    return "/ingresos";
+  }, [search, f?.direction]);
+  const backLabel = backTo === "/egresos" ? "Volver a Egresos" : "Volver a Ingresos";
   const pendingDetail = f ? isPendingDetailCfdi(f) : false;
   const cobranza = f
     ? deriveCobranza({
@@ -87,14 +97,14 @@ export default function FacturaDetalle() {
       <PageTitle
         title="Detalle de factura"
         subtitle={f?.uuid}
-        actions={<Button variant="outline" asChild><Link to="/facturas">Volver</Link></Button>}
+        actions={<Button variant="outline" asChild><Link to={backTo}>{backLabel}</Link></Button>}
       />
       {err && <Notice tone="bad">{err}</Notice>}
       {!err && !d && <Empty>Cargando…</Empty>}
       {blockedDidactic && (
         <Empty>
           Esta factura no pertenece a tu cuenta.{" "}
-          <Link className="underline" to="/facturas">Volver a Facturación</Link>
+          <Link className="underline" to={backTo}>{backLabel}</Link>
         </Empty>
       )}
       {f && (

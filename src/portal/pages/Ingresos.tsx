@@ -25,6 +25,8 @@ import { usePortal } from "../lib/session";
 import { accountOnlyCfdi, isPendingDetailCfdi } from "../lib/cfdiPresentation";
 import { listMirrorInvoices, mirrorSourceNote, rankParties, toInvoiceRows } from "../lib/mirrorInvoices";
 import { calendarMonthBounds, sumPeriodRecognizedIncome } from "../lib/periodIncome";
+import CfdiList, { type CfdiRow } from "../components/CfdiList";
+import PeriodDownloadSearch, { type PeriodSearchResult } from "../components/PeriodDownloadSearch";
 
 function FixtureIngresos() {
   const [period, setPeriod] = useState<PeriodId>("mes");
@@ -127,6 +129,8 @@ function MirrorIngresos() {
   const [sourceNote, setSourceNote] = useState("facturas de tu cuenta");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  const [periodRows, setPeriodRows] = useState<CfdiRow[] | null>(null);
+  const [periodDefaults, setPeriodDefaults] = useState<{ desde: string; hasta: string } | null>(null);
 
   const bounds = useMemo(() => calendarMonthBounds(year, month), [year, month]);
 
@@ -179,11 +183,16 @@ function MirrorIngresos() {
     setMonth(d.getUTCMonth() + 1);
   }
 
+  function onPeriodResult(r: PeriodSearchResult) {
+    setPeriodDefaults({ desde: r.desde, hasta: r.hasta });
+    setPeriodRows(r.coverage === "con_datos" ? r.facturas : []);
+  }
+
   return (
     <>
       <PageHead
         title="Ingresos"
-        subtitle={`${client} · ${bounds.label} · cobrado (PUE/PPD) · ${sourceNote}`}
+        subtitle={`${client} · CFDI emitidas · cobranza PUE/PPD · ${sourceNote}`}
         actions={
           <PeriodSwitch
             value="mes"
@@ -235,10 +244,20 @@ function MirrorIngresos() {
             <strong>PUE</strong> entra en el mes de emisión (cobrado).{" "}
             <strong>PPD</strong> entra en el mes del complemento de pago (cobrado o parcial).{" "}
             PPD sin complemento queda pendiente por cobrar y no suma al KPI.
+            Emisión de facturas nuevas → Facturación.
           </p>
         </GlassPanel>
       </div>
-      <InvoiceTable title="Facturas emitidas" rows={rows} partyLabel="Cliente" />
+      <InvoiceTable title="Resumen de emitidas" rows={rows} partyLabel="Cliente" />
+      <div style={{ marginTop: 28 }}>
+        <h2 className="kw-title" style={{ fontSize: 18, marginBottom: 12 }}>CFDI emitidas · cobranza</h2>
+        <PeriodDownloadSearch direction="emitida" onResult={onPeriodResult} />
+        <CfdiList
+          direction="emitida"
+          rows={periodRows}
+          periodDefaults={periodDefaults}
+        />
+      </div>
     </>
   );
 }

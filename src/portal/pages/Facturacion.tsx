@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   GlassPanel,
   InvoiceRequestForm,
@@ -19,6 +20,7 @@ function todayLabel() {
   }).format(new Date());
 }
 
+/** Vista /diseno: Facturación = emisión / solicitud desde recibos (no archivo SatGo). */
 export default function Facturacion() {
   const [items, setItems] = useState<DemoRequest[]>([]);
   const [filter, setFilter] = useState<RequestFilter>("todas");
@@ -37,6 +39,15 @@ export default function Facturacion() {
         title="Facturación"
         subtitle="Pide una factura o sube recibos/tickets · lectura del avance en esta misma vista"
       />
+      <GlassPanel style={{ marginBottom: 16 }}>
+        <p className="kw-small" style={{ margin: 0 }}>
+          Los CFDI del SAT (emitidas/recibidas y cobranza) se ven en{" "}
+          <Link className="underline" to="/diseno/ingresos">Ingresos</Link>
+          {" "}y{" "}
+          <Link className="underline" to="/diseno/egresos">Egresos</Link>
+          . Aquí solo emisión y solicitudes desde recibos.
+        </p>
+      </GlassPanel>
       <div className="kw-grid kw-main-cols">
         <div className="kw-grid">
           <InvoiceRequestForm
@@ -66,8 +77,8 @@ export default function Facturacion() {
           <GlassPanel>
             <h3 className="kw-title" style={{ fontSize: 16 }}>Cómo se lee el reporte</h3>
             <p className="kw-small" style={{ margin: "6px 0 0" }}>
-              En esta vista de diseño, solicitudes y recibos viven en el navegador (demo). Con sesión real, Facturación
-              muestra los CFDI de tu cuenta en solo lectura; las solicitudes al equipo van por Mensajes.
+              En esta vista de diseño, solicitudes y recibos viven en el navegador (demo).
+              Facturación no es el navegador de CFDI SatGo.
             </p>
           </GlassPanel>
         </div>
