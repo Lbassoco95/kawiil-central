@@ -6,6 +6,7 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -15,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { MOVEMENT, type MtgMovement } from "@/lib/mtg/constants";
+import { AGREEMENT_STATUS, MOVEMENT, type MtgMovement } from "@/lib/mtg/constants";
 import { bucketForMovement, sortOpenUpdatesByMovement } from "@/lib/mtg/prepareBoard";
 import type { BoardTopicRow } from "@/hooks/useMtgBoard";
 import type {
@@ -86,6 +87,8 @@ function TopicCard(props: {
   const u = t.update!;
   const [open, setOpen] = useState(false);
   const showCtx = props.expandAll || open;
+  const hasCtx =
+    props.liveEditable || !!(t.context || t.if_asked || t.source || u.session_notes);
   const dueLate =
     !!t.due_date &&
     new Date(`${t.due_date}T12:00:00`) < new Date() &&
@@ -178,6 +181,20 @@ function TopicCard(props: {
               {MOVEMENT[u.movement].label}
             </span>
           )}
+          {props.liveEditable && (
+            <label className="inline-flex items-center gap-1 text-[0.8em] text-muted-foreground">
+              <Checkbox
+                checked={u.reviewed}
+                onCheckedChange={(c) =>
+                  props.onPatchUpdate(u.id, {
+                    reviewed: !!c,
+                    reviewed_at: c ? new Date().toISOString() : null,
+                  })
+                }
+              />
+              Revisado
+            </label>
+          )}
           {(t.owner_name || t.owner_side) && (
             <span className="font-mono text-[0.8em] text-muted-foreground">
               {t.owner_name || t.owner_side}
@@ -193,7 +210,7 @@ function TopicCard(props: {
               {t.due_date}
             </span>
           )}
-          {(t.context || t.if_asked || t.source || u.session_notes) && (
+          {hasCtx && (
             <button
               type="button"
               className="ml-auto text-[0.8em] font-medium text-primary hover:underline"
@@ -205,7 +222,7 @@ function TopicCard(props: {
           )}
         </div>
 
-        {showCtx && (t.context || t.if_asked || t.source || u.session_notes) && (
+        {showCtx && hasCtx && (
           <div className="mt-2 grid gap-2 rounded-md bg-muted/50 px-3 py-2.5 text-[0.92em]">
             {t.context && (
               <div>
@@ -227,6 +244,14 @@ function TopicCard(props: {
               <p className="m-0 font-mono text-[0.85em] text-muted-foreground">
                 Fuente: {t.source}
               </p>
+            )}
+            {!props.liveEditable && u.session_notes && (
+              <div>
+                <b className="mb-0.5 block text-[0.85em] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Notas de sesión
+                </b>
+                <p className="m-0 whitespace-pre-wrap text-foreground">{u.session_notes}</p>
+              </div>
             )}
             {props.liveEditable && (
               <div>
@@ -319,11 +344,27 @@ export function MtgPresentationTemplate(props: {
   onPatchUpdate: (updateId: string, patch: Record<string, unknown>) => void;
   onToggleExpected?: (id: string, done: boolean) => void;
   onOpenHistory?: (topic: { id: string; title: string }) => void;
+  /** Antes del título (p. ej. volver a Juntas). */
+  headerLeading?: ReactNode;
+  /** Estado, navegación de la serie, clientes. */
+  meta?: ReactNode;
+  /** Acciones de la junta (iniciar/terminar, llamada, proyectar…). */
   toolbar?: ReactNode;
+  /** Filtros por entidad (izquierda del toggle de contexto). */
+  filters?: ReactNode;
+  /** Captura de la sesión (grabación / transcripción). */
+  capture?: ReactNode;
+  /** Formulario para capturar acuerdos → tareas. */
+  agreementComposer?: ReactNode;
+  /** Controles por acuerdo (tarea / proyecto). */
+  renderAgreementExtra?: (agreement: MtgAgreementRow) => ReactNode;
+  onResolveDecision?: (decisionId: string, resolution: string) => void;
+  /** Contexto al final (vencimientos, tareas, archivo). */
+  footer?: ReactNode;
 }) {
   const [expandAll, setExpandAll] = useState(false);
 
-  const { resolved, neu, open, decisionsPending, counters } = useMemo(() => {
+  const { resolved, neu, open, decisionsPending, decisionsSorted, counters } = useMemo(() => {
     const withUpdate = props.topics.filter((t) => t.update);
     const resolved = withUpdate.filter((t) => t.update!.movement === "resolved");
     const neu = withUpdate.filter((t) => t.update!.movement === "new");
@@ -345,7 +386,11 @@ export function MtgPresentationTemplate(props: {
         .length,
     };
     const decisionsPending = props.decisions.filter((d) => d.status === "pending");
-    return { resolved, neu, open: openSorted, decisionsPending, counters };
+    const decisionsSorted = [
+      ...decisionsPending,
+      ...props.decisions.filter((d) => d.status !== "pending"),
+    ];
+    return { resolved, neu, open: openSorted, decisionsPending, decisionsSorted, counters };
   }, [props.topics, props.decisions]);
 
   const resolvedCols = useMemo(
@@ -410,34 +455,52 @@ export function MtgPresentationTemplate(props: {
           : "max-w-[1180px] space-y-0 text-[14px] leading-normal",
       )}
     >
-      <header className="sticky top-0 z-10 mb-5 border-b border-border/80 bg-background/95 pb-2.5 pt-1 backdrop-blur-sm">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
-          <h2 className="m-0 text-[1.55em] font-semibold tracking-tight text-foreground">
-            {props.title}
-          </h2>
-          <div className="font-mono text-[0.85em] text-muted-foreground">
+      <header
+        className={cn(
+          "sticky top-0 z-10 mb-5 space-y-2.5 border-b border-border/80 bg-background/95 pb-3 pt-1 backdrop-blur-sm",
+          !props.projection && "-mx-1 px-1",
+        )}
+      >
+        <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+          <div className="flex min-w-0 items-start gap-2">
+            {props.headerLeading}
+            <div className="min-w-0">
+              <h2 className="m-0 truncate text-[1.55em] font-semibold tracking-tight text-foreground">
+                {props.title}
+              </h2>
+              {props.meta && (
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.85em] text-muted-foreground">
+                  {props.meta}
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="pt-1 font-mono text-[0.85em] text-muted-foreground">
             {props.dateLabel}
           </div>
         </div>
-        <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2">
+        {props.toolbar && (
           <div className="flex flex-wrap items-center gap-1.5">{props.toolbar}</div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <button
-              type="button"
-              className={cn(
-                "rounded-full border px-3 py-1 text-[0.85em] font-medium transition-colors",
-                expandAll
-                  ? "border-foreground bg-foreground text-background"
-                  : "border-border bg-card text-muted-foreground hover:border-foreground/40 hover:text-foreground",
-              )}
-              aria-pressed={expandAll}
-              onClick={() => setExpandAll((v) => !v)}
-            >
-              {expandAll ? "Cerrar todo el contexto" : "Abrir todo el contexto"}
-            </button>
-          </div>
+        )}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">{props.filters}</div>
+          <button
+            type="button"
+            className={cn(
+              "rounded-full border px-3 py-1 text-[0.85em] font-medium transition-colors",
+              expandAll
+                ? "border-foreground bg-foreground text-background"
+                : "border-border bg-card text-muted-foreground hover:border-foreground/40 hover:text-foreground",
+            )}
+            aria-pressed={expandAll}
+            onClick={() => setExpandAll((v) => !v)}
+          >
+            {expandAll ? "Cerrar todo el contexto" : "Abrir todo el contexto"}
+          </button>
         </div>
       </header>
+
+      {props.capture && <section className="mb-6">{props.capture}</section>}
 
       <section className="mb-8">
         <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-2.5">
@@ -510,9 +573,10 @@ export function MtgPresentationTemplate(props: {
             se escribe en vivo
           </small>
         </h3>
+        {props.agreementComposer && <div className="mb-3">{props.agreementComposer}</div>}
         {agreements.length === 0 ? (
           <p className="text-[0.88em] text-muted-foreground">
-            Sin acuerdos capturados aún. Úsalos en el tablero o carga un resumen.
+            Sin acuerdos capturados aún. Escríbelos arriba o carga un resumen.
           </p>
         ) : (
           <ul className="space-y-2">
@@ -521,15 +585,23 @@ export function MtgPresentationTemplate(props: {
                 key={a.id}
                 className={cn(
                   "rounded-md border border-border/70 bg-card px-3.5 py-2.5 text-[0.95em]",
-                  a.status === "confirmed" && "opacity-80",
+                  a.status === "confirmed" && !a.project_id && "border-amber-400/70",
                 )}
               >
                 <div className="font-medium">{a.text}</div>
-                <div className="mt-1 flex flex-wrap gap-2 font-mono text-[0.8em] text-muted-foreground">
+                <div className="mt-1 flex flex-wrap items-center gap-2 font-mono text-[0.8em] text-muted-foreground">
+                  <span
+                    className={cn(
+                      "rounded px-1.5 py-0.5 font-sans font-medium",
+                      AGREEMENT_STATUS[a.status].color,
+                    )}
+                  >
+                    {AGREEMENT_STATUS[a.status].label}
+                  </span>
                   {a.entity_key && <span>{entityLabel(props.entities, a.entity_key)}</span>}
                   {a.owner_name && <span>{a.owner_name}</span>}
                   {a.due_date && <span>{a.due_date}</span>}
-                  <span className="capitalize">{a.status}</span>
+                  {props.renderAgreementExtra?.(a)}
                 </div>
               </li>
             ))}
@@ -596,17 +668,26 @@ export function MtgPresentationTemplate(props: {
 
       <section className="mb-8">
         <h3 className="mb-2.5 text-[1.1em] font-semibold tracking-wide">
-          Decisiones que se piden hoy
+          Decisiones que se piden hoy{" "}
+          <small className="ml-2 font-mono text-[0.8em] font-normal text-muted-foreground">
+            {decisionsPending.length} pendientes
+          </small>
         </h3>
-        {decisionsPending.length === 0 ? (
+        {decisionsSorted.length === 0 ? (
           <p className="text-[0.88em] text-muted-foreground">Sin decisiones pendientes.</p>
         ) : (
           <div className="grid gap-2">
-            {decisionsPending.map((d, i) => (
+            {decisionsSorted.map((d, i) => (
               <div
                 key={d.id}
-                className="grid grid-cols-[auto_1fr] gap-2.5 rounded-md border border-border/80 bg-card px-3.5 py-2.5"
-                style={{ ["--st" as string]: MOVEMENT_STRIPE.decision_needed }}
+                className={cn(
+                  "grid grid-cols-[auto_1fr] gap-2.5 rounded-md border border-border/80 bg-card px-3.5 py-2.5",
+                  d.status !== "pending" && "opacity-70",
+                )}
+                style={{
+                  ["--st" as string]:
+                    d.status === "pending" ? MOVEMENT_STRIPE.decision_needed : MOVEMENT_STRIPE.resolved,
+                }}
               >
                 <div
                   className="mt-1 w-1 self-stretch rounded-sm bg-[var(--st)]"
@@ -618,7 +699,19 @@ export function MtgPresentationTemplate(props: {
                   </div>
                   <div className="mt-1 font-mono text-[0.8em] text-muted-foreground">
                     {entityLabel(props.entities, d.entity_key)}
+                    {d.status === "deferred" && " · diferida"}
                   </div>
+                  {d.status === "pending" && props.liveEditable && props.onResolveDecision && (
+                    <Input
+                      className="mt-1.5 h-8 max-w-xl text-[0.9em]"
+                      placeholder="Qué se decidió (Enter para guardar)"
+                      onKeyDown={(e) => {
+                        if (e.key !== "Enter") return;
+                        const v = e.currentTarget.value.trim();
+                        if (v) props.onResolveDecision?.(d.id, v);
+                      }}
+                    />
+                  )}
                   {d.resolution && (
                     <p className="mt-1 text-[0.9em] text-muted-foreground">
                       Decidido: {d.resolution}
@@ -663,6 +756,8 @@ export function MtgPresentationTemplate(props: {
           </ul>
         )}
       </section>
+
+      {props.footer && <div className="mt-8 space-y-6">{props.footer}</div>}
     </div>
   );
 }

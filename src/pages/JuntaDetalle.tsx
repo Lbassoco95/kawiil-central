@@ -8,8 +8,6 @@ import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -17,37 +15,39 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { formatDateMX } from "@/lib/dateUtils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProfiles } from "@/hooks/useTasks";
 import { useMtgBoard } from "@/hooks/useMtgBoard";
-import {
-  MOVEMENT,
-  MEETING_STATUS,
-  type MtgMovement,
-} from "@/lib/mtg/constants";
-import {
-  bucketForMovement,
-  countByMovement,
-  entitiesForFilter,
-  sortOpenUpdatesByMovement,
-} from "@/lib/mtg/prepareBoard";
-import {
-  compactVisibleTopics,
-  isMeetingLiveEditable,
-  resolvedThisMeeting,
-} from "@/lib/mtg/boardArchive";
+import { MEETING_STATUS } from "@/lib/mtg/constants";
+import { isMeetingLiveEditable } from "@/lib/mtg/boardArchive";
+import { entitiesForFilter } from "@/lib/mtg/prepareBoard";
 import { unreviewedCount } from "@/lib/mtg/meetingLifecycle";
 import {
   ArrowLeft,
+  Bot,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
+  FileText,
   FileUp,
   Link2,
   Loader2,
+  Minimize2,
+  MoreHorizontal,
+  Play,
+  Plus,
   Projector,
+  Square,
+  Users,
   Video,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -58,7 +58,7 @@ import { MtgTopicHistoryDrawer } from "@/components/mtg/MtgTopicHistoryDrawer";
 import { MtgArchiveSection } from "@/components/mtg/MtgArchiveSection";
 import { MtgJoinLinkDialog } from "@/components/mtg/MtgJoinLinkDialog";
 import { MtgImportResumenDialog } from "@/components/mtg/MtgImportResumenDialog";
-import { MtgCallCaptureBar } from "@/components/mtg/MtgCallCaptureBar";
+import { inviteKawiilito } from "@/components/mtg/inviteKawiilito";
 import { MtgPresentationTemplate } from "@/components/mtg/MtgPresentationTemplate";
 import { parseMeetingJoinLink } from "@/lib/mtg/joinLink";
 import {
@@ -156,15 +156,6 @@ export default function JuntaDetalle() {
     };
   }, [board.data, navigate]);
 
-  // Multi-empresa con temas: abrir en plantilla presentación (estructura tipo DOCX).
-  useEffect(() => {
-    const ents = board.data?.series?.entities?.length ?? 0;
-    const topics = board.data?.boardTopics?.length ?? 0;
-    if (ents > 1 && topics > 0) {
-      setProjection(true);
-    }
-  }, [board.data?.meeting?.id, board.data?.series?.entities?.length, board.data?.boardTopics?.length]);
-
   const entities = useMemo(
     () => entitiesForFilter(board.data?.series?.entities, board.data?.meeting.client_id ?? null),
     [board.data],
@@ -175,21 +166,6 @@ export default function JuntaDetalle() {
     if (entityFilter === "all") return list;
     return list.filter((t) => t.entity_key === entityFilter);
   }, [board.data, entityFilter]);
-
-  const compactTopics = useMemo(() => compactVisibleTopics(topicsFiltered), [topicsFiltered]);
-  const updatesForCount = topicsFiltered
-    .map((t) => t.update)
-    .filter(Boolean)
-    .map((u) => ({ movement: u!.movement as MtgMovement }));
-  const counters = countByMovement(updatesForCount);
-
-  const resolved = resolvedThisMeeting(topicsFiltered);
-  const news = compactTopics.filter((t) => t.update && bucketForMovement(t.update.movement) === "new");
-  const openSorted = sortOpenUpdatesByMovement(
-    compactTopics
-      .filter((t) => t.update && bucketForMovement(t.update.movement) === "open")
-      .map((t) => ({ topic: t, movement: t.update!.movement as MtgMovement })),
-  ).map((x) => x.topic);
 
   const schedulePatch = (updateId: string, patch: Record<string, unknown>) => {
     const prev = debounceTimers.current.get(updateId);
@@ -308,713 +284,502 @@ export default function JuntaDetalle() {
     });
   };
 
-  const entityFilterChips =
-    entities.length > 1 ? (
-      <>
-        <button
-          type="button"
-          className={cn(
-            "rounded-full border px-3 py-1 text-[0.85em] font-medium transition-colors",
-            entityFilter === "all"
-              ? "border-foreground bg-foreground text-background"
-              : "border-border bg-card text-muted-foreground hover:border-foreground/40 hover:text-foreground",
-          )}
-          aria-pressed={entityFilter === "all"}
-          onClick={() => setEntityFilter("all")}
-        >
-          Todo
-        </button>
-        {entities.map((e) => (
-          <button
-            key={e.key}
-            type="button"
-            className={cn(
-              "rounded-full border px-3 py-1 text-[0.85em] font-medium transition-colors",
-              entityFilter === e.key
-                ? "border-foreground bg-foreground text-background"
-                : "border-border bg-card text-muted-foreground hover:border-foreground/40 hover:text-foreground",
-            )}
-            aria-pressed={entityFilter === e.key}
-            onClick={() => setEntityFilter(e.key)}
-          >
-            {e.label}
-          </button>
-        ))}
-      </>
-    ) : null;
-
-  if (projection) {
-    return (
-      <AppLayout chrome="none">
-        <MtgPresentationTemplate
-          title={series?.title ?? meeting.title ?? "Junta"}
-          dateLabel={formatDateMX(meeting.scheduled_at)}
-          topics={topicsFiltered}
-          entities={entities}
-          expectedNext={expectedNext}
-          decisions={decisions}
-          agreements={agreements}
-          liveEditable={liveEditable}
-          projection
-          onPatchUpdate={schedulePatch}
-          onToggleExpected={(id, done) =>
-            board.toggleExpectedNext.mutate(
-              { id, done },
-              { onError: (e: Error) => toast.error(e.message) },
-            )
-          }
-          onOpenHistory={(t) => setHistoryTopic(t)}
-          toolbar={
-            <>
-              {entityFilterChips}
-              {user && series && liveEditable && (
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-3 py-1 text-[0.85em] font-medium text-muted-foreground hover:border-foreground/40 hover:text-foreground"
-                  onClick={() => setImportResumenOpen(true)}
-                  title="Cargar texto/DOCX del resumen a los temas del tablero"
-                >
-                  <FileUp className="h-3.5 w-3.5" />
-                  Cargar resumen
-                </button>
-              )}
-              {savedAt && (
-                <span className="font-mono text-[0.8em] text-muted-foreground">
-                  guardado {savedAt}
-                </span>
-              )}
-              <button
-                type="button"
-                className="inline-flex items-center gap-1 rounded-full border border-foreground bg-foreground px-3 py-1 text-[0.85em] font-medium text-background"
-                onClick={() => setProjection(false)}
-              >
-                <Projector className="h-3.5 w-3.5" />
-                Salir de proyección
-              </button>
-            </>
-          }
-        />
-        <MtgTopicHistoryDrawer
-          topicId={historyTopic?.id ?? null}
-          topicTitle={historyTopic?.title}
-          open={!!historyTopic}
-          onOpenChange={(o) => {
-            if (!o) setHistoryTopic(null);
-          }}
-        />
-        {user && series && (
-          <MtgImportResumenDialog
-            open={importResumenOpen}
-            onOpenChange={setImportResumenOpen}
-            organizationId={orgId}
-            actorUserId={user.id}
-            meetingId={meeting.id}
-            seriesId={series.id}
-            onDone={() => {
-              board.invalidate();
-              setProjection(true);
-            }}
-          />
-        )}
-      </AppLayout>
+  const chipClass = (active: boolean) =>
+    cn(
+      "rounded-full border px-3 py-1 text-[0.85em] font-medium transition-colors",
+      active
+        ? "border-foreground bg-foreground text-background"
+        : "border-border bg-card text-muted-foreground hover:border-foreground/40 hover:text-foreground",
     );
-  }
 
-  return (
-    <AppLayout>
-      <div className="space-y-6 animate-fade-in pb-24">
-        {/* Encabezado */}
-        <div className="sticky top-0 z-20 glass-card p-4 space-y-3 border-b">
-          <div className="flex flex-wrap items-start gap-3 justify-between">
-            <div className="flex items-start gap-2 min-w-0">
-              <Button asChild variant="ghost" size="icon" className="shrink-0">
-                <Link to="/juntas">
-                  <ArrowLeft className="h-4 w-4" />
-                </Link>
-              </Button>
-              <div className="min-w-0">
-                <h1 className="text-xl font-bold tracking-tight truncate">
-                  {series?.title ?? meeting.title ?? "Junta"}
-                </h1>
-                <p className="text-sm text-muted-foreground">
-                  {formatDateMX(meeting.scheduled_at)} ·{" "}
-                  <Badge variant="outline" className={cn("text-[10px] border-0", statusCfg.color)}>
-                    {statusCfg.label}
-                  </Badge>
-                  {!meeting.client_id && (
-                    <Badge variant="secondary" className="ml-2 text-[10px]">
-                      Sin cliente
-                    </Badge>
-                  )}
-                  {!liveEditable && (
-                    <Badge variant="secondary" className="ml-2 text-[10px]">
-                      Solo lectura
-                    </Badge>
-                  )}
-                  {savedAt && <span className="ml-2 text-xs">guardado {savedAt}</span>}
-                </p>
-                {seriesMeetings.length > 1 && (
-                  <div className="flex flex-wrap items-center gap-1 mt-1">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 px-2"
-                      disabled={!prevMeeting}
-                      onClick={() => prevMeeting && navigate(`/juntas/${prevMeeting.id}`)}
-                    >
-                      <ChevronLeft className="h-3.5 w-3.5" /> Anterior
-                    </Button>
-                    <Select
-                      value={meeting.id}
-                      onValueChange={(id) => navigate(`/juntas/${id}`)}
-                    >
-                      <SelectTrigger className="h-7 w-[200px] text-xs">
-                        <SelectValue placeholder="Junta" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {seriesMeetings.map((m) => (
-                          <SelectItem key={m.id} value={m.id}>
-                            {formatDateMX(m.scheduled_at)} · {MEETING_STATUS[m.status]?.label ?? m.status}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 px-2"
-                      disabled={!nextMeeting}
-                      onClick={() => nextMeeting && navigate(`/juntas/${nextMeeting.id}`)}
-                    >
-                      Siguiente <ChevronRight className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setProjection(true)}
-                title="Vista tipo tablero a pantalla completa para compartir pantalla"
-              >
-                <Projector className="h-3.5 w-3.5 mr-1" />
-                Proyectar
-              </Button>
-              {meeting.teams_join_url ? (
-                <>
-                  <Button asChild size="sm">
-                    <a href={meeting.teams_join_url} target="_blank" rel="noreferrer">
-                      <Video className="h-3.5 w-3.5 mr-1" />
-                      {(() => {
-                        try {
-                          return `Unirse · ${parseMeetingJoinLink(meeting.teams_join_url).label}`;
-                        } catch {
-                          return "Unirse a la llamada";
-                        }
-                      })()}
-                      <ExternalLink className="h-3 w-3 ml-1" />
-                    </a>
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setJoinLinkOpen(true)}
-                  >
-                    <Link2 className="h-3.5 w-3.5 mr-1" />
-                    Cambiar link
-                  </Button>
-                </>
-              ) : (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setJoinLinkOpen(true)}
-                >
-                  <Link2 className="h-3.5 w-3.5 mr-1" />
-                  Pegar link de llamada
-                </Button>
-              )}
-              {liveEditable && meeting.status === "planned" && (
-                <Button
-                  size="sm"
-                  onClick={() =>
-                    board.doStart.mutate(undefined, {
-                      onError: (e: Error) => toast.error(e.message),
-                    })
-                  }
-                  disabled={board.doStart.isPending}
-                >
-                  Iniciar junta
-                </Button>
-              )}
-              {liveEditable && (meeting.status === "in_progress" || meeting.status === "planned") && (
-                <Button size="sm" variant="secondary" onClick={handleEnd} disabled={board.doEnd.isPending}>
-                  Terminar junta
-                </Button>
-              )}
-              {user && series && liveEditable && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setImportResumenOpen(true)}
-                  title="Cargar texto/DOCX del resumen a los temas del tablero"
-                >
-                  <FileUp className="h-3.5 w-3.5 mr-1" />
-                  Cargar resumen
-                </Button>
-              )}
-              {user && (
-                <MtgUploadTranscriptButton
-                  organizationId={orgId}
-                  actorUserId={user.id}
-                  meeting={meeting}
-                  series={series}
-                  onDone={() => board.invalidate()}
-                />
-              )}
-              {(meeting.status === "ended" ||
-                meeting.status === "minutes_draft" ||
-                meeting.status === "minutes_review" ||
-                meeting.status === "minutes_approved" ||
-                meeting.status === "closed") && (
-                <Button asChild size="sm" variant="outline">
-                  <Link to={`/juntas/${meeting.id}/minuta`}>Minuta</Link>
-                </Button>
-              )}
-            </div>
-          </div>
+  const showMinutaLink =
+    meeting.status === "ended" ||
+    meeting.status === "minutes_draft" ||
+    meeting.status === "minutes_review" ||
+    meeting.status === "minutes_approved" ||
+    meeting.status === "closed";
 
-          <MtgCallCaptureBar
-            meeting={meeting}
-            onPasteLink={() => setJoinLinkOpen(true)}
-          />
+  const joinLabel = (() => {
+    if (!meeting.teams_join_url) return "";
+    try {
+      return `Unirse · ${parseMeetingJoinLink(meeting.teams_join_url).label}`;
+    } catch {
+      return "Unirse a la llamada";
+    }
+  })();
 
-          {!meeting.teams_join_url && liveEditable && (
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-sky-500/30 bg-sky-500/5 px-3 py-2.5 text-sm">
-              <div className="min-w-0">
-                <p className="font-medium text-foreground">Falta el link de la llamada</p>
-                <p className="text-xs text-muted-foreground">
-                  Pega el enlace de Teams (o Meet/Zoom) de esta reunión para Unirse, grabar audio
-                  de la llamada y dejar lista la extracción después.
-                </p>
-              </div>
-              <Button type="button" size="sm" onClick={() => setJoinLinkOpen(true)}>
-                <Link2 className="h-3.5 w-3.5 mr-1" />
-                Pegar link de Teams
-              </Button>
-            </div>
+  const meta = (
+    <>
+      <Badge variant="outline" className={cn("text-[10px] border-0", statusCfg.color)}>
+        {statusCfg.label}
+      </Badge>
+      {!meeting.client_id && entities.length === 0 && (
+        <Badge variant="secondary" className="text-[10px]">
+          Sin cliente
+        </Badge>
+      )}
+      {!liveEditable && (
+        <Badge variant="secondary" className="text-[10px]">
+          Solo lectura
+        </Badge>
+      )}
+      {savedAt && <span className="font-mono text-[0.9em]">guardado {savedAt}</span>}
+      {!projection && seriesMeetings.length > 1 && (
+        <span className="inline-flex items-center gap-0.5">
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-7 px-1.5"
+            disabled={!prevMeeting}
+            onClick={() => prevMeeting && navigate(`/juntas/${prevMeeting.id}`)}
+            aria-label="Junta anterior"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+          </Button>
+          <Select value={meeting.id} onValueChange={(id) => navigate(`/juntas/${id}`)}>
+            <SelectTrigger className="h-7 w-[200px] text-xs">
+              <SelectValue placeholder="Junta" />
+            </SelectTrigger>
+            <SelectContent>
+              {seriesMeetings.map((m) => (
+                <SelectItem key={m.id} value={m.id}>
+                  {formatDateMX(m.scheduled_at)} · {MEETING_STATUS[m.status]?.label ?? m.status}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-7 px-1.5"
+            disabled={!nextMeeting}
+            onClick={() => nextMeeting && navigate(`/juntas/${nextMeeting.id}`)}
+            aria-label="Junta siguiente"
+          >
+            <ChevronRight className="h-3.5 w-3.5" />
+          </Button>
+        </span>
+      )}
+    </>
+  );
+
+  const toolbar = (
+    <>
+      {liveEditable && meeting.status === "planned" && (
+        <Button
+          size="sm"
+          onClick={() =>
+            board.doStart.mutate(undefined, {
+              onError: (e: Error) => toast.error(e.message),
+            })
+          }
+          disabled={board.doStart.isPending}
+        >
+          <Play className="h-3.5 w-3.5 mr-1" />
+          Iniciar junta
+        </Button>
+      )}
+      {liveEditable && (meeting.status === "in_progress" || meeting.status === "planned") && (
+        <Button
+          size="sm"
+          variant={meeting.status === "in_progress" ? "default" : "secondary"}
+          onClick={handleEnd}
+          disabled={board.doEnd.isPending}
+        >
+          <Square className="h-3.5 w-3.5 mr-1" />
+          Terminar junta
+        </Button>
+      )}
+      {showMinutaLink && (
+        <Button asChild size="sm">
+          <Link to={`/juntas/${meeting.id}/minuta`}>
+            <FileText className="h-3.5 w-3.5 mr-1" />
+            Minuta
+          </Link>
+        </Button>
+      )}
+      {meeting.teams_join_url ? (
+        <span className="inline-flex">
+          <Button asChild size="sm" variant="outline" className="rounded-r-none">
+            <a href={meeting.teams_join_url} target="_blank" rel="noreferrer">
+              <Video className="h-3.5 w-3.5 mr-1" />
+              {joinLabel}
+              <ExternalLink className="h-3 w-3 ml-1" />
+            </a>
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="rounded-l-none border-l-0 px-2"
+            onClick={() => setJoinLinkOpen(true)}
+            title="Cambiar link de la llamada"
+            aria-label="Cambiar link de la llamada"
+          >
+            <Link2 className="h-3.5 w-3.5" />
+          </Button>
+        </span>
+      ) : (
+        user && (
+          <Button type="button" variant="outline" size="sm" onClick={() => setJoinLinkOpen(true)}>
+            <Link2 className="h-3.5 w-3.5 mr-1" />
+            Pegar link de llamada
+          </Button>
+        )
+      )}
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => setProjection((v) => !v)}
+        title={
+          projection
+            ? "Volver a la vista con menú (Esc)"
+            : "Pantalla completa para compartir pantalla"
+        }
+      >
+        {projection ? (
+          <Minimize2 className="h-3.5 w-3.5 mr-1" />
+        ) : (
+          <Projector className="h-3.5 w-3.5 mr-1" />
+        )}
+        {projection ? "Salir de proyección" : "Proyectar"}
+      </Button>
+      {user && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm" aria-label="Más acciones">
+              <MoreHorizontal className="h-4 w-4 mr-1" />
+              Más
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            {series && liveEditable && (
+              <DropdownMenuItem onSelect={() => setImportResumenOpen(true)}>
+                <FileUp className="h-3.5 w-3.5 mr-2" />
+                Cargar resumen (texto/DOCX)
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem onSelect={() => setAssignClientOpen(true)}>
+              <Users className="h-3.5 w-3.5 mr-2" />
+              {entities.length > 0 || meeting.client_id ? "Editar clientes" : "Asignar cliente(s)"}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={() => inviteKawiilito(meeting, () => setJoinLinkOpen(true))}
+            >
+              <Bot className="h-3.5 w-3.5 mr-2" />
+              Invitar Kawiilito
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+    </>
+  );
+
+  const filters = (
+    <>
+      {entities.length > 1 && (
+        <>
+          <button
+            type="button"
+            className={chipClass(entityFilter === "all")}
+            aria-pressed={entityFilter === "all"}
+            onClick={() => setEntityFilter("all")}
+          >
+            Todo el grupo
+          </button>
+          {entities.map((e) => (
+            <button
+              key={e.key}
+              type="button"
+              className={chipClass(entityFilter === e.key)}
+              aria-pressed={entityFilter === e.key}
+              onClick={() => setEntityFilter(e.key)}
+            >
+              {e.label}
+            </button>
+          ))}
+        </>
+      )}
+      {entities.length === 1 && (
+        <span className="text-[0.85em] text-muted-foreground">
+          Cliente: <span className="font-medium text-foreground">{entities[0].label}</span>
+        </span>
+      )}
+      {!meeting.client_id && entities.length === 0 && user && (
+        <button type="button" className={chipClass(false)} onClick={() => setAssignClientOpen(true)}>
+          <Users className="inline h-3.5 w-3.5 mr-1 -mt-0.5" />
+          Asignar cliente(s)
+        </button>
+      )}
+    </>
+  );
+
+  const capture =
+    user && orgId ? (
+      <div className="rounded-md border border-border/80 bg-card px-3.5 py-2.5">
+        <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+          <h3 className="m-0 text-[0.85em] font-semibold uppercase tracking-wide text-muted-foreground">
+            Captura de la sesión
+          </h3>
+          {!meeting.recording_path && (
+            <span className="text-[0.78em] text-muted-foreground">
+              Graba aquí (hasta ~3 h) o sube audio / transcripción. Si falla la red queda copia
+              local.
+            </span>
           )}
-
-            {user && orgId && (
-            <MtgRecordingControls
+        </div>
+        <MtgRecordingControls
+          organizationId={orgId}
+          actorUserId={user.id}
+          meeting={meeting}
+          series={series}
+          onDone={() => board.invalidate()}
+          extraActions={
+            <MtgUploadTranscriptButton
               organizationId={orgId}
               actorUserId={user.id}
               meeting={meeting}
               series={series}
               onDone={() => board.invalidate()}
             />
-          )}
+          }
+        />
+      </div>
+    ) : null;
 
-          {meeting.recording_path ? (
-            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2.5 text-sm space-y-0.5">
-              <p className="font-medium text-foreground">Grabación en Storage</p>
-              <p className="text-muted-foreground text-xs">
-                {meeting.recording_bytes != null
-                  ? `${(meeting.recording_bytes / (1024 * 1024)).toFixed(1)} MB · `
-                  : ""}
-                {meeting.recording_saved_at
-                  ? `guardada ${new Date(meeting.recording_saved_at).toLocaleString("es-MX")}`
-                  : "enlazada a esta junta"}
-                . Puedes transcribir o volver a subir si necesitas otra toma.
-              </p>
-            </div>
-          ) : (
-            (meeting.status === "ended" ||
-              meeting.status === "minutes_draft" ||
-              meeting.status === "minutes_review" ||
-              meeting.status === "in_progress" ||
-              meeting.status === "planned") && (
-              <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2.5 text-sm space-y-1">
-                <p className="font-medium text-foreground">Aún sin grabación en Storage</p>
-                <p className="text-muted-foreground text-xs">
-                  Usa <strong>Grabar audio</strong> / <strong>Audio de llamada</strong> (hasta ~3 h)
-                  o <strong>Subir grabación</strong>. Al detener, se guarda una copia local y luego
-                  se sube; si falla la red puedes <strong>Reintentar subida</strong> o{" "}
-                  <strong>Descargar copia local</strong>. Bucket mtg hasta 500 MB.
-                </p>
-              </div>
-            )
-          )}
-
-          {!meeting.client_id && entities.length === 0 && user && (
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm">
-              <p className="text-muted-foreground">
-                Esta junta aún no tiene cliente(s). Asigna uno o varios (grupo) para filtrar temas y
-                crear tareas por empresa. La plantilla de sesión se alimenta en el tablero.
-              </p>
-              <Button size="sm" variant="secondary" onClick={() => setAssignClientOpen(true)}>
-                Asignar cliente(s)
-              </Button>
-            </div>
-          )}
-          {(meeting.client_id || entities.length > 0) && user && (
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              {entities.length > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  Clientes en tablero:{" "}
-                  <span className="text-foreground font-medium">
-                    {entities.map((e) => e.label).join(" · ")}
-                  </span>
-                </p>
-              )}
-              <Button size="sm" variant="ghost" onClick={() => setAssignClientOpen(true)}>
-                {entities.length > 1 ? "Editar clientes" : "Cambiar / añadir clientes"}
-              </Button>
-            </div>
-          )}
-
-          {entities.length > 1 && (
-            <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                variant={entityFilter === "all" ? "default" : "outline"}
-                onClick={() => setEntityFilter("all")}
-              >
-                Todo el grupo
-              </Button>
+  const agreementComposer = liveEditable ? (
+    <div className="space-y-2 rounded-md border border-dashed border-border/80 bg-muted/20 p-2.5">
+      <div className="grid gap-2 md:grid-cols-6">
+        <Input
+          className="md:col-span-2"
+          placeholder="Nuevo acuerdo / tarea"
+          value={agreementDraft.text}
+          onChange={(e) => setAgreementDraft((d) => ({ ...d, text: e.target.value }))}
+          onKeyDown={(e) => e.key === "Enter" && onCaptureAgreement()}
+        />
+        {entities.length > 0 && (
+          <Select
+            value={agreementDraft.entityKey || undefined}
+            onValueChange={(key) => {
+              const ent = entities.find((e) => e.key === key);
+              setAgreementDraft((d) => ({
+                ...d,
+                entityKey: key,
+                clientId: ent?.client_id ?? d.clientId,
+              }));
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Entidad" />
+            </SelectTrigger>
+            <SelectContent>
               {entities.map((e) => (
-                <Button
-                  key={e.key}
-                  size="sm"
-                  variant={entityFilter === e.key ? "default" : "outline"}
-                  onClick={() => setEntityFilter(e.key)}
-                >
+                <SelectItem key={e.key} value={e.key}>
                   {e.label}
-                </Button>
+                </SelectItem>
               ))}
-            </div>
-          )}
-
-          <div className="flex flex-wrap gap-2 text-xs">
-            {(Object.keys(MOVEMENT) as MtgMovement[]).map((m) => (
-              <span key={m} className={cn("px-2 py-0.5 rounded", MOVEMENT[m].color)}>
-                {MOVEMENT[m].label}: {counters[m] ?? 0}
-              </span>
+            </SelectContent>
+          </Select>
+        )}
+        <Select
+          value={agreementDraft.projectId || undefined}
+          onValueChange={(v) => setAgreementDraft((d) => ({ ...d, projectId: v }))}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Proyecto" />
+          </SelectTrigger>
+          <SelectContent>
+            {projects
+              .filter((p) => !agreementDraft.clientId || p.client_id === agreementDraft.clientId)
+              .map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name} · {p.area}
+                </SelectItem>
+              ))}
+          </SelectContent>
+        </Select>
+        <Select
+          value={agreementDraft.ownerUserId || undefined}
+          onValueChange={(v) => setAgreementDraft((d) => ({ ...d, ownerUserId: v }))}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Responsable" />
+          </SelectTrigger>
+          <SelectContent>
+            {profiles.map((p) => (
+              <SelectItem key={p.user_id} value={p.user_id}>
+                {p.full_name}
+              </SelectItem>
             ))}
-            <span className="text-muted-foreground">Total: {updatesForCount.length}</span>
-          </div>
-        </div>
+          </SelectContent>
+        </Select>
+        <Input
+          type="date"
+          value={agreementDraft.dueDate}
+          onChange={(e) => setAgreementDraft((d) => ({ ...d, dueDate: e.target.value }))}
+        />
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[0.78em] text-muted-foreground">
+          Con cliente + proyecto se crea la tarea al guardar; sin proyecto queda en ámbar.
+        </p>
+        <Button size="sm" onClick={onCaptureAgreement} disabled={board.addAgreement.isPending}>
+          <Plus className="h-3.5 w-3.5 mr-1" />
+          Guardar acuerdo (Enter)
+        </Button>
+      </div>
+    </div>
+  ) : null;
 
-        {/* Acuerdos de hoy */}
-        <section className="space-y-3">
-          <h2 className="font-semibold">Acuerdos de hoy</h2>
-          {liveEditable && (
-            <>
-          <div className="grid gap-2 md:grid-cols-6">
-            <Input
-              className="md:col-span-2"
-              placeholder="Texto del acuerdo"
-              value={agreementDraft.text}
-              onChange={(e) => setAgreementDraft((d) => ({ ...d, text: e.target.value }))}
-              onKeyDown={(e) => e.key === "Enter" && onCaptureAgreement()}
-            />
-            <Select
-              value={agreementDraft.entityKey || undefined}
-              onValueChange={(key) => {
-                const ent = entities.find((e) => e.key === key);
-                setAgreementDraft((d) => ({
-                  ...d,
-                  entityKey: key,
-                  clientId: ent?.client_id ?? d.clientId,
-                }));
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Entidad" />
-              </SelectTrigger>
-              <SelectContent>
-                {entities.map((e) => (
-                  <SelectItem key={e.key} value={e.key}>
-                    {e.label}
+  const renderAgreementExtra = (a: (typeof agreements)[number]) => {
+    const ownerName = a.owner_user_id
+      ? profiles.find((p) => p.user_id === a.owner_user_id)?.full_name
+      : null;
+    return (
+      <>
+        {ownerName && !a.owner_name && <span>{ownerName}</span>}
+        {a.task_id ? (
+          <Link
+            to={`/tareas?task=${a.task_id}`}
+            className="font-sans text-primary hover:underline"
+          >
+            Ver tarea
+          </Link>
+        ) : a.status === "confirmed" && !a.project_id ? (
+          <span className="text-amber-700 dark:text-amber-400">sin proyecto</span>
+        ) : (
+          <span>sin tarea</span>
+        )}
+        {liveEditable && a.status === "confirmed" && !a.task_id && user && (
+          <Select
+            onValueChange={(pid) =>
+              board.setProject.mutate({
+                agreement: a,
+                projectId: pid,
+                organizationId: orgId,
+                actorUserId: user.id,
+              })
+            }
+          >
+            <SelectTrigger className="h-7 w-auto min-w-[14rem] font-sans text-xs">
+              <SelectValue placeholder="Elegir proyecto → crear tarea" />
+            </SelectTrigger>
+            <SelectContent>
+              {projects
+                .filter((p) => p.client_id === a.client_id)
+                .map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name} · {p.area}
                   </SelectItem>
                 ))}
-              </SelectContent>
-            </Select>
-            <Select
-              value={agreementDraft.projectId || undefined}
-              onValueChange={(v) => setAgreementDraft((d) => ({ ...d, projectId: v }))}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Proyecto" />
-              </SelectTrigger>
-              <SelectContent>
-                {projects
-                  .filter((p) => !agreementDraft.clientId || p.client_id === agreementDraft.clientId)
-                  .map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name} · {p.area}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-            <Select
-              value={agreementDraft.ownerUserId || undefined}
-              onValueChange={(v) => setAgreementDraft((d) => ({ ...d, ownerUserId: v }))}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Responsable" />
-              </SelectTrigger>
-              <SelectContent>
-                {profiles.map((p) => (
-                  <SelectItem key={p.user_id} value={p.user_id}>
-                    {p.full_name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Input
-              type="date"
-              value={agreementDraft.dueDate}
-              onChange={(e) => setAgreementDraft((d) => ({ ...d, dueDate: e.target.value }))}
-            />
-          </div>
-          <Button size="sm" onClick={onCaptureAgreement} disabled={board.addAgreement.isPending}>
-            Guardar acuerdo (Enter)
-          </Button>
-            </>
-          )}
-          <ul className="space-y-2">
-            {agreements.map((a) => (
-              <li
-                key={a.id}
-                className={cn(
-                  "rounded-md border p-3 text-sm",
-                  a.status === "confirmed" && !a.project_id && "border-amber-400 bg-amber-50/50",
-                )}
-              >
-                <div className="font-medium">{a.text}</div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  {a.entity_key
-                    ? `${entities.find((e) => e.key === a.entity_key)?.label ?? a.entity_key} · `
-                    : ""}
-                  {a.status} · {a.project_id ? "con proyecto" : "ámbar (sin proyecto)"} ·{" "}
-                  {a.task_id ? (
-                    <Link to={`/tareas?task=${a.task_id}`} className="text-sky-700 dark:text-sky-400 hover:underline">
-                      ver tarea
-                    </Link>
-                  ) : (
-                    "sin tarea"
-                  )}
-                </div>
-                {liveEditable && a.status === "confirmed" && !a.task_id && user && (
-                  <Select
-                    onValueChange={(pid) =>
-                      board.setProject.mutate({
-                        agreement: a,
-                        projectId: pid,
-                        organizationId: orgId,
-                        actorUserId: user.id,
-                      })
-                    }
-                  >
-                    <SelectTrigger className="mt-2 max-w-xs">
-                      <SelectValue placeholder="Elegir proyecto → crear tarea" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {projects
-                        .filter((p) => p.client_id === a.client_id)
-                        .map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.name} · {p.area}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        {/* Resuelto / Nuevo — misma estructura que la plantilla DOCX */}
-        {resolved.length > 0 && (
-          <section>
-            <h2 className="font-semibold mb-2">Lo que se cerró</h2>
-            {resolved.map((t) => (
-              <TopicRow
-                key={t.id}
-                topic={t}
-                projection={projection}
-                readOnly={!liveEditable}
-                onPatch={schedulePatch}
-                onOpenHistory={() => setHistoryTopic({ id: t.id, title: t.title })}
-              />
-            ))}
-          </section>
+            </SelectContent>
+          </Select>
         )}
-        {news.length > 0 && (
-          <section>
-            <h2 className="font-semibold mb-2">Focos / nuevo</h2>
-            {news.map((t) => (
-              <TopicRow
-                key={t.id}
-                topic={t}
-                projection={projection}
-                readOnly={!liveEditable}
-                onPatch={schedulePatch}
-                onOpenHistory={() => setHistoryTopic({ id: t.id, title: t.title })}
-              />
-            ))}
-          </section>
-        )}
+      </>
+    );
+  };
 
-        {/* En curso */}
-        <section>
-          <h2 className="font-semibold mb-2">En curso</h2>
-          {openSorted.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Sin temas abiertos en este filtro.</p>
+  const footer = projection ? null : (
+    <>
+      <section className="grid gap-4 md:grid-cols-2">
+        <div className="rounded-md border border-border/80 bg-card px-3.5 py-2.5">
+          <h3 className="mb-1.5 text-[0.85em] font-semibold uppercase tracking-wide text-muted-foreground">
+            Vencimientos (compliance)
+          </h3>
+          {board.data.deadlines.length === 0 ? (
+            <p className="text-xs text-muted-foreground">Sin vencimientos próximos.</p>
           ) : (
-            openSorted.map((t) => (
-              <TopicRow
-                key={t.id}
-                topic={t}
-                projection={projection}
-                readOnly={!liveEditable}
-                onPatch={schedulePatch}
-                onOpenHistory={() => setHistoryTopic({ id: t.id, title: t.title })}
-              />
-            ))
-          )}
-        </section>
-
-        {/* Decisiones / para acordar */}
-        <section>
-          <h2 className="font-semibold mb-2">Para acordar hoy</h2>
-          {expectedNext.length > 0 && (
-            <ul className="mb-3 space-y-2">
-              {expectedNext.map((e) => (
-                <li
-                  key={e.id}
-                  className={cn(
-                    "flex items-start gap-3 rounded-md border border-border/60 px-3 py-2 text-sm",
-                    e.done && "opacity-60",
-                  )}
-                >
-                  <Checkbox
-                    checked={!!e.done}
-                    disabled={!liveEditable}
-                    onCheckedChange={(c) =>
-                      board.toggleExpectedNext.mutate(
-                        { id: e.id, done: !!c },
-                        { onError: (err: Error) => toast.error(err.message) },
-                      )
-                    }
-                    className="mt-0.5"
-                  />
-                  <span className={cn(e.done && "line-through text-muted-foreground")}>{e.text}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-          <h3 className="text-sm font-medium mb-2 text-muted-foreground">Decisiones</h3>
-          {decisions.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Ninguna.</p>
-          ) : (
-            decisions.map((d, i) => (
-              <div key={d.id} className="border rounded-md p-3 mb-2 space-y-2">
-                <div className="text-sm font-medium">
-                  {i + 1}. {d.text}{" "}
-                  <Badge variant="outline">{d.status}</Badge>
-                </div>
-                {liveEditable && d.status === "pending" && user && (
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Qué se decidió"
-                      id={`dec-${d.id}`}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          const v = (e.target as HTMLInputElement).value;
-                          if (!v.trim()) return;
-                          board.markDecision.mutate({
-                            decisionId: d.id,
-                            resolution: v.trim(),
-                            organizationId: orgId,
-                            actorUserId: user.id,
-                          });
-                        }
-                      }}
-                    />
-                  </div>
-                )}
-                {d.resolution && <p className="text-xs text-muted-foreground">{d.resolution}</p>}
-              </div>
-            ))
-          )}
-        </section>
-
-        {/* Próxima — cierre de plantilla; los puntos de hoy viven en «Para acordar» */}
-        <section>
-          <h2 className="font-semibold mb-2">Próxima sesión</h2>
-          <p className="text-sm text-muted-foreground">
-            Lo marcado en «Para acordar hoy» y los focos abiertos alimentan la siguiente junta al
-            preparar el tablero.
-          </p>
-        </section>
-
-        {/* Contexto: vencimientos / tareas */}
-        <section className="grid md:grid-cols-2 gap-4">
-          <div>
-            <h3 className="text-sm font-semibold mb-1">Vencimientos (compliance)</h3>
-            <ul className="text-xs space-y-1 max-h-40 overflow-auto">
+            <ul className="max-h-40 space-y-1 overflow-auto text-xs">
               {board.data.deadlines.slice(0, 40).map((t) => (
                 <li key={t.id}>
                   {t.title} {t.due_date ? `· ${t.due_date}` : ""}
                 </li>
               ))}
             </ul>
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold mb-1">Tareas abiertas</h3>
-            <ul className="text-xs space-y-1 max-h-40 overflow-auto">
+          )}
+        </div>
+        <div className="rounded-md border border-border/80 bg-card px-3.5 py-2.5">
+          <h3 className="mb-1.5 text-[0.85em] font-semibold uppercase tracking-wide text-muted-foreground">
+            Tareas abiertas
+          </h3>
+          {board.data.plainTasks.length === 0 ? (
+            <p className="text-xs text-muted-foreground">Sin tareas abiertas.</p>
+          ) : (
+            <ul className="max-h-40 space-y-1 overflow-auto text-xs">
               {board.data.plainTasks.slice(0, 40).map((t) => (
                 <li key={t.id}>
-                  <Link
-                    to={`/tareas?task=${t.id}`}
-                    className="text-sky-700 dark:text-sky-400 hover:underline"
-                  >
+                  <Link to={`/tareas?task=${t.id}`} className="text-primary hover:underline">
                     {t.title}
                   </Link>
                   <span className="text-muted-foreground"> · {t.status}</span>
                 </li>
               ))}
             </ul>
-            <p className="text-[11px] text-muted-foreground mt-1">
-              Abre la tarea para comentar o reasignar. Los acuerdos de arriba crean tareas por
-              empresa al elegir entidad y proyecto.
-            </p>
-          </div>
-        </section>
+          )}
+        </div>
+      </section>
+      {series && user && (
+        <MtgArchiveSection
+          seriesId={series.id}
+          organizationId={orgId}
+          actorUserId={user.id}
+          meeting={meeting}
+          entities={entities}
+          liveEditable={liveEditable}
+          onOpenHistory={(t) => setHistoryTopic(t)}
+          onReopened={() => board.invalidate()}
+        />
+      )}
+    </>
+  );
 
-        {series && user && (
-          <MtgArchiveSection
-            seriesId={series.id}
-            organizationId={orgId}
-            actorUserId={user.id}
-            meeting={meeting}
-            entities={entities}
-            liveEditable={liveEditable}
-            onOpenHistory={(t) => setHistoryTopic(t)}
-            onReopened={() => board.invalidate()}
-          />
-        )}
-      </div>
+  return (
+    <AppLayout chrome={projection ? "none" : "default"}>
+      <MtgPresentationTemplate
+        title={series?.title ?? meeting.title ?? "Junta"}
+        dateLabel={formatDateMX(meeting.scheduled_at)}
+        topics={topicsFiltered}
+        entities={entities}
+        expectedNext={expectedNext}
+        decisions={decisions}
+        agreements={agreements}
+        liveEditable={liveEditable}
+        projection={projection}
+        onPatchUpdate={schedulePatch}
+        onToggleExpected={(id, done) =>
+          board.toggleExpectedNext.mutate(
+            { id, done },
+            { onError: (e: Error) => toast.error(e.message) },
+          )
+        }
+        onOpenHistory={(t) => setHistoryTopic(t)}
+        headerLeading={
+          projection ? null : (
+            <Button asChild variant="ghost" size="icon" className="mt-0.5 h-8 w-8 shrink-0">
+              <Link to="/juntas" aria-label="Volver a Juntas">
+                <ArrowLeft className="h-4 w-4" />
+              </Link>
+            </Button>
+          )
+        }
+        meta={meta}
+        toolbar={toolbar}
+        filters={filters}
+        capture={capture}
+        agreementComposer={agreementComposer}
+        renderAgreementExtra={renderAgreementExtra}
+        onResolveDecision={(decisionId, resolution) => {
+          if (!user) return;
+          board.markDecision.mutate(
+            { decisionId, resolution, organizationId: orgId, actorUserId: user.id },
+            { onError: (e: Error) => toast.error(e.message) },
+          );
+        }}
+        footer={footer}
+      />
 
       <MtgTopicHistoryDrawer
         topicId={historyTopic?.id ?? null}
@@ -1057,138 +822,9 @@ export default function JuntaDetalle() {
           actorUserId={user.id}
           meetingId={meeting.id}
           seriesId={series.id}
-          onDone={() => {
-            board.invalidate();
-            setProjection(true);
-          }}
+          onDone={() => board.invalidate()}
         />
       )}
     </AppLayout>
-  );
-}
-
-function TopicRow({
-  topic,
-  projection,
-  readOnly,
-  onPatch,
-  onOpenHistory,
-}: {
-  topic: import("@/hooks/useMtgBoard").BoardTopicRow;
-  projection: boolean;
-  readOnly: boolean;
-  onPatch: (updateId: string, patch: Record<string, unknown>) => void;
-  onOpenHistory: () => void;
-}) {
-  const [openCtx, setOpenCtx] = useState(false);
-  const u = topic.update;
-  if (!u) return null;
-  const overdue =
-    topic.due_date &&
-    u.movement !== "resolved" &&
-    new Date(topic.due_date) < new Date(new Date().toDateString());
-
-  return (
-    <div className={cn("border rounded-md p-3 mb-2 space-y-2", MOVEMENT[u.movement].color.replace(/text-\S+/g, ""))}>
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0 flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            className="font-medium text-sm text-left hover:underline"
-            onClick={onOpenHistory}
-          >
-            {topic.title}
-          </button>
-          {topic.entity_key && (
-            <Badge variant="secondary" className="text-[10px]">
-              {topic.entity_key}
-            </Badge>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {readOnly ? (
-            <Badge variant="outline" className={MOVEMENT[u.movement].color}>
-              {MOVEMENT[u.movement].label}
-            </Badge>
-          ) : (
-            <Select
-              value={u.movement}
-              onValueChange={(v) => onPatch(u.id, { movement: v, origin: "edited_live" })}
-            >
-              <SelectTrigger className="w-[180px] h-8">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(Object.keys(MOVEMENT) as MtgMovement[]).map((m) => (
-                  <SelectItem key={m} value={m}>
-                    {MOVEMENT[m].label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-          {!readOnly && (
-            <label className="flex items-center gap-1 text-xs">
-              <Checkbox
-                checked={u.reviewed}
-                onCheckedChange={(c) =>
-                  onPatch(u.id, {
-                    reviewed: !!c,
-                    reviewed_at: c ? new Date().toISOString() : null,
-                  })
-                }
-              />
-              Revisado
-            </label>
-          )}
-        </div>
-      </div>
-      <div className={cn("grid gap-2", projection ? "grid-cols-1" : "md:grid-cols-2")}>
-        <Textarea
-          className="text-sm min-h-[60px]"
-          placeholder="Avance"
-          defaultValue={u.progress_since_last ?? ""}
-          readOnly={readOnly}
-          onChange={(e) => {
-            if (readOnly) return;
-            onPatch(u.id, { progress_since_last: e.target.value, origin: "edited_live" });
-          }}
-        />
-        <Textarea
-          className="text-sm min-h-[60px]"
-          placeholder="Sigue"
-          defaultValue={u.next_step ?? ""}
-          readOnly={readOnly}
-          onChange={(e) => {
-            if (readOnly) return;
-            onPatch(u.id, { next_step: e.target.value, origin: "edited_live" });
-          }}
-        />
-      </div>
-      <div className="text-xs text-muted-foreground flex flex-wrap gap-3">
-        <span>{topic.owner_name ?? "—"}</span>
-        <span className={overdue ? "text-red-600 font-medium" : ""}>
-          {topic.due_date ? formatDateMX(topic.due_date) : "sin fecha"}
-        </span>
-        <button type="button" className="underline" onClick={() => setOpenCtx((o) => !o)}>
-          Contexto y notas
-        </button>
-      </div>
-      {openCtx && (
-        <div className="text-xs space-y-1 bg-background/60 p-2 rounded">
-          {topic.context && <p><strong>Contexto:</strong> {topic.context}</p>}
-          {topic.if_asked && <p><strong>Si preguntan:</strong> {topic.if_asked}</p>}
-          {topic.source && <p><strong>Fuente:</strong> {topic.source}</p>}
-          <Textarea
-            className="text-xs mt-1"
-            placeholder={readOnly ? "Notas posteriores" : "Notas de sesión"}
-            defaultValue={u.session_notes ?? ""}
-            onChange={(e) =>
-              onPatch(u.id, { session_notes: e.target.value, origin: "edited_live" })
-            }
-          />
-        </div>
-      )}
-    </div>
   );
 }

@@ -4,7 +4,7 @@
  * Muestra barra de progreso de la revisión (subida → transcripción).
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -167,6 +167,8 @@ export function MtgRecordingControls(props: {
   size?: "sm" | "default";
   /** Tras guardar, lanzar STT OpenAI (default true). */
   autoTranscribe?: boolean;
+  /** Acciones extra en la misma fila (p. ej. subir transcripción). */
+  extraActions?: ReactNode;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const mediaRef = useRef<MediaRecorder | null>(null);
@@ -641,6 +643,7 @@ export function MtgRecordingControls(props: {
             </Button>
           </>
         )}
+        {props.extraActions}
         {!props.meeting.recording_path &&
           !pendingLocal &&
           (props.meeting.transcript_status === "failed" ||
