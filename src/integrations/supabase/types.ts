@@ -5575,6 +5575,15 @@ export type Database = {
         Args: { p_lead_ids: string[]; p_owner_id: string }
         Returns: Json
       }
+      buscar_global: {
+        Args: { termino: string; limite?: number; incluir_leads?: boolean }
+        Returns: {
+          entidad: string
+          id: string
+          titulo: string
+          subtitulo: string
+        }[]
+      }
       can_edit_org_permission_settings: {
         Args: { _user_id: string }
         Returns: boolean
