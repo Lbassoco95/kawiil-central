@@ -201,11 +201,37 @@ export function sumSavioInvoicedInRange(
   return { sum, count };
 }
 
+/** Nombres de campo de cursor "siguiente" que Savio podría usar (varias convenciones). */
+const SAVIO_CURSOR_KEYS = ["nextCursor", "next_cursor", "nextPageCursor", "next_page_cursor", "cursor"];
+/** Sub-objetos donde suele venir anidada la paginación. */
+const SAVIO_PAGING_CONTAINERS = ["paging", "pagination", "meta", "page_info", "pageInfo"];
+
+function readCursorFrom(obj: Record<string, unknown>): string | null {
+  for (const k of SAVIO_CURSOR_KEYS) {
+    const v = obj[k];
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+  return null;
+}
+
+/**
+ * Extrae el cursor de la siguiente página de una respuesta Savio.
+ * Reconoce varias convenciones de nombre (camelCase/snake_case) y contenedores
+ * anidados (paging/pagination/meta). Aditivo: si no hay cursor reconocible
+ * devuelve null y la paginación se detiene, como antes.
+ */
 export function extractSavioNextCursor(payload: unknown): string | null {
   if (!payload || typeof payload !== "object") return null;
-  const c = (payload as { nextCursor?: unknown }).nextCursor;
-  if (c === null || c === undefined) return null;
-  if (typeof c === "string" && c.trim()) return c.trim();
+  const root = payload as Record<string, unknown>;
+  const direct = readCursorFrom(root);
+  if (direct) return direct;
+  for (const container of SAVIO_PAGING_CONTAINERS) {
+    const nested = root[container];
+    if (nested && typeof nested === "object") {
+      const c = readCursorFrom(nested as Record<string, unknown>);
+      if (c) return c;
+    }
+  }
   return null;
 }
 

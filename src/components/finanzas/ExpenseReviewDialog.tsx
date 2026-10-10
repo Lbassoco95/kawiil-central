@@ -18,6 +18,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
+import { useGroupCompanies } from "@/hooks/useGroupCompanies";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { Check, X, CreditCard, Eye, Paperclip, Download, Receipt, CalendarClock, RefreshCcw } from "lucide-react";
@@ -60,6 +61,7 @@ export function ExpenseReviewDialog({ expense, open, onOpenChange, canManage }: 
   const updateStatus = useUpdateExpenseStatus();
   const markReimbursement = useMarkReimbursementDone();
   const { data: users = [] } = useOrgUsers();
+  const { data: groupCompanies = [] } = useGroupCompanies(true);
   const attachments = expense ? parseExpenseAttachments(expense) : [];
 
   // Precarga la fecha de pago si el gasto ya la tenía.
@@ -211,7 +213,12 @@ export function ExpenseReviewDialog({ expense, open, onOpenChange, canManage }: 
                 <p className="flex items-center gap-1.5 text-sm">
                   <RefreshCcw className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" />
                   <span className="text-muted-foreground">Reembolso:</span>{" "}
-                  <span className="font-medium">{REIMBURSEMENT_LABELS[expense.reimbursement_type]}</span>
+                  <span className="font-medium">
+                    {REIMBURSEMENT_LABELS[expense.reimbursement_type]}
+                    {expense.reimbursement_type === "cobrar_empresa_grupo" && expense.group_company_id
+                      ? ` — ${groupCompanies.find((g) => g.id === expense.group_company_id)?.name ?? "empresa del grupo"}`
+                      : ""}
+                  </span>
                   {expense.reimbursement_status && (
                     <Badge className="ml-1 border-0 bg-white/70 text-[10px] font-semibold text-sky-700 dark:bg-sky-900/40 dark:text-sky-300">
                       {expense.reimbursement_status === "completado" ? "Completado" : "Pendiente"}
@@ -310,9 +317,11 @@ export function ExpenseReviewDialog({ expense, open, onOpenChange, canManage }: 
             <p className="text-[11px] text-muted-foreground">
               {expense.reimbursement_type === "cobrar_cliente"
                 ? "Este gasto se cobra al cliente. "
-                : expense.reimbursement_type === "reembolsar_trabajador"
-                  ? "Este gasto se reembolsa al trabajador. "
-                  : "Gasto a cuenta de Kawiil. "}
+                : expense.reimbursement_type === "cobrar_empresa_grupo"
+                  ? "Este gasto se cobra a una empresa del grupo. "
+                  : expense.reimbursement_type === "reembolsar_trabajador"
+                    ? "Este gasto se reembolsa al trabajador. "
+                    : "Gasto a cuenta de Kawiil. "}
               Al aprobar se crea una tarea de pago para el responsable de pagos configurado
               en el panel de administración.
             </p>
@@ -356,7 +365,9 @@ export function ExpenseReviewDialog({ expense, open, onOpenChange, canManage }: 
                 <RefreshCcw className="h-3.5 w-3.5 mr-1" />
                 {expense.reimbursement_type === "cobrar_cliente"
                   ? "Marcar cobrado al cliente"
-                  : "Marcar reembolsado"}
+                  : expense.reimbursement_type === "cobrar_empresa_grupo"
+                    ? "Marcar cobrado a la empresa"
+                    : "Marcar reembolsado"}
               </Button>
             )}
           </div>

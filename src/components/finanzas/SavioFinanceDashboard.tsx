@@ -6,7 +6,9 @@ import {
   Banknote,
   ExternalLink,
   FileText,
+  DatabaseZap,
   LayoutDashboard,
+  Link2,
   Loader2,
   Plug,
   Radio,
@@ -51,6 +53,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSavioWebhookEvents, type SavioFinanceEvent } from "@/hooks/useSavioWebhookEvents";
 import { useSavioFinanceApiData } from "@/hooks/useSavioFinanceApi";
+import { useSavioSyncRuns, useTriggerSavioSync } from "@/hooks/useSavioSync";
+import { SavioLinkWizard } from "@/components/finanzas/SavioLinkWizard";
 import {
   extractSavioAmount,
   extractSavioSummary,
@@ -124,7 +128,16 @@ export function SavioFinanceDashboard() {
     refetchAll,
     reactQueryError,
     invoiceQueryActive,
+    invoicesTruncated,
   } = useSavioFinanceApiData({ invoiceCustomerId: invoiceCustomerFilter });
+
+  // Tope de render por seguridad de rendimiento (muy por encima del volumen real).
+  const MAX_RENDER_ROWS = 1000;
+
+  const triggerSync = useTriggerSavioSync();
+  const { data: syncRuns = [] } = useSavioSyncRuns();
+  const lastSyncAt = syncRuns[0]?.created_at ?? null;
+  const [linkWizardOpen, setLinkWizardOpen] = useState(false);
 
   const { data: kawiilClients = [] } = useClients();
   const savioOnlyRows = useMemo(
@@ -312,6 +325,37 @@ export function SavioFinanceDashboard() {
           </Button>
           <Button
             type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 text-xs"
+            onClick={() => triggerSync.mutate(undefined)}
+            disabled={triggerSync.isPending}
+            title={
+              lastSyncAt
+                ? `Última sincronización: ${format(new Date(lastSyncAt), "dd MMM yyyy HH:mm", { locale: es })}`
+                : "Sincroniza Savio a las tablas locales (facturas, pagos, clientes)"
+            }
+          >
+            {triggerSync.isPending ? (
+              <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+            ) : (
+              <DatabaseZap className="h-3.5 w-3.5 mr-1" />
+            )}
+            {triggerSync.isPending ? "Sincronizando…" : "Sincronizar Savio"}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 text-xs"
+            onClick={() => setLinkWizardOpen(true)}
+            title="Empareja clientes locales con clientes de Savio"
+          >
+            <Link2 className="h-3.5 w-3.5 mr-1" />
+            Enlazar clientes
+          </Button>
+          <Button
+            type="button"
             variant="outline"
             size="sm"
             className="h-8 text-xs"
@@ -440,6 +484,8 @@ export function SavioFinanceDashboard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <SavioLinkWizard open={linkWizardOpen} onOpenChange={setLinkWizardOpen} />
 
       <Tabs value={section} onValueChange={(v) => setSection(v as "resumen" | "clientes" | "webhooks")} className="space-y-4">
         <div className="surface-toolbar inline-flex w-full max-w-full p-2 md:max-w-2xl">
@@ -611,7 +657,14 @@ export function SavioFinanceDashboard() {
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="glass-card overflow-hidden p-0 border-border/50 rounded-xl">
               <div className="px-3 py-2 border-b flex flex-wrap items-center justify-between gap-2 text-xs font-medium">
-                <span>Facturas y cargos</span>
+                <span>
+                  Facturas y cargos
+                  {invoicesTruncated ? (
+                    <span className="ml-2 font-normal text-amber-600 dark:text-amber-400 text-[10px]">
+                      · se alcanzó el máximo de páginas; hay más facturas en Savio (ajusta VITE_SAVIO_FINANCE_PORTFOLIO_MAX_PAGES)
+                    </span>
+                  ) : null}
+                </span>
                 {savioPanelUrl ? (
                   <a href={savioPanelUrl} target="_blank" rel="noopener noreferrer" className="font-normal text-primary underline text-[11px]">
                     Abrir en Savio
@@ -637,7 +690,7 @@ export function SavioFinanceDashboard() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {invoiceRows.slice(0, 80).map((row) => (
+                      {invoiceRows.slice(0, MAX_RENDER_ROWS).map((row) => (
                         <TableRow
                           key={row.key}
                           className="cursor-pointer hover:bg-muted/50"
@@ -702,7 +755,7 @@ export function SavioFinanceDashboard() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {paymentRows.slice(0, 80).map((row) => (
+                      {paymentRows.slice(0, MAX_RENDER_ROWS).map((row) => (
                         <TableRow
                           key={row.key}
                           className="cursor-pointer hover:bg-muted/50"
