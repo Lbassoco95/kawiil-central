@@ -1,4 +1,14 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  ADMIN_CONSENT_REQUIRED,
+  ADMIN_CONSENT_STATE,
+  escapeHtml,
+  isAdminConsentGranted,
+  isAdminConsentRequired,
+  jsonForScript,
+  normalizeTenant,
+  readMicrosoftCallbackError,
+} from "../_shared/microsoftConsent.ts";
 
 const postMessageOrigin = "*";
 
@@ -17,9 +27,23 @@ function renderPage(status: "success" | "error", message: string, detail?: strin
   .detail { color: #94a3b8; font-size: 14px; margin-top: 8px; } .hint { margin-top: 24px; color: #64748b; font-size: 13px; }
   .brand { margin-top: 32px; font-size: 12px; color: #475569; letter-spacing: 1px; text-transform: uppercase; }
 </style></head>
-<body><div class="card"><div class="icon">${icon}</div><h1>${message}</h1>${detail ? `<p class="detail">${detail}</p>` : ""}
+<body><div class="card"><div class="icon">${icon}</div><h1>${escapeHtml(message)}</h1>${detail ? `<p class="detail">${escapeHtml(detail)}</p>` : ""}
 <p class="hint">Esta ventana se cerrará automáticamente...</p><p class="brand">Kawiil Central</p></div>
 <script>setTimeout(function(){window.close();},3000);</script></body></html>`;
+}
+
+function htmlResponse(
+  status: "success" | "error",
+  message: string,
+  detail: string | undefined,
+  postMessage: Record<string, unknown> | null,
+  httpStatus = 200,
+) {
+  const script = postMessage
+    ? `<script>window.opener?.postMessage(${jsonForScript(postMessage)},${jsonForScript(postMessageOrigin)});</script>`
+    : "";
+  const html = renderPage(status, message, detail).replace("<body>", `<body>${script}`);
+  return new Response(html, { status: httpStatus, headers: { "Content-Type": "text/html; charset=utf-8" } });
 }
 
 Deno.serve(async (req) => {
@@ -27,16 +51,50 @@ Deno.serve(async (req) => {
     const url = new URL(req.url);
     const code = url.searchParams.get("code");
     const userId = url.searchParams.get("state");
-    const error = url.searchParams.get("error");
+    const oauthError = readMicrosoftCallbackError(url.searchParams);
+    const configuredTenant = normalizeTenant(Deno.env.get("MICROSOFT_LINKED_TENANT_ID"));
+    const tenant = normalizeTenant(url.searchParams.get("tenant")) || configuredTenant;
 
-    if (error) {
-      return new Response(
-        `<html><head></head><body><script>window.opener?.postMessage({type:'outlook-auth-error',error:'${error}'},'${postMessageOrigin}');</script>${renderPage("error", "Error de conexión", error)}</body></html>`,
-        { headers: { "Content-Type": "text/html" } },
+    if (userId === ADMIN_CONSENT_STATE) {
+      if (isAdminConsentGranted(url.searchParams)) {
+        return htmlResponse(
+          "success",
+          "Aprobado, ya puedes conectar",
+          "El administrador aprobó Kawiil para tu organización. Vuelve a Kawiil Central y pulsa Conectar Outlook.",
+          { type: "outlook-admin-consent-success", tenant },
+        );
+      }
+      console.warn("Outlook admin consent not granted:", oauthError);
+      return htmlResponse(
+        "error",
+        "No se completó la aprobación",
+        "El administrador no aprobó Kawiil o la aprobación se canceló. Puede volver a abrir el enlace para intentarlo de nuevo.",
+        null,
+      );
+    }
+
+    if (oauthError.error) {
+      console.warn("Outlook OAuth error:", oauthError);
+      if (isAdminConsentRequired(oauthError)) {
+        return htmlResponse(
+          "error",
+          "Tu organización requiere la aprobación de un administrador",
+          "Vuelve a Kawiil Central para obtener el enlace que debes enviar a tu administrador de Microsoft 365.",
+          { type: "outlook-auth-error", error: ADMIN_CONSENT_REQUIRED, tenant },
+        );
+      }
+      const detail = oauthError.error === "access_denied"
+        ? "Cancelaste el permiso en Microsoft. Puedes volver a intentarlo desde Kawiil."
+        : oauthError.error;
+      return htmlResponse(
+        "error",
+        "Error de conexión",
+        detail,
+        { type: "outlook-auth-error", error: oauthError.error },
       );
     }
     if (!code || !userId) {
-      return new Response(renderPage("error", "Solicitud inválida", "Faltan parámetros requeridos."), { status: 400, headers: { "Content-Type": "text/html" } });
+      return htmlResponse("error", "Solicitud inválida", "Faltan parámetros requeridos.", null, 400);
     }
 
     const clientId = Deno.env.get("MICROSOFT_CLIENT_ID")!.trim();
@@ -58,9 +116,11 @@ Deno.serve(async (req) => {
     const tokenData = await tokenResponse.json();
     if (!tokenResponse.ok) {
       console.error("Outlook token exchange failed:", tokenData);
-      return new Response(
-        `<html><head></head><body><script>window.opener?.postMessage({type:'outlook-auth-error',error:'token_exchange_failed'},'${postMessageOrigin}');</script>${renderPage("error", "Error al obtener token", "No se pudo completar la autenticación con Microsoft.")}</body></html>`,
-        { headers: { "Content-Type": "text/html" } },
+      return htmlResponse(
+        "error",
+        "Error al obtener token",
+        "No se pudo completar la autenticación con Microsoft.",
+        { type: "outlook-auth-error", error: "token_exchange_failed" },
       );
     }
 
@@ -105,18 +165,22 @@ Deno.serve(async (req) => {
 
     if (dbError) {
       console.error("DB error:", dbError);
-      return new Response(
-        `<html><head></head><body><script>window.opener?.postMessage({type:'outlook-auth-error',error:'db_error'},'${postMessageOrigin}');</script>${renderPage("error", "Error al guardar", "No se pudieron guardar las credenciales.")}</body></html>`,
-        { headers: { "Content-Type": "text/html" } },
+      return htmlResponse(
+        "error",
+        "Error al guardar",
+        "No se pudieron guardar las credenciales.",
+        { type: "outlook-auth-error", error: "db_error" },
       );
     }
 
-    return new Response(
-      `<html><head></head><body><script>window.opener?.postMessage({type:'outlook-auth-success'},'${postMessageOrigin}');</script>${renderPage("success", "¡Outlook conectado!", "Tu cuenta se vinculó correctamente con Kawiil.")}</body></html>`,
-      { headers: { "Content-Type": "text/html" } },
+    return htmlResponse(
+      "success",
+      "¡Outlook conectado!",
+      "Tu cuenta se vinculó correctamente con Kawiil.",
+      { type: "outlook-auth-success" },
     );
   } catch (err) {
     console.error("Outlook callback error:", err);
-    return new Response(renderPage("error", "Error interno", "Ocurrió un error inesperado. Intenta de nuevo."), { status: 500, headers: { "Content-Type": "text/html" } });
+    return htmlResponse("error", "Error interno", "Ocurrió un error inesperado. Intenta de nuevo.", null, 500);
   }
 });

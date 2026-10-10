@@ -1,4 +1,10 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  buildAdminConsentUrl,
+  normalizeTenant,
+  OUTLOOK_DELEGATED_SCOPES,
+  tenantFromEmail,
+} from "../_shared/microsoftConsent.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -35,11 +41,18 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Microsoft credentials not configured" }), { status: 500, headers: corsHeaders });
     }
 
-    const scopes = [
-      "openid", "profile", "email", "offline_access",
-      "Calendars.ReadWrite", "User.Read",
-      "Mail.Read", "Mail.ReadWrite", "Mail.Send", "MailboxSettings.ReadWrite",
-    ].join(" ");
+    const body = await req.json().catch(() => ({})) as { action?: unknown; email?: unknown; tenant?: unknown };
+    if (body.action === "admin-consent-url") {
+      const tenant = tenantFromEmail(typeof body.email === "string" ? body.email : null) ||
+        normalizeTenant(typeof body.tenant === "string" ? body.tenant : null) ||
+        "organizations";
+      const url = buildAdminConsentUrl({ tenant, clientId, redirectUri });
+      return new Response(JSON.stringify({ url, tenant }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const scopes = OUTLOOK_DELEGATED_SCOPES.join(" ");
 
     // prompt=consent (no select_account): fuerza a Microsoft a pedir el consentimiento
     // de los scopes NUEVOS (Mail.*). Con select_account, una cuenta ya consentida recibe
