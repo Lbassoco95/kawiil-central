@@ -24,6 +24,28 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Autenticación: service role (llamadas entre funciones) o sesión de usuario válida.
+  const _authHeader = req.headers.get("Authorization") || "";
+  const _bearer = _authHeader.replace(/^Bearer\s+/i, "").trim();
+  if (!_bearer) {
+    return new Response(JSON.stringify({ error: "No autorizado" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  if (_bearer !== Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")) {
+    const _caller = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
+      global: { headers: { Authorization: _authHeader } },
+    });
+    const { data: { user: _user }, error: _authErr } = await _caller.auth.getUser();
+    if (_authErr || !_user) {
+      return new Response(JSON.stringify({ error: "No autorizado" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }
+
   const SLACK_BOT_TOKEN = Deno.env.get("SLACK_BOT_TOKEN");
   if (!SLACK_BOT_TOKEN) {
     return new Response(

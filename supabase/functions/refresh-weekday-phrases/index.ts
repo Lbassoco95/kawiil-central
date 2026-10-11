@@ -79,7 +79,7 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
     const cronOk = !!cronSecret && headerSecret === cronSecret;
-    const bearerOk = !!bearer && (bearer === serviceRoleKey || bearer.length > 16);
+    const bearerOk = !!bearer && !!serviceRoleKey && bearer === serviceRoleKey;
 
     if (!cronOk && !bearerOk) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {

@@ -56,7 +56,7 @@ project_id = "qppfampapbxdgednkofc"
   [functions.dropbox-token-exchange]
     verify_jwt = false
   [functions.backup-data]
-    verify_jwt = false
+    verify_jwt = true
   [functions.process-document]
     verify_jwt = false
   [functions.generate-phrase]
