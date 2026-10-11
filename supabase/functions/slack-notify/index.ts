@@ -24,7 +24,6 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  {
   // Autenticación: service role (llamadas entre funciones) o sesión de usuario válida.
   const _authHeader = req.headers.get("Authorization") || "";
   const _bearer = _authHeader.replace(/^Bearer\s+/i, "").trim();
@@ -45,7 +44,6 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-  }
   }
 
   const SLACK_BOT_TOKEN = Deno.env.get("SLACK_BOT_TOKEN");
