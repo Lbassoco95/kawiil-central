@@ -9,6 +9,8 @@ import { SlackQuickReplyProvider } from "@/contexts/SlackQuickReplyContext";
 import { AccessibilityProvider } from "@/contexts/AccessibilityContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import Firmas from "@/pages/Firmas";
+import FirmarPublico from "@/pages/FirmarPublico";
 import { ModuleGate } from "@/components/ModuleGate";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
@@ -76,6 +78,8 @@ const App = () => (
               <Route path="/cambiar-contrasena" element={<CambiarContrasena />} />
               <Route path="/postular/:token" element={<PostularVacante />} />
               <Route path="/contrato/:token" element={<ContratoPublico />} />
+              <Route path="/firmar/:token" element={<FirmarPublico />} />
+              <Route path="/firmas" element={<ProtectedRoute><Firmas /></ProtectedRoute>} />
               <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
               <Route path="/dashboard" element={<ProtectedRoute><Navigate to="/" replace /></ProtectedRoute>} />
               <Route path="/clientes" element={<ProtectedRoute><Clientes /></ProtectedRoute>} />
