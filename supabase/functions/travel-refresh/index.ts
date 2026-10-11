@@ -44,7 +44,7 @@ const fmtHM = (d: Date) =>
 Deno.serve(async (req) => {
   // Solo el cron (o disparo manual con el secreto) puede ejecutar.
   const cronSecret = Deno.env.get("CRON_SECRET");
-  if (cronSecret && req.headers.get("x-cron-secret") !== cronSecret) {
+  if (!cronSecret || req.headers.get("x-cron-secret") !== cronSecret) {
     return json({ error: "forbidden" }, 403);
   }
 

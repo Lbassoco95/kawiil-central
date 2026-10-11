@@ -48,6 +48,13 @@ const TABLES_TO_BACKUP = [
   "savio_webhook_events",
 ];
 
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "no-store" },
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -58,9 +65,18 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    let body: Record<string, unknown> = {};
-    try { body = await req.json(); } catch { /* no body is fine */ }
-    const includeData = body.include_data === true;
+    // El respaldo usa service_role: solo un admin/gerente autenticado puede
+    // dispararlo. (verify_jwt = true en config.toml es la primera barrera;
+    // esto valida además el rol.)
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) return json({ error: "No autorizado" }, 401);
+    const callerClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: { user }, error: authError } = await callerClient.auth.getUser();
+    if (authError || !user) return json({ error: "No autorizado" }, 401);
+    const { data: isAdmin } = await supabase.rpc("is_admin_or_manager", { _user_id: user.id });
+    if (!isAdmin) return json({ error: "Permisos insuficientes" }, 403);
 
     const now = new Date();
     const timestamp = now.toISOString().replace(/[:.]/g, "-");
@@ -120,20 +136,10 @@ Deno.serve(async (req) => {
 
     console.log("Backup completed:", JSON.stringify(summary));
 
-    if (includeData) {
-      return new Response(JSON.stringify({ summary, data: backupData }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    return new Response(JSON.stringify(summary), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    // Nunca se devuelven los datos por HTTP: el respaldo solo vive en el bucket privado.
+    return json(summary, 200);
   } catch (err) {
     console.error("Backup error:", err);
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return json({ error: "Error interno" }, 500);
   }
 });
