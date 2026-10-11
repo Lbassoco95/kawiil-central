@@ -97,6 +97,25 @@ Por qué una Edge Function y no un servidor nuevo: es lo que recomienda la propi
 | **3 — Escritura controlada** | Acciones (alta de usuario, módulos) con confirmación y doble registro; HMAC end-to-end cuando MATI lo soporte | Operación desde Kawiil OS |
 | **4 — Sostenimiento** | Pruebas automáticas de seguridad (roles, enmascarado, funciones sin JWT), revisión trimestral de avisos de Supabase | Que no se regrese |
 
+## 5.1 Estado de la Fase 0 (2026-10-11)
+
+Desplegado en producción (proyecto `qppfampapbxdgednkofc`) y reflejado en la rama:
+
+| Función | Antes | Ahora | Versión |
+|---|---|---|---|
+| `backup-data` | Sin JWT ni validación; con `include_data` devolvía todos los datos | `verify_jwt = true`, exige admin/gerente, ya no devuelve datos por HTTP | v63 |
+| `microsoft-secret-health` | Abierta; renovaba tokens reales de `microsoft_tokens` | Solo admin/gerente o `x-cron-secret` (ahora también está en el repo) | v8 |
+| `slack-notify` | Cualquiera podía publicar en el Slack de Kawiil | Exige service role o sesión válida | v67 |
+| `mtg-graph-admin` | Abierta; `mock: true` insertaba filas con service role | Exige `x-cron-secret` | v4 |
+| `refresh-weekday-phrases` | Aceptaba cualquier bearer de más de 16 caracteres | Solo service role exacto o cron secret | v64 |
+| `travel-refresh` | Si faltaba `CRON_SECRET`, quedaba abierta | Falla cerrada | v8 |
+
+**Pendiente de desplegar:** `process-document` (parchada en la rama, 639 líneas; se despliega con el flujo normal para no retranscribirla a mano). Hasta entonces sigue aceptando llamadas sin identidad.
+
+**Pendiente de revisar:** `satgo-facturas` (existe en producción pero no en el repo), `moffin-webhook`, `meta-webhook-leads`, `calendly-webhook` y `email-tracking` (webhooks/públicas: confirmar firma), y el resto de las funciones sin JWT.
+
+**Acciones fuera del código:** revisar logs de más de 24 h de `backup-data` en el panel de Supabase (la herramienta solo cubre 24 h; en ese lapso no hubo llamadas) y decidir si se rotan los tokens de Microsoft.
+
 ## 6. Decisiones que necesito de ti
 
 1. **¿Qué roles de Kawiil pueden ver datos de Kit-to-Drive/MATI?** (propongo solo dirección y administración al inicio).
