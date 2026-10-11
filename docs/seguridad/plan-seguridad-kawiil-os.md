@@ -122,10 +122,29 @@ Desplegado en producción (proyecto `qppfampapbxdgednkofc`) y reflejado en la ra
 |---|---|
 | Cabeceras de seguridad del front (`vercel.json`): HSTS, `nosniff`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy`, `Permissions-Policy` | En la rama. Se aplican al fusionar y desplegar. |
 | CSP | En modo **solo reporte** (`Content-Security-Policy-Report-Only`): no bloquea nada. Revisar la consola del navegador unos días y luego pasarlo a `Content-Security-Policy`. |
-| Migración `20261011230000_fase1_endurecer_anon_y_rpc.sql` | En la rama, **sin aplicar en producción**. Los intentos de aplicarla desde la sesión caducaron a los 60 s (lecturas sí funcionan). Se aplica sola con `supabase db push` al fusionar, o puede ejecutarse desde el SQL Editor de Supabase. |
+| Migración `20261011230000_fase1_endurecer_anon_y_rpc.sql` | ✅ **Aplicada en producción (2026-10-11)** desde el SQL Editor de Supabase y **verificada** con lecturas (ver abajo). Los intentos desde la sesión (`execute_sql`/`apply_migration`) caducaron a los 60 s y no aplicaron nada. |
 | Contraseñas filtradas y OTP | Solo se cambian en el panel de Supabase (Authentication → Providers/Policies). |
 
-**Qué hace la migración:** quita 3 políticas abiertas a cualquiera (`knowledge_insights` insert/update y `knowledge_feed` insert), deja las funciones internas (cron, colas, `get_edge_fn_source`) solo para `service_role`, quita a `anon` la ejecución de ~70 funciones `SECURITY DEFINER`, y retira a `anon` los permisos de escritura sobre las tablas. **No toca:** `contract_client_get/patch` (portal público por token), `get_user_org_id`, `is_admin_or_manager` y `can_edit_org_permission_settings` (las usan políticas que aplican a anon).
+**Qué hizo la migración:** quitó 3 políticas abiertas a cualquiera (`knowledge_insights` insert/update y `knowledge_feed` insert), dejó las funciones internas (cron, colas, `get_edge_fn_source`, `*_system`) solo para `service_role`, quitó a `anon` la ejecución de las demás funciones `SECURITY DEFINER` salvo las 5 necesarias, y retiró a `anon` los permisos de escritura sobre las tablas (también por defecto para objetos nuevos). **No tocó:** `contract_client_get/patch` (portal público por token), `get_user_org_id`, `is_admin_or_manager` y `can_edit_org_permission_settings` (las usan políticas que aplican a anon).
+
+**Verificación posterior (solo lecturas, 2026-10-11):**
+
+| Comprobación | Antes | Después |
+|---|---|---|
+| Políticas abiertas (`Service insert/update …`) | 3 | 0 |
+| Funciones `SECURITY DEFINER` ejecutables por `anon` | 98 | 5 (`can_edit_org_permission_settings`, `contract_client_get`, `contract_client_patch`, `get_user_org_id`, `is_admin_or_manager`) |
+| Permisos de escritura de `anon` sobre tablas | 706 | 0 |
+| Funciones solo para `service_role` | 0 | 27 |
+| Funciones solo para `authenticated` + `service_role` | 0 | 67 |
+| Aviso Supabase «anon puede ejecutar SECURITY DEFINER» | 98 | 5 |
+
+Comprobadas una a una: `claim_jobs`, `complete_job`, `fail_job`, `get_edge_fn_source`, `invoke_travel_refresh_cron`, `enqueue_sequence_system` y `pipeline_calendly_apply_system` ya no son ejecutables por `anon` ni `authenticated` (sí por `service_role`); `assign_lead`, `move_lead_stage`, `rh_start_jornada` y `has_role` siguen ejecutables por `authenticated`.
+
+**Nota sobre el PR #369:** como la migración se aplicó a mano, no quedó registrada en `supabase_migrations.schema_migrations`. Al fusionar, `supabase db push` volverá a ejecutar el archivo; es idempotente, así que no cambia nada.
+
+**Sin verificar:** que ningún flujo de la aplicación se haya visto afectado. Probar login, portal público de contratos, pipeline de leads, RH (iniciar jornada) y knowledge. Rollback puntual: devolver `EXECUTE` a `anon` solo en la función afectada.
+
+**Pendiente en base de datos (avisos de Supabase tras la migración):** 177 tablas visibles por GraphQL para `anon` y `authenticated`, 72 funciones abiertas a `authenticated`, 23 con `search_path` mutable, 2 tablas con RLS sin políticas, y el aviso de `pg_trgm` en el esquema público.
 
 **Decisión pendiente:** las tablas `agent_registry`, `agent_tasks` y `agent_activity_logs` son legibles por cualquiera con la clave pública (`anon_read_*`, `true`). Probablemente las lee un agente externo con la clave anon; hay que confirmarlo antes de cerrarlas.
 
