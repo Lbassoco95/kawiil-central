@@ -116,6 +116,19 @@ Desplegado en producción (proyecto `qppfampapbxdgednkofc`) y reflejado en la ra
 
 **Acciones fuera del código:** revisar logs de más de 24 h de `backup-data` en el panel de Supabase (la herramienta solo cubre 24 h; en ese lapso no hubo llamadas) y decidir si se rotan los tokens de Microsoft.
 
+## 5.2 Estado de la Fase 1 (2026-10-11)
+
+| Pieza | Estado |
+|---|---|
+| Cabeceras de seguridad del front (`vercel.json`): HSTS, `nosniff`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy`, `Permissions-Policy` | En la rama. Se aplican al fusionar y desplegar. |
+| CSP | En modo **solo reporte** (`Content-Security-Policy-Report-Only`): no bloquea nada. Revisar la consola del navegador unos días y luego pasarlo a `Content-Security-Policy`. |
+| Migración `20261011230000_fase1_endurecer_anon_y_rpc.sql` | En la rama, **sin aplicar en producción**. Los intentos de aplicarla desde la sesión caducaron a los 60 s (lecturas sí funcionan). Se aplica sola con `supabase db push` al fusionar, o puede ejecutarse desde el SQL Editor de Supabase. |
+| Contraseñas filtradas y OTP | Solo se cambian en el panel de Supabase (Authentication → Providers/Policies). |
+
+**Qué hace la migración:** quita 3 políticas abiertas a cualquiera (`knowledge_insights` insert/update y `knowledge_feed` insert), deja las funciones internas (cron, colas, `get_edge_fn_source`) solo para `service_role`, quita a `anon` la ejecución de ~70 funciones `SECURITY DEFINER`, y retira a `anon` los permisos de escritura sobre las tablas. **No toca:** `contract_client_get/patch` (portal público por token), `get_user_org_id`, `is_admin_or_manager` y `can_edit_org_permission_settings` (las usan políticas que aplican a anon).
+
+**Decisión pendiente:** las tablas `agent_registry`, `agent_tasks` y `agent_activity_logs` son legibles por cualquiera con la clave pública (`anon_read_*`, `true`). Probablemente las lee un agente externo con la clave anon; hay que confirmarlo antes de cerrarlas.
+
 ## 6. Decisiones que necesito de ti
 
 1. **¿Qué roles de Kawiil pueden ver datos de Kit-to-Drive/MATI?** (propongo solo dirección y administración al inicio).
