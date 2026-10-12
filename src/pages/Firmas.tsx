@@ -116,6 +116,11 @@ export default function Firmas() {
         </Tabs>
 
         {(inbox.isLoading || sent.isLoading) && <Loader2 className="h-4 w-4 animate-spin" />}
+        {(inbox.error || sent.error) && (
+          <p className="text-sm text-destructive">
+            No se pudieron cargar las firmas: {((inbox.error || sent.error) as Error).message}
+          </p>
+        )}
 
         {tab === "por_firmar" && (
           <div className="space-y-2">
