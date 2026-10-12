@@ -151,7 +151,12 @@ export function SendToSignDialog({ open, onClose, fileUrl, fileName, clientId, p
             .map(({ page, x, y, w, h }) => ({ page, x, y, w, h })),
         })),
       });
-      toast.success("Enviado a firma. Los firmantes recibieron un correo.");
+      const placed = fields.length;
+      toast.success(
+        placed
+          ? `Enviado a firma con ${placed} recuadro${placed === 1 ? "" : "s"}. Los firmantes recibieron un correo.`
+          : "Enviado a firma sin lugar definido: la firma irá en la hoja de firmas al final del PDF.",
+      );
       onSent?.(res.request_id);
       reset();
       onClose();
@@ -281,11 +286,28 @@ export function SendToSignDialog({ open, onClose, fileUrl, fileName, clientId, p
           </label>
         </div>
 
-        <div className="flex justify-end gap-2 pt-2 border-t">
+        <div className="flex flex-wrap justify-end gap-2 pt-2 border-t">
           <Button variant="outline" onClick={onClose} disabled={sending}>Cancelar</Button>
-          <Button onClick={handleSend} disabled={sending}>
-            {sending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Enviando...</> : <><PenTool className="h-4 w-4 mr-2" />Enviar a firma</>}
-          </Button>
+          {fields.length === 0 ? (
+            <>
+              <Button variant="ghost" onClick={handleSend} disabled={sending || loadingPdf}>
+                Enviar sin lugar de firma
+              </Button>
+              <Button onClick={openPlacement} disabled={sending || loadingPdf}>
+                {loadingPdf ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <MapPin className="h-4 w-4 mr-2" />}
+                Colocar firmas y enviar
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button variant="outline" onClick={openPlacement} disabled={sending || loadingPdf}>
+                <MapPin className="h-4 w-4 mr-2" /> Editar recuadros
+              </Button>
+              <Button onClick={handleSend} disabled={sending}>
+                {sending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Enviando...</> : <><PenTool className="h-4 w-4 mr-2" />Enviar a firma</>}
+              </Button>
+            </>
+          )}
         </div>
       </DialogContent>
 
@@ -298,6 +320,8 @@ export function SendToSignDialog({ open, onClose, fileUrl, fileName, clientId, p
         onFieldsChange={setFields}
         activeKey={activeKey}
         onActiveKeyChange={setActiveKey}
+        onSend={handleSend}
+        sending={sending}
       />
     </Dialog>
   );

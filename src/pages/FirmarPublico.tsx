@@ -195,6 +195,11 @@ export default function FirmarPublico() {
               ) : (
                 <SignaturePad onChange={setPng} defaultTypedName={signer.name} />
               )}
+              {(signer.fields?.length ?? 0) === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Quien envió el documento no definió un lugar para tu firma: se agregará en la hoja de firmas al final del documento.
+                </p>
+              )}
               <label className="flex items-start gap-2 text-xs text-muted-foreground">
                 <input type="checkbox" className="mt-0.5" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
                 Declaro que revisé el documento y acepto firmarlo electrónicamente. Reconozco que mi firma, correo, fecha, hora e IP quedarán registrados como evidencia.

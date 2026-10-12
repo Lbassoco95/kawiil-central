@@ -617,6 +617,7 @@ Deno.serve(async (req) => {
         signers.push({ name, email, user_id: userId, sign_order: body.sequential ? i : 0, fields: parseFields(rs.fields, pageCount) });
       }
 
+      console.log("esign create", JSON.stringify({ pageCount, signers: signers.map((sg) => ({ internal: !!sg.user_id, fields: sg.fields.length })) }));
       const requestId = crypto.randomUUID();
       const originalPath = `${ctx.orgId}/requests/${requestId}/original.pdf`;
       const up = await svc.storage.from(BUCKET).upload(originalPath, pdf, { contentType: "application/pdf" });
