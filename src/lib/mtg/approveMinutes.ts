@@ -266,7 +266,7 @@ export async function approveMinutes(opts: {
       contentMd: opts.contentMd,
     });
     if (sent > 0) toast.success(`Resumen enviado por correo a ${sent} persona(s) del equipo`);
-    else if (meetingTeamIds(opts.series).some((id) => id !== opts.actorUserId)) {
+    else if (meetingTeamIds(opts.series, opts.meeting).some((id) => id !== opts.actorUserId)) {
       toast.message("No se pudo enviar el resumen por correo (¿Outlook conectado?). Sí se notificó en la app.");
     }
   } catch (e) {

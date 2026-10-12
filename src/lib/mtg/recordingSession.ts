@@ -151,11 +151,11 @@ async function buildCaptureStream(mode: CaptureMode): Promise<{
   };
 }
 
-async function runTranscription(): Promise<void> {
+async function runTranscription(force = false): Promise<void> {
   if (!ctx) return;
   setState({ phase: "transcribing", error: null });
   try {
-    const res = await requestRecordingTranscription(ctx.meeting.id);
+    const res = await requestRecordingTranscription(ctx.meeting.id, force);
     const lang = res.language_detected ? ` (${res.language_detected})` : "";
     toast.success(
       res.translated_to_spanish
@@ -174,10 +174,10 @@ async function runTranscription(): Promise<void> {
   }
 }
 
-export async function retranscribe(session: SessionContext): Promise<void> {
+export async function retranscribe(session: SessionContext, force = false): Promise<void> {
   ctx = session;
   setState({ meetingId: session.meeting.id, meetingTitle: meetingLabel(session) });
-  await runTranscription();
+  await runTranscription(force);
 }
 
 function meetingLabel(c: SessionContext): string {

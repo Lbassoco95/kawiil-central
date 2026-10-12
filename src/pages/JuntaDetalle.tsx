@@ -571,7 +571,7 @@ export default function JuntaDetalle() {
                   title="Agregar gente del equipo para que reciba el resumen de la junta"
                 >
                   <UserPlus className="h-3.5 w-3.5 mr-1" />
-                  Equipo ({meetingTeamIds(series).length})
+                  Equipo ({meetingTeamIds(series, meeting).length})
                 </Button>
               )}
               {user && series && liveEditable && (

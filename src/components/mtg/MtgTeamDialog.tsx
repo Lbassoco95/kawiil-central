@@ -31,10 +31,15 @@ export function MtgTeamDialog(props: {
   const [selected, setSelected] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const owner = props.series?.owner_user_id ?? null;
+  // Del equipo fijo de la serie: se muestran marcados y no se quitan desde aquí.
+  const seriesIds = useMemo(
+    () => new Set(meetingTeamIds(props.series)),
+    [props.series],
+  );
 
   useEffect(() => {
-    if (props.open) setSelected(meetingTeamIds(props.series));
-  }, [props.open, props.series]);
+    if (props.open) setSelected(meetingTeamIds(props.series, props.meeting));
+  }, [props.open, props.series, props.meeting]);
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -47,24 +52,25 @@ export function MtgTeamDialog(props: {
   }, [profiles, q]);
 
   const toggle = (id: string) => {
-    if (id === owner) return;
+    if (seriesIds.has(id)) return;
     setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
   const submit = async () => {
-    if (!props.series) return;
     setBusy(true);
     try {
-      const before = new Set(meetingTeamIds(props.series));
-      const ids = selected.filter((id) => id !== owner);
-      await saveMeetingTeam({ seriesId: props.series.id, userIds: ids });
-      const added = ids.filter((id) => !before.has(id));
+      const before = new Set(meetingTeamIds(props.series, props.meeting));
+      const own = selected.filter((id) => !seriesIds.has(id));
+      await saveMeetingTeam({ meetingId: props.meeting.id, userIds: own });
+      const added = own.filter((id) => !before.has(id));
       if (added.length > 0) {
         await notifyMeetingTeam({
           actorUserId: props.actorUserId,
           meeting: props.meeting,
-          series: { ...props.series, attendees_internal: added },
+          series: props.series,
+          title: props.meeting.title,
           kind: "added",
+          onlyUserIds: added,
         });
       }
       toast.success("Equipo de la junta actualizado — recibirán el resumen al aprobarse la minuta");
@@ -83,27 +89,23 @@ export function MtgTeamDialog(props: {
         <DialogHeader>
           <DialogTitle>Equipo de la junta</DialogTitle>
         </DialogHeader>
-        {!props.series ? (
-          <p className="text-sm text-muted-foreground">
-            Esta junta no pertenece a una serie. Asígnale cliente(s) primero para poder agregar
-            equipo que reciba el resumen.
-          </p>
-        ) : (
+        {(
           <>
             <p className="text-sm text-muted-foreground">
-              Las personas seleccionadas reciben una notificación con el resumen cuando se aprueba
-              la minuta, y los recordatorios de la serie.
+              Las personas seleccionadas reciben notificación y correo con el resumen cuando se
+              aprueba la minuta. Aplica a esta junta, tenga o no serie.
             </p>
             <Input placeholder="Buscar persona…" value={q} onChange={(e) => setQ(e.target.value)} />
             <div className="max-h-64 divide-y overflow-y-auto rounded-md border">
               {filtered.map((p) => {
                 const active = selected.includes(p.user_id);
                 const isOwner = p.user_id === owner;
+                const fromSeries = seriesIds.has(p.user_id);
                 return (
                   <button
                     key={p.user_id}
                     type="button"
-                    disabled={isOwner}
+                    disabled={fromSeries}
                     className={cn(
                       "flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted/50",
                       active && "bg-primary/10",
@@ -123,7 +125,11 @@ export function MtgTeamDialog(props: {
                         </span>
                       )}
                     </span>
-                    {isOwner && <span className="text-[10px] text-muted-foreground">Responsable</span>}
+                    {fromSeries && (
+                      <span className="text-[10px] text-muted-foreground">
+                        {isOwner ? "Responsable" : "De la serie"}
+                      </span>
+                    )}
                   </button>
                 );
               })}

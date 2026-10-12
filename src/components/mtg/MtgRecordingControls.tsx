@@ -25,6 +25,7 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { MtgMeetingRow, MtgSeriesRow } from "@/lib/mtg/db";
+import { useMtgRecordings } from "@/hooks/useMtgRecordings";
 import { canUploadRecording } from "@/lib/mtg/uploadRecording";
 import {
   clearPendingRecording,
@@ -97,6 +98,7 @@ export function MtgRecordingControls(props: {
   const [hidden, setHidden] = useState(false);
   const [nowTick, setNowTick] = useState(() => Date.now());
   const autoTranscribe = props.autoTranscribe !== false;
+  const { data: takes = [] } = useMtgRecordings(props.meeting.id, props.meeting.recording_saved_at);
 
   // La sesión global puede ser de otra junta (p. ej. grabando una y mirando otra).
   const mine = session.meetingId === props.meeting.id;
@@ -141,7 +143,7 @@ export function MtgRecordingControls(props: {
       try {
         const pending = await getPendingRecording(props.meeting.id);
         if (cancelled) return;
-        if (pending && !props.meeting.recording_path) {
+        if (pending && (!props.meeting.recording_path || pending.partial)) {
           setRecoveredLocal(pending);
         } else if (pending && props.meeting.recording_path && !pending.partial) {
           await clearPendingRecording(props.meeting.id);
@@ -157,6 +159,18 @@ export function MtgRecordingControls(props: {
   }, [props.meeting.id, props.meeting.recording_path]);
 
   if (!canUploadRecording(props.meeting.status)) return null;
+
+  // Una copia local sin subir no debe pisarse con una toma nueva.
+  const startTake = async (mode: "audio" | "av") => {
+    const stale = pendingLocal ?? (await getPendingRecording(props.meeting.id).catch(() => null));
+    if (stale) {
+      toast.error("Hay una toma sin subir de esta junta", {
+        description: "Pulsa «Reintentar subida» (o descárgala) antes de grabar otra, para no perderla.",
+      });
+      return;
+    }
+    await startRecording(sessionCtx(), mode);
+  };
 
   const sessionCtx = () => ({
     organizationId: props.organizationId,
@@ -214,8 +228,8 @@ export function MtgRecordingControls(props: {
         {props.meeting.recording_path && phase === "idle" && (
           <span className="inline-flex items-center gap-1 text-[11px] text-emerald-700 dark:text-emerald-400">
             <CheckCircle2 className="h-3.5 w-3.5" />
-            En Storage
-            {props.meeting.recording_bytes != null
+            {takes.length > 1 ? `${takes.length} tomas en Storage` : "En Storage"}
+            {takes.length <= 1 && props.meeting.recording_bytes != null
               ? ` · ${formatRecordingSizeMb(props.meeting.recording_bytes)} MB`
               : ""}
           </span>
@@ -249,7 +263,7 @@ export function MtgRecordingControls(props: {
               size={size}
               variant="outline"
               disabled={disabled}
-              onClick={() => void startRecording(sessionCtx(), "audio")}
+              onClick={() => void startTake("audio")}
               title="Solo micrófono — apto para juntas de hasta ~3 horas"
             >
               {phase === "uploading" ? (
@@ -264,7 +278,7 @@ export function MtgRecordingControls(props: {
               size={size}
               variant="outline"
               disabled={disabled}
-              onClick={() => void startRecording(sessionCtx(), "av")}
+              onClick={() => void startTake("av")}
               title="Audio de la pestaña/llamada + micrófono (sin video). Hasta ~3 horas."
             >
               <Monitor className="h-3.5 w-3.5 mr-1" />
@@ -297,7 +311,7 @@ export function MtgRecordingControls(props: {
                   : "secondary"
               }
               disabled={processing}
-              onClick={() => void retranscribe(sessionCtx())}
+              onClick={() => void retranscribe(sessionCtx(), props.meeting.transcript_status === "received")}
               title={
                 props.meeting.transcript_unavailable_reason ||
                 "Transcribir con OpenAI (multiidioma → español)"
@@ -360,6 +374,24 @@ export function MtgRecordingControls(props: {
             </span>
           )}
       </div>
+
+      {takes.length > 0 && (
+        <ul className="rounded-lg border px-3 py-2 text-xs space-y-1" aria-label="Tomas grabadas">
+          <li className="font-medium text-foreground">
+            Grabaciones de esta junta ({takes.length}) — se transcriben y unen en orden
+          </li>
+          {takes.map((t, i) => (
+            <li key={t.id} className="flex flex-wrap items-center gap-x-2 text-muted-foreground">
+              <span className="text-foreground">Toma {i + 1}</span>
+              <span>{new Date(t.saved_at).toLocaleString("es-MX")}</span>
+              {t.bytes != null && <span>{formatRecordingSizeMb(t.bytes)} MB</span>}
+              <span className={t.transcribed_at ? "text-emerald-700 dark:text-emerald-400" : ""}>
+                {t.transcribed_at ? "transcrita" : "sin transcribir"}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {showPanel && meta && (
         <div

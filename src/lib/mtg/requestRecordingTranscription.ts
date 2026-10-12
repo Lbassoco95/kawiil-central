@@ -45,10 +45,12 @@ async function describeInvokeError(error: {
 
 export async function requestRecordingTranscription(
   meetingId: string,
+  /** true = ignora la caché por toma y vuelve a transcribir todo. */
+  force = false,
 ): Promise<RecordingTranscriptionResult> {
   const { data, error } = await supabase.functions.invoke(
     "mtg-transcribe-recording",
-    { body: { meeting_id: meetingId } },
+    { body: { meeting_id: meetingId, force } },
   );
   if (error) {
     throw new Error(await describeInvokeError(error));

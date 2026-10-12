@@ -197,6 +197,22 @@ export async function uploadMeetingRecording(opts: {
     );
   }
 
+  // Registro de tomas: una junta puede tener varias grabaciones.
+  const { error: rErr } = await mtgDb.from("mtg_meeting_recordings").upsert(
+    {
+      organization_id: opts.organizationId,
+      meeting_id: opts.meeting.id,
+      path,
+      file_name: asFile.name,
+      bytes: asFile.size,
+      origin: opts.origin ?? "manual_upload",
+      saved_at: savedAt,
+      created_by: opts.actorUserId,
+    },
+    { onConflict: "meeting_id,path" },
+  );
+  if (rErr) console.warn("[mtg] registro de toma (¿migración aplicada?)", rErr.message);
+
   await logMtgAudit({
     organizationId: opts.organizationId,
     actorUserId: opts.actorUserId,

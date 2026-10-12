@@ -330,114 +330,171 @@ serve(async (req) => {
       .update({ transcript_status: "subscribed", transcript_unavailable_reason: null })
       .eq("id", meetingId);
 
-    const { data: fileBlob, error: dlErr } = await admin.storage
-      .from(MTG_BUCKET)
-      .download(meeting.recording_path);
-    if (dlErr || !fileBlob) {
-      await admin
-        .from("mtg_meetings")
-        .update({
-          transcript_status: "failed",
-          transcript_unavailable_reason: "No se pudo descargar la grabación del bucket",
-        })
-        .eq("id", meetingId);
-      return new Response(
-        JSON.stringify({ error: "No se pudo descargar la grabación", details: dlErr?.message }),
-        { status: 500, headers: { ...cors, "Content-Type": "application/json" } },
-      );
+    // Una junta puede tener varias tomas: se transcriben en orden y se unen
+    // con offset temporal. Las ya transcritas se reutilizan (cache en la fila).
+    const force = body?.force === true;
+    const { data: takeRows } = await admin
+      .from("mtg_meeting_recordings")
+      .select("id, path, transcript_segments, duration_sec, language")
+      .eq("meeting_id", meetingId)
+      .order("saved_at", { ascending: true });
+    type Take = {
+      id: string | null;
+      path: string;
+      transcript_segments?: WhisperSegment[] | null;
+      duration_sec?: number | null;
+      language?: string | null;
+    };
+    let takes: Take[] = (takeRows ?? []) as Take[];
+    if (!takes.some((t) => t.path === meeting.recording_path)) {
+      takes = [...takes, { id: null, path: meeting.recording_path }];
     }
 
-    const bytes = new Uint8Array(await fileBlob.arrayBuffer());
-    if (bytes.byteLength > MAX_RECORDING_BYTES) {
-      await admin
-        .from("mtg_meetings")
-        .update({
-          transcript_status: "failed",
-          transcript_unavailable_reason:
-            "Grabación > 200 MB (~3 h). Sube audio más liviano o parte la conversación.",
-        })
-        .eq("id", meetingId);
-      return new Response(
-        JSON.stringify({
-          error:
-            "La grabación supera ~200 MB (tope para ~3 horas). Usa audio a bitrate moderado o parte la sesión.",
-          code: "file_too_large",
-          size_bytes: bytes.byteLength,
-        }),
-        { status: 413, headers: { ...cors, "Content-Type": "application/json" } },
-      );
-    }
-
-    const pathLower = String(meeting.recording_path).toLowerCase();
-    const ext = pathLower.includes(".mp4")
-      ? "mp4"
-      : pathLower.includes(".mp3")
-        ? "mp3"
-        : pathLower.includes(".m4a")
-          ? "m4a"
-          : pathLower.includes(".wav")
-            ? "wav"
-            : pathLower.includes(".ogg")
-              ? "ogg"
-              : "webm";
-    const mime =
-      ext === "mp3"
-        ? "audio/mpeg"
-        : ext === "mp4"
-          ? "video/mp4"
-          : ext === "wav"
-            ? "audio/wav"
-            : ext === "m4a"
-              ? "audio/mp4"
-              : "audio/webm";
-
-    const chunks = splitBytesForWhisper(bytes);
     let segments: WhisperSegment[] = [];
     let languageDetected: string | null = null;
     let timeOffset = 0;
-    try {
-      for (let i = 0; i < chunks.length; i++) {
-        const chunk = chunks[i];
-        if (chunk.byteLength > WHISPER_MAX_BYTES) {
-          throw new Error(`Trozo ${i + 1} supera el límite Whisper (${chunk.byteLength} bytes)`);
+    let totalBytes = 0;
+    let totalChunks = 0;
+
+    for (let ti = 0; ti < takes.length; ti++) {
+      const take = takes[ti];
+      let tSegs: WhisperSegment[];
+      let tDuration: number;
+      let tLang: string | null;
+
+      if (!force && Array.isArray(take.transcript_segments) && take.transcript_segments.length > 0) {
+        tSegs = take.transcript_segments;
+        tDuration = Number(take.duration_sec) || 0;
+        tLang = take.language ?? null;
+      } else {
+        const { data: fileBlob, error: dlErr } = await admin.storage
+          .from(MTG_BUCKET)
+          .download(take.path);
+        if (dlErr || !fileBlob) {
+          await admin
+            .from("mtg_meetings")
+            .update({
+              transcript_status: "failed",
+              transcript_unavailable_reason: `No se pudo descargar la toma ${ti + 1} del bucket`,
+            })
+            .eq("id", meetingId);
+          return new Response(
+            JSON.stringify({ error: `No se pudo descargar la grabación (toma ${ti + 1})`, details: dlErr?.message }),
+            { status: 500, headers: { ...cors, "Content-Type": "application/json" } },
+          );
         }
-        const part = await whisperTranscribeChunk({
-          apiKey: openaiKey,
-          bytes: chunk,
-          mime,
-          ext,
-          fileName: `recording-part${i + 1}.${ext}`,
-        });
-        if (!languageDetected && part.language) languageDetected = part.language;
-        for (const s of part.segments) {
-          segments.push({
-            start: s.start + timeOffset,
-            end: s.end + timeOffset,
-            text: s.text,
-          });
+        const bytes = new Uint8Array(await fileBlob.arrayBuffer());
+        if (bytes.byteLength > MAX_RECORDING_BYTES) {
+          await admin
+            .from("mtg_meetings")
+            .update({
+              transcript_status: "failed",
+              transcript_unavailable_reason:
+                `Toma ${ti + 1} > 200 MB (~3 h). Sube audio más liviano o parte la conversación.`,
+            })
+            .eq("id", meetingId);
+          return new Response(
+            JSON.stringify({
+              error: `La toma ${ti + 1} supera ~200 MB (tope para ~3 horas). Usa audio a bitrate moderado o parte la sesión.`,
+              code: "file_too_large",
+              size_bytes: bytes.byteLength,
+            }),
+            { status: 413, headers: { ...cors, "Content-Type": "application/json" } },
+          );
         }
-        timeOffset += part.duration > 0
-          ? part.duration
-          : Math.max(0, ...part.segments.map((s) => s.end), 0);
+        totalBytes += bytes.byteLength;
+
+        const pathLower = String(take.path).toLowerCase();
+        const ext = pathLower.includes(".mp4")
+          ? "mp4"
+          : pathLower.includes(".mp3")
+            ? "mp3"
+            : pathLower.includes(".m4a")
+              ? "m4a"
+              : pathLower.includes(".wav")
+                ? "wav"
+                : pathLower.includes(".ogg")
+                  ? "ogg"
+                  : "webm";
+        const mime =
+          ext === "mp3"
+            ? "audio/mpeg"
+            : ext === "mp4"
+              ? "video/mp4"
+              : ext === "wav"
+                ? "audio/wav"
+                : ext === "m4a"
+                  ? "audio/mp4"
+                  : "audio/webm";
+
+        const chunks = splitBytesForWhisper(bytes);
+        totalChunks += chunks.length;
+        tSegs = [];
+        tDuration = 0;
+        tLang = null;
+        let chunkOffset = 0;
+        try {
+          for (let i = 0; i < chunks.length; i++) {
+            const chunk = chunks[i];
+            if (chunk.byteLength > WHISPER_MAX_BYTES) {
+              throw new Error(`Trozo ${i + 1} supera el límite Whisper (${chunk.byteLength} bytes)`);
+            }
+            const part = await whisperTranscribeChunk({
+              apiKey: openaiKey,
+              bytes: chunk,
+              mime,
+              ext,
+              fileName: `recording-take${ti + 1}-part${i + 1}.${ext}`,
+            });
+            if (!tLang && part.language) tLang = part.language;
+            for (const s of part.segments) {
+              tSegs.push({ start: s.start + chunkOffset, end: s.end + chunkOffset, text: s.text });
+            }
+            chunkOffset += part.duration > 0
+              ? part.duration
+              : Math.max(0, ...part.segments.map((s) => s.end), 0);
+          }
+          tDuration = chunkOffset;
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          await admin
+            .from("mtg_meetings")
+            .update({
+              transcript_status: "failed",
+              transcript_unavailable_reason: `Toma ${ti + 1}: ${msg}`.slice(0, 240),
+            })
+            .eq("id", meetingId);
+          return new Response(
+            JSON.stringify({
+              error: "OpenAI Whisper falló al transcribir (posible archivo largo)",
+              details: `Toma ${ti + 1}: ${msg}`.slice(0, 400),
+              chunks: chunks.length,
+            }),
+            { status: 502, headers: { ...cors, "Content-Type": "application/json" } },
+          );
+        }
+
+        if (take.id && tSegs.length > 0) {
+          await admin
+            .from("mtg_meeting_recordings")
+            .update({
+              transcript_segments: tSegs,
+              duration_sec: tDuration,
+              language: tLang,
+              transcribed_at: new Date().toISOString(),
+            })
+            .eq("id", take.id);
+        }
       }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      await admin
-        .from("mtg_meetings")
-        .update({
-          transcript_status: "failed",
-          transcript_unavailable_reason: msg.slice(0, 240),
-        })
-        .eq("id", meetingId);
-      return new Response(
-        JSON.stringify({
-          error: "OpenAI Whisper falló al transcribir (posible archivo largo)",
-          details: msg.slice(0, 400),
-          chunks: chunks.length,
-        }),
-        { status: 502, headers: { ...cors, "Content-Type": "application/json" } },
-      );
+
+      if (!languageDetected && tLang) languageDetected = tLang;
+      for (const s of tSegs) {
+        segments.push({ start: s.start + timeOffset, end: s.end + timeOffset, text: s.text });
+      }
+      timeOffset += tDuration > 0 ? tDuration : Math.max(0, ...tSegs.map((s) => s.end), 0);
     }
+    const chunks = { length: totalChunks };
+    const bytes = { byteLength: totalBytes };
 
     if (segments.length === 0) {
       await admin

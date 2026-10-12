@@ -7,36 +7,45 @@ import { mtgDb, type MtgMeetingRow, type MtgSeriesRow } from "@/lib/mtg/db";
 import { supabase } from "@/integrations/supabase/client";
 import { createNotifications } from "@/lib/notificationHelpers";
 
+type TeamSeries = Pick<MtgSeriesRow, "owner_user_id" | "attendees_internal">;
+type TeamMeeting = Pick<MtgMeetingRow, "attendees_internal">;
+
+/** Equipo = responsable y asistentes de la serie (si hay) + los agregados a esta junta. */
 export function meetingTeamIds(
-  series: Pick<MtgSeriesRow, "owner_user_id" | "attendees_internal"> | null | undefined,
+  series: TeamSeries | null | undefined,
+  meeting?: Partial<TeamMeeting> | null,
 ): string[] {
   const ids = new Set<string>();
   if (series?.owner_user_id) ids.add(series.owner_user_id);
   for (const u of series?.attendees_internal ?? []) if (u) ids.add(u);
+  for (const u of meeting?.attendees_internal ?? []) if (u) ids.add(u);
   return [...ids];
 }
 
+/** Guarda el equipo propio de la junta (funciona con o sin serie). */
 export async function saveMeetingTeam(opts: {
-  seriesId: string;
+  meetingId: string;
   userIds: string[];
 }): Promise<void> {
   const { error } = await mtgDb
-    .from("mtg_series")
+    .from("mtg_meetings")
     .update({ attendees_internal: [...new Set(opts.userIds)] })
-    .eq("id", opts.seriesId);
+    .eq("id", opts.meetingId);
   if (error) throw new Error(error.message);
 }
 
 /** Avisa al equipo (excepto a quien actúa) con enlace a la minuta o al tablero. */
 export async function notifyMeetingTeam(opts: {
   actorUserId: string;
-  meeting: Pick<MtgMeetingRow, "id">;
-  series: Pick<MtgSeriesRow, "owner_user_id" | "attendees_internal" | "title"> | null;
+  meeting: Pick<MtgMeetingRow, "id"> & Partial<TeamMeeting>;
+  series: (TeamSeries & { title?: string }) | null;
   kind: "added" | "minutes";
   title?: string | null;
+  /** Si se pasa, avisa solo a estas personas (p. ej. las recién agregadas). */
+  onlyUserIds?: string[];
 }): Promise<void> {
   const label = opts.series?.title ?? opts.title ?? "Junta";
-  const recipients = meetingTeamIds(opts.series);
+  const recipients = opts.onlyUserIds ?? meetingTeamIds(opts.series, opts.meeting);
   await createNotifications(
     recipients
       .filter((id) => id !== opts.actorUserId)
@@ -69,11 +78,11 @@ function escapeHtml(t: string): string {
  */
 export async function emailMeetingTeamSummary(opts: {
   actorUserId: string;
-  meeting: Pick<MtgMeetingRow, "id" | "scheduled_at" | "title">;
-  series: Pick<MtgSeriesRow, "owner_user_id" | "attendees_internal" | "title"> | null;
+  meeting: Pick<MtgMeetingRow, "id" | "scheduled_at" | "title"> & Partial<TeamMeeting>;
+  series: (TeamSeries & { title?: string }) | null;
   contentMd: string;
 }): Promise<number> {
-  const ids = meetingTeamIds(opts.series).filter((id) => id !== opts.actorUserId);
+  const ids = meetingTeamIds(opts.series, opts.meeting).filter((id) => id !== opts.actorUserId);
   if (ids.length === 0) return 0;
 
   const { data: profs } = await supabase

@@ -77,6 +77,8 @@ export type MtgMeetingRow = {
     | "closed"
     | "cancelled"
     | "no_show";
+  /** Equipo interno de esta junta (se suma al de la serie). */
+  attendees_internal: string[];
   facilitator_user_id: string | null;
   note_taker_user_id: string | null;
   outlook_event_id: string | null;
@@ -98,6 +100,26 @@ export type MtgMeetingRow = {
   created_at: string;
   updated_at: string;
 };
+
+/** Una toma grabada de la junta (puede haber varias por reunión). */
+export type MtgMeetingRecordingRow = {
+  id: string;
+  organization_id: string;
+  meeting_id: string;
+  path: string;
+  file_name: string | null;
+  bytes: number | null;
+  origin: string | null;
+  saved_at: string;
+  created_by: string | null;
+  transcript_segments: unknown | null;
+  duration_sec: number | null;
+  language: string | null;
+  transcribed_at: string | null;
+};
+
+export type MtgMeetingRecordingInsert = Partial<MtgMeetingRecordingRow> &
+  Pick<MtgMeetingRecordingRow, "organization_id" | "meeting_id" | "path">;
 
 export type MtgMeetingInsert = Partial<Omit<MtgMeetingRow, "id" | "created_at" | "updated_at">> &
   Pick<MtgMeetingRow, "organization_id" | "scheduled_at">;
@@ -341,6 +363,12 @@ type MtgDatabase = {
         Row: MtgMeetingRow;
         Insert: MtgMeetingInsert;
         Update: MtgMeetingUpdate;
+        Relationships: [];
+      };
+      mtg_meeting_recordings: {
+        Row: MtgMeetingRecordingRow;
+        Insert: MtgMeetingRecordingInsert;
+        Update: Partial<MtgMeetingRecordingRow>;
         Relationships: [];
       };
       mtg_topics: {
