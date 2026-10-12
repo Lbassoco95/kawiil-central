@@ -195,8 +195,8 @@ El efecto neto es registrar esas versiones en el historial. **Deuda que queda:**
 
 | # | Sev | Hallazgo | Estado |
 |---|---|---|---|
-| N1 | Alta | **La clave `service_role` se usa fuera de Supabase**, desde una red residencial/oficina en México (Cablevisión): 158 llamadas en 24 h de `Python-urllib` (lectura de `tasks`, `projects`, `clients`, `profiles` y sondeos de tablas que no existen: `pagos`, `facturas`, `cobranza`…) más 13 de la VM de agentes. Esa clave omite RLS. Puede ser herramienta propia, pero no lo puedo confirmar. | Pendiente: confirmar quién es; si no se reconoce, **rotar la clave**. |
-| N2 | Media | El `state` de OAuth de Slack (`slack-user-callback`) y el de Microsoft (`_shared/microsoftOAuthState.ts`) **no están firmados**: es el `userId`. Un atacante que conozca el UUID de otro usuario puede vincular su propia cuenta de Slack/Microsoft a esa persona. | Pendiente: firmar el `state` con HMAC y caducidad (cambia función y front). |
+| N1 | Alta | **La clave `service_role` se usa fuera de Supabase**, desde una red residencial/oficina en México (Cablevisión): 158 llamadas en 24 h de `Python-urllib` (lectura de `tasks`, `projects`, `clients`, `profiles` y sondeos de tablas que no existen: `pagos`, `facturas`, `cobranza`…) más 13 de la VM de agentes. Esa clave omite RLS. Puede ser herramienta propia, pero no lo puedo confirmar. | Leo indica que probablemente es **Cerebro**, un servidor de la oficina (2026-10-12). Pendiente: que Cerebro use una credencial de menor alcance que `service_role`; si resulta que no es Cerebro, **rotar la clave**. |
+| N2 | Media | El `state` de OAuth de Slack (`slack-user-callback`) y el de Microsoft (`_shared/microsoftOAuthState.ts`) **no están firmados**: es el `userId`. Un atacante que conozca el UUID de otro usuario puede vincular su propia cuenta de Slack/Microsoft a esa persona. | **Corregido** (ver 5.7): `state` firmado con HMAC y caducidad; no requirió cambios en el front. |
 | N3 | Media | `satgo-facturas`: cualquier usuario con sesión (sin rol) puede disparar la descarga SAT de **todos** los clientes de **todas** las organizaciones. Además, la función desplegada es un arranque que importa el código de `raw.githubusercontent.com` en un commit fijo (`266629df`) y esa carpeta ya no existe en `main`: el CI no la redespliega. | **Corregido** (ver 5.6): la función vuelve al repo, el disparo manual exige admin/gerente y se limita a su organización. |
 | N4 | Media | `mtg-graph-webhook` aceptaba notificaciones sin `clientState` o sin el secreto configurado (insertaba en `job_queue` y `mtg_unmatched_transcripts`). Sin llamadas en 24 h y sin suscripción real todavía. | **Corregido en este PR**: falla cerrado y exige `clientState` exacto. Requiere crear el secreto `MTG_GRAPH_CLIENT_STATE` antes de activar la suscripción. |
 | N5 | Baja | `esign`: la IP de la firma sale de `x-forwarded-for` (suplantable; mejor `cf-connecting-ip`); los 500 devuelven `e.message`; `fetchRemotePdf` sigue redirecciones; no hay límite de intentos; `decline` no condiciona el estado. El resto está bien: token de 244 bits, validación de organización, firma atómica, orden secuencial, solo PDF/PNG con tope de tamaño. | Pendiente: avisar a la sesión de firmas. |
@@ -239,6 +239,26 @@ El efecto neto es registrar esas versiones en el historial. **Deuda que queda:**
 **Probado:** 11 pruebas con Supabase simulado (sin credenciales, secreto incorrecto, JWT inválido, usuario sin rol, admin sin organización, admin de su organización, cliente de otra organización, cron intacto). Contra el código original, 5 de esas pruebas fallan (el problema se reproduce); con el arreglo pasan las 11. Tipos: el archivo tiene 14 errores de tipos de supabase-js **idénticos antes y después** (preexistentes; el despliegue no verifica tipos).
 
 **No probado:** contra producción ni contra SATgo reales. Ninguna pantalla llama hoy a esta función; solo el cron.
+
+## 5.7 Corrección de N2: `state` de OAuth firmado (2026-10-12)
+
+**Problema:** en Slack, Microsoft, Outlook vinculado y Google el `state` del flujo OAuth era el UUID del usuario (en Microsoft, un JSON en base64 sin firma). Quien conociera el UUID de otra persona podía iniciar el flujo con ese `state` y vincular **su propia** cuenta externa a la cuenta Kawiil de esa persona.
+
+**Cambio:**
+- Nuevo `_shared/oauthState.ts`: `state = v1.<payload>.<HMAC-SHA256>`; el payload lleva el proveedor, la caducidad (10 min) y un nonce. Solo las funciones `*-auth`, que exigen sesión, emiten un `state` válido y solo para el usuario autenticado. Un `state` de un proveedor no sirve en otro.
+- Clave: `OAUTH_STATE_SECRET` (≥ 32 caracteres) si existe; si no, se deriva de `SUPABASE_SERVICE_ROLE_KEY` (que ya tienen todas las funciones, sin exponerla). **No hace falta crear ningún secreto nuevo.**
+- Los cuatro callbacks rechazan el `state` ausente, falsificado, caducado o de otro proveedor **antes** de llamar al proveedor. Ya no se acepta el UUID "legado" en Microsoft.
+- No hubo que tocar el front: el `state` lo genera el servidor.
+
+**Hallazgo adicional corregido:** `google-callback` y `outlook-account-callback` insertaban el parámetro `error` de la URL sin escapar dentro de un `<script>` y del HTML (XSS reflejado en el dominio de las funciones). Se escapa el HTML y se usa `JSON.stringify` con `<` escapado. Slack y Microsoft ya escapaban el HTML, pero su `JSON.stringify` dentro del script tampoco escapaba `<` (un `</script>` rompía el bloque); también se corrigió.
+
+**Probado:** 47 comprobaciones con Deno: firma y verificación, UUID crudo, JSON sin firma, firma alterada, payload cambiado a otro usuario, caducidad, proveedor cruzado, cambio de clave; los 4 callbacks reales (falsificado/ausente → no llaman al proveedor; válido → continúa; otro proveedor → rechazado); y XSS ejecutando los `<script>` de la respuesta con un `alert` espía (4 cargas × 4 callbacks). La primera corrida detectó que `microsoft-callback` seguía vulnerable; se corrigió. Tipos: las 10 funciones y módulos compilan sin errores con `deno check`.
+
+**No probado:** el flujo completo con Slack, Microsoft y Google reales (requiere iniciar sesión en cada proveedor).
+
+**Efecto al desplegar:** los flujos de conexión que estén a medias en ese momento (menos de unos segundos) fallarán y se repiten. Los `state` en vuelo no sobreviven al cambio, por diseño.
+
+**Límite conocido (no resuelto):** el `state` no va atado al navegador de quien inicia el flujo. Un usuario autenticado podría pedir un `state` para su propia cuenta y convencer a otra persona de completar el consentimiento; lo mitiga la pantalla de consentimiento del proveedor. Cerrarlo requiere una cookie de sesión atada al flujo.
 
 ## 6. Decisiones que necesito de ti
 

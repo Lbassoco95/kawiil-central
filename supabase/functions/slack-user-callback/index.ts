@@ -1,3 +1,4 @@
+import { verifyOAuthState } from "../_shared/oauthState.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const postMessageOrigin = Deno.env.get("APP_ORIGIN")?.trim() || "*";
@@ -152,13 +153,13 @@ Deno.serve(async (req) => {
   try {
     const url = new URL(req.url);
     const code = url.searchParams.get("code");
-    const userId = url.searchParams.get("state");
+    const userId = (await verifyOAuthState(url.searchParams.get("state"), "slack"))?.u ?? null;
     const errParam = url.searchParams.get("error");
     const errDesc = url.searchParams.get("error_description");
 
     if (errParam) {
       const boot =
-        `try{window.opener?.postMessage({type:'slack-auth-error',error:${JSON.stringify(errParam)}},${JSON.stringify(postMessageOrigin)});}catch(_){}`;
+        `try{window.opener?.postMessage({type:'slack-auth-error',error:${JSON.stringify(errParam).replace(/</g, "\\u003c")}},${JSON.stringify(postMessageOrigin)});}catch(_){}`;
       const detail = errDesc ? ` ${decodeURIComponent(errDesc.replace(/\+/g, " "))}` : "";
       return new Response(
         renderOAuthResultPage({

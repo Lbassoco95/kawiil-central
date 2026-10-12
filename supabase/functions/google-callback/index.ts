@@ -1,6 +1,16 @@
+import { verifyOAuthState } from "../_shared/oauthState.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const postMessageOrigin = "*";
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 
 function renderPage(status: "success" | "error", message: string, detail?: string) {
   const isSuccess = status === "success";
@@ -17,7 +27,7 @@ function renderPage(status: "success" | "error", message: string, detail?: strin
   .detail { color: #94a3b8; font-size: 14px; margin-top: 8px; } .hint { margin-top: 24px; color: #64748b; font-size: 13px; }
   .brand { margin-top: 32px; font-size: 12px; color: #475569; letter-spacing: 1px; text-transform: uppercase; }
 </style></head>
-<body><div class="card"><div class="icon">${icon}</div><h1>${message}</h1>${detail ? `<p class="detail">${detail}</p>` : ""}
+<body><div class="card"><div class="icon">${icon}</div><h1>${escapeHtml(message)}</h1>${detail ? `<p class="detail">${escapeHtml(detail)}</p>` : ""}
 <p class="hint">Esta ventana se cerrará automáticamente...</p><p class="brand">Kawiil Central</p></div>
 <script>setTimeout(function(){window.close();},3000);</script></body></html>`;
 }
@@ -26,12 +36,12 @@ Deno.serve(async (req) => {
   try {
     const url = new URL(req.url);
     const code = url.searchParams.get("code");
-    const userId = url.searchParams.get("state");
+    const userId = (await verifyOAuthState(url.searchParams.get("state"), "google"))?.u ?? null;
     const error = url.searchParams.get("error");
 
     if (error) {
       return new Response(
-        `<html><head></head><body><script>window.opener?.postMessage({type:'google-auth-error',error:'${error}'},'${postMessageOrigin}');</script>${renderPage("error", "Error de conexión", error)}</body></html>`,
+        `<html><head></head><body><script>window.opener?.postMessage({type:'google-auth-error',error:${JSON.stringify(error).replace(/</g, "\\u003c")}},${JSON.stringify(postMessageOrigin)});</script>${renderPage("error", "Error de conexión", error)}</body></html>`,
         { headers: { "Content-Type": "text/html" } },
       );
     }

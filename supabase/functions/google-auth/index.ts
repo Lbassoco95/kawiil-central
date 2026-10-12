@@ -1,3 +1,4 @@
+import { signOAuthState } from "../_shared/oauthState.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -51,7 +52,7 @@ Deno.serve(async (req) => {
         response_type: "code",
         redirect_uri: redirectUri,
         scope: scopes,
-        state: user.id,
+        state: await signOAuthState("google", { u: user.id }),
         access_type: "offline",
         include_granted_scopes: "true",
         prompt: "consent",

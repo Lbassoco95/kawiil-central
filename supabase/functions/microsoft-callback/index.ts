@@ -3,6 +3,7 @@ import { classifyMicrosoftOAuthError } from "../_shared/microsoftOAuthErrors.ts"
 import {
   buildAppReturnUrl,
   parseMicrosoftOAuthState,
+  type MicrosoftOAuthState,
   sanitizeReturnPath,
 } from "../_shared/microsoftOAuthState.ts";
 
@@ -105,7 +106,7 @@ function finishHtml(
   kind: "success" | "error",
   title: string,
   detail: string | undefined,
-  state: ReturnType<typeof parseMicrosoftOAuthState>,
+  state: MicrosoftOAuthState | null,
   postMessageType: "microsoft-auth-success" | "microsoft-auth-error",
   postMessageError?: string,
 ) {
@@ -126,7 +127,7 @@ function finishHtml(
   const postMsg =
     postMessageType === "microsoft-auth-success"
       ? `window.opener?.postMessage({type:'microsoft-auth-success'},'${postMessageOrigin}');`
-      : `window.opener?.postMessage({type:'microsoft-auth-error',error:${JSON.stringify(postMessageError || "error")}},'${postMessageOrigin}');`;
+      : `window.opener?.postMessage({type:'microsoft-auth-error',error:${JSON.stringify(postMessageError || "error").replace(/</g, "\\u003c")}},'${postMessageOrigin}');`;
 
   const page = renderPage(kind, title, detail, { returnUrl, autoClose: mode === "popup" });
   // Inyectar postMessage justo antes de </body> (evitar HTML anidado / mojibake).
@@ -143,7 +144,7 @@ Deno.serve(async (req) => {
     const code = url.searchParams.get("code");
     const rawState = url.searchParams.get("state");
     const error = url.searchParams.get("error");
-    const state = parseMicrosoftOAuthState(rawState);
+    const state = await parseMicrosoftOAuthState(rawState);
     const userId = state?.u;
 
     console.log("Callback received:", {

@@ -1,7 +1,9 @@
 /**
  * Estado OAuth Microsoft embebido en `state` (userId + returnTo + modo + origen).
- * Compatible con state legado = solo UUID de usuario.
+ * Firmado con HMAC y con caducidad (ver `_shared/oauthState.ts`).
  */
+
+import { signOAuthState, verifyOAuthState } from "./oauthState.ts";
 
 export type MicrosoftOAuthState = {
   u: string;
@@ -13,46 +15,25 @@ export type MicrosoftOAuthState = {
   o?: string;
 };
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
 const ALLOWED_ORIGINS = new Set([
   "https://www.kawiil-central.mx",
   "https://kawiil-central.mx",
   "https://kawiil-core-hub.lovable.app",
 ]);
 
-function b64urlEncode(raw: string): string {
-  const bytes = new TextEncoder().encode(raw);
-  let bin = "";
-  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+/** `state` firmado (HMAC + caducidad). Ver `_shared/oauthState.ts`. */
+export async function encodeMicrosoftOAuthState(state: MicrosoftOAuthState): Promise<string> {
+  return await signOAuthState("microsoft", state);
 }
 
-function b64urlDecode(input: string): string {
-  const pad = "=".repeat((4 - (input.length % 4)) % 4);
-  const b64 = (input + pad).replace(/-/g, "+").replace(/_/g, "/");
-  const bin = atob(b64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return new TextDecoder().decode(bytes);
-}
-
-export function encodeMicrosoftOAuthState(state: MicrosoftOAuthState): string {
-  return b64urlEncode(JSON.stringify(state));
-}
-
-export function parseMicrosoftOAuthState(raw: string | null): MicrosoftOAuthState | null {
-  if (!raw) return null;
-  const trimmed = raw.trim();
-  if (UUID_RE.test(trimmed)) return { u: trimmed, m: "popup" };
-  try {
-    const parsed = JSON.parse(b64urlDecode(trimmed)) as MicrosoftOAuthState;
-    if (!parsed?.u || typeof parsed.u !== "string") return null;
-    return parsed;
-  } catch {
-    return null;
-  }
+/**
+ * Devuelve el estado solo si la firma, el proveedor y la caducidad son válidos.
+ * Ya NO se acepta el UUID de usuario "legado": cualquiera podía fabricarlo.
+ */
+export async function parseMicrosoftOAuthState(raw: string | null): Promise<MicrosoftOAuthState | null> {
+  const v = await verifyOAuthState<MicrosoftOAuthState>(raw, "microsoft");
+  if (!v) return null;
+  return { u: v.u, r: v.r, m: v.m, o: v.o };
 }
 
 /** Solo rutas internas relativas (anti open-redirect). */

@@ -84,7 +84,7 @@ Deno.serve(async (req) => {
         redirect_uri: redirectUri,
         scope: scopes,
         response_mode: "query",
-        state: encodeMicrosoftOAuthState({
+        state: await encodeMicrosoftOAuthState({
           u: user.id,
           r: returnTo,
           m: mode,
