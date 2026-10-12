@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { Loader2, PenTool, CheckCircle2, XCircle, Download } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,7 @@ interface GetResponse {
  */
 export default function FirmarPublico() {
   const { token } = useParams<{ token: string }>();
+  const navigate = useNavigate();
   const [data, setData] = useState<GetResponse | null>(null);
   const [error, setError] = useState<{ message: string; code?: string } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -73,6 +74,12 @@ export default function FirmarPublico() {
     setBusy(true);
     try {
       await invokeEsign({ action: "decline", token, reason });
+      // Los firmantes internos regresan al dashboard; los externos no tienen sesión y ven la pantalla final.
+      if (data?.signer.internal) {
+        toast.success("Rechazaste el documento. Se avisó a quien lo envió.");
+        navigate("/", { replace: true });
+        return;
+      }
       setDone("declined");
       await load();
     } catch (e) {
@@ -170,7 +177,14 @@ export default function FirmarPublico() {
               {signer.internal && <Button asChild variant="ghost" size="sm"><Link to="/firmas">Ir a mi bandeja</Link></Button>}
             </div>
           ) : done === "declined" || signer.status === "declined" ? (
-            <div className="rounded-lg border bg-background p-4 text-sm">Rechazaste firmar este documento.</div>
+            <div className="space-y-3 rounded-lg border bg-background p-4 text-sm">
+              <p>Rechazaste firmar este documento. Se avisó a quien lo envió.</p>
+              {signer.internal ? (
+                <Button asChild size="sm"><Link to="/">Ir al dashboard</Link></Button>
+              ) : (
+                <p className="text-muted-foreground">Ya puedes cerrar esta ventana.</p>
+              )}
+            </div>
           ) : !signer.can_sign ? (
             <div className="rounded-lg border bg-background p-4 text-sm text-muted-foreground">
               {request.status === "pending" ? "Aún no es tu turno de firmar. Te avisaremos por correo." : "Esta solicitud ya no está vigente."}
