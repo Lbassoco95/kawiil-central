@@ -83,7 +83,9 @@ const Login = () => {
         variant: "destructive",
       });
     } else {
-      navigate("/");
+      const redirect = new URLSearchParams(window.location.search).get("redirect");
+      // Solo rutas internas (evita open redirect).
+      navigate(redirect && /^\/(?!\/)/.test(redirect) ? redirect : "/");
     }
     setLoading(false);
   };
