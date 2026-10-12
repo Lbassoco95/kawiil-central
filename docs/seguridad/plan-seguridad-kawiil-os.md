@@ -197,7 +197,7 @@ El efecto neto es registrar esas versiones en el historial. **Deuda que queda:**
 |---|---|---|---|
 | N1 | Alta | **La clave `service_role` se usa fuera de Supabase**, desde una red residencial/oficina en México (Cablevisión): 158 llamadas en 24 h de `Python-urllib` (lectura de `tasks`, `projects`, `clients`, `profiles` y sondeos de tablas que no existen: `pagos`, `facturas`, `cobranza`…) más 13 de la VM de agentes. Esa clave omite RLS. Puede ser herramienta propia, pero no lo puedo confirmar. | Pendiente: confirmar quién es; si no se reconoce, **rotar la clave**. |
 | N2 | Media | El `state` de OAuth de Slack (`slack-user-callback`) y el de Microsoft (`_shared/microsoftOAuthState.ts`) **no están firmados**: es el `userId`. Un atacante que conozca el UUID de otro usuario puede vincular su propia cuenta de Slack/Microsoft a esa persona. | Pendiente: firmar el `state` con HMAC y caducidad (cambia función y front). |
-| N3 | Media | `satgo-facturas`: cualquier usuario con sesión (sin rol) puede disparar la descarga SAT de **todos** los clientes de **todas** las organizaciones. Además, la función desplegada es un arranque que importa el código de `raw.githubusercontent.com` en un commit fijo (`266629df`) y esa carpeta ya no existe en `main`: el CI no la redespliega. | Pendiente: restaurar la función al repo, exigir admin/gerente y filtrar por organización. |
+| N3 | Media | `satgo-facturas`: cualquier usuario con sesión (sin rol) puede disparar la descarga SAT de **todos** los clientes de **todas** las organizaciones. Además, la función desplegada es un arranque que importa el código de `raw.githubusercontent.com` en un commit fijo (`266629df`) y esa carpeta ya no existe en `main`: el CI no la redespliega. | **Corregido** (ver 5.6): la función vuelve al repo, el disparo manual exige admin/gerente y se limita a su organización. |
 | N4 | Media | `mtg-graph-webhook` aceptaba notificaciones sin `clientState` o sin el secreto configurado (insertaba en `job_queue` y `mtg_unmatched_transcripts`). Sin llamadas en 24 h y sin suscripción real todavía. | **Corregido en este PR**: falla cerrado y exige `clientState` exacto. Requiere crear el secreto `MTG_GRAPH_CLIENT_STATE` antes de activar la suscripción. |
 | N5 | Baja | `esign`: la IP de la firma sale de `x-forwarded-for` (suplantable; mejor `cf-connecting-ip`); los 500 devuelven `e.message`; `fetchRemotePdf` sigue redirecciones; no hay límite de intentos; `decline` no condiciona el estado. El resto está bien: token de 244 bits, validación de organización, firma atómica, orden secuencial, solo PDF/PNG con tope de tamaño. | Pendiente: avisar a la sesión de firmas. |
 
@@ -225,6 +225,20 @@ El efecto neto es registrar esas versiones en el historial. **Deuda que queda:**
 4. Las listas de campos permitidos se basan en los esquemas que se ven en `mati-api` (`routes/admin-kit-to-drive.ts`); los nombres reales que devuelve el puente podrían diferir (una columna ausente simplemente no se muestra). Se ajustan en `ACTIONS` del gateway.
 
 **Siguiente (Fase 3, escritura controlada):** acciones con confirmación y doble registro; solo tras tener credencial dedicada y HMAC verificado en el puente.
+
+## 5.6 Corrección de N3: `satgo-facturas` (2026-10-12)
+
+**Problema:** la función en producción era un arranque de una línea que importaba su código de `raw.githubusercontent.com` en el commit `266629df`, de una rama que nunca se fusionó a `main`. Por eso `main` no tenía ni la función ni dos de sus dependencias, y el CI no podía redesplegarla. Además, el disparo manual aceptaba a **cualquier usuario con sesión** y recorría **los clientes de todas las organizaciones**.
+
+**Cambio:**
+- Se restaura al repo el código exacto que corre hoy (commit `266629df`): `satgo-facturas/index.ts`, `_shared/satgoCfdiEnrich.ts`, `_shared/portal/{cfdiXml,fiscalMirror,publishInvoiceToOs,systemAuth,validate}.ts` y 4 catálogos JSON. `_shared/satgoFielClient.ts` pasa a la versión del commit, que es un superconjunto puro del de `main` (+238 líneas, 0 eliminadas), así que `satgo-query` y `satgo-monthly` no cambian de comportamiento.
+- Disparo manual: solo `is_admin_or_manager` y limitado a la organización del usuario (también con `clientId`). El cron (`x-cron-secret`) sigue recorriendo todas las organizaciones, sin cambios.
+- `config.toml`: `[functions.satgo-facturas] verify_jwt = false`. Es obligatorio: el cron solo manda `x-cron-secret`, sin JWT.
+- Al desplegar por CI, el arranque que importaba de GitHub se reemplaza por el código empaquetado del repo.
+
+**Probado:** 11 pruebas con Supabase simulado (sin credenciales, secreto incorrecto, JWT inválido, usuario sin rol, admin sin organización, admin de su organización, cliente de otra organización, cron intacto). Contra el código original, 5 de esas pruebas fallan (el problema se reproduce); con el arreglo pasan las 11. Tipos: el archivo tiene 14 errores de tipos de supabase-js **idénticos antes y después** (preexistentes; el despliegue no verifica tipos).
+
+**No probado:** contra producción ni contra SATgo reales. Ninguna pantalla llama hoy a esta función; solo el cron.
 
 ## 6. Decisiones que necesito de ti
 

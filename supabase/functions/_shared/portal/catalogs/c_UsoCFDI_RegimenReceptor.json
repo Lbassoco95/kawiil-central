@@ -1,0 +1,10 @@
+{
+  "_meta": {
+    "catalogo": "c_UsoCFDI × c_RegimenFiscal (columna «Régimen Fiscal Receptor» de c_UsoCFDI)",
+    "fuente": "pendiente",
+    "publicado": null,
+    "generado_por": null,
+    "nota": "VACÍA A PROPÓSITO. No se inventa: se genera del catCFDI_V_4_*.xls oficial del SAT con `node tools/portal/build-sat-catalogs.mjs <archivo.xls>`. Mientras esté vacía, validarBorrador() BLOQUEA toda emisión con el motivo «matriz régimen–uso no cargada»."
+  },
+  "entries": []
+}
