@@ -175,6 +175,8 @@ El efecto neto es registrar esas versiones en el historial. **Deuda que queda:**
 
 **Corrección tras el primer despliegue (2026-10-12):** `db push` aplicó 12 de los archivos sin registrar y se detuvo en `20260930200000_moffin_consults_buzon_types`: el gemelo recreaba un `CHECK` viejo de `moffin_consults`, que una migración posterior ya había ampliado (`satgo_cfdi_download`, 175 filas), así que fallaba. Re-ejecutar un gemelo no es siempre inocuo cuando una migración posterior cambió el mismo objeto. Se eliminaron los 4 gemelos que aún no se habían aplicado (`20260930200000`, `20260930230000`, `20261001160000`, `20261005170000`), idénticos a su versión ya registrada. Los 12 gemelos ya aplicados quedan en el repo porque ahora forman parte del historial del remoto.
 
+**Segunda corrección (2026-10-12):** el siguiente despliegue falló en `20261011120000_esign_simple` (gemelo de `20261011225226`, ya registrado): su `CREATE POLICY` no es idempotente y la política ya existía. Se eliminó ese gemelo. `20261012010000_esign_fix_rls_recursion` se conserva: usa `CREATE OR REPLACE` y `ALTER POLICY`, y las políticas de producción ya coinciden con él. Criterio para los gemelos pendientes: quitarlos si su SQL no es idempotente o si una migración posterior cambió el mismo objeto.
+
 **Causa de fondo:** se aplican migraciones directamente en producción (panel o conector) sin versionarlas. Regla propuesta: toda migración se escribe primero en `supabase/migrations/` y la aplica el CI.
 
 ## 6. Decisiones que necesito de ti
