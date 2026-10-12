@@ -224,7 +224,7 @@ El efecto neto es registrar esas versiones en el historial. **Deuda que queda:**
 3. La firma HMAC solo protege cuando el puente la verifique (hallazgo M7 del informe de MATI); hasta entonces es inofensiva pero no añade seguridad.
 4. Las listas de campos permitidos se basan en los esquemas que se ven en `mati-api` (`routes/admin-kit-to-drive.ts`); los nombres reales que devuelve el puente podrían diferir (una columna ausente simplemente no se muestra). Se ajustan en `ACTIONS` del gateway.
 
-**Siguiente (Fase 3, escritura controlada):** acciones con confirmación y doble registro; solo tras tener credencial dedicada y HMAC verificado en el puente.
+**Siguiente (Fase 3, escritura controlada):** acciones con confirmación y doble registro; solo tras tener credencial dedicada y HMAC verificado en el puente. → Primera ola construida y apagada: ver 5.11.
 
 ## 5.6 Corrección de N3: `satgo-facturas` (2026-10-12)
 
@@ -305,6 +305,33 @@ El efecto neto es registrar esas versiones en el historial. **Deuda que queda:**
 **No probado:** la app con una sesión real (sección de agentes y tarjeta de tareas del chat). Si algo se ve vacío, revisar primero estas políticas.
 
 **Siguiente paso:** acotar la lectura de tareas y logs por `created_by` o rol (hoy cualquier usuario con sesión lee todo). Antes hay que ver cómo se comparten las tareas en el chat para no romper vistas compartidas.
+
+## 5.11 Fase 3: escritura controlada hacia MATI, primera ola (2026-10-12) — construida y APAGADA
+
+**Qué se decidió.** Primera ola con solo dos acciones sobre tickets de soporte: `ticket_update` (estado y prioridad) y `ticket_message` (responder). **Fuera de la lista cerrada del gateway, a propósito:** crear o editar usuarios (incluido su nivel), resetear contraseñas, activar o desactivar usuarios, cambiar la configuración y activar o desactivar módulos. El puente de MATI sí las expone; si se quieren más adelante, se añaden una a una con su validación y sus pruebas.
+
+**Cómo queda apagada.** Las escrituras responden `403 writes_disabled` y **no llaman a MATI** mientras `MATI_GATEWAY_WRITES` no valga exactamente `on`. Aun encendida, exigen `MATI_GATEWAY_HMAC_KEY` (sin ella responden 503 y tampoco llaman). La pantalla solo muestra «Gestionar» cuando el gateway informa `writes_enabled`.
+
+**Controles de cada escritura.**
+- Sesión válida y rol `transformador`; el servidor valida de nuevo aunque la pantalla no muestre el botón.
+- Validación estricta, sin claves extra: id de ticket en formato UUID (no hay forma de construir otra ruta), estado y prioridad de listas cerradas, mensaje de 1 a 5000 caracteres sin NUL. El autor del mensaje lo fija el servidor (`Soporte (Kawiil Central)`); el cliente no puede elegirlo.
+- Límite propio de **10 escrituras por minuto por usuario** (las lecturas no lo consumen) y bloqueo de **mensajes duplicados** (mismo usuario, ticket y texto) durante 60 s. Si no se puede consultar la bitácora, **falla cerrado**.
+- Confirmación en pantalla que muestra el antes y el después, o el texto exacto del mensaje, y avisa que el cambio se aplica en MATI.
+- **Doble registro:** la bitácora append-only de Kawiil (`integration_audit`: quién, qué ticket, qué valores; del mensaje solo el largo y una huella corta, nunca el texto) y el actor `x-mati-actor: kawiil:<correo>` que viaja al puente para su propia bitácora.
+- Respuesta con lista blanca de campos; los errores del puente no se reenvían (solo se distinguen «no encontrado» y «MATI no aceptó el cambio»).
+- **Firma HMAC con el cuerpo:** `HMAC-SHA256(clave, "<ts>.<nonce>.<MÉTODO>.<ruta?query>.<sha256(cuerpo)>")`, en las cabeceras `x-kawiil-timestamp`, `x-kawiil-nonce` y `x-kawiil-signature`. Las lecturas siguen firmándose sin el último segmento. Formato detallado para MATI en el anexo del informe de MATI.
+
+**Probado.** Gateway (Deno, Supabase y puente simulados): 55 comprobaciones de escritura (bandera, firma, autorización, validación con 32 entradas inválidas, duplicados, límites, errores del puente, que la bitácora no guarde texto, que la firma cambie si cambia el cuerpo) más las 31 de lectura, que siguen pasando tras el refactor. Se comprobó que las pruebas **fallan** al introducir cinco defectos a propósito (quitar la bandera, contar lecturas en el cupo de escrituras, guardar el texto en la bitácora, dejar que el cliente elija el autor y firmar sin el cuerpo). Front: 14 pruebas de la tarjeta y el diálogo (incluidas dos mutaciones detectadas: enviar sin recortar y enviar sin confirmar). Tipos: `deno check` limpio en el gateway.
+
+**No probado.** Contra un MATI real: ni la forma de las respuestas del puente a `PATCH /tickets/:id` y `POST /tickets/:id/messages`, ni que el puente acepte `autor_nombre`. Tampoco el diálogo en un navegador real.
+
+**Condiciones para encenderla (`MATI_GATEWAY_WRITES=on`), todas pendientes del proyecto MATI:**
+1. Una **credencial dedicada a Kawiil** en el puente (hoy hay un solo secreto compartido; configurarlo como `MATI_GATEWAY_TOKEN` daría a Kawiil las mismas escrituras que un administrador de MATI).
+2. El puente **verifica la firma** (ventana de ±5 min y nonce de un solo uso) y rechaza lo que no coincide (hallazgo M7).
+3. El puente **registra el actor** que recibe en su propia bitácora.
+4. Una prueba con un ticket real en un entorno de pruebas de MATI.
+
+**Siguiente.** Cuando se cumplan las condiciones, encender en un entorno de prueba, ejecutar un cambio y un mensaje reales, y comprobar los dos registros. Una segunda ola (activar o desactivar usuarios o módulos) requiere decisión expresa.
 
 ## 6. Decisiones que necesito de ti
 
