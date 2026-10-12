@@ -365,12 +365,20 @@ async function buildSignedPdf(
   }
   page.drawText(winAnsi(`Folio: ${meta.requestId}`), { x: M, y, size: 9, font, color: rgb(0.4, 0.4, 0.4) });
   y -= 13;
-  page.drawText(`SHA-256 del documento original:`, { x: M, y, size: 9, font, color: rgb(0.4, 0.4, 0.4) });
+  page.drawText(`SHA-256 del documento original (calculado por Kawiil Central):`, { x: M, y, size: 9, font, color: rgb(0.4, 0.4, 0.4) });
   y -= 12;
   page.drawText(meta.originalSha, { x: M, y, size: 8, font, color: rgb(0.4, 0.4, 0.4) });
   y -= 14;
   page.drawLine({ start: { x: M, y }, end: { x: W - M, y }, thickness: 0.5, color: rgb(0.8, 0.8, 0.8) });
   y -= 20;
+
+  // PENDIENTE — constancia de conservación NOM-151 (PSC):
+  // Hoy NINGÚN proveedor interviene en este documento: el SHA-256 lo calcula Kawiil Central y la hoja
+  // lo declara así. Dropbox Sign no es un PSC mexicano ni emite NOM-151, por lo que no hay un nombre
+  // de PSC que tomar de Dropbox. Cuando se integre un PSC acreditado ante la Secretaría de Economía,
+  // mostrar aquí SOLO lo que devuelva su respuesta (nombre del PSC, folio de la constancia, fecha y
+  // huella sellada), nunca texto escrito a mano:
+  //   if (meta.psc) { page.drawText(`Constancia NOM-151 — ${meta.psc.name} · folio ${meta.psc.folio}`, ...); y -= 14; }
 
   const BLOCK = 120;
   for (const s of signers) {
