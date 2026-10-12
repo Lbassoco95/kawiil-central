@@ -7,7 +7,8 @@ import { mtgDb, type MtgAgreementRow, type MtgMeetingRow, type MtgMinutesRow, ty
 import { logMtgAudit, MTG_AUDIT_ACTION } from "@/lib/mtg/audit";
 import { createTaskForAgreement } from "@/lib/mtg/captureAgreement";
 import { confirmRequires, parseTopicsFromMarkdown } from "@/lib/mtg/minutesReview";
-import { notifyMeetingTeam } from "@/lib/mtg/meetingTeam";
+import { toast } from "sonner";
+import { emailMeetingTeamSummary, meetingTeamIds, notifyMeetingTeam } from "@/lib/mtg/meetingTeam";
 import { buildMtgStoragePath, MTG_BUCKET } from "@/lib/mtg/storagePaths";
 
 export async function confirmProposedAgreement(opts: {
@@ -258,6 +259,16 @@ export async function approveMinutes(opts: {
       title: opts.meeting.title,
       kind: "minutes",
     });
+    const sent = await emailMeetingTeamSummary({
+      actorUserId: opts.actorUserId,
+      meeting: opts.meeting,
+      series: opts.series,
+      contentMd: opts.contentMd,
+    });
+    if (sent > 0) toast.success(`Resumen enviado por correo a ${sent} persona(s) del equipo`);
+    else if (meetingTeamIds(opts.series).some((id) => id !== opts.actorUserId)) {
+      toast.message("No se pudo enviar el resumen por correo (¿Outlook conectado?). Sí se notificó en la app.");
+    }
   } catch (e) {
     console.warn("[mtg] notify team", e);
   }

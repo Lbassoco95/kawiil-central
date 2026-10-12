@@ -4,6 +4,7 @@
  */
 
 import { mtgDb, type MtgMeetingRow, type MtgSeriesRow } from "@/lib/mtg/db";
+import { supabase } from "@/integrations/supabase/client";
 import { createNotifications } from "@/lib/notificationHelpers";
 
 export function meetingTeamIds(
@@ -55,4 +56,58 @@ export async function notifyMeetingTeam(opts: {
         source_user_id: opts.actorUserId,
       })),
   );
+}
+
+function escapeHtml(t: string): string {
+  return t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/**
+ * Envía el resumen (minuta aprobada) por correo al equipo, desde el Outlook de
+ * quien aprueba (microsoft-api). Devuelve cuántos destinatarios recibieron el correo;
+ * 0 si no hay equipo con correo o Outlook no está conectado (no lanza).
+ */
+export async function emailMeetingTeamSummary(opts: {
+  actorUserId: string;
+  meeting: Pick<MtgMeetingRow, "id" | "scheduled_at" | "title">;
+  series: Pick<MtgSeriesRow, "owner_user_id" | "attendees_internal" | "title"> | null;
+  contentMd: string;
+}): Promise<number> {
+  const ids = meetingTeamIds(opts.series).filter((id) => id !== opts.actorUserId);
+  if (ids.length === 0) return 0;
+
+  const { data: profs } = await supabase
+    .from("profiles")
+    .select("email")
+    .in("user_id", ids);
+  const emails = [...new Set((profs ?? []).map((p) => p.email?.trim()).filter(Boolean))] as string[];
+  if (emails.length === 0) return 0;
+
+  const label = opts.series?.title ?? opts.meeting.title ?? "Junta";
+  const day = opts.meeting.scheduled_at.slice(0, 10);
+  const link = `${window.location.origin}/juntas/${opts.meeting.id}/minuta`;
+  const html =
+    `<p>Resumen de la junta <strong>${escapeHtml(label)}</strong> (${day}).</p>` +
+    `<div style="white-space:pre-wrap;font-family:inherit">${escapeHtml(opts.contentMd)}</div>` +
+    `<p><a href="${link}">Abrir la minuta en Kawiil OS</a></p>`;
+
+  try {
+    const { data, error } = await supabase.functions.invoke("microsoft-api", {
+      body: {
+        action: "send-email",
+        params: {
+          message: {
+            subject: `Resumen de junta: ${label} (${day})`,
+            body: { contentType: "HTML", content: html },
+            toRecipients: emails.map((address) => ({ emailAddress: { address } })),
+          },
+        },
+      },
+    });
+    if (error || data?.error) throw new Error(error?.message ?? String(data?.error));
+    return emails.length;
+  } catch (e) {
+    console.warn("[mtg] email team", e);
+    return 0;
+  }
 }
