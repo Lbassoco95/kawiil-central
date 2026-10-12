@@ -122,14 +122,18 @@ export async function isRateLimited(
   system: string,
   max: number,
   windowSec: number,
+  /** Si se indica, solo cuentan las filas de estas acciones (p. ej. un límite más estricto para escrituras). */
+  actions?: string[],
 ): Promise<boolean> {
   const since = new Date(Date.now() - windowSec * 1000).toISOString();
-  const { count, error } = await svc
+  let query = svc
     .from("integration_audit")
     .select("id", { count: "exact", head: true })
     .eq("user_id", userId)
     .eq("system", system)
     .gte("created_at", since);
+  if (actions?.length) query = query.in("action", actions);
+  const { count, error } = await query;
   if (error) {
     // Si no se puede contar, se falla cerrado: mejor frenar que dejar pasar sin límite.
     console.error("integration_audit count:", error.message);
@@ -154,16 +158,54 @@ export async function hmacSha256Hex(key: string, message: string): Promise<strin
   return toHex(await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(message)));
 }
 
-/** Cabeceras de firma: HMAC-SHA256(key, `${ts}.${nonce}.${METHOD}.${path?query}`). */
+/** SHA-256 en hexadecimal de un texto (huella del cuerpo de una escritura). */
+export async function sha256HexOf(text: string): Promise<string> {
+  return toHex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)));
+}
+
+/**
+ * Cabeceras de firma: HMAC-SHA256(key, `${ts}.${nonce}.${METHOD}.${path?query}`).
+ * Si la petición lleva cuerpo, se añade su SHA-256 al final del mensaje firmado
+ * (`...${path?query}.${sha256(body)}`) para que el puente pueda detectar un
+ * cuerpo alterado; sin `bodySha256` el mensaje es el de siempre (lecturas).
+ */
 export async function signRequestHeaders(
   key: string,
   method: string,
   pathWithQuery: string,
+  bodySha256?: string,
 ): Promise<Record<string, string>> {
   const ts = String(Math.floor(Date.now() / 1000));
   const nonce = crypto.randomUUID();
-  const sig = await hmacSha256Hex(key, `${ts}.${nonce}.${method.toUpperCase()}.${pathWithQuery}`);
+  const base = `${ts}.${nonce}.${method.toUpperCase()}.${pathWithQuery}`;
+  const sig = await hmacSha256Hex(key, bodySha256 ? `${base}.${bodySha256}` : base);
   return { "x-kawiil-timestamp": ts, "x-kawiil-nonce": nonce, "x-kawiil-signature": sig };
+}
+
+/**
+ * true si el mismo usuario ya hizo con éxito esta acción con el mismo valor de
+ * `detail.<campo>` en los últimos `windowSec` segundos (anti doble clic).
+ * Si no se puede consultar, falla cerrado (se trata como duplicado).
+ */
+export async function hasRecentDuplicate(
+  svc: SupabaseClient,
+  o: { userId: string; system: string; action: string; field: string; value: string; windowSec: number },
+): Promise<boolean> {
+  const since = new Date(Date.now() - o.windowSec * 1000).toISOString();
+  const { count, error } = await svc
+    .from("integration_audit")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", o.userId)
+    .eq("system", o.system)
+    .eq("action", o.action)
+    .eq("outcome", "ok")
+    .eq(`detail->>${o.field}`, o.value)
+    .gte("created_at", since);
+  if (error) {
+    console.error("integration_audit duplicate check:", error.message);
+    return true;
+  }
+  return (count ?? 0) > 0;
 }
 
 // ---------- Enmascarado y lista blanca ----------

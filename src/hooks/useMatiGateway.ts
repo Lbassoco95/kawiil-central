@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   invokeFunctionWithSession,
@@ -12,6 +12,14 @@ import {
  */
 export type MatiAction = "status" | "users" | "modules" | "tickets";
 
+/** Escrituras (Fase 3, primera ola). Solo existen si el gateway las tiene activadas. */
+export type MatiWriteAction = "ticket_update" | "ticket_message";
+
+export const ESTADOS_TICKET = ["abierto", "en_progreso", "resuelto", "cerrado"] as const;
+export const PRIORIDADES_TICKET = ["baja", "media", "alta", "urgente"] as const;
+export type EstadoTicket = (typeof ESTADOS_TICKET)[number];
+export type PrioridadTicket = (typeof PRIORIDADES_TICKET)[number];
+
 export type MatiRow = Record<string, unknown>;
 
 export type MatiGatewayResponse<T> = {
@@ -19,6 +27,8 @@ export type MatiGatewayResponse<T> = {
   problems?: string[];
   data?: T;
   fetched_at?: string;
+  /** El gateway tiene activadas las escrituras (bandera + firma + puente). El servidor las valida de todos modos. */
+  writes_enabled?: boolean;
 };
 
 export type MatiStatusData = {
@@ -30,8 +40,8 @@ export type MatiStatusData = {
 };
 
 async function callGateway<T>(
-  action: MatiAction,
-  params?: Record<string, string | number>,
+  action: MatiAction | MatiWriteAction,
+  params?: Record<string, string | number | undefined>,
 ): Promise<MatiGatewayResponse<T>> {
   const { data, error } = await invokeFunctionWithSession<MatiGatewayResponse<T>>(
     "integraciones-gateway",
@@ -67,5 +77,26 @@ export function useMatiList(
     staleTime: 60_000,
     gcTime: 60_000,
     retry: false,
+  });
+}
+
+/**
+ * Cambia el estado y/o la prioridad de un ticket en MATI. El gateway rechaza la
+ * petición si las escrituras no están activadas; la interfaz solo ofrece el botón
+ * cuando `status` dice `writes_enabled`.
+ */
+export function useMatiTicketUpdate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (p: { id: string; estado?: EstadoTicket; prioridad?: PrioridadTicket }) =>
+      callGateway<Record<string, unknown>>("ticket_update", p),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["mati-gateway", "tickets"] }),
+  });
+}
+
+/** Responde un ticket en MATI. El texto viaja al gateway y nunca se guarda en el navegador. */
+export function useMatiTicketMessage() {
+  return useMutation({
+    mutationFn: (p: { id: string; mensaje: string }) => callGateway<Record<string, unknown>>("ticket_message", p),
   });
 }
