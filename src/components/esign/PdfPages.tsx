@@ -23,6 +23,9 @@ interface PdfPagesProps {
   onAdd?: (page: number, x: number, y: number) => void;
   onMove?: (id: string, x: number, y: number) => void;
   onRemove?: (id: string) => void;
+  /** Se llama cuando el PDF ya se pudo abrir (o falló) para habilitar/avisar en la UI. */
+  onLoaded?: () => void;
+  onError?: (message: string) => void;
 }
 
 const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max);
@@ -136,7 +139,7 @@ function PageView({
 }
 
 /** Renderiza todas las páginas de un PDF con recuadros de firma encima (pdfjs, sin iframe). */
-export function PdfPages({ source, fields, mode, onAdd, onMove, onRemove }: PdfPagesProps) {
+export function PdfPages({ source, fields, mode, onAdd, onMove, onRemove, onLoaded, onError }: PdfPagesProps) {
   const [doc, setDoc] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const key = "data" in source ? source.data : source.url;
@@ -152,9 +155,16 @@ export function PdfPages({ source, fields, mode, onAdd, onMove, onRemove }: PdfP
         // pdfjs transfiere el buffer al worker: se le pasa una copia.
         const params = "data" in source ? { data: source.data.slice() } : { url: source.url };
         loaded = await pdfjs.getDocument(params).promise;
-        if (!cancelled) setDoc(loaded);
+        if (!cancelled) {
+          setDoc(loaded);
+          onLoaded?.();
+        }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "No se pudo abrir el PDF");
+        const msg = e instanceof Error ? e.message : "No se pudo abrir el PDF";
+        if (!cancelled) {
+          setError(msg);
+          onError?.(msg);
+        }
       }
     })();
     return () => {

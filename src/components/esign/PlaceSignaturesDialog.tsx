@@ -2,7 +2,8 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { Button } from "@/components/ui/button";
 import { PdfPages, type PdfFieldBox } from "./PdfPages";
 import { DEFAULT_FIELD, signerColor } from "@/lib/esignPdf";
-import { PenTool } from "lucide-react";
+import { Loader2, PenTool } from "lucide-react";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 
 export interface PlacedField extends PdfFieldBox {
@@ -23,12 +24,23 @@ interface PlaceSignaturesDialogProps {
   onFieldsChange: (fields: PlacedField[]) => void;
   activeKey: string | null;
   onActiveKeyChange: (key: string) => void;
+  onSend: () => void;
+  sending: boolean;
 }
 
 /** Pantalla para elegir en qué página y lugar firma cada persona. */
 export function PlaceSignaturesDialog({
-  open, onClose, pdfData, signers, fields, onFieldsChange, activeKey, onActiveKeyChange,
+  open, onClose, pdfData, signers, fields, onFieldsChange, activeKey, onActiveKeyChange, onSend, sending,
 }: PlaceSignaturesDialogProps) {
+  const [ready, setReady] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  useEffect(() => {
+    if (open) {
+      setReady(false);
+      setLoadError(null);
+    }
+  }, [open, pdfData]);
+  const missing = signers.filter((s) => !fields.some((f) => f.signerKey === s.key));
   const active = signers.find((s) => s.key === activeKey) ?? signers[0];
 
   const add = (page: number, x: number, y: number) => {
@@ -80,6 +92,8 @@ export function PlaceSignaturesDialog({
               source={{ data: pdfData }}
               fields={fields}
               mode="place"
+              onLoaded={() => setReady(true)}
+              onError={setLoadError}
               onAdd={add}
               onMove={(id, x, y) => onFieldsChange(fields.map((f) => (f.id === id ? { ...f, x, y } : f)))}
               onRemove={(id) => onFieldsChange(fields.filter((f) => f.id !== id))}
@@ -89,11 +103,22 @@ export function PlaceSignaturesDialog({
           )}
         </div>
 
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-xs text-muted-foreground">
-            Los firmantes sin recuadro quedan registrados solo en la hoja de firmas al final del PDF.
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className={cn("text-xs", missing.length ? "text-amber-600" : "text-muted-foreground")}>
+            {loadError
+              ? "No se pudo mostrar el documento. Puedes enviar igual: la firma irá en la hoja de firmas al final del PDF."
+              : !ready
+                ? "Cargando documento…"
+                : missing.length
+                  ? `Sin recuadro: ${missing.map((m) => m.name || "Firmante").join(", ")}. Su firma irá solo en la hoja de firmas al final del PDF.`
+                  : "Todos los firmantes tienen su recuadro."}
           </p>
-          <Button onClick={onClose}>Listo</Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onClose} disabled={sending}>Volver</Button>
+            <Button onClick={onSend} disabled={sending || (!ready && !loadError)}>
+              {sending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Enviando...</> : <><PenTool className="mr-2 h-4 w-4" />Enviar a firma</>}
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
