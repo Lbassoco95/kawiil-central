@@ -148,6 +148,33 @@ Comprobadas una a una: `claim_jobs`, `complete_job`, `fail_job`, `get_edge_fn_so
 
 **Decisión pendiente:** las tablas `agent_registry`, `agent_tasks` y `agent_activity_logs` son legibles por cualquiera con la clave pública (`anon_read_*`, `true`). Probablemente las lee un agente externo con la clave anon; hay que confirmarlo antes de cerrarlas.
 
+## 5.3 Reparación del historial de migraciones (2026-10-12)
+
+**Problema:** `Deploy Supabase` fallaba en «Push migrations» con `Remote migration versions not found in local migrations directory` (ejecuciones #136, #138, #139 y #140). Producción tenía 16 migraciones registradas que no existían en `supabase/migrations/`, porque se aplicaron a mano con otra numeración.
+
+**Reparación (sin escribir en la base de producción):** se recrearon esas 16 migraciones en el repo con el SQL exacto que quedó guardado en `supabase_migrations.schema_migrations`, cada una con su misma versión y nombre. Cada archivo se verificó contra el `md5` que calcula la base (coinciden las 16).
+
+| Versión | Nombre |
+|---|---|
+| 20260925014308 · 014354 · 020641 · 022629 | `contract_engagements_mvp`, `contract_templates_seed`, `contract_won_stage_softlanding_rfc`, `contract_rpc_schema_reload` |
+| 20260930025108 · 150806 · 210647 · 224934 | `mtg_unassigned_meetings`, `satgo_monthly_cron`, `moffin_consults_buzon_types`, `mtg_bucket_file_size_limit_500mb` |
+| 20261001160110 | `mtg_recording_saved_meta` |
+| 20261004164053 · 164139 · 192226 | `satgo_cfdi_auto_download`, `satgo_cfdi_cron`, `kawiil_vault_secret_os_mirror` |
+| 20261005164935 · 20261006024112 · 20261006215158 | `rh_start_jornada_rpc`, `satgo_cfdi_enrich_structured`, `facturapi_org_mapping` |
+| 20261011225226 | `esign_simple` |
+
+Con esto no queda ninguna versión del remoto sin archivo local (272 de 272).
+
+**Qué pasará al fusionar:** `supabase db push --include-all` aplicará los 17 archivos locales que el remoto no tiene registrados. Se revisó que no cambie nada:
+- 10 son gemelos de las migraciones recuperadas (mismo SQL; solo difieren comentarios y espacios). Producción ya tiene ese SQL aplicado a mano.
+- 6 no tienen gemelo (`lead_client_referrals`, `contract_pgcrypto_search_path`, `rh_jornada_repairs`, `add_nomina_service`, `contract_client_fields_and_service_sync`, `client_sat_certificates_satgo_jwe`): sus objetos ya existen en producción (columnas, constraint, política, valor de enum y `search_path`).
+- La 17.ª es `20261011230000_fase1_endurecer_anon_y_rpc.sql`, ya aplicada e idempotente.
+- Ninguna re-ejecución devuelve permisos a `anon`; las únicas concesiones a `anon` son `contract_client_get/patch`, que son públicas a propósito.
+
+El efecto neto es registrar esas versiones en el historial. **Deuda que queda:** los gemelos duplican el SQL bajo dos versiones (p. ej. `20260924120000` y `20260925014308`). En una base nueva se ejecutarían las dos veces; es inocuo porque son idempotentes, pero conviene eliminar los duplicados locales más adelante.
+
+**Causa de fondo:** se aplican migraciones directamente en producción (panel o conector) sin versionarlas. Regla propuesta: toda migración se escribe primero en `supabase/migrations/` y la aplica el CI.
+
 ## 6. Decisiones que necesito de ti
 
 1. **¿Qué roles de Kawiil pueden ver datos de Kit-to-Drive/MATI?** (propongo solo dirección y administración al inicio).
