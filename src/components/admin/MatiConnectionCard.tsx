@@ -11,6 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { AlertCircle, CheckCircle2, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
+import { MatiTicketDialog } from "./MatiTicketDialog";
 import { useMatiList, useMatiStatus, type MatiRow } from "@/hooks/useMatiGateway";
 
 type Section = "users" | "modules" | "tickets";
@@ -53,11 +54,17 @@ function cell(row: MatiRow, key: string): string {
   return String(v);
 }
 
-/** Conexión de solo lectura con MATI / Kit-to-Drive, vía el gateway de Kawiil. */
+/**
+ * Conexión con MATI / Kit-to-Drive, vía el gateway de Kawiil. Es de solo lectura
+ * salvo que el gateway tenga activadas las escrituras (`writes_enabled`); en ese
+ * caso los tickets se pueden gestionar, siempre con confirmación.
+ */
 export function MatiConnectionCard() {
   const status = useMatiStatus();
   const [section, setSection] = useState<Section | null>(null);
   const configured = status.data?.configured === true;
+  const canWrite = configured && status.data?.writes_enabled === true;
+  const [managing, setManaging] = useState<MatiRow | null>(null);
   const list = useMatiList(section ?? "users", configured && section !== null);
 
   const rows = list.data?.data ?? [];
@@ -68,7 +75,7 @@ export function MatiConnectionCard() {
         <CardTitle className="flex items-center gap-2 text-sm">
           <ShieldCheck className="h-4 w-4 text-sky-600" />
           MATI / Kit-to-Drive
-          <Badge variant="outline" className="text-[10px]">Solo lectura</Badge>
+          <Badge variant="outline" className="text-[10px]">{canWrite ? "Lectura y tickets" : "Solo lectura"}</Badge>
           <Button
             variant="ghost"
             size="sm"
@@ -151,6 +158,7 @@ export function MatiConnectionCard() {
                         {SECTIONS[section].columns.map((c) => (
                           <TableHead key={c.key} className="text-[11px]">{c.label}</TableHead>
                         ))}
+                        {canWrite && section === "tickets" && <TableHead className="text-[11px]" />}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -159,6 +167,19 @@ export function MatiConnectionCard() {
                           {SECTIONS[section].columns.map((c) => (
                             <TableCell key={c.key} className="text-xs">{cell(r, c.key)}</TableCell>
                           ))}
+                          {canWrite && section === "tickets" && (
+                            <TableCell className="text-right">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 px-2 text-[11px]"
+                                disabled={!r.id}
+                                onClick={() => setManaging(r)}
+                              >
+                                Gestionar
+                              </Button>
+                            </TableCell>
+                          )}
                         </TableRow>
                       ))}
                     </TableBody>
@@ -172,7 +193,9 @@ export function MatiConnectionCard() {
         <p className="text-[10px] text-muted-foreground">
           Los datos pasan por Kawiil (nunca directo desde tu navegador a MATI), se muestran con los
           correos enmascarados, solo viven en memoria y cada consulta queda en la bitácora.
+          {canWrite ? " Los cambios en tickets piden confirmación y quedan registrados con tu usuario." : ""}
         </p>
+        {canWrite && <MatiTicketDialog ticket={managing} onClose={() => setManaging(null)} />}
       </CardContent>
     </Card>
   );
