@@ -7,10 +7,13 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { invokeEsign } from "@/lib/esign";
+import { base64ToBytes, bytesToBase64, signerColor } from "@/lib/esignPdf";
+import { PlaceSignaturesDialog, type PlacedField } from "@/components/esign/PlaceSignaturesDialog";
 import { toast } from "sonner";
-import { Loader2, PenTool, Plus, Trash2, FileText, UserRound } from "lucide-react";
+import { Loader2, PenTool, Plus, Trash2, FileText, UserRound, MapPin } from "lucide-react";
 
 interface Signer {
+  key: string;
   name: string;
   email: string;
   user_id?: string;
@@ -51,6 +54,11 @@ export function SendToSignDialog({ open, onClose, fileUrl, fileName, clientId, p
   const [sequential, setSequential] = useState(false);
   const [localFile, setLocalFile] = useState<File | null>(null);
   const [sending, setSending] = useState(false);
+  const [placing, setPlacing] = useState(false);
+  const [loadingPdf, setLoadingPdf] = useState(false);
+  const [pdfBytes, setPdfBytes] = useState<Uint8Array | null>(null);
+  const [fields, setFields] = useState<PlacedField[]>([]);
+  const [activeKey, setActiveKey] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -68,16 +76,54 @@ export function SendToSignDialog({ open, onClose, fileUrl, fileName, clientId, p
     setSigners([]);
     setSequential(false);
     setLocalFile(null);
+    setPdfBytes(null);
+    setFields([]);
+    setActiveKey(null);
+    setPlacing(false);
+  };
+
+  // Si cambia el archivo, los bytes y recuadros anteriores ya no aplican.
+  useEffect(() => {
+    setPdfBytes(null);
+    setFields([]);
+  }, [fileUrl, localFile]);
+
+  const openPlacement = async () => {
+    if (!signers.length) return toast.error("Agrega al menos un firmante primero");
+    if (!fileUrl && !localFile) return toast.error("Selecciona un PDF");
+    setActiveKey((k) => k ?? signers[0].key);
+    if (!pdfBytes) {
+      setLoadingPdf(true);
+      try {
+        if (localFile) {
+          if (localFile.type && localFile.type !== "application/pdf") throw new Error("Solo se pueden firmar archivos PDF");
+          setPdfBytes(new Uint8Array(await localFile.arrayBuffer()));
+        } else {
+          const r = await invokeEsign<{ file_base64: string }>({ action: "preview", file_url: fileUrl });
+          setPdfBytes(base64ToBytes(r.file_base64));
+        }
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "No se pudo abrir el documento");
+        setLoadingPdf(false);
+        return;
+      }
+      setLoadingPdf(false);
+    }
+    setPlacing(true);
   };
 
   const addInternal = (userId: string) => {
     const m = members.find((x) => x.user_id === userId);
     if (!m || signers.some((s) => s.user_id === userId)) return;
-    setSigners((p) => [...p, { name: m.full_name, email: m.email, user_id: m.user_id }]);
+    setSigners((p) => [...p, { key: crypto.randomUUID(), name: m.full_name, email: m.email, user_id: m.user_id }]);
   };
-  const addExternal = () => setSigners((p) => [...p, { name: "", email: "" }]);
+  const addExternal = () => setSigners((p) => [...p, { key: crypto.randomUUID(), name: "", email: "" }]);
   const update = (i: number, patch: Partial<Signer>) => setSigners((p) => p.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
-  const remove = (i: number) => setSigners((p) => p.filter((_, idx) => idx !== i));
+  const remove = (i: number) => {
+    const key = signers[i]?.key;
+    setSigners((p) => p.filter((_, idx) => idx !== i));
+    setFields((f) => f.filter((x) => x.signerKey !== key));
+  };
 
   const handleSend = async () => {
     const valid = signers.filter((s) => s.user_id || (s.name.trim() && s.email.trim()));
@@ -93,8 +139,17 @@ export function SendToSignDialog({ open, onClose, fileUrl, fileName, clientId, p
         client_id: clientId ?? undefined,
         project_id: projectId ?? undefined,
         file_name: fileName || localFile?.name,
-        ...(fileUrl ? { file_url: fileUrl } : { file_base64: await fileToBase64(localFile!) }),
-        signers: valid.map((s) => ({ name: s.name.trim(), email: s.email.trim(), user_id: s.user_id })),
+        ...(pdfBytes
+          ? { file_base64: bytesToBase64(pdfBytes) }
+          : fileUrl ? { file_url: fileUrl } : { file_base64: await fileToBase64(localFile!) }),
+        signers: valid.map((s) => ({
+          name: s.name.trim(),
+          email: s.email.trim(),
+          user_id: s.user_id,
+          fields: fields
+            .filter((f) => f.signerKey === s.key)
+            .map(({ page, x, y, w, h }) => ({ page, x, y, w, h })),
+        })),
       });
       toast.success("Enviado a firma. Los firmantes recibieron un correo.");
       onSent?.(res.request_id);
@@ -191,6 +246,35 @@ export function SendToSignDialog({ open, onClose, fileUrl, fileName, clientId, p
             {signers.length === 0 && <p className="text-xs text-muted-foreground">Agrega firmantes internos o externos (clientes, agentes aduanales).</p>}
           </div>
 
+          <div className="space-y-1.5 rounded-md border p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-sm font-medium">Lugar de la firma</p>
+                <p className="text-xs text-muted-foreground">
+                  {fields.length
+                    ? `${fields.length} recuadro${fields.length === 1 ? "" : "s"} colocado${fields.length === 1 ? "" : "s"}`
+                    : "Opcional: elige en qué página firma cada persona."}
+                </p>
+              </div>
+              <Button type="button" variant="outline" size="sm" className="gap-1 shrink-0" onClick={openPlacement} disabled={loadingPdf}>
+                {loadingPdf ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <MapPin className="h-3.5 w-3.5" />}
+                Colocar firmas
+              </Button>
+            </div>
+            {fields.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {signers.map((sg) => {
+                  const n = fields.filter((f) => f.signerKey === sg.key).length;
+                  return (
+                    <Badge key={sg.key} variant="outline" className="gap-1 text-[10px]" style={{ borderColor: signerColor(signers, sg.key) }}>
+                      {sg.name || "Firmante"}: {n || "sin recuadro"}
+                    </Badge>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             <input type="checkbox" checked={sequential} onChange={(e) => setSequential(e.target.checked)} className="rounded" />
             Firma en orden (cada firmante recibe el correo cuando el anterior firma)
@@ -204,6 +288,17 @@ export function SendToSignDialog({ open, onClose, fileUrl, fileName, clientId, p
           </Button>
         </div>
       </DialogContent>
+
+      <PlaceSignaturesDialog
+        open={placing}
+        onClose={() => setPlacing(false)}
+        pdfData={pdfBytes}
+        signers={signers.map((sg) => ({ key: sg.key, name: sg.name }))}
+        fields={fields}
+        onFieldsChange={setFields}
+        activeKey={activeKey}
+        onActiveKeyChange={setActiveKey}
+      />
     </Dialog>
   );
 }

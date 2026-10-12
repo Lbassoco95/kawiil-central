@@ -211,7 +211,28 @@ async function fetchRemotePdf(rawUrl: string): Promise<Uint8Array> {
   return bytes;
 }
 
-// ---------- PDF: hoja de firmas ----------
+// ---------- PDF: firmas posicionadas + hoja de firmas ----------
+/** Recuadro de firma: coordenadas normalizadas 0..1, origen arriba-izquierda, page base 1. */
+type SignField = { page: number; x: number; y: number; w: number; h: number };
+
+const MAX_FIELDS_PER_SIGNER = 10;
+
+function parseFields(raw: unknown, pageCount: number): SignField[] {
+  if (raw == null) return [];
+  if (!Array.isArray(raw) || raw.length > MAX_FIELDS_PER_SIGNER) {
+    throw new HttpError(400, `Máximo ${MAX_FIELDS_PER_SIGNER} recuadros de firma por firmante`);
+  }
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : NaN);
+  return raw.map((f) => {
+    const page = num((f as SignField)?.page), x = num((f as SignField)?.x), y = num((f as SignField)?.y);
+    const w = num((f as SignField)?.w), h = num((f as SignField)?.h);
+    if (!Number.isInteger(page) || page < 1 || page > pageCount) throw new HttpError(400, "Recuadro de firma con página inválida");
+    if ([x, y, w, h].some((n) => Number.isNaN(n)) || w < 0.03 || h < 0.02 || x < 0 || y < 0 || x + w > 1.0001 || y + h > 1.0001) {
+      throw new HttpError(400, "Recuadro de firma fuera de la página");
+    }
+    return { page, x, y, w, h };
+  });
+}
 function winAnsi(s: string): string {
   // Helvetica estándar solo soporta WinAnsi; reemplaza lo demás.
   return s.replace(/[^ -~ -ÿ]/g, "?");
@@ -235,9 +256,28 @@ function wrap(text: string, font: PDFFont, size: number, maxW: number): string[]
 async function buildSignedPdf(
   original: Uint8Array,
   meta: { title: string; originalSha: string; requestId: string },
-  signers: Array<{ name: string; email: string; signed_at: string; ip: string | null; png: Uint8Array }>,
+  signers: Array<{ name: string; email: string; signed_at: string; ip: string | null; png: Uint8Array; fields?: SignField[] }>,
 ): Promise<Uint8Array> {
   const pdf = await PDFDocument.load(original, { ignoreEncryption: true });
+  // Estampa cada firma en su recuadro (solo páginas sin rotación; la hoja de firmas las cubre todas).
+  const originalPages = pdf.getPages();
+  for (const s of signers) {
+    if (!s.fields?.length) continue;
+    const sigImg = await pdf.embedPng(s.png);
+    for (const f of s.fields) {
+      const pg = originalPages[f.page - 1];
+      if (!pg || pg.getRotation().angle % 360 !== 0) continue;
+      const { width: PW, height: PH } = pg.getSize();
+      const bw = f.w * PW, bh = f.h * PH, bx = f.x * PW, by = PH - f.y * PH - bh;
+      const sc = Math.min(bw / sigImg.width, bh / sigImg.height);
+      pg.drawImage(sigImg, {
+        x: bx + (bw - sigImg.width * sc) / 2,
+        y: by + (bh - sigImg.height * sc) / 2,
+        width: sigImg.width * sc,
+        height: sigImg.height * sc,
+      });
+    }
+  }
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const W = 595, H = 842, M = 48;
@@ -303,10 +343,12 @@ async function buildSignedPdf(
 }
 
 // ---------- Lógica ----------
+
 type SignerRow = {
   id: string; request_id: string; organization_id: string; sign_order: number; name: string; email: string;
   user_id: string | null; token: string; status: string; signed_at: string | null; signed_ip: string | null;
   signature_path: string | null;
+  fields: SignField[] | null;
 };
 type RequestRow = {
   id: string; organization_id: string; created_by: string; title: string; message: string | null;
@@ -374,6 +416,7 @@ async function finalizeIfComplete(svc: Svc, r: RequestRow, creator: { email: str
       signed_at: s.signed_at!,
       ip: s.signed_ip,
       png: await download(svc, s.signature_path!),
+      fields: s.fields ?? [],
     });
   }
   const out = await buildSignedPdf(original, { title: r.title, originalSha: r.original_sha256, requestId: r.id }, parts);
@@ -471,15 +514,16 @@ Deno.serve(async (req) => {
       else throw new HttpError(400, "Falta el archivo (file_url o file_base64)");
       if (pdf.length > MAX_PDF_BYTES) throw new HttpError(400, "El PDF excede 15 MB");
       if (!isPdf(pdf)) throw new HttpError(400, "Solo se pueden firmar archivos PDF. Convierte el documento a PDF primero.");
+      let pageCount = 1;
       try {
-        await PDFDocument.load(pdf, { ignoreEncryption: true });
+        pageCount = (await PDFDocument.load(pdf, { ignoreEncryption: true })).getPageCount();
       } catch {
         throw new HttpError(400, "El PDF está dañado o protegido");
       }
 
       // Resolver firmantes (internos validados contra la organización)
       const seen = new Set<string>();
-      const signers: Array<{ name: string; email: string; user_id: string | null; sign_order: number }> = [];
+      const signers: Array<{ name: string; email: string; user_id: string | null; sign_order: number; fields: SignField[] }> = [];
       for (let i = 0; i < rawSigners.length; i++) {
         const rs = rawSigners[i];
         let name = String(rs.name ?? "").trim();
@@ -500,7 +544,7 @@ Deno.serve(async (req) => {
         const k = email.toLowerCase();
         if (seen.has(k)) throw new HttpError(400, `Firmante duplicado: ${email}`);
         seen.add(k);
-        signers.push({ name, email, user_id: userId, sign_order: body.sequential ? i : 0 });
+        signers.push({ name, email, user_id: userId, sign_order: body.sequential ? i : 0, fields: parseFields(rs.fields, pageCount) });
       }
 
       const requestId = crypto.randomUUID();
@@ -539,6 +583,16 @@ Deno.serve(async (req) => {
 
       await notifyTurn(svc, reqRow as RequestRow, sRows as SignerRow[], ctx.fullName);
       return json({ success: true, request_id: requestId });
+    }
+
+    // ===== Previsualizar un PDF remoto (para colocar firmas antes de crear) =====
+    if (action === "preview") {
+      await requireUser(req, svc, url, anon);
+      if (!body.file_url) throw new HttpError(400, "Falta file_url");
+      const bytes = await fetchRemotePdf(String(body.file_url));
+      if (bytes.length > MAX_PDF_BYTES) throw new HttpError(400, "El PDF excede 15 MB");
+      if (!isPdf(bytes)) throw new HttpError(400, "Solo se pueden firmar archivos PDF. Convierte el documento a PDF primero.");
+      return json({ file_base64: bytesToB64(bytes) });
     }
 
     // ===== Cancelar / recordar / descargar (staff) =====
@@ -590,6 +644,7 @@ Deno.serve(async (req) => {
         signer: {
           name: signer.name, email: signer.email, status: signer.status, signed_at: signer.signed_at,
           internal: !!signer.user_id, can_sign: canSignNow(request, signer, all),
+          fields: signer.fields ?? [],
         },
         progress: all.map((s) => ({ name: s.name, status: s.status })),
         document_url: await signedUrl(svc, done ? request.signed_path! : request.original_path),
