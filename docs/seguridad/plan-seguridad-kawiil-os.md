@@ -205,6 +205,8 @@ El efecto neto es registrar esas versiones en el historial. **Deuda que queda:**
 
 ## 5.5 Estado de la Fase 2: conexión de solo lectura (2026-10-12)
 
+> **RETIRADA (2026-10-12).** Esta fase hacía que Kawiil llamara al puente de **Kit-to-Drive**. Esa conexión se descartó: Kit-to-Drive es de otro proyecto y la seguridad de Kawiil OS se plantea con MATI Admin y MATI API (ver 5.12). Se quitaron la Edge Function `integraciones-gateway`, la tarjeta «MATI / Kit-to-Drive» de Configuración → Integraciones y el diálogo de tickets. Se conservan `_shared/security.ts` y la tabla `integration_audit`, que sirven de base para 5.12. Lo que sigue describe lo que se construyó, como historial.
+
 **Construido (en este PR, sin secretos configurados → inactivo hasta que se activen):**
 
 | Pieza | Qué hace |
@@ -306,7 +308,9 @@ El efecto neto es registrar esas versiones en el historial. **Deuda que queda:**
 
 **Siguiente paso:** acotar la lectura de tareas y logs por `created_by` o rol (hoy cualquier usuario con sesión lee todo). Antes hay que ver cómo se comparten las tareas en el chat para no romper vistas compartidas.
 
-## 5.11 Fase 3: escritura controlada hacia MATI, primera ola (2026-10-12) — construida y APAGADA
+## 5.11 Fase 3: escrituras de tickets hacia Kit-to-Drive (2026-10-12) — RETIRADA
+
+> **RETIRADA (2026-10-12).** Se descartó la conexión con Kit-to-Drive (ver 5.12): las escrituras de tickets, el diálogo y la firma saliente se quitaron junto con el gateway. Lo que sigue queda como historial y para reutilizar las ideas (lista cerrada de acciones, límite de ritmo, doble registro, firma con el cuerpo, confirmación antes de escribir) en el sentido contrario: MATI Admin controlando Kawiil.
 
 **Qué se decidió.** Primera ola con solo dos acciones sobre tickets de soporte: `ticket_update` (estado y prioridad) y `ticket_message` (responder). **Fuera de la lista cerrada del gateway, a propósito:** crear o editar usuarios (incluido su nivel), resetear contraseñas, activar o desactivar usuarios, cambiar la configuración y activar o desactivar módulos. El puente de MATI sí las expone; si se quieren más adelante, se añaden una a una con su validación y sus pruebas.
 
@@ -332,6 +336,16 @@ El efecto neto es registrar esas versiones en el historial. **Deuda que queda:**
 4. Una prueba con un ticket real en un entorno de pruebas de MATI.
 
 **Siguiente.** Cuando se cumplan las condiciones, encender en un entorno de prueba, ejecutar un cambio y un mensaje reales, y comprobar los dos registros. Una segunda ola (activar o desactivar usuarios o módulos) requiere decisión expresa.
+
+## 5.12 Replanteamiento: MATI Admin controla Kawiil (2026-10-12)
+
+**Decisión.** No hay ninguna conexión con el sistema de Kit-to-Drive. La relación es la inversa de la que se había construido: **MATI Admin (con MATI API) tiene el control de la aplicación de Kawiil Central y de Kawiil OS**, como un panel de seguridad, y esa aplicación queda configurada de forma segura desde ahí. La seguridad (back, middle y front) cubre a la plataforma MATI y a Kawiil OS.
+
+**Se retiró** el gateway hacia Kit-to-Drive, la tarjeta de Integraciones y las escrituras de tickets (PR de limpieza). La función ya desplegada `integraciones-gateway` sigue existiendo en Supabase, inactiva (sin secretos, solo responde «no configurado»): hay que **borrarla a mano** (`supabase functions delete integraciones-gateway --project-ref qppfampapbxdgednkofc` o desde el panel), porque el CI no elimina funciones.
+
+**Se conserva** `_shared/security.ts` (CORS por lista, autenticación y rol, límite de ritmo, bitácora, HMAC, enmascarado y lista blanca de campos) y la tabla `integration_audit` (append-only): son la base natural de un plano de control.
+
+**Pendiente de diseño** (no se ha construido nada): qué controles tiene el panel, qué datos de seguridad de Kawiil se ven desde MATI Admin, qué acciones puede ordenar MATI y cómo se autentica MATI API frente a Kawiil. Una propuesta está en la conversación; se registra aquí cuando se decida.
 
 ## 6. Decisiones que necesito de ti
 

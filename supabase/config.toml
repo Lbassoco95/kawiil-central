@@ -99,9 +99,6 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = true
   [functions.integration-health]
     verify_jwt = true
-  [functions.integraciones-gateway]
-    # Auth y rol (transformador) en código; verify_jwt exige sesión antes de ejecutar
-    verify_jwt = true
   [functions.moffin-facturas]
     verify_jwt = false
   [functions.moffin-monthly-sat]
