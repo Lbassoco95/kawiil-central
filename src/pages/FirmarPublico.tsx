@@ -7,10 +7,12 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { SignaturePad } from "@/components/esign/SignaturePad";
 import { invokeEsign, type EsignError } from "@/lib/esign";
+import { PdfPages } from "@/components/esign/PdfPages";
+import type { SignField } from "@/lib/esignPdf";
 
 interface GetResponse {
   request: { id: string; title: string; message: string | null; file_name: string; status: string; created_by_name: string; expires_at: string };
-  signer: { name: string; email: string; status: string; signed_at: string | null; internal: boolean; can_sign: boolean };
+  signer: { name: string; email: string; status: string; signed_at: string | null; internal: boolean; can_sign: boolean; fields?: SignField[] };
   progress: Array<{ name: string; status: string }>;
   document_url: string | null;
   saved_signature_url: string | null;
@@ -114,7 +116,17 @@ export default function FirmarPublico() {
     <div className="min-h-screen bg-muted/30 p-4 md:p-8">
       <div className="mx-auto grid max-w-6xl gap-4 lg:grid-cols-[1fr_380px]">
         <div className="rounded-lg border bg-background overflow-hidden min-h-[60vh]">
-          {data.document_url ? (
+          {data.document_url && signer.can_sign && (signer.fields?.length ?? 0) > 0 ? (
+            <div className="h-[80vh] overflow-y-auto bg-muted/40 p-3">
+              <PdfPages
+                source={{ url: data.document_url }}
+                mode="view"
+                fields={(signer.fields ?? []).map((f, i) => ({
+                  id: `f${i}`, ...f, color: "#0ea5e9", label: "Tu firma aquí",
+                }))}
+              />
+            </div>
+          ) : data.document_url ? (
             <iframe title={request.title} src={data.document_url} className="h-[80vh] w-full" />
           ) : (
             <p className="p-6 text-sm text-muted-foreground">No se pudo mostrar el documento.</p>
