@@ -203,6 +203,29 @@ El efecto neto es registrar esas versiones en el historial. **Deuda que queda:**
 
 **Acciones solo del panel de Supabase (no se pueden hacer desde aquí):** Auth → activar protección de contraseñas filtradas; Auth → bajar la expiración de OTP a ≤ 3600 s. La CSP sigue en solo reporte porque no hay colector de reportes que diga qué rompería.
 
+## 5.5 Estado de la Fase 2: conexión de solo lectura (2026-10-12)
+
+**Construido (en este PR, sin secretos configurados → inactivo hasta que se activen):**
+
+| Pieza | Qué hace |
+|---|---|
+| `supabase/migrations/20261012130000_integration_audit.sql` | Tabla `integration_audit` **append-only** (trigger que bloquea UPDATE/DELETE incluso a `service_role`). RLS: solo un `transformador` de la misma organización lee. `anon`/`authenticated` sin permisos de escritura. |
+| `supabase/functions/_shared/security.ts` | CORS con lista de orígenes (no `*`), `authenticate`, límite de ritmo, bitácora, HMAC-SHA256, enmascarado y lista blanca de campos (`pickFields`). |
+| `supabase/functions/integraciones-gateway` | `verify_jwt = true` + rol `transformador`; 30 solicitudes/60 s por usuario (falla cerrado si no puede contar); **lista cerrada** de acciones (`status`, `users`, `modules`, `tickets`) con parámetros validados; credencial de servicio propia; firma HMAC opcional; solo devuelve campos permitidos y con el correo enmascarado; errores del puente no se reenvían; cada intento a la bitácora sin cuerpos ni secretos. |
+| `MatiConnectionCard` en Configuración → Integraciones | Estado de la conexión y tablas de usuarios, módulos y tickets. Datos solo en memoria (React Query sin persistencia, 60 s). Si faltan secretos, dice cuáles. |
+
+**Probado:** tipos (Deno y `tsc`), 11 pruebas de las utilidades (incluye el vector RFC 4231 de HMAC), 31 del flujo completo del gateway con Supabase y puente simulados (sin sesión, sin rol, sin configurar, acciones fuera de lista incluido `__proto__`, parámetros inválidos, campos sensibles que no salen, firma, 502/504, CORS, límite de ritmo), 3 de la tarjeta y, del SQL, 13 comprobaciones en un Postgres real (PGlite) tras ejecutarlo dos veces: idempotencia, RLS por organización, grants y append-only. **No probado contra producción ni contra un MATI real**: el entorno no puede ejecutar DDL ni llamar a Supabase por HTTP; lo aplicará el CI.
+
+**Para activarlo hacen falta tres secretos en Supabase → Edge Functions:** `MATI_GATEWAY_URL` (URL del puente `mati-admin-bridge`), `MATI_GATEWAY_TOKEN` (≥ 32 caracteres) y, opcional, `MATI_GATEWAY_HMAC_KEY`.
+
+**Limitaciones que dependen de MATI / Kit-to-Drive (no del código de Kawiil):**
+1. `mati-api` solo acepta sesión de admin de MATI; no existe credencial de máquina. Por eso el gateway apunta al **puente** (`mati-admin-bridge`), cuyas rutas son `/app/status`, `/users`, `/modules` y `/tickets`.
+2. Ese puente hoy acepta **un solo secreto compartido** (el mismo que usa `mati-api`). Una credencial *dedicada a Kawiil* requiere que `kit-to-drive-web` (no disponible para mí) acepte un segundo secreto. **Mientras tanto, configurar `MATI_GATEWAY_TOKEN` con el secreto actual reutiliza la credencial de MATI**, lo que el plan quería evitar: es una decisión que debe tomarse a conciencia.
+3. La firma HMAC solo protege cuando el puente la verifique (hallazgo M7 del informe de MATI); hasta entonces es inofensiva pero no añade seguridad.
+4. Las listas de campos permitidos se basan en los esquemas que se ven en `mati-api` (`routes/admin-kit-to-drive.ts`); los nombres reales que devuelve el puente podrían diferir (una columna ausente simplemente no se muestra). Se ajustan en `ACTIONS` del gateway.
+
+**Siguiente (Fase 3, escritura controlada):** acciones con confirmación y doble registro; solo tras tener credencial dedicada y HMAC verificado en el puente.
+
 ## 6. Decisiones que necesito de ti
 
 1. **¿Qué roles de Kawiil pueden ver datos de Kit-to-Drive/MATI?** (propongo solo dirección y administración al inicio).
