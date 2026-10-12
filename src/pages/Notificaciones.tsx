@@ -16,6 +16,7 @@ import {
   AlertTriangle, CalendarClock, ArrowRight,
   AtSign, CheckCheck, MessageSquare, ClipboardList, DollarSign, Activity,
   Bot, BrainCircuit, Settings, Sparkles, Lightbulb, Bell,
+  PenTool,
 } from "lucide-react";
 import { PageHeader, type PageHeaderStat } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -50,6 +51,7 @@ const ACTIVITY_TYPES = [
   "expense_created",
   "expense_status_changed",
   "slack_message",
+  "esign",
 ];
 const KNOWN_TYPES = [...MENTION_TYPES, ...ACTIVITY_TYPES];
 
@@ -87,6 +89,9 @@ function getNotificationCtas(
   if (m.type === "improvement_suggestion") {
     ctas.push({ key: "open_suggestion", label: "Ver sugerencia", primary: true });
   }
+  if (m.type === "esign") {
+    ctas.push({ key: "open_esign", label: "Ir a Firmas", primary: true });
+  }
   if (m.type === "agent_task_completed" || m.type === "agent_task_failed") {
     ctas.push({ key: "open_asistente_conv", label: "Abrir conversación", primary: true });
   }
@@ -105,6 +110,7 @@ function getNotificationIcon(type: string) {
   if (type === "ai_proactive_tip") return <Sparkles className="h-3.5 w-3.5 text-sky-500" />;
   if (type === "agent_task_completed" || type === "agent_task_failed")
     return <MessageSquare className="h-3.5 w-3.5 text-sky-600 dark:text-sky-300" />;
+  if (type === "esign") return <PenTool className="h-3.5 w-3.5 text-primary" />;
   if (type === "slack_mention") return <AtSign className="h-3.5 w-3.5 text-sky-600 dark:text-sky-300" />;
   if (type === "slack_message") return <MessageSquare className="h-3.5 w-3.5 text-sky-600 dark:text-sky-300" />;
   return <Settings className="h-3.5 w-3.5 text-muted-foreground" />;
@@ -755,7 +761,9 @@ export default function Notificaciones() {
       return;
     }
 
-    if (m.entity_type === "project" && m.entity_id) {
+    if (m.type === "esign") {
+      navigate("/firmas");
+    } else if (m.entity_type === "project" && m.entity_id) {
       navigate(`/proyectos/${m.entity_id}?tab=comentarios`);
     } else if (m.entity_type === "task" && m.entity_id) {
       navigate(`/tareas?taskId=${m.entity_id}`);
