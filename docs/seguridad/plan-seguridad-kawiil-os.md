@@ -173,6 +173,8 @@ Con esto no queda ninguna versión del remoto sin archivo local (272 de 272).
 
 El efecto neto es registrar esas versiones en el historial. **Deuda que queda:** los gemelos duplican el SQL bajo dos versiones (p. ej. `20260924120000` y `20260925014308`). En una base nueva se ejecutarían las dos veces; es inocuo porque son idempotentes, pero conviene eliminar los duplicados locales más adelante.
 
+**Corrección tras el primer despliegue (2026-10-12):** `db push` aplicó 12 de los archivos sin registrar y se detuvo en `20260930200000_moffin_consults_buzon_types`: el gemelo recreaba un `CHECK` viejo de `moffin_consults`, que una migración posterior ya había ampliado (`satgo_cfdi_download`, 175 filas), así que fallaba. Re-ejecutar un gemelo no es siempre inocuo cuando una migración posterior cambió el mismo objeto. Se eliminaron los 4 gemelos que aún no se habían aplicado (`20260930200000`, `20260930230000`, `20261001160000`, `20261005170000`), idénticos a su versión ya registrada. Los 12 gemelos ya aplicados quedan en el repo porque ahora forman parte del historial del remoto.
+
 **Causa de fondo:** se aplican migraciones directamente en producción (panel o conector) sin versionarlas. Regla propuesta: toda migración se escribe primero en `supabase/migrations/` y la aplica el CI.
 
 ## 6. Decisiones que necesito de ti
