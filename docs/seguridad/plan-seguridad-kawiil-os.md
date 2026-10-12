@@ -345,7 +345,11 @@ El efecto neto es registrar esas versiones en el historial. **Deuda que queda:**
 
 **Se conserva** `_shared/security.ts` (CORS por lista, autenticación y rol, límite de ritmo, bitácora, HMAC, enmascarado y lista blanca de campos) y la tabla `integration_audit` (append-only): son la base natural de un plano de control.
 
-**Pendiente de diseño** (no se ha construido nada): qué controles tiene el panel, qué datos de seguridad de Kawiil se ven desde MATI Admin, qué acciones puede ordenar MATI y cómo se autentica MATI API frente a Kawiil. Una propuesta está en la conversación; se registra aquí cuando se decida.
+**Diseño y estado.** Se construye por olas, siempre con Kawiil como servidor y MATI API como cliente (sin tocar el código de MATI ni de Kit-to-Drive):
+
+- **Ola 1 — solo lectura (construida, en PR).** Edge Function `seguridad-control` (POST, lista cerrada de acciones: `status`, `snapshot`, `posture`, `users`, `activity`, `secrets`, `audit`), tres funciones SQL de lectura (`security_posture`, `security_users_snapshot`, `security_auth_activity`; solo `service_role`) y la tabla `control_nonces`. Autenticación en dos capas: credencial propia + firma HMAC con hora (±300 s) y nonce de un solo uso; rotación con `*_PREVIOUS`; actor siempre con prefijo `mati:`; bitácora append-only en `integration_audit`; 60 consultas/min; sin CORS; 503 genérico si no está configurada. Contrato y cliente de ejemplo para MATI: `docs/seguridad/contrato-control-mati-admin.md`. Pruebas: 20 casos Deno con doble de Supabase y 8 mutaciones detectadas; SQL validado en PGlite.
+- **Ola 2 — escrituras (sin construir, requiere decisión).** Bloquear/reactivar usuarios, cerrar sesiones, cambiar ajustes de seguridad. Cada una con confirmación en dos pasos, motivo obligatorio y registro antes y después.
+- **Activación.** Hasta que se carguen `SEGURIDAD_CONTROL_TOKEN` y `SEGURIDAD_CONTROL_HMAC_KEY` en Supabase la función responde 503 y no expone nada.
 
 ## 6. Decisiones que necesito de ti
 
