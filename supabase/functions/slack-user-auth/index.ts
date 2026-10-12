@@ -6,6 +6,7 @@
  * im:history,im:read,im:write,mpim:history,mpim:read,mpim:write,users:read,users:read.email,users.profile:write,chat:write,files:write,files:read
  * Event Subscriptions (misma app, slack-events): message.channels, message.groups, message.im, message.mpim
  */
+import { signOAuthState } from "../_shared/oauthState.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -84,7 +85,7 @@ Deno.serve(async (req) => {
         client_id: clientId,
         user_scope: userScope,
         redirect_uri: redirectUri,
-        state: user.id,
+        state: await signOAuthState("slack", { u: user.id }),
       }).toString();
 
     return new Response(JSON.stringify({ url: authUrl }), {
