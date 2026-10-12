@@ -179,6 +179,30 @@ El efecto neto es registrar esas versiones en el historial. **Deuda que queda:**
 
 **Causa de fondo:** se aplican migraciones directamente en producción (panel o conector) sin versionarlas. Regla propuesta: toda migración se escribe primero en `supabase/migrations/` y la aplica el CI.
 
+## 5.4 Cierre de pendientes de las fases 0 y 1 (2026-10-12)
+
+**Verificado con los registros de Supabase (ventana máxima de 24 h):**
+
+| Pendiente | Resultado |
+|---|---|
+| ¿Se rompió algo al cerrar `anon`? | No hay señales: 7 812 peticiones, **0 respuestas 401/403**. Los 75 errores 500 eran `esign_requests/esign_signers` (recursión de RLS) y dejaron de aparecer a las 01:12 UTC tras el arreglo de la sesión de firmas. Esto no sustituye probar las pantallas a mano. |
+| ¿`CRON_SECRET` está configurado? | Sí: `travel-refresh` respondió 200 en 96 de 96 llamadas con el control fail-closed activo. |
+| Logs de `backup-data` | 0 llamadas en las últimas 24 h. La API no permite mirar más atrás, así que **no se puede descartar acceso anterior**; si se quiere certeza hay que revisar el historial en el panel de Supabase o rotar los tokens de Microsoft por precaución. |
+| Lectura pública de `agent_registry`, `agent_tasks`, `agent_activity_logs` | La usa la VM de agentes (`python-httpx`, cada 30 min, con la clave `anon`). **No se cierra** hasta que la VM lea con `service_role`. El front ya las lee con sesión de usuario. |
+| Avisos restantes de Supabase (9 tipos) | `anon`/`authenticated` con funciones SECURITY DEFINER ejecutables (las 5 de `anon` son intencionales), tablas visibles en GraphQL, `search_path` mutable, `pg_trgm` en `public`, una tabla con RLS sin políticas, OTP largo y contraseñas filtradas sin proteger. |
+
+**Hallazgos nuevos:**
+
+| # | Sev | Hallazgo | Estado |
+|---|---|---|---|
+| N1 | Alta | **La clave `service_role` se usa fuera de Supabase**, desde una red residencial/oficina en México (Cablevisión): 158 llamadas en 24 h de `Python-urllib` (lectura de `tasks`, `projects`, `clients`, `profiles` y sondeos de tablas que no existen: `pagos`, `facturas`, `cobranza`…) más 13 de la VM de agentes. Esa clave omite RLS. Puede ser herramienta propia, pero no lo puedo confirmar. | Pendiente: confirmar quién es; si no se reconoce, **rotar la clave**. |
+| N2 | Media | El `state` de OAuth de Slack (`slack-user-callback`) y el de Microsoft (`_shared/microsoftOAuthState.ts`) **no están firmados**: es el `userId`. Un atacante que conozca el UUID de otro usuario puede vincular su propia cuenta de Slack/Microsoft a esa persona. | Pendiente: firmar el `state` con HMAC y caducidad (cambia función y front). |
+| N3 | Media | `satgo-facturas`: cualquier usuario con sesión (sin rol) puede disparar la descarga SAT de **todos** los clientes de **todas** las organizaciones. Además, la función desplegada es un arranque que importa el código de `raw.githubusercontent.com` en un commit fijo (`266629df`) y esa carpeta ya no existe en `main`: el CI no la redespliega. | Pendiente: restaurar la función al repo, exigir admin/gerente y filtrar por organización. |
+| N4 | Media | `mtg-graph-webhook` aceptaba notificaciones sin `clientState` o sin el secreto configurado (insertaba en `job_queue` y `mtg_unmatched_transcripts`). Sin llamadas en 24 h y sin suscripción real todavía. | **Corregido en este PR**: falla cerrado y exige `clientState` exacto. Requiere crear el secreto `MTG_GRAPH_CLIENT_STATE` antes de activar la suscripción. |
+| N5 | Baja | `esign`: la IP de la firma sale de `x-forwarded-for` (suplantable; mejor `cf-connecting-ip`); los 500 devuelven `e.message`; `fetchRemotePdf` sigue redirecciones; no hay límite de intentos; `decline` no condiciona el estado. El resto está bien: token de 244 bits, validación de organización, firma atómica, orden secuencial, solo PDF/PNG con tope de tamaño. | Pendiente: avisar a la sesión de firmas. |
+
+**Acciones solo del panel de Supabase (no se pueden hacer desde aquí):** Auth → activar protección de contraseñas filtradas; Auth → bajar la expiración de OTP a ≤ 3600 s. La CSP sigue en solo reporte porque no hay colector de reportes que diga qué rompería.
+
 ## 6. Decisiones que necesito de ti
 
 1. **¿Qué roles de Kawiil pueden ver datos de Kit-to-Drive/MATI?** (propongo solo dirección y administración al inicio).
