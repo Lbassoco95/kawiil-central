@@ -62,6 +62,13 @@ jobs:
             echo "Sin funciones que desplegar."
           else
             for fn in $CHANGED; do
+              # `git diff` también lista las funciones BORRADAS: no hay nada que desplegar.
+              # (Quitar la carpeta no la elimina de Supabase: se borra a mano con
+              # `supabase functions delete <nombre> --project-ref ...`.)
+              if [ ! -d "supabase/functions/$fn" ]; then
+                echo "::notice::Se omite '$fn': ya no existe en el repo. Si sigue desplegada en Supabase, bórrala a mano."
+                continue
+              fi
               echo "::group::Deploy $fn"
               supabase functions deploy "$fn" --project-ref "$PROJECT_REF"
               echo "::endgroup::"
