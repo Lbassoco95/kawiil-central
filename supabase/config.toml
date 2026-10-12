@@ -99,6 +99,9 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = true
   [functions.integration-health]
     verify_jwt = true
+  [functions.seguridad-control]
+    # Servidor a servidor (MATI API): la credencial y la firma HMAC se validan en código
+    verify_jwt = false
   [functions.moffin-facturas]
     verify_jwt = false
   [functions.moffin-monthly-sat]
