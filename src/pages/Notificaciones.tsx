@@ -765,6 +765,8 @@ export default function Notificaciones() {
       navigate("/firmas");
     } else if (m.entity_type === "project" && m.entity_id) {
       navigate(`/proyectos/${m.entity_id}?tab=comentarios`);
+    } else if (m.entity_type === "meeting" && m.entity_id) {
+      navigate(m.type === "mtg_minutes" ? `/juntas/${m.entity_id}/minuta` : `/juntas/${m.entity_id}`);
     } else if (m.entity_type === "task" && m.entity_id) {
       navigate(`/tareas?taskId=${m.entity_id}`);
     } else if (m.entity_type === "expense") {

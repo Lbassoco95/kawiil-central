@@ -7,6 +7,7 @@ import { mtgDb, type MtgAgreementRow, type MtgMeetingRow, type MtgMinutesRow, ty
 import { logMtgAudit, MTG_AUDIT_ACTION } from "@/lib/mtg/audit";
 import { createTaskForAgreement } from "@/lib/mtg/captureAgreement";
 import { confirmRequires, parseTopicsFromMarkdown } from "@/lib/mtg/minutesReview";
+import { notifyMeetingTeam } from "@/lib/mtg/meetingTeam";
 import { buildMtgStoragePath, MTG_BUCKET } from "@/lib/mtg/storagePaths";
 
 export async function confirmProposedAgreement(opts: {
@@ -247,6 +248,19 @@ export async function approveMinutes(opts: {
     action: MTG_AUDIT_ACTION.MINUTES_APPROVED,
     details: { document_id: doc.id, path },
   });
+
+  // Resumen disponible para el equipo interno de la junta.
+  try {
+    await notifyMeetingTeam({
+      actorUserId: opts.actorUserId,
+      meeting: opts.meeting,
+      series: opts.series,
+      title: opts.meeting.title,
+      kind: "minutes",
+    });
+  } catch (e) {
+    console.warn("[mtg] notify team", e);
+  }
 
   // Slack si hay canal (nunca minuta completa ni transcripción)
   if (opts.series?.slack_channel_id) {
