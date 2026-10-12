@@ -188,14 +188,14 @@ El efecto neto es registrar esas versiones en el historial. **Deuda que queda:**
 | ¿Se rompió algo al cerrar `anon`? | No hay señales: 7 812 peticiones, **0 respuestas 401/403**. Los 75 errores 500 eran `esign_requests/esign_signers` (recursión de RLS) y dejaron de aparecer a las 01:12 UTC tras el arreglo de la sesión de firmas. Esto no sustituye probar las pantallas a mano. |
 | ¿`CRON_SECRET` está configurado? | Sí: `travel-refresh` respondió 200 en 96 de 96 llamadas con el control fail-closed activo. |
 | Logs de `backup-data` | 0 llamadas en las últimas 24 h. La API no permite mirar más atrás, así que **no se puede descartar acceso anterior**; si se quiere certeza hay que revisar el historial en el panel de Supabase o rotar los tokens de Microsoft por precaución. |
-| Lectura pública de `agent_registry`, `agent_tasks`, `agent_activity_logs` | La usa la VM de agentes (`python-httpx`, cada 30 min, con la clave `anon`). **No se cierra** hasta que la VM lea con `service_role`. El front ya las lee con sesión de usuario. |
+| Lectura pública de `agent_registry`, `agent_tasks`, `agent_activity_logs` | La usa la VM de agentes (`python-httpx`, cada 30 min, con la clave `anon`). **No se cierra** hasta que la VM lea con `service_role`. El front ya las lee con sesión de usuario. → **Cerrado el 2026-10-12** (ver 5.10): la VM era `kawiil-agents` y ya usa una clave de servicio propia. |
 | Avisos restantes de Supabase (9 tipos) | `anon`/`authenticated` con funciones SECURITY DEFINER ejecutables (las 5 de `anon` son intencionales), tablas visibles en GraphQL, `search_path` mutable, `pg_trgm` en `public`, una tabla con RLS sin políticas, OTP largo y contraseñas filtradas sin proteger. |
 
 **Hallazgos nuevos:**
 
 | # | Sev | Hallazgo | Estado |
 |---|---|---|---|
-| N1 | Alta | **La clave `service_role` se usa fuera de Supabase**, desde una red residencial/oficina en México (Cablevisión): 158 llamadas en 24 h de `Python-urllib` (lectura de `tasks`, `projects`, `clients`, `profiles` y sondeos de tablas que no existen: `pagos`, `facturas`, `cobranza`…) más 13 de la VM de agentes. Esa clave omite RLS. Puede ser herramienta propia, pero no lo puedo confirmar. | Leo indica que probablemente es **Cerebro**, un servidor de la oficina (2026-10-12). Pendiente: que Cerebro use una credencial de menor alcance que `service_role`; si resulta que no es Cerebro, **rotar la clave**. |
+| N1 | Alta | **La clave `service_role` se usa fuera de Supabase**, desde una red residencial/oficina en México (Cablevisión): 158 llamadas en 24 h de `Python-urllib` (lectura de `tasks`, `projects`, `clients`, `profiles` y sondeos de tablas que no existen: `pagos`, `facturas`, `cobranza`…) más 13 de la VM de agentes. Esa clave omite RLS. Puede ser herramienta propia, pero no lo puedo confirmar. | **Origen identificado y migrado** (ver 5.9): no era Cerebro sino dos servicios de la Mac de Leo (`louis_healthcheck.py` y `kawiil-agents`). Ambos usan ya una *secret key* dedicada; desde las 03:13 UTC no llega ninguna llamada con la firma de la clave legacy. Pendiente (opcional): rotar o desactivar la clave legacy y limpiar sus copias en texto plano. |
 | N2 | Media | El `state` de OAuth de Slack (`slack-user-callback`) y el de Microsoft (`_shared/microsoftOAuthState.ts`) **no están firmados**: es el `userId`. Un atacante que conozca el UUID de otro usuario puede vincular su propia cuenta de Slack/Microsoft a esa persona. | **Corregido** (ver 5.7): `state` firmado con HMAC y caducidad; no requirió cambios en el front. |
 | N3 | Media | `satgo-facturas`: cualquier usuario con sesión (sin rol) puede disparar la descarga SAT de **todos** los clientes de **todas** las organizaciones. Además, la función desplegada es un arranque que importa el código de `raw.githubusercontent.com` en un commit fijo (`266629df`) y esa carpeta ya no existe en `main`: el CI no la redespliega. | **Corregido** (ver 5.6): la función vuelve al repo, el disparo manual exige admin/gerente y se limita a su organización. |
 | N4 | Media | `mtg-graph-webhook` aceptaba notificaciones sin `clientState` o sin el secreto configurado (insertaba en `job_queue` y `mtg_unmatched_transcripts`). Sin llamadas en 24 h y sin suscripción real todavía. | **Corregido en este PR**: falla cerrado y exige `clientState` exacto. Requiere crear el secreto `MTG_GRAPH_CLIENT_STATE` antes de activar la suscripción. |
@@ -254,7 +254,7 @@ El efecto neto es registrar esas versiones en el historial. **Deuda que queda:**
 
 **Probado:** 47 comprobaciones con Deno: firma y verificación, UUID crudo, JSON sin firma, firma alterada, payload cambiado a otro usuario, caducidad, proveedor cruzado, cambio de clave; los 4 callbacks reales (falsificado/ausente → no llaman al proveedor; válido → continúa; otro proveedor → rechazado); y XSS ejecutando los `<script>` de la respuesta con un `alert` espía (4 cargas × 4 callbacks). La primera corrida detectó que `microsoft-callback` seguía vulnerable; se corrigió. Tipos: las 10 funciones y módulos compilan sin errores con `deno check`.
 
-**No probado:** el flujo completo con Slack, Microsoft y Google reales (requiere iniciar sesión en cada proveedor).
+**Verificado en producción (2026-10-12):** los cuatro callbacks rechazan un `state` falso sin llegar al proveedor (Slack, Outlook y Google responden 400; Microsoft muestra su página de error con HTTP 200, una inconsistencia menor de estado HTTP, no de seguridad). La conexión real de **Slack** funcionó de extremo a extremo: `slack-user-auth` emitió el `state` firmado y `slack-user-callback` lo aceptó y vinculó la cuenta. **No probado:** la ruta de éxito de Google, Outlook y Microsoft con cuentas nuevas (las cuentas ya conectadas no se ven afectadas; si una reconexión falla, revisar esas funciones).
 
 **Efecto al desplegar:** los flujos de conexión que estén a medias en ese momento (menos de unos segundos) fallarán y se repiten. Los `state` en vuelo no sobreviven al cambio, por diseño.
 
@@ -273,6 +273,38 @@ El efecto neto es registrar esas versiones en el historial. **Deuda que queda:**
 **No probado:** firmas ni descargas reales con Dropbox o Supabase. Riesgo a vigilar: si Dropbox redirigiera a un dominio fuera de la lista (hoy usa `dropboxusercontent.com`), esa descarga se rechazaría con «Origen de archivo no permitido»; en ese caso se agrega el dominio a `ALLOWED_FILE_HOSTS`.
 
 **Sigue pendiente de N5:** límite de intentos sobre las acciones por token (el token tiene 244 bits, así que el riesgo de adivinarlo es despreciable; el límite solo evitaría abuso de cómputo/correos).
+
+## 5.9 Cierre de N1: la clave `service_role` fuera de Supabase (2026-10-12)
+
+**Qué era.** Las 158 llamadas de `Python-urllib/3.9` y las de `python-httpx` con la clave legacy `service_role` (emitida en agosto de 2025, válida hasta 2070, firma `4PwMn5`) salían de la IP de la oficina/casa de Leo (Cablevisión, CDMX), la misma desde la que entra su Mac. **No era Cerebro** (Cerebro corre en `louis-prod`, Hetzner, y no llamó a Supabase con esa clave en 24 h). Eran dos servicios de la Mac, que cargan el mismo archivo `~/.openclaw/credentials/kawiil-agents.env`:
+
+| Servicio | Qué hace | Qué necesita |
+|---|---|---|
+| `louis_healthcheck.py` (LaunchAgent, cada 30 min, `/usr/bin/python3` 3.9) | Comprueba que Kawiil Central responde: lee el esquema (`/rest/v1/`) y 1 fila de `projects`, `clients`, `tasks`, más sondeos de tablas que no existen | Solo disponibilidad; no necesita acceso total |
+| `kawiil-agents` (FastAPI en `127.0.0.1:8000`, `python-httpx`) | Lee y escribe `agent_registry`, `agent_tasks`, `agent_activity_logs`, `agent_memories`, `ai_task_events`, `legal_tesis*`, `legal_dof_*` y descarga adjuntos de Storage | Acceso de servidor completo |
+
+**Qué se hizo.** Se creó una *secret key* dedicada (`kawiil-agents-mac`, mismo acceso, revocable por separado, sin firma JWT en los logs) y se cambió en `kawiil-agents.env`. `supabase-py` 2.10.0 rechazaba el formato `sb_secret_…` (`Invalid API key`), así que se actualizó a 2.32.0 antes del cambio (respaldo de versiones en `~/kawiil-agents-freeze-antes.txt`).
+
+**Verificación.** A las 03:13:54 UTC, al reiniciar `kawiil-agents`, la llamada llegó sin firma JWT (clave nueva) y registró 25 agentes. Desde las 03:13 UTC no llega **ninguna** llamada con la firma `4PwMn5` de ninguna IP; el healthcheck ya usa la clave nueva (22 llamadas entre las 03:22 y las 03:53 UTC). En las últimas 24 h, los consumidores de esa firma fueron la Mac (tres IPs de Cablevisión) y **dos llamadas sin identificar** de `python-requests/2.33.0` a `/auth/v1/health` desde una IP de AWS (`35.161.89.114`, 01:22 UTC). Por la hora y el endpoint parecen una herramienta de diagnóstico, pero no se pudo verificar; si vuelven a aparecer tras rotar la clave legacy, hay que identificarlas.
+
+**Pendiente (opcional, sin urgencia):**
+- **Rotar o desactivar la clave legacy.** Ya no hay un consumidor desconocido, pero la clave estuvo en texto plano en la Mac y en copias de `louis-prod` (`/opt/openclaw/.env.bak*` y `.respaldo-*`). Rotarla implica tocar también la clave `anon` (que va en el JavaScript del front) y las claves que Supabase inyecta en las Edge Functions, así que se hace como mantenimiento planeado, con inventario previo y no antes de decidirlo.
+- **Limpiar las copias antiguas en `louis-prod`** (y revisar si `donna_core.py`, `nexo_*.py` y `setup-kawiil-central-creds.sh` usan realmente esa clave).
+- **Healthcheck con credencial mínima:** hoy usa la clave de servicio nueva; le bastaría la `anon` o una dedicada.
+
+## 5.10 Cierre de la lectura anónima de las tablas de agentes (2026-10-12)
+
+**Problema.** Las políticas `anon_read_registry`, `anon_read_tasks` y `anon_read_logs` eran SELECT `USING (true)` para el rol `public`: cualquiera con la clave `anon` (que va en el JavaScript del sitio) leía las tareas y resultados de los agentes, el catálogo de agentes y sus logs. `auth_insert_tasks` además dejaba a cualquier usuario con sesión insertar tareas con cualquier agente.
+
+**Evidencia previa.** En 24 h hubo cero lecturas con rol `anon` sobre esas tablas; solo `kawiil-agents` (clave de servicio) y el front con sesión de usuario. Ni el front ni las funciones del repo insertan en `agent_tasks`: `dispatch-to-agent` reenvía a la VM, que escribe con clave de servicio. Los datos viven en la organización global `00000000-…-0001` y los usuarios en `a0000000-…-0001`, por lo que **no se puede filtrar por organización**.
+
+**Cambio (PR #385, migración `20261012150000_agent_tables_cerrar_lectura_anonima.sql`).** Se eliminan las tres lecturas abiertas y `auth_insert_tasks`; se crean lecturas solo para `authenticated`; se revocan los privilegios de `anon` sobre las tres tablas. `service_role` no cambia (se salta RLS). Probado en una base temporal (antes: `anon` leía y los usuarios insertaban; después: `anon` recibe `permission denied`, los usuarios leen y no insertan, `service_role` sigue igual; segunda ejecución sin errores).
+
+**Verificado en producción.** Migración registrada; políticas nuevas presentes, `anon_read_*` y `auth_insert_tasks` ausentes, 0 privilegios de `anon` sobre las tres tablas.
+
+**No probado:** la app con una sesión real (sección de agentes y tarjeta de tareas del chat). Si algo se ve vacío, revisar primero estas políticas.
+
+**Siguiente paso:** acotar la lectura de tareas y logs por `created_by` o rol (hoy cualquier usuario con sesión lee todo). Antes hay que ver cómo se comparten las tareas en el chat para no romper vistas compartidas.
 
 ## 6. Decisiones que necesito de ti
 
