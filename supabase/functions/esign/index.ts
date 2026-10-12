@@ -191,6 +191,12 @@ async function download(svc: Svc, path: string): Promise<Uint8Array> {
   return new Uint8Array(await data.arrayBuffer());
 }
 
+function assertAllowedFileUrl(u: URL) {
+  if (u.protocol !== "https:" || !ALLOWED_FILE_HOSTS.some((r) => r.test(u.hostname))) {
+    throw new HttpError(400, "Origen de archivo no permitido (solo Dropbox o Supabase)");
+  }
+}
+
 async function fetchRemotePdf(rawUrl: string): Promise<Uint8Array> {
   let u: URL;
   try {
@@ -198,17 +204,81 @@ async function fetchRemotePdf(rawUrl: string): Promise<Uint8Array> {
   } catch {
     throw new HttpError(400, "file_url inválida");
   }
-  if (u.protocol !== "https:" || !ALLOWED_FILE_HOSTS.some((r) => r.test(u.hostname))) {
-    throw new HttpError(400, "Origen de archivo no permitido (solo Dropbox o Supabase)");
-  }
+  assertAllowedFileUrl(u);
   if (/dropbox\.com$/i.test(u.hostname)) {
     u.searchParams.delete("raw");
     u.searchParams.set("dl", "1");
   }
-  const r = await fetch(u.toString(), { redirect: "follow" });
-  if (!r.ok) throw new HttpError(400, `No se pudo descargar el archivo (${r.status})`);
-  const bytes = new Uint8Array(await r.arrayBuffer());
-  return bytes;
+  // Las redirecciones se siguen a mano y cada salto se valida contra la lista
+  // blanca: con `redirect: "follow"` un redireccionamiento podía llevar a un host interno.
+  let r: Response | null = null;
+  for (let hop = 0; hop <= 3; hop++) {
+    r = await fetch(u.toString(), { redirect: "manual" });
+    if (r.status >= 300 && r.status < 400) {
+      const loc = r.headers.get("location");
+      await r.body?.cancel();
+      if (!loc) throw new HttpError(400, "No se pudo descargar el archivo");
+      try {
+        u = new URL(loc, u);
+      } catch {
+        throw new HttpError(400, "No se pudo descargar el archivo");
+      }
+      assertAllowedFileUrl(u);
+      r = null;
+      continue;
+    }
+    break;
+  }
+  if (!r) throw new HttpError(400, "Demasiadas redirecciones al descargar el archivo");
+  if (!r.ok) {
+    await r.body?.cancel();
+    throw new HttpError(400, `No se pudo descargar el archivo (${r.status})`);
+  }
+  // Tope de tamaño ANTES de cargar todo en memoria.
+  const declared = Number(r.headers.get("content-length") ?? 0);
+  if (declared > MAX_PDF_BYTES) {
+    await r.body?.cancel();
+    throw new HttpError(400, "El PDF excede 15 MB");
+  }
+  const reader = r.body?.getReader();
+  if (!reader) return new Uint8Array(await r.arrayBuffer());
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.length;
+    if (total > MAX_PDF_BYTES) {
+      await reader.cancel();
+      throw new HttpError(400, "El PDF excede 15 MB");
+    }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) {
+    out.set(c, off);
+    off += c.length;
+  }
+  return out;
+}
+
+/**
+ * IP del cliente para la evidencia de la firma. `x-forwarded-for` lo puede
+ * escribir el propio cliente (el primer valor es suplantable); se prefiere la
+ * cabecera que pone el borde de Cloudflare y, si no, el ÚLTIMO salto.
+ */
+function clientIp(req: Request): string | null {
+  const candidates = [
+    req.headers.get("cf-connecting-ip"),
+    req.headers.get("x-real-ip"),
+    (req.headers.get("x-forwarded-for") || "").split(",").pop(),
+  ];
+  for (const c of candidates) {
+    const v = (c ?? "").trim();
+    if (v && v.length <= 45 && /^[0-9a-fA-F:.]+$/.test(v)) return v;
+  }
+  return null;
 }
 
 // ---------- PDF: firmas posicionadas + hoja de firmas ----------
@@ -679,7 +749,7 @@ Deno.serve(async (req) => {
       const up = await svc.storage.from(BUCKET).upload(sigPath, png, { contentType: "image/png", upsert: true });
       if (up.error) throw new Error(up.error.message);
 
-      const ip = (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || null;
+      const ip = clientIp(req);
       const { data: upd } = await svc.from("esign_signers").update({
         status: "signed",
         signed_at: new Date().toISOString(),
@@ -707,7 +777,10 @@ Deno.serve(async (req) => {
       await assertSignerIdentity(signer, req, url, anon);
       if (!canSignNow(request, signer, all)) throw new HttpError(409, "Esta solicitud ya no está vigente");
       const reason = String(body.reason ?? "").trim().slice(0, 500) || null;
-      await svc.from("esign_signers").update({ status: "declined", decline_reason: reason, signed_at: new Date().toISOString() }).eq("id", signer.id);
+      const { data: declined } = await svc.from("esign_signers")
+        .update({ status: "declined", decline_reason: reason, signed_at: new Date().toISOString() })
+        .eq("id", signer.id).eq("status", "pending").select("id");
+      if (!declined?.length) throw new HttpError(409, "Esta solicitud ya no está vigente");
       await svc.from("esign_requests").update({ status: "declined" }).eq("id", request.id).eq("status", "pending");
       const { data: creator } = await svc.from("profiles").select("full_name, email").eq("user_id", request.created_by).maybeSingle();
       await svc.from("notifications").insert({
@@ -734,8 +807,8 @@ Deno.serve(async (req) => {
     throw new HttpError(400, "Acción inválida");
   } catch (e) {
     if (e instanceof HttpError) return json({ error: e.message, code: e.code }, e.status);
-    const message = e instanceof Error ? e.message : "Error desconocido";
-    console.error("esign error:", message);
-    return json({ error: message }, 500);
+    // El detalle interno queda en los logs; al cliente solo un mensaje genérico.
+    console.error("esign error:", e instanceof Error ? e.message : "Error desconocido");
+    return json({ error: "Error interno. Intenta de nuevo." }, 500);
   }
 });

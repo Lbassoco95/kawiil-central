@@ -199,7 +199,7 @@ El efecto neto es registrar esas versiones en el historial. **Deuda que queda:**
 | N2 | Media | El `state` de OAuth de Slack (`slack-user-callback`) y el de Microsoft (`_shared/microsoftOAuthState.ts`) **no están firmados**: es el `userId`. Un atacante que conozca el UUID de otro usuario puede vincular su propia cuenta de Slack/Microsoft a esa persona. | **Corregido** (ver 5.7): `state` firmado con HMAC y caducidad; no requirió cambios en el front. |
 | N3 | Media | `satgo-facturas`: cualquier usuario con sesión (sin rol) puede disparar la descarga SAT de **todos** los clientes de **todas** las organizaciones. Además, la función desplegada es un arranque que importa el código de `raw.githubusercontent.com` en un commit fijo (`266629df`) y esa carpeta ya no existe en `main`: el CI no la redespliega. | **Corregido** (ver 5.6): la función vuelve al repo, el disparo manual exige admin/gerente y se limita a su organización. |
 | N4 | Media | `mtg-graph-webhook` aceptaba notificaciones sin `clientState` o sin el secreto configurado (insertaba en `job_queue` y `mtg_unmatched_transcripts`). Sin llamadas en 24 h y sin suscripción real todavía. | **Corregido en este PR**: falla cerrado y exige `clientState` exacto. Requiere crear el secreto `MTG_GRAPH_CLIENT_STATE` antes de activar la suscripción. |
-| N5 | Baja | `esign`: la IP de la firma sale de `x-forwarded-for` (suplantable; mejor `cf-connecting-ip`); los 500 devuelven `e.message`; `fetchRemotePdf` sigue redirecciones; no hay límite de intentos; `decline` no condiciona el estado. El resto está bien: token de 244 bits, validación de organización, firma atómica, orden secuencial, solo PDF/PNG con tope de tamaño. | Pendiente: avisar a la sesión de firmas. |
+| N5 | Baja | `esign`: la IP de la firma sale de `x-forwarded-for` (suplantable; mejor `cf-connecting-ip`); los 500 devuelven `e.message`; `fetchRemotePdf` sigue redirecciones; no hay límite de intentos; `decline` no condiciona el estado. El resto está bien: token de 244 bits, validación de organización, firma atómica, orden secuencial, solo PDF/PNG con tope de tamaño. | **Corregido** (ver 5.8), salvo el límite de intentos. |
 
 **Acciones solo del panel de Supabase (no se pueden hacer desde aquí):** Auth → activar protección de contraseñas filtradas; Auth → bajar la expiración de OTP a ≤ 3600 s. La CSP sigue en solo reporte porque no hay colector de reportes que diga qué rompería.
 
@@ -259,6 +259,20 @@ El efecto neto es registrar esas versiones en el historial. **Deuda que queda:**
 **Efecto al desplegar:** los flujos de conexión que estén a medias en ese momento (menos de unos segundos) fallarán y se repiten. Los `state` en vuelo no sobreviven al cambio, por diseño.
 
 **Límite conocido (no resuelto):** el `state` no va atado al navegador de quien inicia el flujo. Un usuario autenticado podría pedir un `state` para su propia cuenta y convencer a otra persona de completar el consentimiento; lo mitiga la pantalla de consentimiento del proveedor. Cerrarlo requiere una cookie de sesión atada al flujo.
+
+## 5.8 Corrección de N5: endurecimiento de `esign` (2026-10-12)
+
+**Cambios en `supabase/functions/esign/index.ts`:**
+- **IP de la firma:** ahora sale de `cf-connecting-ip`, luego `x-real-ip` y, si no, del **último** salto de `x-forwarded-for`. Antes se tomaba el primer valor, que el propio firmante podía escribir, y esa IP se estampa en la hoja de firmas como evidencia. Los valores con formato inválido se descartan.
+- **Descarga de PDF remoto (`fetchRemotePdf`):** las redirecciones se siguen a mano (máx. 3) y **cada salto se valida** contra la lista blanca (Dropbox, `dropboxusercontent.com`, `supabase.co`); antes `redirect: "follow"` permitía terminar en cualquier host. El tope de 15 MB se aplica por `Content-Length` y **durante la lectura** del cuerpo, no después de cargarlo entero en memoria.
+- **`decline` atómico:** el `UPDATE` exige `status = 'pending'` y responde 409 si no cambió nada. Antes, un firmante que ya había firmado (o una carrera) podía quedar marcado como «rechazado» y sobrescribir su firma.
+- **Errores 500:** el mensaje interno solo va a los logs; el cliente recibe «Error interno. Intenta de nuevo.».
+
+**Probado (Deno, Supabase y red simulados):** 4 comprobaciones de la IP (se extrae la función real del archivo), 500 genérico, `decline` (ya firmó, UPDATE condicionado, carrera simulada), y la descarga (host/protocolo no permitidos, redirección a host externo, Dropbox→dropboxusercontent legítimo, redirección relativa, bucle de redirecciones, `Content-Length` > 15 MB, cuerpo sin cabecera > 15 MB que se corta a los ~17 MB, descarga normal, archivo que no es PDF). Contra el código original fallan las que miden el defecto (500 con detalle, `decline` no atómico y sobrescritura, tope de tamaño). Tipos: los mismos 2 errores de `deno check` antes y después (preexistentes: `notified_at` no está en el tipo `SignerRow`, y un `Uint8Array`/`BufferSource`).
+
+**No probado:** firmas ni descargas reales con Dropbox o Supabase. Riesgo a vigilar: si Dropbox redirigiera a un dominio fuera de la lista (hoy usa `dropboxusercontent.com`), esa descarga se rechazaría con «Origen de archivo no permitido»; en ese caso se agrega el dominio a `ALLOWED_FILE_HOSTS`.
+
+**Sigue pendiente de N5:** límite de intentos sobre las acciones por token (el token tiene 244 bits, así que el riesgo de adivinarlo es despreciable; el límite solo evitaría abuso de cómputo/correos).
 
 ## 6. Decisiones que necesito de ti
 
