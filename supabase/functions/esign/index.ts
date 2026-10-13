@@ -8,7 +8,7 @@
  *   - Firmante interno (user_id): además exige sesión del mismo usuario.
  *
  * Secrets: SUPABASE_URL/ANON/SERVICE_ROLE, AZURE_*|MICROSOFT_* (Graph app-only),
- * SENDER_EMAIL, SITE_URL|PUBLIC_APP_URL.
+ * SENDER_EMAIL; opcional ESIGN_PUBLIC_URL (por defecto https://kawiil-central.mx).
  * Deploy: verify_jwt = false (config.toml); la auth se valida dentro.
  */
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
@@ -144,10 +144,16 @@ ${o.note ? `<p style="margin:0;font-size:12px;color:#78716c">${esc(o.note)}</p>`
 </td></tr></table></body></html>`;
 }
 
-function siteBase(): string {
-  const b = (Deno.env.get("SITE_URL") || Deno.env.get("PUBLIC_APP_URL") || "").replace(/\/$/, "");
-  if (!b) throw new Error("SITE_URL no configurada en Edge Functions (Secrets)");
-  return b;
+/**
+ * Base pública de los links de firma (/firmar/:token).
+ * Independiente de SITE_URL: ese secreto sirve a otras funciones (invitaciones, avisos) y puede
+ * apuntar a un dominio anterior donde /firmar no existe (404). ESIGN_PUBLIC_URL permite cambiarla.
+ */
+const DEFAULT_ESIGN_BASE = "https://kawiil-central.mx";
+function esignBase(): string {
+  const raw = (Deno.env.get("ESIGN_PUBLIC_URL") || DEFAULT_ESIGN_BASE).replace(/\/$/, "");
+  if (!/^https:\/\/[^\s/]+$/.test(raw)) throw new Error("ESIGN_PUBLIC_URL inválida (debe ser https://dominio, sin ruta)");
+  return raw;
 }
 
 // ---------- Contexto ----------
@@ -446,7 +452,7 @@ function canSignNow(r: RequestRow, s: SignerRow, all: SignerRow[]): boolean {
 
 /** Notifica (correo + campana) a quienes les toca firmar ahora y aún no se les ha avisado. */
 async function notifyTurn(svc: Svc, r: RequestRow, all: SignerRow[], creatorName: string, force = false) {
-  const base = siteBase();
+  const base = esignBase();
   const targets = all.filter((s) => canSignNow(r, s, all) && (force || !s.notified_at));
   for (const s of targets) {
     const url = `${base}/firmar/${s.token}`;
@@ -512,7 +518,7 @@ async function finalizeIfComplete(svc: Svc, r: RequestRow, creator: { email: str
     .select("id");
   if (!won?.length) return all;
 
-  const base = siteBase();
+  const base = esignBase();
   const recipients = new Map<string, { email: string; name: string; token?: string; user_id?: string | null }>();
   for (const s of all) recipients.set(s.email.toLowerCase(), { email: s.email, name: s.name, token: s.token, user_id: s.user_id });
   if (creator.email && !recipients.has(creator.email.toLowerCase())) {
