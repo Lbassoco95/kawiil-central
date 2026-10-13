@@ -15,7 +15,11 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { mtgDb } from "@/lib/mtg/db";
 import { useClients } from "@/hooks/useClients";
+import { useClientGroups } from "@/hooks/useClientGroups";
 import {
   assignMeetingClient,
   type AssignMeetingClientMode,
@@ -32,6 +36,7 @@ export function MtgAssignClientDialog(props: {
   currentClientId?: string | null;
   /** client_ids ya en la serie (multi). */
   currentEntityClientIds?: string[];
+  currentProjectId?: string | null;
   onDone?: () => void;
 }) {
   const { data: clients = [] } = useClients();
@@ -47,9 +52,73 @@ export function MtgAssignClientDialog(props: {
   );
   const [mode, setMode] = useState<AssignMeetingClientMode>("meeting");
   const [busy, setBusy] = useState(false);
+  const [projectId, setProjectId] = useState(props.currentProjectId ?? "");
+  const { data: groups = [] } = useClientGroups();
+  const { data: groupMembers = [] } = useQuery({
+    queryKey: ["client-group-members-all"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .from("client_group_members" as any)
+        .select("group_id, client_id");
+      if (error) throw error;
+      return (data ?? []) as unknown as { group_id: string; client_id: string }[];
+    },
+    enabled: props.open,
+  });
+  const { data: projects = [] } = useQuery({
+    queryKey: ["mtg-assign-projects"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("projects")
+        .select("id, name, client_id, status")
+        .order("name");
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: props.open,
+  });
+
+  const activeClientIds = useMemo(
+    () => (multi ? selected : clientId ? [clientId] : []),
+    [multi, selected, clientId],
+  );
+  const projectOptions = useMemo(
+    () =>
+      projects.filter(
+        (p) =>
+          p.id === projectId ||
+          (p.status === "activo" &&
+            (activeClientIds.length === 0 || activeClientIds.includes(p.client_id))),
+      ),
+    [projects, activeClientIds, projectId],
+  );
+
+  const toggleGroup = (groupId: string) => {
+    const ids = groupMembers.filter((m) => m.group_id === groupId).map((m) => m.client_id);
+    if (ids.length === 0) {
+      toast.error("Este grupo no tiene empresas");
+      return;
+    }
+    setMulti(true);
+    setSelected((prev) => {
+      const all = ids.every((id) => prev.includes(id));
+      return all ? prev.filter((id) => !ids.includes(id)) : [...new Set([...prev, ...ids])];
+    });
+  };
+
+  const pickProject = (id: string) => {
+    setProjectId(id);
+    const proj = projects.find((p) => p.id === id);
+    if (proj && !activeClientIds.includes(proj.client_id)) {
+      if (multi) setSelected((prev) => [...prev, proj.client_id]);
+      else setClientId(proj.client_id);
+    }
+  };
 
   useEffect(() => {
     if (!props.open) return;
+    setProjectId(props.currentProjectId ?? "");
     setClientId(props.currentClientId ?? "");
     setSelected(
       props.currentEntityClientIds?.length
@@ -58,7 +127,7 @@ export function MtgAssignClientDialog(props: {
           ? [props.currentClientId]
           : [],
     );
-  }, [props.open, props.currentClientId, props.currentEntityClientIds]);
+  }, [props.open, props.currentClientId, props.currentEntityClientIds, props.currentProjectId]);
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -111,6 +180,11 @@ export function MtgAssignClientDialog(props: {
             : "Tareas/seguimientos asignados al cliente",
         );
       }
+      const { error: pErr } = await mtgDb
+        .from("mtg_meetings")
+        .update({ project_id: projectId || null })
+        .eq("id", props.meetingId);
+      if (pErr) throw pErr;
       props.onOpenChange(false);
       props.onDone?.();
     } catch (e) {
@@ -124,7 +198,7 @@ export function MtgAssignClientDialog(props: {
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Asignar cliente(s)</DialogTitle>
+          <DialogTitle>Asignar cliente y proyecto</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
           Para juntas de grupo elige varios clientes (p. ej. las tres empresas). Quedan como
@@ -180,8 +254,31 @@ export function MtgAssignClientDialog(props: {
           </div>
         )}
 
+        {groups.length > 0 && (
+          <div className="space-y-2">
+            <Label>Por grupo</Label>
+            <div className="flex flex-wrap gap-1.5">
+              {groups.map((g) => {
+                const ids = groupMembers.filter((m) => m.group_id === g.id).map((m) => m.client_id);
+                const on = ids.length > 0 && ids.every((id) => selected.includes(id));
+                return (
+                  <Button
+                    key={g.id}
+                    type="button"
+                    size="sm"
+                    variant={on ? "default" : "outline"}
+                    onClick={() => toggleGroup(g.id)}
+                  >
+                    {g.name} ({ids.length})
+                  </Button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <div className="space-y-2">
-          <Label>{multi ? "Clientes" : "Cliente"}</Label>
+          <Label>{multi ? "Por empresa" : "Cliente"}</Label>
           <Input
             placeholder="Buscar…"
             value={q}
@@ -223,6 +320,22 @@ export function MtgAssignClientDialog(props: {
               {selected.length} seleccionado{selected.length === 1 ? "" : "s"}
             </p>
           )}
+        </div>
+
+        <div className="space-y-2">
+          <Label>Proyecto (opcional)</Label>
+          <select
+            className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+            value={projectId}
+            onChange={(e) => pickProject(e.target.value)}
+          >
+            <option value="">Sin proyecto</option>
+            {projectOptions.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="flex justify-end gap-2">
