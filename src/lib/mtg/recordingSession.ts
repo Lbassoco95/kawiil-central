@@ -155,7 +155,9 @@ async function runTranscription(force = false): Promise<void> {
   if (!ctx) return;
   setState({ phase: "transcribing", error: null });
   try {
-    const res = await requestRecordingTranscription(ctx.meeting.id, force);
+    const res = await requestRecordingTranscription(ctx.meeting.id, force, ({ done, total }) =>
+      toast.message(`Transcripción: toma ${done}${total ? ` de ${total}` : ""} lista…`, { id: "mtg-transcribe-progress" }),
+    );
     const lang = res.language_detected ? ` (${res.language_detected})` : "";
     toast.success(
       res.translated_to_spanish

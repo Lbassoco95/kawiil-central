@@ -224,14 +224,20 @@ async function translateSegmentsToSpanish(
   if (segments.length === 0) return segments;
   const byIndex = new Map<number, string>();
   const batchSize = 80;
-  for (let start = 0; start < segments.length; start += batchSize) {
-    const slice = segments.slice(start, start + batchSize);
-    const payload = slice.map((s, j) => ({
-      i: start + j,
-      t: s.text,
-    }));
-    const part = await translateSegmentBatch(apiKey, payload, sourceLang);
-    for (const [k, v] of part) byIndex.set(k, v);
+  const starts: number[] = [];
+  for (let start = 0; start < segments.length; start += batchSize) starts.push(start);
+  // En paralelo (5 a la vez) para no rozar el timeout de la función.
+  for (let g = 0; g < starts.length; g += 5) {
+    const parts = await Promise.all(
+      starts.slice(g, g + 5).map((start) =>
+        translateSegmentBatch(
+          apiKey,
+          segments.slice(start, start + batchSize).map((s, j) => ({ i: start + j, t: s.text })),
+          sourceLang,
+        ),
+      ),
+    );
+    for (const part of parts) for (const [k, v] of part) byIndex.set(k, v);
   }
   return segments.map((s, idx) => ({
     ...s,
@@ -332,7 +338,16 @@ serve(async (req) => {
 
     // Una junta puede tener varias tomas: se transcriben en orden y se unen
     // con offset temporal. Las ya transcritas se reutilizan (cache en la fila).
-    const force = body?.force === true;
+    // Supabase corta a los ~150 s sin respuesta: se transcribe UNA toma nueva por
+    // petición y se responde {partial:true}; el cliente repite hasta terminar.
+    if (body?.force === true) {
+      await admin
+        .from("mtg_meeting_recordings")
+        .update({ transcript_segments: null, duration_sec: null, language: null, transcribed_at: null })
+        .eq("meeting_id", meetingId);
+    }
+    const force = false;
+    const stepMode = body?.step === true;
     const { data: takeRows } = await admin
       .from("mtg_meeting_recordings")
       .select("id, path, transcript_segments, duration_sec, language")
@@ -484,6 +499,17 @@ serve(async (req) => {
               transcribed_at: new Date().toISOString(),
             })
             .eq("id", take.id);
+        }
+
+        // Quedan tomas sin transcribir: responder ya (evita el timeout de 150 s).
+        const remaining = takes
+          .slice(ti + 1)
+          .filter((t) => !(Array.isArray(t.transcript_segments) && t.transcript_segments.length > 0)).length;
+        if (stepMode && remaining > 0 && take.id) {
+          return new Response(
+            JSON.stringify({ partial: true, remaining, transcribed_take: ti + 1, total_takes: takes.length }),
+            { headers: { ...cors, "Content-Type": "application/json" } },
+          );
         }
       }
 

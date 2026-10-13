@@ -6,6 +6,11 @@
 import { supabase } from "@/integrations/supabase/client";
 
 export type RecordingTranscriptionResult = {
+  /** true = faltan tomas; la app vuelve a llamar hasta terminar. */
+  partial?: boolean;
+  remaining?: number;
+  transcribed_take?: number;
+  total_takes?: number;
   transcript_path: string;
   language_detected: string | null;
   translated_to_spanish: boolean;
@@ -49,14 +54,13 @@ async function describeInvokeError(error: {
   return error.message || fallback;
 }
 
-export async function requestRecordingTranscription(
+async function invokeOnce(
   meetingId: string,
-  /** true = ignora la caché por toma y vuelve a transcribir todo. */
-  force = false,
+  force: boolean,
 ): Promise<RecordingTranscriptionResult> {
   const { data, error } = await supabase.functions.invoke(
     "mtg-transcribe-recording",
-    { body: { meeting_id: meetingId, force } },
+    { body: { meeting_id: meetingId, force, step: true } },
   );
   if (error) {
     throw new Error(await describeInvokeError(error));
@@ -65,4 +69,24 @@ export async function requestRecordingTranscription(
     throw new Error(String(data.error));
   }
   return data as RecordingTranscriptionResult;
+}
+
+/**
+ * Una petición transcribe una toma (límite de ~150 s por petición); se repite
+ * hasta que no queden tomas pendientes y la última une todo en un transcript.
+ */
+export async function requestRecordingTranscription(
+  meetingId: string,
+  /** true = ignora la caché por toma y vuelve a transcribir todo. */
+  force = false,
+  onProgress?: (info: { done: number; total: number }) => void,
+): Promise<RecordingTranscriptionResult> {
+  let reset = force;
+  for (let i = 0; i < 30; i++) {
+    const res = await invokeOnce(meetingId, reset);
+    reset = false;
+    if (!res.partial) return res;
+    onProgress?.({ done: res.transcribed_take ?? i + 1, total: res.total_takes ?? 0 });
+  }
+  throw new Error("La transcripción tardó demasiadas rondas. Reintenta: las tomas ya transcritas se conservan.");
 }
