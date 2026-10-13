@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { useCreateDocument } from "@/hooks/useDocuments";
 import { useClients } from "@/hooks/useClients";
+import { useClientSelectOptions } from "@/hooks/useClientSelectOptions";
 import { useProjects } from "@/hooks/useProjects";
 import { ACCEPTED_DOCUMENT_EXTENSIONS } from "@/lib/documentTypes";
 import { uploadFileToDropbox } from "@/lib/dropboxUpload";
@@ -33,6 +34,7 @@ export function DocumentFormDialog({ open, onOpenChange }: Props) {
 
   const createDocument = useCreateDocument();
   const { data: clients } = useClients();
+  const clientSelectOptions = useClientSelectOptions();
   const { data: projects } = useProjects();
 
   const handleDropzoneChange = (next: File[]) => {
@@ -196,7 +198,7 @@ export function DocumentFormDialog({ open, onOpenChange }: Props) {
             <div>
               <Label>Cliente</Label>
               <SearchableSelect
-                options={(clients || []).map((c) => ({ value: c.id, label: c.name }))}
+                options={clientSelectOptions}
                 value={clientId}
                 onValueChange={setClientId}
                 placeholder="Opcional"

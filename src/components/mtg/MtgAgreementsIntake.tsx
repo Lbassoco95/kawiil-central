@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { useClients } from "@/hooks/useClients";
+import { CLIENTS_SECTION, useClientSections } from "@/hooks/useClientSelectOptions";
 import { useProfiles } from "@/hooks/useTasks";
 import { supabase } from "@/integrations/supabase/client";
 import type { MtgAgreementRow, MtgMeetingRow, MtgSeriesRow } from "@/lib/mtg/db";
@@ -36,6 +37,7 @@ export function MtgAgreementsIntake(props: {
 }) {
   const { data: clients = [] } = useClients();
   const { data: profiles = [] } = useProfiles();
+  const groupSections = useClientSections().filter((x) => x.group !== CLIENTS_SECTION);
   const [text, setText] = useState("");
   const [owner, setOwner] = useState("");
   const [due, setDue] = useState("");
@@ -236,12 +238,23 @@ export function MtgAgreementsIntake(props: {
             value={pickedClient}
             onChange={(e) => setPickedClient(e.target.value)}
           >
-            <option value="">Cliente…</option>
-            {clients.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
+            <option value="">Cliente o grupo…</option>
+            {groupSections.map((g) => (
+              <optgroup key={g.group} label={g.group}>
+                {g.items.map((c) => (
+                  <option key={`${g.group}-${c.id}`} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </optgroup>
             ))}
+            <optgroup label="Clientes">
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </optgroup>
           </select>
         </div>
       )}

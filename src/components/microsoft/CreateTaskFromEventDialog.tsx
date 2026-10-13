@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/select";
 import { useCreateTask } from "@/hooks/useTasks";
 import { useClients } from "@/hooks/useClients";
+import { useClientSelectOptions } from "@/hooks/useClientSelectOptions";
 import { useProjects } from "@/hooks/useProjects";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
@@ -65,6 +66,7 @@ export function CreateTaskFromEventDialog({ open, onOpenChange, event }: Props) 
 
   const createTask = useCreateTask();
   const { data: clients } = useClients();
+  const clientSelectOptions = useClientSelectOptions();
   const { data: projects } = useProjects();
   const { data: users } = useOrgUsers();
 
@@ -122,11 +124,9 @@ export function CreateTaskFromEventDialog({ open, onOpenChange, event }: Props) 
   const clientOptions = useMemo(
     () => [
       { value: NO_CLIENT_VALUE, label: "Sin cliente" },
-      ...(clients ?? [])
-        .map((c) => ({ value: c.id, label: c.name }))
-        .sort((a, b) => a.label.localeCompare(b.label, "es")),
+      ...clientSelectOptions,
     ],
-    [clients],
+    [clientSelectOptions],
   );
 
   const handleClientChange = (value: string) => {

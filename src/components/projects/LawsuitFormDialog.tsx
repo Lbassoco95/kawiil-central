@@ -24,6 +24,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClients } from "@/hooks/useClients";
+import { useClientSelectOptions } from "@/hooks/useClientSelectOptions";
 import { useOrgProfiles } from "@/hooks/useClients";
 import { toast } from "sonner";
 
@@ -70,6 +71,7 @@ export function LawsuitFormDialog({ open, onOpenChange }: LawsuitFormDialogProps
   
   const { user } = useAuth();
   const { data: clients } = useClients();
+  const clientSelectOptions = useClientSelectOptions();
   const { data: profiles } = useOrgProfiles();
   const queryClient = useQueryClient();
 
@@ -164,7 +166,7 @@ export function LawsuitFormDialog({ open, onOpenChange }: LawsuitFormDialogProps
             <div className="space-y-2">
               <Label>Cliente *</Label>
               <SearchableSelect
-                options={(clients || []).map((c) => ({ value: c.id, label: c.name }))}
+                options={clientSelectOptions}
                 value={clientId}
                 onValueChange={setClientId}
                 placeholder="Seleccionar cliente"

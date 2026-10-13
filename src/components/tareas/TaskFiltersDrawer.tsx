@@ -11,24 +11,43 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useClients } from "@/hooks/useClients";
 import { useProjects } from "@/hooks/useProjects";
 import { useProfiles } from "@/hooks/useTasks";
 import { useAreaOptions } from "@/hooks/useAreaOptions";
+import { CLIENTS_SECTION, useClientSections } from "@/hooks/useClientSelectOptions";
+import { useClientGroups } from "@/hooks/useClientGroups";
 import { cn } from "@/lib/utils";
 
 export type TaskAdvancedFilters = {
   clientId?: string | null;
+  /** Filtra por todas las empresas del grupo (excluyente con clientId). */
+  groupId?: string | null;
   projectId?: string | null;
   assignedTo?: string | null;
   area?: string | null;
   priority?: string | null;
 };
 
+/** Aplica los filtros avanzados a una lista de tareas (el grupo se expande a sus clientes). */
+export function matchesTaskAdvancedFilters(
+  t: { client_id?: string | null; project_id?: string | null; assigned_to?: string | null; area?: string | null; priority?: string | null },
+  f: TaskAdvancedFilters,
+  groupClientIds: ReadonlySet<string> | null,
+): boolean {
+  if (f.clientId && t.client_id !== f.clientId) return false;
+  if (f.groupId && !(t.client_id && groupClientIds?.has(t.client_id))) return false;
+  if (f.projectId && t.project_id !== f.projectId) return false;
+  if (f.assignedTo && t.assigned_to !== f.assignedTo) return false;
+  if (f.area && t.area !== f.area) return false;
+  if (f.priority && t.priority !== f.priority) return false;
+  return true;
+}
+
 const STORAGE_KEY = "kawiil-tareas-filters";
 
 const EMPTY: TaskAdvancedFilters = {
   clientId: null,
+  groupId: null,
   projectId: null,
   assignedTo: null,
   area: null,
@@ -80,7 +99,8 @@ interface TaskFiltersDrawerProps {
 
 export function TaskFiltersDrawer({ filters, onChange, onClear, activeCount }: TaskFiltersDrawerProps) {
   const [open, setOpen] = useState(false);
-  const { data: clients = [] } = useClients();
+  const { data: groups = [] } = useClientGroups();
+  const clientSections = useClientSections();
   const { data: projects = [] } = useProjects();
   const { data: profiles = [] } = useProfiles();
   const { areaOptions } = useAreaOptions();
@@ -88,10 +108,17 @@ export function TaskFiltersDrawer({ filters, onChange, onClear, activeCount }: T
   const [clientSearch, setClientSearch] = useState("");
   const [projectSearch, setProjectSearch] = useState("");
 
-  const filteredClients = useMemo(() => {
+  const filteredSections = useMemo(() => {
     const q = clientSearch.trim().toLowerCase();
-    return q ? (clients as any[]).filter((c) => c.name?.toLowerCase().includes(q)) : (clients as any[]);
-  }, [clients, clientSearch]);
+    const groupIdByLabel = new Map(groups.map((g) => [`Grupo: ${g.name}`, g.id]));
+    return clientSections
+      .map((sec) => ({
+        ...sec,
+        groupId: groupIdByLabel.get(sec.group) ?? null,
+        items: (q ? sec.items.filter((c) => c.name?.toLowerCase().includes(q)) : sec.items).slice(0, 50),
+      }))
+      .filter((sec) => sec.items.length > 0);
+  }, [clientSections, groups, clientSearch]);
 
   const filteredProjects = useMemo(() => {
     const q = projectSearch.trim().toLowerCase();
@@ -135,7 +162,7 @@ export function TaskFiltersDrawer({ filters, onChange, onClear, activeCount }: T
 
         <div className="space-y-5">
           {/* Cliente */}
-          <FilterBlock label="Cliente" cleared={!filters.clientId}>
+          <FilterBlock label="Cliente" cleared={!filters.clientId && !filters.groupId}>
             <Input
               placeholder="Buscar cliente..."
               value={clientSearch}
@@ -145,26 +172,49 @@ export function TaskFiltersDrawer({ filters, onChange, onClear, activeCount }: T
             <div className="max-h-44 overflow-y-auto rounded-md border border-border/60">
               <button
                 type="button"
-                onClick={() => update({ clientId: null })}
+                onClick={() => update({ clientId: null, groupId: null })}
                 className={cn(
                   "block w-full text-left px-2.5 py-1.5 text-xs hover:bg-muted",
-                  !filters.clientId && "bg-primary/10 text-primary",
+                  !filters.clientId && !filters.groupId && "bg-primary/10 text-primary",
                 )}
               >
                 Todos los clientes
               </button>
-              {filteredClients.slice(0, 50).map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => update({ clientId: c.id })}
-                  className={cn(
-                    "block w-full text-left px-2.5 py-1.5 text-xs truncate hover:bg-muted",
-                    filters.clientId === c.id && "bg-primary/10 text-primary font-medium",
+              {filteredSections.map((sec) => (
+                <div key={sec.group}>
+                  {sec.groupId ? (
+                    <button
+                      type="button"
+                      onClick={() => update({ groupId: sec.groupId, clientId: null })}
+                      className={cn(
+                        "block w-full text-left px-2.5 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground",
+                        filters.groupId === sec.groupId && "bg-primary/10 text-primary",
+                      )}
+                      title="Filtrar por todas las empresas del grupo"
+                    >
+                      {sec.group} (todas)
+                    </button>
+                  ) : (
+                    sec.group !== CLIENTS_SECTION || filteredSections.length > 1 ? (
+                      <p className="px-2.5 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        {sec.group}
+                      </p>
+                    ) : null
                   )}
-                >
-                  {c.name}
-                </button>
+                  {sec.items.map((c) => (
+                    <button
+                      key={`${sec.group}|${c.id}`}
+                      type="button"
+                      onClick={() => update({ clientId: c.id, groupId: null })}
+                      className={cn(
+                        "block w-full text-left px-2.5 py-1.5 text-xs truncate hover:bg-muted",
+                        filters.clientId === c.id && "bg-primary/10 text-primary font-medium",
+                      )}
+                    >
+                      {c.name}
+                    </button>
+                  ))}
+                </div>
               ))}
             </div>
           </FilterBlock>

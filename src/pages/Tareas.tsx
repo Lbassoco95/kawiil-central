@@ -36,6 +36,12 @@ import { toast } from "sonner";
 import { UserAvatar } from "@/components/shared/UserAvatar";
 import { AiHeroV24 } from "@/components/dashboard/AiHeroV24";
 import { useAreaOptions } from "@/hooks/useAreaOptions";
+import { useAllClientGroupMembers } from "@/hooks/useClientGroups";
+import {
+  TaskFiltersDrawer,
+  matchesTaskAdvancedFilters,
+  useTaskAdvancedFilters,
+} from "@/components/tareas/TaskFiltersDrawer";
 import { PageHeader, type PageHeaderStat } from "@/components/shared/PageHeader";
 import { RecordatoriosEntryButton } from "@/components/reminders/RecordatoriosEntryButton";
 import { useAuth } from "@/contexts/AuthContext";
@@ -142,6 +148,16 @@ const Tareas = () => {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("mias");
   const [celula, setCelula] = useState<string>(() => searchParams.get("area") || "todas");
   const [orden, setOrden] = useState<OrderMode>("fecha");
+  const adv = useTaskAdvancedFilters();
+  const { data: allGroupMembers = [] } = useAllClientGroupMembers(!!adv.filters.groupId);
+  const advGroupClientIds = useMemo(
+    () =>
+      adv.filters.groupId
+        ? new Set(allGroupMembers.filter((m) => m.group_id === adv.filters.groupId).map((m) => m.client_id))
+        : null,
+    [adv.filters.groupId, allGroupMembers],
+  );
+  const passesAdv = (t: any) => matchesTaskAdvancedFilters(t, adv.filters, advGroupClientIds);
   const [vista, setVista] = useState<Vista>(() => {
     if (typeof window === "undefined") return "activas";
     const p = new URLSearchParams(window.location.search);
@@ -343,8 +359,9 @@ const Tareas = () => {
    * el filtro de célula y la búsqueda (que ya se resuelven en el servidor dentro de useTasks).
    */
   const orgOpen = useMemo(
-    () => (tasks as any[]).filter((t) => !isTaskClosedStatus(t.status)),
-    [tasks],
+    () => (tasks as any[]).filter((t) => !isTaskClosedStatus(t.status)).filter(passesAdv),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tasks, adv.filters, advGroupClientIds],
   );
 
   /**
@@ -357,8 +374,10 @@ const Tareas = () => {
     return (myAssignedRaw as any[])
       .filter((t) => !isTaskClosedStatus(t.status))
       .filter((t) => (celula !== "todas" ? t.area === celula : true))
-      .filter((t) => (q ? (t.title ?? "").toLowerCase().includes(q) : true));
-  }, [myAssignedRaw, celula, search]);
+      .filter((t) => (q ? (t.title ?? "").toLowerCase().includes(q) : true))
+      .filter(passesAdv);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myAssignedRaw, celula, search, adv.filters, advGroupClientIds]);
 
   const mineOverdue = useMemo(
     () => mineOpen.filter((t) => t.due_date && isPastDueCalendarMX(t.due_date)),
@@ -366,13 +385,14 @@ const Tareas = () => {
   );
 
   const closedTasks = useMemo(() => {
-    const list = (tasks as any[]).filter((t) => isTaskClosedStatus(t.status));
+    const list = (tasks as any[]).filter((t) => isTaskClosedStatus(t.status)).filter(passesAdv);
     return [...list].sort(
       (a, b) =>
         new Date(b.updated_at || b.created_at).getTime() -
         new Date(a.updated_at || a.created_at).getTime(),
     );
-  }, [tasks]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks, adv.filters, advGroupClientIds]);
 
   // Conteos operativos (personales por defecto, para que coincidan con el dashboard).
   const overdueCount = mineOverdue.length;
@@ -640,6 +660,12 @@ const Tareas = () => {
             <option value="prioridad">Prioridad</option>
             <option value="responsable">Responsable</option>
           </select>
+          <TaskFiltersDrawer
+            filters={adv.filters}
+            onChange={adv.setFilters}
+            onClear={adv.clear}
+            activeCount={adv.activeCount}
+          />
           <div style={{ flex: 1 }} />
           <div className="pill-group">
             <button

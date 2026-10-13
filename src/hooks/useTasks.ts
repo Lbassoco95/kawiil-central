@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { sortAlpha } from "@/lib/sortAlpha";
 import type { Tables, TablesInsert } from "@/integrations/supabase/types";
 import { toast } from "sonner";
 import { sendSlackNotification } from "@/lib/slackNotifications";
@@ -787,7 +788,7 @@ export function useProfiles() {
         .eq("is_active", true);
 
       if (error) throw error;
-      return data;
+      return sortAlpha(data ?? [], (p) => p.full_name || p.email);
     },
     enabled: !!user,
   });

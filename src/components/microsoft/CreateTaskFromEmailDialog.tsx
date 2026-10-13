@@ -19,9 +19,10 @@ import {
 } from "@/components/ui/select";
 import { useCreateTask } from "@/hooks/useTasks";
 import { useClients } from "@/hooks/useClients";
+import { useClientSelectOptions } from "@/hooks/useClientSelectOptions";
+import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { useProjects } from "@/hooks/useProjects";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
-import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { useCurrentProfile } from "@/hooks/useCurrentProfile";
 import { Loader2, Sparkles, Wand2, X, Check, Info } from "lucide-react";
 import { toast } from "sonner";
@@ -87,6 +88,7 @@ export function CreateTaskFromEmailDialog({
 
   const createTask = useCreateTask();
   const { data: clients } = useClients();
+  const clientSelectOptions = useClientSelectOptions();
   const { data: projects } = useProjects();
   const { data: users } = useOrgUsers();
   const { data: currentProfile } = useCurrentProfile();
@@ -427,19 +429,13 @@ export function CreateTaskFromEmailDialog({
             </div>
             <div className="space-y-1">
               <Label>Cliente (opcional)</Label>
-              <Select value={clientId} onValueChange={handleClientChange}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Sin cliente" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NO_CLIENT_VALUE}>Sin cliente</SelectItem>
-                  {clients?.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                options={[{ value: NO_CLIENT_VALUE, label: "Sin cliente" }, ...clientSelectOptions]}
+                value={clientId}
+                onValueChange={handleClientChange}
+                placeholder="Sin cliente"
+                searchPlaceholder="Buscar cliente..."
+              />
             </div>
           </div>
           <div className="space-y-1">
