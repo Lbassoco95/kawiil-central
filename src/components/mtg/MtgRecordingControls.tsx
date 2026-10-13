@@ -21,6 +21,7 @@ import {
   Download,
   RefreshCw,
   HardDrive,
+  Play,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -109,10 +110,11 @@ function TakeActions({ path, fileName }: { path: string; fileName: string }) {
 
   return (
     <span className="inline-flex flex-wrap items-center gap-2">
-      <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-xs" disabled={busy} onClick={() => void sign(false)}>
+      <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={busy} onClick={() => void sign(false)}>
+        <Play className="h-3 w-3 mr-1" />
         Escuchar
       </Button>
-      <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-xs" disabled={busy} onClick={() => void sign(true)}>
+      <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={busy} onClick={() => void sign(true)}>
         <Download className="h-3 w-3 mr-1" />
         Descargar
       </Button>
@@ -367,12 +369,15 @@ export function MtgRecordingControls(props: {
               ) : (
                 <Sparkles className="h-3.5 w-3.5 mr-1" />
               )}
-              {props.meeting.transcript_status === "failed" ||
-              props.meeting.transcript_status === "unavailable"
-                ? "Reintentar transcripción"
-                : props.meeting.transcript_status === "received"
-                  ? "Volver a transcribir"
-                  : "Transcribir IA"}
+              {(() => {
+                const n = takes.length > 1 ? ` (${takes.length} tomas)` : "";
+                return props.meeting.transcript_status === "failed" ||
+                  props.meeting.transcript_status === "unavailable"
+                  ? `Reintentar transcripción${n}`
+                  : props.meeting.transcript_status === "received"
+                    ? `Volver a transcribir${n}`
+                    : `Transcribir IA${n}`;
+              })()}
             </Button>
           )}
         {pendingLocal && !props.meeting.recording_path && !recording && (
