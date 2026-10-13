@@ -36,6 +36,23 @@ export function useClientGroups() {
   });
 }
 
+/** Todas las membresías grupo↔cliente (para selectores con grupos). */
+export function useAllClientGroupMembers(enabled = true) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["client-group-members-all"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("client_group_members" as any)
+        .select("group_id, client_id");
+      if (error) throw error;
+      return (data ?? []) as unknown as { group_id: string; client_id: string }[];
+    },
+    enabled: !!user && enabled,
+    staleTime: 60_000,
+  });
+}
+
 export function useClientGroupMembers(groupId: string | undefined) {
   return useQuery({
     queryKey: ["client-group-members", groupId],

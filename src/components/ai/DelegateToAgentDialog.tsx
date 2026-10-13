@@ -32,6 +32,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useAgentList, type Agent } from "@/hooks/useAgentList";
 import { useClients } from "@/hooks/useClients";
+import { useClientSections } from "@/hooks/useClientSelectOptions";
 import type { Client } from "@/hooks/useClients";
 import type { ChatAttachmentMeta } from "@/hooks/useChat";
 import {
@@ -937,6 +938,7 @@ function ClientCombobox({
   disabled?: boolean;
 }) {
   const selectedClient = clients.find((c) => c.id === selected);
+  const sections = useClientSections();
 
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
@@ -978,25 +980,29 @@ function ClientCombobox({
                 />
                 Sin cliente específico
               </CommandItem>
-              {clients.map((client) => (
-                <CommandItem
-                  key={client.id}
-                  value={`${client.name} ${client.id}`}
-                  onSelect={() => {
-                    onSelect(client.id);
-                    onOpenChange(false);
-                  }}
-                >
-                  <Check
-                    className={cn(
-                      "h-4 w-4 mr-2 shrink-0",
-                      selected === client.id ? "opacity-100" : "opacity-0",
-                    )}
-                  />
-                  {client.name}
-                </CommandItem>
-              ))}
             </CommandGroup>
+            {sections.map((section) => (
+              <CommandGroup key={section.group} heading={section.group}>
+                {section.items.map((client) => (
+                  <CommandItem
+                    key={`${section.group}|${client.id}`}
+                    value={`${client.name} ${client.id} ${section.group}`}
+                    onSelect={() => {
+                      onSelect(client.id);
+                      onOpenChange(false);
+                    }}
+                  >
+                    <Check
+                      className={cn(
+                        "h-4 w-4 mr-2 shrink-0",
+                        selected === client.id ? "opacity-100" : "opacity-0",
+                      )}
+                    />
+                    {client.name}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            ))}
           </CommandList>
         </Command>
       </PopoverContent>

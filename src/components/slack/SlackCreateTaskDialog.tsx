@@ -10,6 +10,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Loader2, X, Plus, Link as LinkIcon, ChevronDown, ChevronUp } from "lucide-react";
 import { useCreateTask, useProfiles } from "@/hooks/useTasks";
 import { useClients } from "@/hooks/useClients";
+import { useClientSelectOptions } from "@/hooks/useClientSelectOptions";
 import { useProjects } from "@/hooks/useProjects";
 import { useAreaOptions } from "@/hooks/useAreaOptions";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
@@ -52,6 +53,7 @@ export function SlackCreateTaskDialog({
   const createTask = useCreateTask();
   const { data: profiles = [] } = useProfiles();
   const { data: clients } = useClients();
+  const clientSelectOptions = useClientSelectOptions();
   const { data: projects } = useProjects();
   const { areaOptions } = useAreaOptions();
 
@@ -117,11 +119,9 @@ export function SlackCreateTaskDialog({
   const clientOptions = useMemo(
     () => [
       { value: NONE_VALUE, label: "Sin cliente (interna)" },
-      ...(clients ?? [])
-        .map((c) => ({ value: c.id, label: c.name }))
-        .sort((a, b) => a.label.localeCompare(b.label, "es")),
+      ...clientSelectOptions,
     ],
-    [clients],
+    [clientSelectOptions],
   );
 
   const projectOptions = useMemo(() => {

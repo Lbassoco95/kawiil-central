@@ -12,6 +12,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClients } from "@/hooks/useClients";
+import { useClientSelectOptions } from "@/hooks/useClientSelectOptions";
 import { useClientComplianceConfig } from "@/hooks/useCompliance";
 import { useProjectTemplates, useCreateProjectTemplate } from "@/hooks/useProjectTemplates";
 import { ComplianceTaskGeneratorModal } from "@/components/compliance/ComplianceTaskGeneratorModal";
@@ -42,6 +43,7 @@ export function ProjectFormDialog() {
   const [taskLines, setTaskLines] = useState<string>("");
   const { user } = useAuth();
   const { data: clients } = useClients();
+  const clientSelectOptions = useClientSelectOptions();
   const { areaOptions } = useAreaOptions();
   const queryClient = useQueryClient();
   const { data: templates } = useProjectTemplates(area || undefined);
@@ -215,7 +217,7 @@ export function ProjectFormDialog() {
             <div className="space-y-2">
               <Label>Cliente</Label>
               <SearchableSelect
-                options={(clients || []).map((c) => ({ value: c.id, label: c.name }))}
+                options={clientSelectOptions}
                 value={clientId}
                 onValueChange={setClientId}
                 placeholder="Seleccionar cliente (opcional)"

@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { useClients } from "@/hooks/useClients";
+import { useClientSelectOptions } from "@/hooks/useClientSelectOptions";
 import { useProjects } from "@/hooks/useProjects";
 import { useCreateExpense } from "@/hooks/useExpenses";
 import { FileDropzone } from "@/components/shared/FileDropzone";
@@ -74,6 +75,7 @@ interface Props {
 export function ExpenseFormDialog({ open, onOpenChange }: Props) {
   const createExpense = useCreateExpense();
   const { data: clients = [] } = useClients();
+  const clientSelectOptions = useClientSelectOptions();
   const { data: projects = [] } = useProjects();
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [dupOpen, setDupOpen] = useState(false);
@@ -132,7 +134,7 @@ export function ExpenseFormDialog({ open, onOpenChange }: Props) {
   const watchClient = form.watch("client_id");
   const watchChargeTo = form.watch("charge_to");
 
-  const clientOptions = clients.map((c) => ({ value: c.id, label: c.name }));
+  const clientOptions = clientSelectOptions;
   const projectOptions = projects
     .filter((p: any) => !watchClient || p.client_id === watchClient)
     .map((p: any) => ({ value: p.id, label: p.name }));

@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { useCreateTask, useProfiles } from "@/hooks/useTasks";
 import { useClients } from "@/hooks/useClients";
+import { useClientSelectOptions } from "@/hooks/useClientSelectOptions";
 import { useProjects } from "@/hooks/useProjects";
 import { useAreaOptions } from "@/hooks/useAreaOptions";
 import { useQuery } from "@tanstack/react-query";
@@ -85,6 +86,7 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
   const createTask = useCreateTask();
   const { data: profiles } = useProfiles();
   const { data: clients } = useClients();
+  const clientSelectOptions = useClientSelectOptions();
   const { data: projects } = useProjects();
   const { areaOptions } = useAreaOptions();
 
@@ -120,11 +122,9 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
   const clientOptions = useMemo(
     () => [
       { value: "__none__", label: "Sin cliente (interna)" },
-      ...(clients ?? [])
-        .map((c) => ({ value: c.id, label: c.name }))
-        .sort((a, b) => a.label.localeCompare(b.label, "es")),
+      ...clientSelectOptions,
     ],
-    [clients]
+    [clientSelectOptions]
   );
 
   const projectOptions = useMemo(
