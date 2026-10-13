@@ -26,6 +26,8 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { useProfiles } from "@/hooks/useTasks";
 import { supabase } from "@/integrations/supabase/client";
+import { MtgAssignClientDialog } from "@/components/mtg/MtgAssignClientDialog";
+import { useClients } from "@/hooks/useClients";
 import { mtgDb, type MtgAgreementRow, type MtgMeetingRow, type MtgMinutesRow, type MtgSeriesRow } from "@/lib/mtg/db";
 import { MTG_BUCKET, MTG_SIGNED_URL_TTL_SECONDS } from "@/lib/mtg/storagePaths";
 import {
@@ -63,6 +65,8 @@ export default function JuntaMinuta() {
   const [sendOpen, setSendOpen] = useState(false);
   const [sendRecipients, setSendRecipients] = useState("");
   const [draftBusy, setDraftBusy] = useState(false);
+  const [assignOpen, setAssignOpen] = useState(false);
+  const { data: allClients = [] } = useClients();
 
   const q = useQuery({
     queryKey: ["mtg-minutes-full", meetingId],
@@ -189,10 +193,35 @@ export default function JuntaMinuta() {
 
   const { meeting, series, projects } = q.data;
   const orgId = meeting.organization_id;
+  const entityClientIds = (series?.entities ?? []).map((e) => e.client_id);
+  const hasClient = !!meeting.client_id || entityClientIds.length > 0;
+  const clientLabel =
+    (series?.entities ?? []).length > 1
+      ? (series?.entities ?? []).map((e) => e.label).join(" · ")
+      : (allClients.find((c) => c.id === (meeting.client_id ?? entityClientIds[0]))?.name ?? null);
+  const needClient = (action: string): boolean => {
+    if (hasClient) return false;
+    toast.message(`Elige el cliente de la junta para ${action}`, { duration: 6000 });
+    setAssignOpen(true);
+    return true;
+  };
 
   return (
     <AppLayout>
       <div className="space-y-4 animate-fade-in pb-16">
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-sm">
+          <span className="text-xs text-muted-foreground">Cliente:</span>
+          {hasClient ? (
+            <span className="font-medium">{clientLabel ?? "asignado"}</span>
+          ) : (
+            <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-xs text-amber-700 dark:text-amber-400">
+              Sin cliente
+            </span>
+          )}
+          <Button size="sm" variant="ghost" onClick={() => setAssignOpen(true)}>
+            {hasClient ? "Cambiar cliente / proyecto" : "Asignar cliente / proyecto"}
+          </Button>
+        </div>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <Button asChild variant="ghost" size="sm">
             <Link to={`/juntas/${meetingId}`}>
@@ -240,6 +269,7 @@ export default function JuntaMinuta() {
               title={!approval.ok ? approval.reason : undefined}
               onClick={async () => {
                 if (!current || !approval.ok) return;
+                if (needClient("aprobar la minuta")) return;
                 try {
                   await approveMinutes({
                     organizationId: orgId,
@@ -280,6 +310,7 @@ export default function JuntaMinuta() {
                 size="sm"
                 variant="outline"
                 onClick={async () => {
+                  if (needClient("cerrar la junta")) return;
                   try {
                     await closeMeetingAfterMinutes({
                       organizationId: orgId,
@@ -577,6 +608,7 @@ export default function JuntaMinuta() {
             </Button>
             <Button
               onClick={async () => {
+                if (needClient("enviar y cerrar")) return;
                 try {
                   const recipients = sendRecipients
                     .split(",")
@@ -604,6 +636,21 @@ export default function JuntaMinuta() {
           </div>
         </DialogContent>
       </Dialog>
+      <MtgAssignClientDialog
+        open={assignOpen}
+        onOpenChange={setAssignOpen}
+        organizationId={orgId}
+        actorUserId={user.id}
+        meetingId={meeting.id}
+        currentClientId={meeting.client_id}
+        currentEntityClientIds={entityClientIds}
+        currentProjectId={meeting.project_id}
+        onDone={() => {
+          invalidate();
+          qc.invalidateQueries({ queryKey: ["mtg-board", meeting.id] });
+          qc.invalidateQueries({ queryKey: ["mtg-meetings"] });
+        }}
+      />
     </AppLayout>
   );
 }
