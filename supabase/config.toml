@@ -178,6 +178,10 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = true
   [functions.mtg-transcribe-recording]
     verify_jwt = true
+  [functions.mtg-recall-join]
+    verify_jwt = true
+  [functions.mtg-recall-webhook]
+    verify_jwt = false
   [functions.mtg-summarize-meeting]
     verify_jwt = true
 

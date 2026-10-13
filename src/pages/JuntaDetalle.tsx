@@ -611,6 +611,7 @@ export default function JuntaDetalle() {
           <MtgCallCaptureBar
             meeting={meeting}
             onPasteLink={() => setJoinLinkOpen(true)}
+            onBotSent={() => board.invalidate()}
           />
 
           {!meeting.teams_join_url && liveEditable && (
