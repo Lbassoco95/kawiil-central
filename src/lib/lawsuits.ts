@@ -106,3 +106,16 @@ export function collectLawsuitDeadlines(lawsuits: LawsuitDateSource[], today = t
   }
   return out.sort((a, b) => a.date.localeCompare(b.date));
 }
+
+/**
+ * Juicios en los que participa un usuario: es responsable del proyecto o forma
+ * parte de su equipo (project_team).
+ */
+export function lawsuitsForUser<T extends { project_id: string; responsible_user_id: string | null }>(
+  lawsuits: T[],
+  userId: string,
+  teamProjectIds: Iterable<string>,
+): T[] {
+  const team = new Set(teamProjectIds);
+  return lawsuits.filter((l) => l.responsible_user_id === userId || team.has(l.project_id));
+}

@@ -284,7 +284,13 @@ export function PersonalBoardTasksAndProjectSteps({
                 <button
                   key={s.id}
                   type="button"
-                  onClick={() => navigate(`/proyectos/${s.projectId}`)}
+                  onClick={() =>
+                    navigate(
+                      s.lawsuitId
+                        ? `/proyectos/${s.projectId}?tab=juicios&lawsuitId=${s.lawsuitId}`
+                        : `/proyectos/${s.projectId}`,
+                    )
+                  }
                   className={cn(
                     "flex w-full items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-xs transition-colors",
                     due.overdue

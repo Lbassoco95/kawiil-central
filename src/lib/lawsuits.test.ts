@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { collectLawsuitDeadlines, currentStageLabel, parseLawsuitStages } from "./lawsuits";
+import { collectLawsuitDeadlines, currentStageLabel, lawsuitsForUser, parseLawsuitStages } from "./lawsuits";
 
 const base = {
   project_id: "p1",
@@ -44,5 +44,21 @@ describe("etapas", () => {
     const stages = parseLawsuitStages([{ label: "A", completed: true }, { label: "B" }, { label: "C" }]);
     expect(currentStageLabel(stages)).toBe("B");
     expect(currentStageLabel(stages.map((s) => ({ ...s, completed: true })))).toBeNull();
+  });
+});
+
+describe("lawsuitsForUser", () => {
+  const rows = [
+    { project_id: "p1", responsible_user_id: "u1" },
+    { project_id: "p2", responsible_user_id: "u2" },
+    { project_id: "p3", responsible_user_id: null },
+  ];
+
+  it("incluye proyectos que el usuario responsabiliza o donde está en el equipo", () => {
+    expect(lawsuitsForUser(rows, "u1", ["p3"]).map((r) => r.project_id)).toEqual(["p1", "p3"]);
+  });
+
+  it("no incluye proyectos ajenos", () => {
+    expect(lawsuitsForUser(rows, "u9", [])).toEqual([]);
   });
 });
