@@ -29,6 +29,12 @@ import type { MtgMeetingRow, MtgSeriesRow } from "@/lib/mtg/db";
 import { useMtgRecordings } from "@/hooks/useMtgRecordings";
 import { supabase } from "@/integrations/supabase/client";
 import { MTG_BUCKET } from "@/lib/mtg/storagePaths";
+import {
+  getOutputLanguage,
+  OUTPUT_LANGUAGES,
+  setOutputLanguage,
+  type OutputLanguage,
+} from "@/lib/mtg/outputLanguage";
 import { canUploadRecording } from "@/lib/mtg/uploadRecording";
 import {
   clearPendingRecording,
@@ -143,6 +149,7 @@ export function MtgRecordingControls(props: {
   const session = useRecordingSession();
   const [recoveredLocal, setRecoveredLocal] = useState<PendingRecording | null>(null);
   const [hidden, setHidden] = useState(false);
+  const [outLang, setOutLang] = useState<OutputLanguage>(() => getOutputLanguage());
   const [nowTick, setNowTick] = useState(() => Date.now());
   const autoTranscribe = props.autoTranscribe !== false;
   const { data: takes = [] } = useMtgRecordings(props.meeting.id, props.meeting.recording_saved_at);
@@ -380,6 +387,43 @@ export function MtgRecordingControls(props: {
               })()}
             </Button>
           )}
+        {props.meeting.recording_path && !recording && (
+          <>
+            <label className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+              Idioma
+              <select
+                className="h-8 rounded-md border bg-background px-2 text-xs text-foreground"
+                value={outLang}
+                disabled={processing}
+                onChange={(e) => {
+                  const v = e.target.value as OutputLanguage;
+                  setOutLang(v);
+                  setOutputLanguage(v);
+                }}
+                title="Idioma de la transcripción y del resumen (la junta puede mezclar idiomas)"
+              >
+                {OUTPUT_LANGUAGES.map((l) => (
+                  <option key={l.value} value={l.value}>
+                    {l.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {props.meeting.transcript_status === "received" && (
+              <Button
+                type="button"
+                size={size}
+                variant="default"
+                disabled={processing}
+                onClick={() => void retranscribe(sessionCtx(), false)}
+                title="Une las tomas ya transcritas en el idioma elegido y genera el resumen (puntos clave, compromisos, notas)"
+              >
+                <Sparkles className="h-3.5 w-3.5 mr-1" />
+                Resumen con IA
+              </Button>
+            )}
+          </>
+        )}
         {pendingLocal && !props.meeting.recording_path && !recording && (
           <>
             <Button

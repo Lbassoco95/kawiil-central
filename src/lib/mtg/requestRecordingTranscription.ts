@@ -4,6 +4,7 @@
  */
 
 import { supabase } from "@/integrations/supabase/client";
+import { getOutputLanguage } from "@/lib/mtg/outputLanguage";
 
 export type RecordingTranscriptionResult = {
   /** true = faltan tomas; la app vuelve a llamar hasta terminar. */
@@ -60,7 +61,7 @@ async function invokeOnce(
 ): Promise<RecordingTranscriptionResult> {
   const { data, error } = await supabase.functions.invoke(
     "mtg-transcribe-recording",
-    { body: { meeting_id: meetingId, force, step: true } },
+    { body: { meeting_id: meetingId, force, step: true, target_language: getOutputLanguage() } },
   );
   if (error) {
     throw new Error(await describeInvokeError(error));
