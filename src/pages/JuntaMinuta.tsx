@@ -41,6 +41,7 @@ import {
 } from "@/lib/mtg/approveMinutes";
 import { assignProjectAndCreateTask } from "@/lib/mtg/captureAgreement";
 import { MtgAgreementsIntake } from "@/components/mtg/MtgAgreementsIntake";
+import { MtgMinutesView } from "@/components/mtg/MtgMinutesView";
 import { MtgPeoplePanel } from "@/components/mtg/MtgPeoplePanel";
 import { MtgUploadTranscriptButton } from "@/components/mtg/MtgUploadTranscriptButton";
 import { ArrowLeft, Loader2 } from "lucide-react";
@@ -309,21 +310,24 @@ export default function JuntaMinuta() {
         )}
 
         <div className="grid lg:grid-cols-2 gap-6">
-          <section className="space-y-2">
-            <h2 className="font-semibold text-sm">Markdown</h2>
-            <Textarea
-              className="min-h-[420px] font-mono text-xs"
-              value={md}
-              onChange={(e) => setDraftMd(e.target.value)}
-              disabled={current?.status === "approved"}
+          {q.data && (
+            <MtgMinutesView
+              md={md}
+              onChange={setDraftMd}
+              readOnly={current?.status === "approved"}
+              title={q.data.series?.title ?? q.data.meeting.title ?? "Junta"}
+              meeting={q.data.meeting}
+              series={q.data.series}
+              footer={
+                current && (
+                  <p className="text-xs text-muted-foreground">
+                    v{current.version} · {current.status} · {current.generated_by ?? "—"} · prompt{" "}
+                    {current.prompt_version ?? "—"}
+                  </p>
+                )
+              }
             />
-            {current && (
-              <p className="text-xs text-muted-foreground">
-                v{current.version} · {current.status} · {current.generated_by ?? "—"} · prompt{" "}
-                {current.prompt_version ?? "—"}
-              </p>
-            )}
-          </section>
+          )}
 
           <section className="space-y-4">
             {user && q.data && (

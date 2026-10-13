@@ -35,6 +35,7 @@ import {
   setOutputLanguage,
   type OutputLanguage,
 } from "@/lib/mtg/outputLanguage";
+import { summarizeMeeting } from "@/lib/mtg/summarizeMeeting";
 import { canUploadRecording } from "@/lib/mtg/uploadRecording";
 import {
   clearPendingRecording,
@@ -149,6 +150,7 @@ export function MtgRecordingControls(props: {
   const session = useRecordingSession();
   const [recoveredLocal, setRecoveredLocal] = useState<PendingRecording | null>(null);
   const [hidden, setHidden] = useState(false);
+  const [summarizing, setSummarizing] = useState(false);
   const [outLang, setOutLang] = useState<OutputLanguage>(() => getOutputLanguage());
   const [nowTick, setNowTick] = useState(() => Date.now());
   const autoTranscribe = props.autoTranscribe !== false;
@@ -224,6 +226,24 @@ export function MtgRecordingControls(props: {
       return;
     }
     await startRecording(sessionCtx(), mode);
+  };
+
+  // Juntas con transcripción de Kawiilito (Recall): sin tomas propias, solo se resume.
+  const summarizeOnly = async () => {
+    setSummarizing(true);
+    toast.message("Generando resumen de la junta…", { id: "mtg-summary-progress" });
+    try {
+      await summarizeMeeting(props.meeting.id);
+      toast.success("Resumen listo", { id: "mtg-summary-progress" });
+      props.onDone?.();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo generar el resumen", {
+        id: "mtg-summary-progress",
+        duration: 10000,
+      });
+    } finally {
+      setSummarizing(false);
+    }
   };
 
   const sessionCtx = () => ({
@@ -387,7 +407,7 @@ export function MtgRecordingControls(props: {
               })()}
             </Button>
           )}
-        {props.meeting.recording_path && !recording && (
+        {(props.meeting.recording_path || props.meeting.transcript_status === "received") && !recording && (
           <>
             <label className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
               Idioma
@@ -414,8 +434,8 @@ export function MtgRecordingControls(props: {
                 type="button"
                 size={size}
                 variant="default"
-                disabled={processing}
-                onClick={() => void retranscribe(sessionCtx(), false)}
+                disabled={processing || summarizing}
+                onClick={() => (takes.length > 0 ? void retranscribe(sessionCtx(), false) : void summarizeOnly())}
                 title="Une las tomas ya transcritas en el idioma elegido y genera el resumen (puntos clave, compromisos, notas)"
               >
                 <Sparkles className="h-3.5 w-3.5 mr-1" />
@@ -458,6 +478,7 @@ export function MtgRecordingControls(props: {
         )}
         {!props.meeting.recording_path &&
           !pendingLocal &&
+          props.meeting.transcript_status !== "received" &&
           (props.meeting.transcript_status === "failed" ||
             props.meeting.status === "ended" ||
             props.meeting.status === "minutes_draft") &&

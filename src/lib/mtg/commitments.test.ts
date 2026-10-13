@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseCommitments } from "./commitments";
+import { matchProfileByName, parseCommitments } from "./commitments";
 
 const MD = `## Puntos más importantes
 - algo
@@ -23,5 +23,18 @@ describe("parseCommitments", () => {
   it("devuelve [] sin sección o con (ninguno)", () => {
     expect(parseCommitments("# x")).toEqual([]);
     expect(parseCommitments("## Compromisos y fechas\n- (ninguno)")).toEqual([]);
+  });
+});
+
+describe("matchProfileByName", () => {
+  const ps = [{ full_name: "Leopoldo Bassoco" }, { full_name: "Lorena Sandoval" }, { full_name: "Carlos Hernández" }, { full_name: "Carlos Olivares" }];
+  it("coincide por nombre completo o único nombre de pila", () => {
+    expect(matchProfileByName(ps, "Leopoldo Bassoco")).toBe(ps[0]);
+    expect(matchProfileByName(ps, "Lorena")).toBe(ps[1]);
+  });
+  it("no adivina si hay ambigüedad o no existe", () => {
+    expect(matchProfileByName(ps, "Carlos")).toBeUndefined();
+    expect(matchProfileByName(ps, "Viridiana Garcia")).toBeUndefined();
+    expect(matchProfileByName(ps, null)).toBeUndefined();
   });
 });
