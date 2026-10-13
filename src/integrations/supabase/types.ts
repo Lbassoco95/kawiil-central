@@ -4234,6 +4234,80 @@ export type Database = {
           },
         ]
       }
+      project_lawsuits: {
+        Row: {
+          case_number: string | null
+          court: string | null
+          created_at: string
+          created_by: string | null
+          current_stage: string | null
+          defendant: string | null
+          filed_date: string | null
+          id: string
+          lawsuit_type: string | null
+          name: string
+          next_deadline_date: string | null
+          next_deadline_note: string | null
+          next_hearing_date: string | null
+          notes: string | null
+          organization_id: string
+          plaintiff: string | null
+          project_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          case_number?: string | null
+          court?: string | null
+          created_at?: string
+          created_by?: string | null
+          current_stage?: string | null
+          defendant?: string | null
+          filed_date?: string | null
+          id?: string
+          lawsuit_type?: string | null
+          name: string
+          next_deadline_date?: string | null
+          next_deadline_note?: string | null
+          next_hearing_date?: string | null
+          notes?: string | null
+          organization_id: string
+          plaintiff?: string | null
+          project_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          case_number?: string | null
+          court?: string | null
+          created_at?: string
+          created_by?: string | null
+          current_stage?: string | null
+          defendant?: string | null
+          filed_date?: string | null
+          id?: string
+          lawsuit_type?: string | null
+          name?: string
+          next_deadline_date?: string | null
+          next_deadline_note?: string | null
+          next_hearing_date?: string | null
+          notes?: string | null
+          organization_id?: string
+          plaintiff?: string | null
+          project_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_lawsuits_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_log_entries: {
         Row: {
           content: string
