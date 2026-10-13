@@ -107,6 +107,8 @@ serve(async (req) => {
         },
         recording_config: {
           transcript: { provider: { recallai_streaming: { language_code: "auto" } } },
+          // Video mezclado (mp4) para poder ver la llamada; se consulta con mtg-recall-media.
+          video_mixed_mp4: {},
         },
       }),
     });
