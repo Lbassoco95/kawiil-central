@@ -22,6 +22,7 @@ import {
   AlertTriangle,
   ArrowRight,
   ChevronRight,
+  Scale,
 } from "lucide-react";
 import { useClients } from "@/hooks/useClients";
 import { useProjects } from "@/hooks/useProjects";
@@ -32,6 +33,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { formatDateMX, nowMX, isPastDueCalendarMX } from "@/lib/dateUtils";
 import { SERVICE_LABELS } from "@/lib/serviceLabels";
+import { collectLawsuitDeadlines } from "@/lib/lawsuits";
 import { useUserRole } from "@/hooks/useUserRole";
 
 
@@ -68,6 +70,23 @@ export function TeamDashboard() {
     },
     enabled: !!user,
   });
+
+  const { data: lawsuits } = useQuery({
+    queryKey: ["dashboard-lawsuits"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("project_lawsuits")
+        .select("id, name, project_id, status, next_hearing_date, next_deadline_date, next_deadline_note, projects(name)")
+        .not("status", "in", "(concluido,archivado)");
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user,
+  });
+
+  const lawsuitDeadlines = useMemo(() => collectLawsuitDeadlines(lawsuits ?? []), [lawsuits]);
+  const lawsuitProjectName = (projectId: string) =>
+    (lawsuits ?? []).find((l) => l.project_id === projectId)?.projects?.name ?? "";
 
   const pendingTasks = useMemo(
     () => allTasks?.filter((t) => ["pendiente", "en_progreso", "en_revision"].includes(t.status)) ?? [],
@@ -332,6 +351,10 @@ export function TeamDashboard() {
       return `  - ${p.name} (${SERVICE_LABELS[p.area as keyof typeof SERVICE_LABELS] || p.area || "sin área"}) — ${ptPending.length} pendientes, ${ptOverdue.length} vencidas${areaDetail}`;
     }) ?? [];
 
+    const lawsuitLines = lawsuitDeadlines.slice(0, 10).map(
+      (d) => `  - ${d.lawsuitName} — ${d.label} (${d.date})${d.overdue ? " ⚠️ vencido" : ""}`,
+    );
+
     return `Genera un resumen ejecutivo breve del estado del equipo Kawiil para el dashboard. Usa español mexicano, tono profesional y cercano con emojis.
 
 DATOS:
@@ -347,6 +370,9 @@ ${areaStats.map(a => `- ${a.label}: ${a.pct}% completado (${a.pending} pendiente
 PROYECTOS ACTIVOS CON DETALLE:
 ${activeProjectDetails.slice(0, 10).join("\n") || "Ninguno"}
 
+PLAZOS Y AUDIENCIAS DE JUICIOS (próximos):
+${lawsuitLines.join("\n") || "Ninguno"}
+
 PROYECTOS CRÍTICOS O CON ATRASO:
 ${criticalProjects.length > 0 ? criticalProjects.map((p: any) => `- ${p.name}: criticidad=${(p as any).criticality_level || "normal"}, motivo_atraso=${(p as any).delay_category || "ninguno"}`).join("\n") : "Ninguno"}
 
@@ -358,7 +384,7 @@ INSTRUCCIONES:
 5. Si hay muchas tareas vencidas en alguna célula, sugiere acción.
 6. Cierra con una observación motivadora.
 7. Máximo 150 palabras. Usa Markdown: títulos con ## o ** (ej. **📊 Resumen ejecutivo**, **Estado general**), listas con guiones, **negritas** en cifras y alertas, emojis en viñetas.`;
-  }, [activeClients, activeProjects, pendingTasks, completedTasks, dueSoon, areaStats, projects, allTasks, today]);
+  }, [activeClients, activeProjects, pendingTasks, completedTasks, dueSoon, areaStats, projects, allTasks, today, lawsuitDeadlines]);
 
   const tabClass = "rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 sm:px-4 py-2.5 text-xs sm:text-sm whitespace-nowrap";
 
@@ -436,6 +462,46 @@ INSTRUCCIONES:
                   <Progress value={a.pct} className="h-1" />
                 </button>
               ))}
+            </div>
+          )}
+
+          {/* Plazos de juicios */}
+          {lawsuitDeadlines.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                  <Scale className="h-3.5 w-3.5" /> Plazos de juicios
+                </h3>
+                {lawsuitDeadlines.some((d) => d.overdue) && (
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-destructive border-destructive/40">
+                    {lawsuitDeadlines.filter((d) => d.overdue).length} vencido
+                    {lawsuitDeadlines.filter((d) => d.overdue).length === 1 ? "" : "s"}
+                  </Badge>
+                )}
+              </div>
+              <div className="divide-y divide-border/40">
+                {lawsuitDeadlines.slice(0, 6).map((d) => (
+                  <button
+                    key={`${d.lawsuitId}-${d.kind}`}
+                    className="flex items-center gap-3 w-full py-2 text-left hover:bg-secondary/30 -mx-2 px-2 rounded-md transition-colors"
+                    onClick={() => navigate(`/proyectos/${d.projectId}?tab=juicios&lawsuitId=${d.lawsuitId}`)}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm text-foreground truncate">{d.lawsuitName}</div>
+                      <div className="text-[11px] text-muted-foreground truncate">
+                        {d.label}
+                        {lawsuitProjectName(d.projectId) ? ` · ${lawsuitProjectName(d.projectId)}` : ""}
+                      </div>
+                    </div>
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
+                      {d.kind === "audiencia" ? "Audiencia" : "Plazo"}
+                    </Badge>
+                    <span className={`text-[11px] shrink-0 ${d.overdue ? "text-destructive font-medium" : "text-muted-foreground"}`}>
+                      {formatDateMX(d.date)}
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 

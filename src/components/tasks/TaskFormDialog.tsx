@@ -37,6 +37,8 @@ interface Props {
   defaultClientId?: string;
   defaultArea?: string;
   defaultPhaseKey?: string;
+  /** Vincula la tarea creada a un juicio concreto (project_lawsuits). */
+  defaultLawsuitId?: string;
   /** Valores iniciales opcionales (p. ej. al crear una tarea desde un correo). */
   defaultTitle?: string;
   defaultDescription?: string;
@@ -59,7 +61,7 @@ const ACTION_TYPE_OPTIONS = [
   { value: "registro", label: "Solo registrar en lista", hint: "Anotar en una lista interna, sin dueño de ejecución." },
 ];
 
-export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultClientId, defaultArea, defaultPhaseKey, defaultTitle, defaultDescription, defaultDueDate, defaultPriority, sourceEmailId, sourceEmailSubject, sourceEmailFrom, onForwardEmail, onCreated }: Props) {
+export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultClientId, defaultArea, defaultPhaseKey, defaultLawsuitId, defaultTitle, defaultDescription, defaultDueDate, defaultPriority, sourceEmailId, sourceEmailSubject, sourceEmailFrom, onForwardEmail, onCreated }: Props) {
   const { user } = useAuth();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -183,6 +185,7 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
         client_id: clientId || undefined,
         project_id: projectId || undefined,
         phase_key: defaultPhaseKey || undefined,
+        lawsuit_id: defaultLawsuitId || undefined,
         additional_assignees: additionalAssignees,
         dropbox_links: dropboxLinks,
         is_recurring: isRecurring || undefined,

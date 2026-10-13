@@ -1165,7 +1165,9 @@ const Tareas = () => {
                     key={step.id}
                     onClick={() =>
                       navigate(
-                        `/proyectos/${step.projectId}?tab=${
+                        step.sourceType === "juicio_plazo"
+                          ? `/proyectos/${step.projectId}?tab=juicios&lawsuitId=${step.lawsuitId}`
+                          : `/proyectos/${step.projectId}?tab=${
                           step.sourceType === "contabilidad"
                             ? "contabilidad"
                             : step.sourceType === "declaracion_anual"

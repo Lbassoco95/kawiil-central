@@ -4234,6 +4234,44 @@ export type Database = {
           },
         ]
       }
+      project_lawsuit_entries: {
+        Row: {
+          content: string
+          created_at: string
+          created_by: string | null
+          entry_date: string
+          id: string
+          lawsuit_id: string
+          organization_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          created_by?: string | null
+          entry_date?: string
+          id?: string
+          lawsuit_id: string
+          organization_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          created_by?: string | null
+          entry_date?: string
+          id?: string
+          lawsuit_id?: string
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_lawsuit_entries_lawsuit_id_fkey"
+            columns: ["lawsuit_id"]
+            isOneToOne: false
+            referencedRelation: "project_lawsuits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_lawsuits: {
         Row: {
           case_number: string | null
@@ -4253,6 +4291,7 @@ export type Database = {
           organization_id: string
           plaintiff: string | null
           project_id: string
+          stages: Json
           status: string
           updated_at: string
         }
@@ -4274,6 +4313,7 @@ export type Database = {
           organization_id: string
           plaintiff?: string | null
           project_id: string
+          stages?: Json
           status?: string
           updated_at?: string
         }
@@ -4295,6 +4335,7 @@ export type Database = {
           organization_id?: string
           plaintiff?: string | null
           project_id?: string
+          stages?: Json
           status?: string
           updated_at?: string
         }
@@ -5163,6 +5204,7 @@ export type Database = {
           id: string
           is_recurring: boolean
           is_subtask: boolean
+          lawsuit_id: string | null
           mtg_meeting_id: string | null
           organization_id: string
           parent_task_id: string | null
@@ -5200,6 +5242,7 @@ export type Database = {
           id?: string
           is_recurring?: boolean
           is_subtask?: boolean
+          lawsuit_id?: string | null
           mtg_meeting_id?: string | null
           organization_id: string
           parent_task_id?: string | null
@@ -5237,6 +5280,7 @@ export type Database = {
           id?: string
           is_recurring?: boolean
           is_subtask?: boolean
+          lawsuit_id?: string | null
           mtg_meeting_id?: string | null
           organization_id?: string
           parent_task_id?: string | null

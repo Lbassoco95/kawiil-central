@@ -316,6 +316,7 @@ export function useCreateTask() {
       assigned_to?: string;
       client_id?: string;
       project_id?: string;
+      lawsuit_id?: string;
       phase_key?: string;
       activity_id?: string;
       additional_assignees?: string[];
@@ -392,6 +393,9 @@ export function useCreateTask() {
       queryClient.invalidateQueries({ queryKey: ["personal-rendimiento-task-log"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-all-tasks"] });
       queryClient.invalidateQueries({ queryKey: ["briefing-team-deadlines"] });
+      if (variables.lawsuit_id) {
+        queryClient.invalidateQueries({ queryKey: ["lawsuit-tasks", variables.lawsuit_id] });
+      }
       toast.success("Tarea creada exitosamente");
 
       if (data && data.organization_id) {
