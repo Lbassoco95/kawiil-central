@@ -805,7 +805,13 @@ const ProyectoDetalle = () => {
         )}
 
         {tab === "juicios" && isJuiciosArea && (
-          <ProjectLawsuitsTab projectId={project.id} organizationId={project.organization_id} clientId={project.client_id} />
+          <ProjectLawsuitsTab
+            projectId={project.id}
+            organizationId={project.organization_id}
+            clientId={project.client_id}
+            dropboxPath={effectiveDropboxPath}
+            lockDropboxToPath={lockDropboxToInitialPath}
+          />
         )}
 
         {tab === "cumplimiento" && isCumplimiento && (

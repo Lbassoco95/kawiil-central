@@ -4234,6 +4234,47 @@ export type Database = {
           },
         ]
       }
+      project_lawsuit_comments: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          lawsuit_id: string
+          mentions: string[]
+          organization_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          lawsuit_id: string
+          mentions?: string[]
+          organization_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          lawsuit_id?: string
+          mentions?: string[]
+          organization_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_lawsuit_comments_lawsuit_id_fkey"
+            columns: ["lawsuit_id"]
+            isOneToOne: false
+            referencedRelation: "project_lawsuits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_lawsuit_entries: {
         Row: {
           content: string

@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { LawsuitCommentsPanel } from "@/components/projects/LawsuitCommentsPanel";
 import { TaskFormDialog } from "@/components/tasks/TaskFormDialog";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -32,11 +33,14 @@ type EntryRow = Database["public"]["Tables"]["project_lawsuit_entries"]["Row"];
 interface Props {
   lawsuit: LawsuitRow | null;
   clientId?: string | null;
+  /** Carpeta de Dropbox del cliente/juicios donde abre el selector de documentos. */
+  dropboxPath?: string;
+  lockDropboxToPath?: boolean;
   onClose: () => void;
   onEdit: (lawsuit: LawsuitRow) => void;
 }
 
-export function LawsuitWorkspaceSheet({ lawsuit, clientId, onClose, onEdit }: Props) {
+export function LawsuitWorkspaceSheet({ lawsuit, clientId, dropboxPath, lockDropboxToPath, onClose, onEdit }: Props) {
   const lawsuitId = lawsuit?.id;
   const status = LAWSUIT_STATUS_OPTIONS.find((s) => s.value === lawsuit?.status);
   const typeLabel = LAWSUIT_TYPE_OPTIONS.find((t) => t.value === lawsuit?.lawsuit_type)?.label;
@@ -62,10 +66,12 @@ export function LawsuitWorkspaceSheet({ lawsuit, clientId, onClose, onEdit }: Pr
             </SheetHeader>
 
             <Tabs defaultValue="etapas" className="mt-4">
-              <TabsList className="grid grid-cols-3 w-full">
-                <TabsTrigger value="etapas">Etapas</TabsTrigger>
-                <TabsTrigger value="actuaciones">Actuaciones</TabsTrigger>
-                <TabsTrigger value="tareas">Tareas</TabsTrigger>
+              <TabsList className="grid grid-cols-5 w-full">
+                <TabsTrigger value="etapas" className="px-1 text-xs sm:text-sm">Etapas</TabsTrigger>
+                <TabsTrigger value="actuaciones" className="px-1 text-xs sm:text-sm">Actuaciones</TabsTrigger>
+                <TabsTrigger value="tareas" className="px-1 text-xs sm:text-sm">Tareas</TabsTrigger>
+                <TabsTrigger value="comentarios" className="px-1 text-xs sm:text-sm">Comentarios</TabsTrigger>
+                <TabsTrigger value="documentos" className="px-1 text-xs sm:text-sm">Documentos</TabsTrigger>
               </TabsList>
               <TabsContent value="etapas" className="mt-4">
                 <StagesPanel lawsuit={lawsuit} />
@@ -75,6 +81,22 @@ export function LawsuitWorkspaceSheet({ lawsuit, clientId, onClose, onEdit }: Pr
               </TabsContent>
               <TabsContent value="tareas" className="mt-4">
                 <TasksPanel lawsuitId={lawsuitId!} projectId={lawsuit.project_id} clientId={clientId} />
+              </TabsContent>
+              <TabsContent value="comentarios" className="mt-4">
+                <LawsuitCommentsPanel
+                  lawsuit={lawsuit}
+                  mode="comments"
+                  dropboxPath={dropboxPath}
+                  lockDropboxToPath={lockDropboxToPath}
+                />
+              </TabsContent>
+              <TabsContent value="documentos" className="mt-4">
+                <LawsuitCommentsPanel
+                  lawsuit={lawsuit}
+                  mode="documents"
+                  dropboxPath={dropboxPath}
+                  lockDropboxToPath={lockDropboxToPath}
+                />
               </TabsContent>
             </Tabs>
           </>
