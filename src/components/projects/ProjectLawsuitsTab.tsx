@@ -1,6 +1,7 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Scale, Plus, Pencil, Trash2, Calendar, AlertTriangle, Gavel } from "lucide-react";
+import { Scale, Plus, Pencil, Trash2, Calendar, AlertTriangle, Gavel, FolderOpen } from "lucide-react";
 import { isPast, isToday } from "date-fns";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -27,30 +28,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
+import { LawsuitWorkspaceSheet } from "@/components/projects/LawsuitWorkspaceSheet";
+import {
+  CLOSED_LAWSUIT_STATUSES,
+  LAWSUIT_STATUS_OPTIONS,
+  LAWSUIT_TYPE_OPTIONS,
+} from "@/lib/lawsuits";
 import type { Database } from "@/integrations/supabase/types";
 
 type LawsuitRow = Database["public"]["Tables"]["project_lawsuits"]["Row"];
-
-const STATUS_OPTIONS = [
-  { value: "en_tramite", label: "En trámite", className: "bg-blue-500/10 text-blue-700 border-blue-500/30" },
-  { value: "en_apelacion", label: "En apelación", className: "bg-amber-500/10 text-amber-700 border-amber-500/30" },
-  { value: "amparo", label: "Amparo", className: "bg-purple-500/10 text-purple-700 border-purple-500/30" },
-  { value: "suspendido", label: "Suspendido", className: "bg-slate-500/10 text-slate-700 border-slate-500/30" },
-  { value: "concluido", label: "Concluido", className: "bg-green-500/10 text-green-700 border-green-500/30" },
-  { value: "archivado", label: "Archivado", className: "bg-muted text-muted-foreground border-border" },
-];
-
-const TYPE_OPTIONS = [
-  { value: "laboral", label: "Laboral" },
-  { value: "mercantil", label: "Mercantil" },
-  { value: "civil", label: "Civil" },
-  { value: "fiscal", label: "Fiscal" },
-  { value: "penal", label: "Penal" },
-  { value: "administrativo", label: "Administrativo" },
-  { value: "familiar", label: "Familiar" },
-];
-
-const CLOSED_STATUSES = ["concluido", "archivado"];
 
 interface FormState {
   name: string;
@@ -121,9 +107,22 @@ function DateChip({ label, date }: { label: string; date: string | null }) {
 interface ProjectLawsuitsTabProps {
   projectId: string;
   organizationId: string;
+  clientId?: string | null;
 }
 
-export function ProjectLawsuitsTab({ projectId, organizationId }: ProjectLawsuitsTabProps) {
+export function ProjectLawsuitsTab({ projectId, organizationId, clientId }: ProjectLawsuitsTabProps) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const openId = searchParams.get("lawsuitId");
+  const setOpenId = (id: string | null) =>
+    setSearchParams(
+      (prev) => {
+        const p = new URLSearchParams(prev);
+        if (id) p.set("lawsuitId", id);
+        else p.delete("lawsuitId");
+        return p;
+      },
+      { replace: true },
+    );
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -132,6 +131,10 @@ export function ProjectLawsuitsTab({ projectId, organizationId }: ProjectLawsuit
   const [deleting, setDeleting] = useState<LawsuitRow | null>(null);
 
   const queryKey = ["project-lawsuits", projectId];
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey });
+    queryClient.invalidateQueries({ queryKey: ["dashboard-lawsuits"] });
+  };
 
   const { data: lawsuits = [], isLoading } = useQuery({
     queryKey,
@@ -177,7 +180,7 @@ export function ProjectLawsuitsTab({ projectId, organizationId }: ProjectLawsuit
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey });
+      invalidate();
       toast.success(editingId ? "Juicio actualizado" : "Juicio agregado");
       setDialogOpen(false);
     },
@@ -189,7 +192,7 @@ export function ProjectLawsuitsTab({ projectId, organizationId }: ProjectLawsuit
       const { error } = await supabase.from("project_lawsuits").update({ status }).eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey }),
+    onSuccess: invalidate,
     onError: (e: Error) => toast.error("No se pudo cambiar el estatus: " + e.message),
   });
 
@@ -199,8 +202,9 @@ export function ProjectLawsuitsTab({ projectId, organizationId }: ProjectLawsuit
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey });
+      invalidate();
       toast.success("Juicio eliminado");
+      if (deleting?.id === openId) setOpenId(null);
       setDeleting(null);
     },
     onError: (e: Error) => toast.error("No se pudo eliminar: " + e.message),
@@ -221,7 +225,7 @@ export function ProjectLawsuitsTab({ projectId, organizationId }: ProjectLawsuit
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
 
-  const activeCount = lawsuits.filter((l) => !CLOSED_STATUSES.includes(l.status)).length;
+  const activeCount = lawsuits.filter((l) => !CLOSED_LAWSUIT_STATUSES.includes(l.status)).length;
 
   return (
     <div className="space-y-4">
@@ -253,16 +257,18 @@ export function ProjectLawsuitsTab({ projectId, organizationId }: ProjectLawsuit
       ) : (
         <div className="grid gap-3">
           {lawsuits.map((l) => {
-            const status = STATUS_OPTIONS.find((s) => s.value === l.status) ?? STATUS_OPTIONS[0];
-            const typeLabel = TYPE_OPTIONS.find((t) => t.value === l.lawsuit_type)?.label;
+            const status = LAWSUIT_STATUS_OPTIONS.find((s) => s.value === l.status) ?? LAWSUIT_STATUS_OPTIONS[0];
+            const typeLabel = LAWSUIT_TYPE_OPTIONS.find((t) => t.value === l.lawsuit_type)?.label;
             const parties = [l.plaintiff, l.defendant].filter(Boolean).join(" vs ");
             return (
-              <Card key={l.id} className={CLOSED_STATUSES.includes(l.status) ? "opacity-70" : undefined}>
+              <Card key={l.id} className={CLOSED_LAWSUIT_STATUSES.includes(l.status) ? "opacity-70" : undefined}>
                 <CardContent className="p-4 space-y-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 space-y-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-medium">{l.name}</span>
+                        <button className="font-medium text-left hover:underline" onClick={() => setOpenId(l.id)}>
+                          {l.name}
+                        </button>
                         {typeLabel && <Badge variant="outline">{typeLabel}</Badge>}
                       </div>
                       <div className="text-xs text-muted-foreground space-x-2">
@@ -280,13 +286,16 @@ export function ProjectLawsuitsTab({ projectId, organizationId }: ProjectLawsuit
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {STATUS_OPTIONS.map((s) => (
+                          {LAWSUIT_STATUS_OPTIONS.map((s) => (
                             <SelectItem key={s.value} value={s.value}>
                               {s.label}
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
+                      <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => setOpenId(l.id)}>
+                        <FolderOpen className="h-3.5 w-3.5 mr-1" /> Abrir
+                      </Button>
                       <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(l)}>
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
@@ -346,7 +355,7 @@ export function ProjectLawsuitsTab({ projectId, organizationId }: ProjectLawsuit
                   <SelectValue placeholder="Selecciona" />
                 </SelectTrigger>
                 <SelectContent>
-                  {TYPE_OPTIONS.map((t) => (
+                  {LAWSUIT_TYPE_OPTIONS.map((t) => (
                     <SelectItem key={t.value} value={t.value}>
                       {t.label}
                     </SelectItem>
@@ -361,7 +370,7 @@ export function ProjectLawsuitsTab({ projectId, organizationId }: ProjectLawsuit
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {STATUS_OPTIONS.map((s) => (
+                  {LAWSUIT_STATUS_OPTIONS.map((s) => (
                     <SelectItem key={s.value} value={s.value}>
                       {s.label}
                     </SelectItem>
@@ -436,6 +445,13 @@ export function ProjectLawsuitsTab({ projectId, organizationId }: ProjectLawsuit
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <LawsuitWorkspaceSheet
+        lawsuit={lawsuits.find((l) => l.id === openId) ?? null}
+        clientId={clientId}
+        onClose={() => setOpenId(null)}
+        onEdit={openEdit}
+      />
 
       <DeleteConfirmDialog
         open={!!deleting}
