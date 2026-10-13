@@ -12,6 +12,7 @@ import { useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import type { MtgMeetingRow, MtgSeriesRow } from "@/lib/mtg/db";
 import { uploadMeetingRecording } from "@/lib/mtg/uploadRecording";
+import { summarizeMeeting } from "@/lib/mtg/summarizeMeeting";
 import { requestRecordingTranscription } from "@/lib/mtg/requestRecordingTranscription";
 import {
   checkpointPendingRecording,
@@ -164,6 +165,17 @@ async function runTranscription(force = false): Promise<void> {
         ? `Transcripción lista en español${lang}`
         : `Transcripción lista${lang}`,
     );
+    // Resumen automático (puntos clave, compromisos, notas) desde la transcripción.
+    try {
+      toast.message("Generando resumen de la junta…", { id: "mtg-summary-progress" });
+      await summarizeMeeting(ctx.meeting.id);
+      toast.success("Resumen listo — ábrelo en la minuta de la junta", { id: "mtg-summary-progress" });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo generar el resumen", {
+        id: "mtg-summary-progress",
+        duration: 10000,
+      });
+    }
     setState({ phase: "done" });
     ctx.onDone?.();
   } catch (e) {
