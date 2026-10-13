@@ -12,6 +12,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
@@ -196,7 +203,7 @@ export function MtgAssignClientDialog(props: {
 
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Asignar cliente y proyecto</DialogTitle>
         </DialogHeader>
@@ -324,18 +331,27 @@ export function MtgAssignClientDialog(props: {
 
         <div className="space-y-2">
           <Label>Proyecto (opcional)</Label>
-          <select
-            className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-            value={projectId}
-            onChange={(e) => pickProject(e.target.value)}
+          <Select
+            value={projectId || "none"}
+            onValueChange={(v) => pickProject(v === "none" ? "" : v)}
           >
-            <option value="">Sin proyecto</option>
-            {projectOptions.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger>
+              <SelectValue placeholder="Sin proyecto" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Sin proyecto</SelectItem>
+              {projectOptions.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {activeClientIds.length > 0 && projectOptions.length === 0 && (
+            <p className="text-xs text-muted-foreground">
+              Los clientes elegidos no tienen proyectos activos.
+            </p>
+          )}
         </div>
 
         <div className="flex justify-end gap-2">
