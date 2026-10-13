@@ -47,6 +47,7 @@ export async function confirmProposedAgreement(opts: {
     .from("mtg_agreements")
     .update({
       status: "confirmed",
+      client_id: opts.agreement.client_id,
       project_id: opts.projectId,
       due_date: opts.dueDate,
       owner_user_id: opts.ownerUserId ?? null,
