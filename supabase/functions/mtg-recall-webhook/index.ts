@@ -211,15 +211,18 @@ serve(async (req) => {
   if (!botId) return json({ ok: true, ignored: "sin bot id" });
 
   const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-  const { data: meeting } = await admin
-    .from("mtg_meetings")
-    .select("id, organization_id, series_id, client_id, transcript_path, recall_bot_id")
-    .eq("recall_bot_id", botId)
-    .maybeSingle();
+  const cols = "id, organization_id, series_id, client_id, transcript_path, recall_bot_id";
+  let { data: meeting } = await admin.from("mtg_meetings").select(cols).eq("recall_bot_id", botId).maybeSingle();
+  // Si la junta ya apunta a otro bot (reenvío), se resuelve por el metadata del bot.
+  if (!meeting && evt.data?.bot?.metadata?.meeting_id) {
+    ({ data: meeting } = await admin.from("mtg_meetings").select(cols).eq("id", evt.data.bot.metadata.meeting_id).maybeSingle());
+  }
   if (!meeting) return json({ ok: true, ignored: "bot sin junta" });
+  // Solo el bot vigente actualiza el estado; los bots anteriores solo aportan su transcripción.
+  const isCurrent = meeting.recall_bot_id === botId;
 
   try {
-    if (event.startsWith("bot.")) {
+    if (event.startsWith("bot.") && isCurrent) {
       const status = event.slice(4);
       await admin.from("mtg_meetings").update({ recall_bot_status: status }).eq("id", meeting.id);
       if (status === "fatal") {

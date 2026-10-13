@@ -8,6 +8,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { BOT_AVATAR_JPEG_B64 } from "./avatar.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -89,20 +90,17 @@ serve(async (req) => {
       );
     }
 
-    let botName = "Kawiil Notetaker";
-    if (meeting.series_id) {
-      const { data: s } = await admin.from("mtg_series").select("title").eq("id", meeting.series_id).maybeSingle();
-      if (s?.title) botName = `Kawiil · ${String(s.title).slice(0, 80)}`;
-    }
-
     const resp = await fetch(`https://${host}/api/v1/bot/`, {
       method: "POST",
       headers: { Authorization: `Token ${recallKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         meeting_url: meeting.teams_join_url,
-        bot_name: botName,
+        bot_name: "Kawiilito",
         // Strings de nivel superior: regresan en data.bot.metadata de cada webhook.
         metadata: { meeting_id: meeting.id, organization_id: meeting.organization_id },
+        automatic_video_output: {
+          in_call_recording: { kind: "jpeg", b64_data: BOT_AVATAR_JPEG_B64 },
+        },
         recording_config: {
           transcript: { provider: { recallai_streaming: { language_code: "auto" } } },
         },
