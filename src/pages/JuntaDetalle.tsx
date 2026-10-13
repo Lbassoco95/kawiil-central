@@ -41,6 +41,7 @@ import {
 import { unreviewedCount } from "@/lib/mtg/meetingLifecycle";
 import {
   ArrowLeft,
+  Bot,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
@@ -52,6 +53,7 @@ import {
   Video,
 } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 import { MtgUploadTranscriptButton } from "@/components/mtg/MtgUploadTranscriptButton";
 import { MtgRecordingControls } from "@/components/mtg/MtgRecordingControls";
 import { MtgTeamDialog } from "@/components/mtg/MtgTeamDialog";
@@ -89,6 +91,29 @@ export default function JuntaDetalle() {
   const [historyTopic, setHistoryTopic] = useState<{ id: string; title: string } | null>(null);
   const [assignClientOpen, setAssignClientOpen] = useState(false);
   const [joinLinkOpen, setJoinLinkOpen] = useState(false);
+  const [recallBusy, setRecallBusy] = useState(false);
+
+  const sendRecallBot = async () => {
+    setRecallBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("mtg-recall-join", {
+        body: { meeting_id: meetingId },
+      });
+      if (error) {
+        // El cuerpo del error trae el mensaje de la función.
+        const ctx = (error as { context?: Response }).context;
+        const detail = ctx ? await ctx.json().catch(() => null) : null;
+        throw new Error(detail?.error ?? error.message);
+      }
+      if (data?.error) throw new Error(data.error);
+      toast.success("Bot de Recall enviado: entrará a la llamada y transcribirá con hablantes");
+      board.invalidate();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo enviar el bot");
+    } finally {
+      setRecallBusy(false);
+    }
+  };
   const [teamOpen, setTeamOpen] = useState(false);
   const [importResumenOpen, setImportResumenOpen] = useState(false);
   const [agreementDraft, setAgreementDraft] = useState({
@@ -531,6 +556,26 @@ export default function JuntaDetalle() {
                   >
                     <Link2 className="h-3.5 w-3.5 mr-1" />
                     Cambiar link
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={sendRecallBot}
+                    disabled={recallBusy}
+                    title="Un bot de Recall entra a la llamada, graba y transcribe con quién habla"
+                  >
+                    {recallBusy ? (
+                      <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                    ) : (
+                      <Bot className="h-3.5 w-3.5 mr-1" />
+                    )}
+                    {meeting.recall_bot_id ? "Reenviar bot" : "Enviar bot de Recall"}
+                    {meeting.recall_bot_status && (
+                      <Badge variant="secondary" className="ml-2 text-[10px]">
+                        {meeting.recall_bot_status}
+                      </Badge>
+                    )}
                   </Button>
                 </>
               ) : (

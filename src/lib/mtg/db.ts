@@ -93,6 +93,9 @@ export type MtgMeetingRow = {
   transcript_path: string | null;
   recording_path: string | null;
   recording_bytes: number | null;
+  recall_bot_id: string | null;
+  recall_bot_status: string | null;
+  recall_participants: { id?: number | string; name?: string; is_host?: boolean; email?: string | null }[] | null;
   recording_saved_at: string | null;
   transcript_unavailable_reason: string | null;
   minutes_id: string | null;

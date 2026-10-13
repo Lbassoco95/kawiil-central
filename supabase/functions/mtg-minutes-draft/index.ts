@@ -152,8 +152,15 @@ serve(async (req) => {
       .order("sort_order");
 
     const attendees: string[] = [];
-    for (const a of series?.attendees_client ?? []) {
-      if (a?.name) attendees.push(a.name);
+    // Asistentes reales de la llamada (Recall) tienen prioridad sobre la serie.
+    const recallNames = ((meeting.recall_participants ?? []) as { name?: string }[])
+      .map((p) => p?.name)
+      .filter((n): n is string => !!n);
+    for (const n of recallNames) attendees.push(n);
+    if (recallNames.length === 0) {
+      for (const a of series?.attendees_client ?? []) {
+        if (a?.name) attendees.push(a.name);
+      }
     }
 
     const md = buildDraft({
