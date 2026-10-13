@@ -58,6 +58,22 @@ function ts(sec: number): string {
   return `${String(Math.floor(s / 3600)).padStart(2, "0")}:${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 }
 
+/** VTT de Recall (<v Nombre>texto) → líneas "[hh:mm:ss] Nombre: texto". */
+function vttToLines(vtt: string): string[] {
+  const out: string[] = [];
+  const blocks = vtt.split(/\r?\n\r?\n/);
+  for (const b of blocks) {
+    const m = b.match(/(\d{2}):(\d{2}):(\d{2})\.\d{3}\s+-->/);
+    if (!m) continue;
+    const body = b.split(/\r?\n/).slice(b.split(/\r?\n/).findIndex((l) => l.includes("-->")) + 1).join(" ").trim();
+    const v = body.match(/^<v ([^>]*)>([\s\S]*)$/);
+    const who = v ? v[1].trim() : "";
+    const text = (v ? v[2] : body).trim();
+    if (text) out.push(`[${m[1]}:${m[2]}:${m[3]}] ${who ? `${who}: ` : ""}${text}`);
+  }
+  return out;
+}
+
 async function chat(apiKey: string, model: string, system: string, user: string, jsonMode: boolean): Promise<string> {
   const r = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -121,11 +137,17 @@ serve(async (req) => {
     if (!apiKey) return json({ error: "OPENAI_API_KEY no configurada", code: "openai_not_configured" }, 503);
 
     const url = Deno.env.get("SUPABASE_URL")!;
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const userClient = createClient(url, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { Authorization: auth } } });
-    const admin = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-    const { data: ud, error: ue } = await userClient.auth.getUser();
-    if (ue || !ud.user) return json({ error: "unauthorized" }, 401);
-    const userId = ud.user.id;
+    const admin = createClient(url, serviceKey);
+    // Llamada interna (mtg-recall-webhook) con la service role: sin usuario.
+    const internal = auth === `Bearer ${serviceKey}`;
+    let userId: string | null = null;
+    if (!internal) {
+      const { data: ud, error: ue } = await userClient.auth.getUser();
+      if (ue || !ud.user) return json({ error: "unauthorized" }, 401);
+      userId = ud.user.id;
+    }
 
     const body = await req.json().catch(() => ({}));
     const meetingId = String(body?.meeting_id || "").trim();
@@ -133,14 +155,16 @@ serve(async (req) => {
     const l = String(body?.language ?? "es").toLowerCase();
     const lang: Lang = l === "en" || l === "zh" ? l : "es";
 
-    const { data: profile } = await admin.from("profiles").select("organization_id").eq("user_id", userId).single();
     const { data: meeting } = await admin
       .from("mtg_meetings")
-      .select("id, organization_id, series_id, client_id, title, scheduled_at")
+      .select("id, organization_id, series_id, client_id, title, scheduled_at, transcript_path, recall_participants")
       .eq("id", meetingId)
       .single();
     if (!meeting) return json({ error: "junta no encontrada" }, 404);
-    if (!profile?.organization_id || meeting.organization_id !== profile.organization_id) return json({ error: "forbidden" }, 403);
+    if (!internal) {
+      const { data: profile } = await admin.from("profiles").select("organization_id").eq("user_id", userId!).single();
+      if (!profile?.organization_id || meeting.organization_id !== profile.organization_id) return json({ error: "forbidden" }, 403);
+    }
 
     // Texto con marcas de tiempo corridas a lo largo de todas las tomas.
     const { data: takes } = await admin
@@ -154,6 +178,18 @@ serve(async (req) => {
       const segs = (t.transcript_segments ?? []) as { start: number; text: string }[];
       for (const s of segs) if (s.text?.trim()) lines.push(`[${ts(Number(s.start) + offset)}] ${s.text.trim()}`);
       offset += Number(t.duration_sec) || (segs.length ? Number(segs[segs.length - 1].start) : 0);
+    }
+    // Transcripción de Recall (con hablantes): se prefiere sobre Whisper.
+    const recallRoster = ((meeting.recall_participants ?? []) as { name?: string }[]).map((p) => p?.name).filter(Boolean) as string[];
+    if (meeting.transcript_path && String(meeting.transcript_path).includes("transcript-recall")) {
+      const { data: blob } = await admin.storage.from("mtg").download(meeting.transcript_path);
+      if (blob) {
+        const rl = vttToLines(await blob.text());
+        if (rl.length > 0) {
+          lines.length = 0;
+          lines.push(...rl);
+        }
+      }
     }
     if (lines.length === 0) return json({ error: "La junta no tiene transcripción. Transcribe las grabaciones primero." }, 400);
     const full = lines.join("\n");
@@ -206,7 +242,12 @@ serve(async (req) => {
       `notas_relevantes (string[]), temas_pendientes (string[]), ` +
       `participantes ({estimado: número|null de personas distintas que hablan, confianza: "alta"|"media"|"baja", nombres_mencionados: string[], nota: string}), ` +
       `idiomas ({principal, secundario|null}). ` +
-      `El número de participantes es un ESTIMADO por turnos y contenido; la transcripción no identifica voces.` + peopleMemory;
+      (recallRoster.length
+        ? `La transcripción SÍ identifica a quien habla (formato "[hh:mm:ss] Nombre: texto"). Asistentes reales de la llamada: ${recallRoster.join(", ")}. ` +
+          `Atribuye cada compromiso, decisión y punto a la persona que lo dijo, por su nombre, y usa esos nombres como responsables. ` +
+          `En participantes pon estimado = número de asistentes que hablaron, confianza "alta" y nombres_mencionados con sus nombres. ` +
+          `Ignora a los asistentes que sean bots de notas (p. ej. read.ai).`
+        : `El número de participantes es un ESTIMADO por turnos y contenido; la transcripción no identifica voces.`) + peopleMemory;
 
     let material = full;
     // Junta muy larga: notas por bloques y luego síntesis.

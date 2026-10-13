@@ -188,6 +188,24 @@ async function processTranscript(admin: ReturnType<typeof createClient>, meeting
     },
     status: "pending",
   });
+
+  // Resumen con IA con la transcripción atribuida (en segundo plano: el webhook responde ya).
+  const summarize = fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/mtg-summarize-meeting`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ meeting_id: meeting.id, language: "es" }),
+  })
+    .then(async (r) => {
+      if (!r.ok) console.error("mtg-summarize-meeting", r.status, (await r.text()).slice(0, 300));
+    })
+    .catch((e) => console.error("mtg-summarize-meeting", e));
+  // deno-lint-ignore no-explicit-any
+  const rt = (globalThis as any).EdgeRuntime;
+  if (rt?.waitUntil) rt.waitUntil(summarize);
+  else await summarize;
 }
 
 serve(async (req) => {
