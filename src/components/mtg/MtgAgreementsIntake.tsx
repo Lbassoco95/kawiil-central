@@ -44,6 +44,7 @@ export function MtgAgreementsIntake(props: {
   const [projectId, setProjectId] = useState("");
   const [rows, setRows] = useState<Row[]>([]);
   const [busy, setBusy] = useState(false);
+  const [showMissing, setShowMissing] = useState(false);
 
   const entities = props.series?.entities ?? [];
   const clientForEntity = (key: string) => entities.find((e) => e.key === key)?.client_id ?? null;
@@ -154,10 +155,15 @@ export function MtgAgreementsIntake(props: {
 
   const asTasks = async () => {
     if (selected.length === 0) return;
-    const missing = selected.filter((r) => !r.projectId);
+    const lacks = (r: Row) =>
+      [!r.projectId && "proyecto", !r.dueDate && "fecha", !r.ownerUserId && !r.owner?.trim() && "responsable"].filter(Boolean);
+    const missing = selected.filter((r) => lacks(r).length > 0);
     if (missing.length > 0) {
-      toast.error(`Falta el proyecto en ${missing.length} compromiso(s)`, {
-        description: "Elige el proyecto de cada tarea (o usa «Proyecto para todas»).",
+      setShowMissing(true);
+      toast.error(`Faltan datos en ${missing.length} compromiso(s)`, {
+        description:
+          "Cada tarea necesita proyecto, fecha y responsable (si no, la minuta no se puede aprobar). Revisa los campos marcados.",
+        duration: 10000,
       });
       return;
     }
@@ -270,7 +276,7 @@ export function MtgAgreementsIntake(props: {
                 </label>
                 <div className="grid gap-1.5 sm:grid-cols-5 pl-6">
                   <select
-                    className="sm:col-span-3 h-8 rounded-md border bg-background px-2 text-xs"
+                    className={`sm:col-span-3 h-8 rounded-md border bg-background px-2 text-xs ${showMissing && r.selected && !r.ownerUserId && !r.owner?.trim() ? "border-red-500" : ""}`}
                     value={r.ownerUserId}
                     onChange={(e) => patch(i, { ownerUserId: e.target.value })}
                     title="Responsable"
@@ -283,7 +289,7 @@ export function MtgAgreementsIntake(props: {
                     ))}
                   </select>
                   <Input
-                    className="sm:col-span-2 h-8 text-xs"
+                    className={`sm:col-span-2 h-8 text-xs ${showMissing && r.selected && !r.dueDate ? "border-red-500" : ""}`}
                     type="date"
                     value={r.dueDate}
                     onChange={(e) => patch(i, { dueDate: e.target.value })}
@@ -292,7 +298,7 @@ export function MtgAgreementsIntake(props: {
                 </div>
                 <div className="pl-6">
                   <select
-                    className="h-8 w-full rounded-md border bg-background px-2 text-xs"
+                    className={`h-8 w-full rounded-md border bg-background px-2 text-xs ${showMissing && r.selected && !r.projectId ? "border-red-500" : ""}`}
                     value={r.projectId}
                     onChange={(e) => patch(i, { projectId: e.target.value })}
                     disabled={projects.length === 0}

@@ -170,3 +170,64 @@ export async function assignProjectAndCreateTask(opts: {
 
   return data as MtgAgreementRow;
 }
+
+/** Completa proyecto, fecha y responsable de un acuerdo confirmado (y su tarea). */
+export async function completeConfirmedAgreement(opts: {
+  organizationId: string;
+  actorUserId: string;
+  agreement: MtgAgreementRow;
+  projectId: string;
+  /** Cliente dueño del proyecto elegido (puede ser otra empresa del grupo). */
+  clientId: string;
+  dueDate: string;
+  ownerUserId?: string | null;
+  ownerName?: string | null;
+}): Promise<MtgAgreementRow> {
+  const a = opts.agreement;
+  if (a.status !== "confirmed") throw new Error("Sólo acuerdos confirmados");
+  if (!opts.projectId) throw new Error("Elige el proyecto");
+  if (!opts.dueDate) throw new Error("Falta la fecha");
+  if (!opts.ownerUserId && !opts.ownerName?.trim()) throw new Error("Falta el responsable");
+
+  let taskId = a.task_id;
+  if (taskId) {
+    const { error: tErr } = await supabase
+      .from("tasks")
+      .update({
+        project_id: opts.projectId,
+        client_id: opts.clientId,
+        due_date: opts.dueDate,
+        assigned_to: opts.ownerUserId ?? null,
+      } as never)
+      .eq("id", taskId);
+    if (tErr) throw tErr;
+  } else {
+    taskId = await createTaskForAgreement({
+      organizationId: opts.organizationId,
+      actorUserId: opts.actorUserId,
+      meetingId: a.meeting_id,
+      clientId: opts.clientId,
+      projectId: opts.projectId,
+      title: a.text.slice(0, 200),
+      dueDate: opts.dueDate,
+      assignedTo: opts.ownerUserId ?? null,
+    });
+  }
+
+  const { data, error } = await mtgDb
+    .from("mtg_agreements")
+    .update({
+      project_id: opts.projectId,
+      client_id: opts.clientId,
+      due_date: opts.dueDate,
+      owner_user_id: opts.ownerUserId ?? null,
+      owner_name: opts.ownerName?.trim() || null,
+      owner_side: opts.ownerUserId ? "kawiil" : "client",
+      task_id: taskId,
+    })
+    .eq("id", a.id)
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as MtgAgreementRow;
+}

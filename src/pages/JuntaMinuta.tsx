@@ -41,7 +41,7 @@ import {
   confirmProposedAgreement,
   rejectProposedAgreement,
 } from "@/lib/mtg/approveMinutes";
-import { assignProjectAndCreateTask } from "@/lib/mtg/captureAgreement";
+import { completeConfirmedAgreement } from "@/lib/mtg/captureAgreement";
 import { MtgAgreementsIntake } from "@/components/mtg/MtgAgreementsIntake";
 import { MtgMinutesView } from "@/components/mtg/MtgMinutesView";
 import { MtgPeoplePanel } from "@/components/mtg/MtgPeoplePanel";
@@ -65,6 +65,9 @@ export default function JuntaMinuta() {
   const [sendOpen, setSendOpen] = useState(false);
   const [sendRecipients, setSendRecipients] = useState("");
   const [draftBusy, setDraftBusy] = useState(false);
+  const [editDone, setEditDone] = useState<
+    Record<string, { projectId?: string; dueDate?: string; ownerUserId?: string; ownerName?: string }>
+  >({});
   const [assignOpen, setAssignOpen] = useState(false);
   const { data: allClients = [] } = useClients();
 
@@ -193,6 +196,11 @@ export default function JuntaMinuta() {
 
   const { meeting, series, projects } = q.data;
   const orgId = meeting.organization_id;
+  const projectClientCount = new Set(projects.map((p) => p.client_id)).size;
+  const projectOptionLabel = (p: { name: string; area: string | null; client_id: string | null }) => {
+    const company = allClients.find((c) => c.id === p.client_id)?.name;
+    return `${projectClientCount > 1 && company ? `${company} · ` : ""}${p.name}${p.area ? ` · ${p.area}` : ""}`;
+  };
   const entityClientIds = (series?.entities ?? []).map((e) => e.client_id);
   const hasClient = !!meeting.client_id || entityClientIds.length > 0;
   const clientLabel =
@@ -387,7 +395,7 @@ export default function JuntaMinuta() {
             )}
             {proposed.map((a) => {
               const ed = getEdit(a);
-              const clientProjects = projects.filter((p) => p.client_id === a.client_id);
+              const clientProjects = projects;
               return (
                 <div key={a.id} className="border rounded-md p-3 space-y-2 text-sm">
                   <div className="font-medium">{a.text}</div>
@@ -410,7 +418,7 @@ export default function JuntaMinuta() {
                       <SelectContent>
                         {clientProjects.map((p) => (
                           <SelectItem key={p.id} value={p.id}>
-                            {p.name} · {p.area}
+                            {projectOptionLabel(p)}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -460,7 +468,10 @@ export default function JuntaMinuta() {
                           await confirmProposedAgreement({
                             organizationId: orgId,
                             actorUserId: user.id,
-                            agreement: a,
+                            agreement: {
+                              ...a,
+                              client_id: projects.find((p) => p.id === ed.projectId)?.client_id ?? a.client_id,
+                            },
                             projectId: ed.projectId,
                             dueDate: ed.dueDate,
                             ownerUserId: ed.ownerUserId || null,
@@ -516,44 +527,95 @@ export default function JuntaMinuta() {
             {incomplete.length === 0 && (
               <p className="text-sm text-muted-foreground">Ninguno.</p>
             )}
-            {incomplete.map((a) => (
-              <div key={a.id} className="border border-amber-300 rounded-md p-3 space-y-2 text-sm">
-                <div className="font-medium">{a.text}</div>
-                {a.project_reason && (
-                  <p className="text-xs text-muted-foreground">{a.project_reason}</p>
-                )}
-                <Select
-                  defaultValue={a.project_hint ?? undefined}
-                  onValueChange={async (pid) => {
-                    try {
-                      await assignProjectAndCreateTask({
-                        organizationId: orgId,
-                        actorUserId: user.id,
-                        agreement: a,
-                        projectId: pid,
-                      });
-                      toast.success("Proyecto asignado + tarea");
-                      invalidate();
-                    } catch (e) {
-                      toast.error(e instanceof Error ? e.message : "Error");
-                    }
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={a.project_hint ? "Usar sugerencia / elegir" : "Elegir proyecto"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {projects
-                      .filter((p) => p.client_id === a.client_id)
-                      .map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {p.name} · {p.area}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            ))}
+            {incomplete.map((a) => {
+              const ed = {
+                projectId: editDone[a.id]?.projectId ?? a.project_id ?? a.project_hint ?? "",
+                dueDate: editDone[a.id]?.dueDate ?? a.due_date ?? "",
+                ownerUserId: editDone[a.id]?.ownerUserId ?? a.owner_user_id ?? "",
+                ownerName: editDone[a.id]?.ownerName ?? a.owner_name ?? "",
+              };
+              const setEd = (p: Partial<typeof ed>) => setEditDone((s) => ({ ...s, [a.id]: { ...ed, ...p } }));
+              const missing = [
+                !ed.projectId && "proyecto",
+                !ed.dueDate && "fecha",
+                !ed.ownerUserId && !ed.ownerName.trim() && "responsable",
+              ].filter(Boolean) as string[];
+              return (
+                <div key={a.id} className="border border-amber-300 rounded-md p-3 space-y-2 text-sm">
+                  <div className="font-medium">{a.text}</div>
+                  {a.project_reason && <p className="text-xs text-muted-foreground">{a.project_reason}</p>}
+                  <p className="text-xs text-amber-700 dark:text-amber-400">
+                    {missing.length ? `Falta: ${missing.join(", ")}` : "Listo para guardar"}
+                  </p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <Select value={ed.projectId || undefined} onValueChange={(v) => setEd({ projectId: v })}>
+                      <SelectTrigger className={!ed.projectId ? "border-amber-400" : undefined}>
+                        <SelectValue placeholder="Elegir proyecto" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {projects.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {projectOptionLabel(p)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      type="date"
+                      className={!ed.dueDate ? "border-amber-400" : undefined}
+                      value={ed.dueDate}
+                      onChange={(e) => setEd({ dueDate: e.target.value })}
+                    />
+                    <Select value={ed.ownerUserId || undefined} onValueChange={(v) => setEd({ ownerUserId: v })}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Responsable interno" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {profiles.map((p) => (
+                          <SelectItem key={p.user_id} value={p.user_id}>
+                            {p.full_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      placeholder="Nombre cliente (si aplica)"
+                      value={ed.ownerName}
+                      onChange={(e) => setEd({ ownerName: e.target.value })}
+                    />
+                  </div>
+                  <Button
+                    size="sm"
+                    disabled={missing.length > 0}
+                    onClick={async () => {
+                      try {
+                        const proj = projects.find((p) => p.id === ed.projectId);
+                        await completeConfirmedAgreement({
+                          organizationId: orgId,
+                          actorUserId: user.id,
+                          agreement: a,
+                          projectId: ed.projectId,
+                          clientId: proj?.client_id ?? a.client_id ?? "",
+                          dueDate: ed.dueDate,
+                          ownerUserId: ed.ownerUserId || null,
+                          ownerName: ed.ownerName || null,
+                        });
+                        toast.success("Acuerdo completado");
+                        setEditDone((s) => {
+                          const { [a.id]: _, ...rest } = s;
+                          return rest;
+                        });
+                        invalidate();
+                      } catch (e) {
+                        toast.error(e instanceof Error ? e.message : "Error");
+                      }
+                    }}
+                  >
+                    Guardar
+                  </Button>
+                </div>
+              );
+            })}
 
             {agreements.filter((a) => a.status === "rejected").length > 0 && (
               <>
