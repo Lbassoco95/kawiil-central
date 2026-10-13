@@ -91,3 +91,19 @@ export async function addProposedAgreements(input: NewAgreementInput): Promise<n
   if (error) throw new Error(error.message);
   return rows.length;
 }
+
+/** Persona del equipo que corresponde al nombre dicho en la junta (coincidencia por nombre completo o por nombre de pila). */
+export function matchProfileByName<T extends { full_name: string | null }>(
+  profiles: T[],
+  name: string | null | undefined,
+): T | undefined {
+  const n = (name ?? "").trim().toLowerCase();
+  if (n.length < 3) return undefined;
+  const exact = profiles.find((p) => (p.full_name ?? "").trim().toLowerCase() === n);
+  if (exact) return exact;
+  const loose = profiles.filter((p) => {
+    const f = (p.full_name ?? "").trim().toLowerCase();
+    return f.length >= 3 && (f.includes(n) || n.includes(f) || f.split(/\s+/)[0] === n.split(/\s+/)[0]);
+  });
+  return loose.length === 1 ? loose[0] : undefined;
+}

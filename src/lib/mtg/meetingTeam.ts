@@ -5,6 +5,7 @@
 
 import { mtgDb, type MtgMeetingRow, type MtgSeriesRow } from "@/lib/mtg/db";
 import { supabase } from "@/integrations/supabase/client";
+import { minutesToHtml } from "@/lib/mtg/minutesEmail";
 import { createNotifications } from "@/lib/notificationHelpers";
 
 type TeamSeries = Pick<MtgSeriesRow, "owner_user_id" | "attendees_internal">;
@@ -97,7 +98,7 @@ export async function emailMeetingTeamSummary(opts: {
   const link = `${window.location.origin}/juntas/${opts.meeting.id}/minuta`;
   const html =
     `<p>Resumen de la junta <strong>${escapeHtml(label)}</strong> (${day}).</p>` +
-    `<div style="white-space:pre-wrap;font-family:inherit">${escapeHtml(opts.contentMd)}</div>` +
+    minutesToHtml(opts.contentMd) +
     `<p><a href="${link}">Abrir la minuta en Kawiil OS</a></p>`;
 
   try {
