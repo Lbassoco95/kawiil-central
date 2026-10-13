@@ -22,6 +22,9 @@ const json = (body: unknown, status = 200) =>
     headers: { ...cors, "Content-Type": "application/json" },
   });
 
+/** Segundos que espera el bot en la sala de espera antes de salirse (mínimo de Recall: 30). */
+const WAITING_ROOM_TIMEOUT_SEC = 30;
+
 /** Estados del bot en los que no se debe enviar otro. */
 const ACTIVE_BOT = new Set([
   "joining_call",
@@ -70,7 +73,7 @@ serve(async (req) => {
 
     const { data: meeting, error: mErr } = await admin
       .from("mtg_meetings")
-      .select("id, organization_id, series_id, teams_join_url, recall_bot_id, recall_bot_status")
+      .select("id, organization_id, series_id, teams_join_url, recall_bot_id, recall_bot_status, transcript_path")
       .eq("id", meetingId)
       .single();
     if (mErr || !meeting) return json({ error: "junta no encontrada" }, 404);
@@ -98,6 +101,7 @@ serve(async (req) => {
         bot_name: "Kawiilito",
         // Strings de nivel superior: regresan en data.bot.metadata de cada webhook.
         metadata: { meeting_id: meeting.id, organization_id: meeting.organization_id },
+        automatic_leave: { waiting_room_timeout: WAITING_ROOM_TIMEOUT_SEC },
         automatic_video_output: {
           in_call_recording: { kind: "jpeg", b64_data: BOT_AVATAR_JPEG_B64 },
         },
@@ -118,8 +122,10 @@ serve(async (req) => {
       .update({
         recall_bot_id: bot.id,
         recall_bot_status: "joining_call",
-        transcript_status: "subscribed",
-        transcript_unavailable_reason: null,
+        // No pisar una transcripción ya recibida (p. ej. al reenviar el bot).
+        ...(meeting.transcript_path
+          ? {}
+          : { transcript_status: "subscribed", transcript_unavailable_reason: null }),
       })
       .eq("id", meetingId);
 

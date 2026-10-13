@@ -225,12 +225,15 @@ serve(async (req) => {
     if (event.startsWith("bot.") && isCurrent) {
       const status = event.slice(4);
       await admin.from("mtg_meetings").update({ recall_bot_status: status }).eq("id", meeting.id);
-      if (status === "fatal") {
+      if (status === "fatal" && !meeting.transcript_path) {
+        const sub = evt.data?.data?.sub_code ?? evt.data?.data?.code ?? "fatal";
         await admin
           .from("mtg_meetings")
           .update({
             transcript_status: "failed",
-            transcript_unavailable_reason: `Recall bot falló: ${evt.data?.data?.sub_code ?? evt.data?.data?.code ?? "fatal"}`.slice(0, 240),
+            transcript_unavailable_reason: (sub === "timeout_exceeded_waiting_room"
+              ? "Kawiilito no fue admitido a tiempo en la llamada"
+              : `Recall bot falló: ${sub}`).slice(0, 240),
           })
           .eq("id", meeting.id);
       }
