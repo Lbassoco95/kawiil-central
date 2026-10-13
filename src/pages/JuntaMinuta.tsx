@@ -40,6 +40,7 @@ import {
   rejectProposedAgreement,
 } from "@/lib/mtg/approveMinutes";
 import { assignProjectAndCreateTask } from "@/lib/mtg/captureAgreement";
+import { MtgPeoplePanel } from "@/components/mtg/MtgPeoplePanel";
 import { MtgUploadTranscriptButton } from "@/components/mtg/MtgUploadTranscriptButton";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -324,6 +325,15 @@ export default function JuntaMinuta() {
           </section>
 
           <section className="space-y-4">
+            {user && q.data && (
+              <MtgPeoplePanel
+                organizationId={q.data.meeting.organization_id}
+                actorUserId={user.id}
+                meeting={q.data.meeting}
+                series={q.data.series}
+                minutesMd={md}
+              />
+            )}
             <h2 className="font-semibold text-sm">Acuerdos propuestos</h2>
             {proposed.length === 0 && (
               <p className="text-sm text-muted-foreground">Ninguno pendiente.</p>
