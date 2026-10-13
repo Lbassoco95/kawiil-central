@@ -34,6 +34,12 @@ async function describeInvokeError(error: {
       } catch {
         /* cuerpo no JSON */
       }
+      if (/insufficient_quota|no credits|credit_balance_exhausted/i.test(detail)) {
+        return (
+          "OpenAI no tiene créditos para transcribir. Tu grabación está guardada y segura en Storage; " +
+          "recarga saldo en platform.openai.com/settings/organization/billing y pulsa «Reintentar transcripción»."
+        );
+      }
       if (detail.trim()) return `Transcripción falló (${ctx.status}): ${detail.slice(0, 400)}`;
       return `Transcripción falló (HTTP ${ctx.status}).`;
     } catch {
