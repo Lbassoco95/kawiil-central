@@ -136,7 +136,7 @@ serve(async (req) => {
     const { data: profile } = await admin.from("profiles").select("organization_id").eq("user_id", userId).single();
     const { data: meeting } = await admin
       .from("mtg_meetings")
-      .select("id, organization_id, series_id, title, scheduled_at")
+      .select("id, organization_id, series_id, client_id, title, scheduled_at")
       .eq("id", meetingId)
       .single();
     if (!meeting) return json({ error: "junta no encontrada" }, 404);
@@ -158,10 +158,40 @@ serve(async (req) => {
     if (lines.length === 0) return json({ error: "La junta no tiene transcripción. Transcribe las grabaciones primero." }, 400);
     const full = lines.join("\n");
 
-    let series: { title?: string } | null = null;
+    let series: { title?: string; entities?: { client_id?: string }[] } | null = null;
     if (meeting.series_id) {
-      const { data: s } = await admin.from("mtg_series").select("title").eq("id", meeting.series_id).maybeSingle();
+      const { data: s } = await admin.from("mtg_series").select("title, entities").eq("id", meeting.series_id).maybeSingle();
       series = s;
+    }
+
+    // Memoria de personas conocidas de las empresas de la junta (si la tabla existe).
+    let peopleMemory = "";
+    try {
+      const clientIds = [...new Set([meeting.client_id, ...(series?.entities ?? []).map((e) => e.client_id)].filter(Boolean))] as string[];
+      const { data: linked } = await admin.from("mtg_meeting_people").select("person_id").eq("meeting_id", meetingId);
+      const linkedIds = (linked ?? []).map((l: { person_id: string }) => l.person_id);
+      const ors = [
+        ...(clientIds.length ? [`client_id.in.(${clientIds.join(",")})`] : []),
+        ...(linkedIds.length ? [`id.in.(${linkedIds.join(",")})`] : []),
+        `side.eq.kawiil`,
+      ].join(",");
+      const { data: ppl } = await admin
+        .from("mtg_people")
+        .select("name, aliases, role, side, notes")
+        .eq("organization_id", meeting.organization_id)
+        .or(ors)
+        .limit(60);
+      if (ppl && ppl.length) {
+        peopleMemory =
+          `\n\nPersonas conocidas (memoria de Kawiil; úsalas para reconocer a quién habla, con su rol, y no las inventes si no aparecen):\n` +
+          ppl
+            .map((p: { name: string; aliases: string[] | null; role: string | null; side: string; notes: string | null }) =>
+              `- ${p.name}${p.aliases?.length ? ` (alias: ${p.aliases.join(", ")})` : ""}${p.role ? ` — ${p.role}` : ""}${p.side === "kawiil" ? " [Kawiil]" : ""}${p.notes ? `: ${p.notes.slice(0, 200)}` : ""}`,
+            )
+            .join("\n");
+      }
+    } catch {
+      /* sin memoria todavía */
     }
     const title = series?.title ?? meeting.title ?? "Junta";
     const dateLabel = String(meeting.scheduled_at).slice(0, 10);
@@ -176,7 +206,7 @@ serve(async (req) => {
       `notas_relevantes (string[]), temas_pendientes (string[]), ` +
       `participantes ({estimado: número|null de personas distintas que hablan, confianza: "alta"|"media"|"baja", nombres_mencionados: string[], nota: string}), ` +
       `idiomas ({principal, secundario|null}). ` +
-      `El número de participantes es un ESTIMADO por turnos y contenido; la transcripción no identifica voces.`;
+      `El número de participantes es un ESTIMADO por turnos y contenido; la transcripción no identifica voces.` + peopleMemory;
 
     let material = full;
     // Junta muy larga: notas por bloques y luego síntesis.

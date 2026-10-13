@@ -124,6 +124,33 @@ export type MtgMeetingRecordingRow = {
 export type MtgMeetingRecordingInsert = Partial<MtgMeetingRecordingRow> &
   Pick<MtgMeetingRecordingRow, "organization_id" | "meeting_id" | "path">;
 
+/** Memoria de personas que participan en juntas (por cliente/empresa). */
+export type MtgPersonRow = {
+  id: string;
+  organization_id: string;
+  client_id: string | null;
+  name: string;
+  aliases: string[];
+  role: string | null;
+  email: string | null;
+  side: "client" | "kawiil" | "other";
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+export type MtgPersonInsert = Partial<Omit<MtgPersonRow, "id" | "created_at" | "updated_at">> &
+  Pick<MtgPersonRow, "organization_id" | "name">;
+
+export type MtgMeetingPersonRow = {
+  meeting_id: string;
+  person_id: string;
+  organization_id: string;
+  note: string | null;
+  added_by: string | null;
+  created_at: string;
+};
+
 export type MtgMeetingInsert = Partial<Omit<MtgMeetingRow, "id" | "created_at" | "updated_at">> &
   Pick<MtgMeetingRow, "organization_id" | "scheduled_at">;
 
@@ -366,6 +393,18 @@ type MtgDatabase = {
         Row: MtgMeetingRow;
         Insert: MtgMeetingInsert;
         Update: MtgMeetingUpdate;
+        Relationships: [];
+      };
+      mtg_people: {
+        Row: MtgPersonRow;
+        Insert: MtgPersonInsert;
+        Update: Partial<MtgPersonRow>;
+        Relationships: [];
+      };
+      mtg_meeting_people: {
+        Row: MtgMeetingPersonRow;
+        Insert: Partial<MtgMeetingPersonRow> & Pick<MtgMeetingPersonRow, "meeting_id" | "person_id" | "organization_id">;
+        Update: Partial<MtgMeetingPersonRow>;
         Relationships: [];
       };
       mtg_meeting_recordings: {
