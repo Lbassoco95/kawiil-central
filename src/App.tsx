@@ -11,6 +11,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Firmas from "@/pages/Firmas";
 import FirmarPublico from "@/pages/FirmarPublico";
+import { MtgRecordingDock } from "@/components/mtg/MtgRecordingDock";
 import { ModuleGate } from "@/components/ModuleGate";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
@@ -155,6 +156,7 @@ const App = () => (
               <Route path="/admin" element={<Navigate to="/configuracion" replace />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
+            <MtgRecordingDock />
             </SlackQuickReplyProvider>
           </AuthProvider>
         </BrowserRouter>

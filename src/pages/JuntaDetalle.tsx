@@ -48,11 +48,14 @@ import {
   Link2,
   Loader2,
   Projector,
+  UserPlus,
   Video,
 } from "lucide-react";
 import { toast } from "sonner";
 import { MtgUploadTranscriptButton } from "@/components/mtg/MtgUploadTranscriptButton";
 import { MtgRecordingControls } from "@/components/mtg/MtgRecordingControls";
+import { MtgTeamDialog } from "@/components/mtg/MtgTeamDialog";
+import { meetingTeamIds } from "@/lib/mtg/meetingTeam";
 import { MtgAssignClientDialog } from "@/components/mtg/MtgAssignClientDialog";
 import { MtgTopicHistoryDrawer } from "@/components/mtg/MtgTopicHistoryDrawer";
 import { MtgArchiveSection } from "@/components/mtg/MtgArchiveSection";
@@ -86,6 +89,7 @@ export default function JuntaDetalle() {
   const [historyTopic, setHistoryTopic] = useState<{ id: string; title: string } | null>(null);
   const [assignClientOpen, setAssignClientOpen] = useState(false);
   const [joinLinkOpen, setJoinLinkOpen] = useState(false);
+  const [teamOpen, setTeamOpen] = useState(false);
   const [importResumenOpen, setImportResumenOpen] = useState(false);
   const [agreementDraft, setAgreementDraft] = useState({
     text: "",
@@ -556,6 +560,18 @@ export default function JuntaDetalle() {
               {liveEditable && (meeting.status === "in_progress" || meeting.status === "planned") && (
                 <Button size="sm" variant="secondary" onClick={handleEnd} disabled={board.doEnd.isPending}>
                   Terminar junta
+                </Button>
+              )}
+              {user && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setTeamOpen(true)}
+                  title="Agregar gente del equipo para que reciba el resumen de la junta"
+                >
+                  <UserPlus className="h-3.5 w-3.5 mr-1" />
+                  Equipo ({meetingTeamIds(series, meeting).length})
                 </Button>
               )}
               {user && series && liveEditable && (
@@ -1034,6 +1050,17 @@ export default function JuntaDetalle() {
           meetingId={meeting.id}
           currentClientId={meeting.client_id}
           currentEntityClientIds={entities.map((e) => e.client_id)}
+          onDone={() => board.invalidate()}
+        />
+      )}
+
+      {user && (
+        <MtgTeamDialog
+          open={teamOpen}
+          onOpenChange={setTeamOpen}
+          actorUserId={user.id}
+          meeting={meeting}
+          series={series}
           onDone={() => board.invalidate()}
         />
       )}
