@@ -137,6 +137,7 @@ export function ProjectLawsuitsTab({ projectId, organizationId, clientId, dropbo
     queryClient.invalidateQueries({ queryKey });
     queryClient.invalidateQueries({ queryKey: ["dashboard-lawsuits"] });
     queryClient.invalidateQueries({ queryKey: ["assigned-steps"] });
+    queryClient.invalidateQueries({ queryKey: ["calendar-lawsuits"] });
   };
 
   const { data: lawsuits = [], isLoading } = useQuery({

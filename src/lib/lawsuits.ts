@@ -119,3 +119,48 @@ export function lawsuitsForUser<T extends { project_id: string; responsible_user
   const team = new Set(teamProjectIds);
   return lawsuits.filter((l) => l.responsible_user_id === userId || team.has(l.project_id));
 }
+
+const CALENDAR_ID_PREFIX = "lw:";
+
+/** Id sintético de un plazo/audiencia para el calendario: `lw:<proyecto>:<juicio>:<tipo>`. */
+export function lawsuitCalendarId(d: Pick<LawsuitDeadline, "projectId" | "lawsuitId" | "kind">): string {
+  return `${CALENDAR_ID_PREFIX}${d.projectId}:${d.lawsuitId}:${d.kind}`;
+}
+
+/** Ruta del juicio a partir del id sintético; null si el id no es de un plazo de juicio. */
+export function lawsuitCalendarHref(id: string): string | null {
+  if (!id.startsWith(CALENDAR_ID_PREFIX)) return null;
+  const [projectId, lawsuitId] = id.slice(CALENDAR_ID_PREFIX.length).split(":");
+  if (!projectId || !lawsuitId) return null;
+  return `/proyectos/${encodeURIComponent(projectId)}?tab=juicios&lawsuitId=${encodeURIComponent(lawsuitId)}`;
+}
+
+/**
+ * Plazos/audiencias con forma de tarea para pintarlos en el calendario junto a las tareas.
+ * Solo los que caen en [start, end] (yyyy-MM-dd, ambos inclusive).
+ */
+export function lawsuitDeadlinesAsCalendarTasks(
+  deadlines: LawsuitDeadline[],
+  start: string,
+  end: string,
+  meta: Map<string, { projectName?: string | null; clientName?: string | null }> = new Map(),
+) {
+  return deadlines
+    .filter((d) => d.date >= start && d.date <= end)
+    .map((d) => {
+      const m = meta.get(d.lawsuitId);
+      return {
+        id: lawsuitCalendarId(d),
+        title: `⚖️ ${d.label}: ${d.lawsuitName}`,
+        due_date: d.date,
+        status: "pendiente",
+        priority: d.overdue ? "alta" : "media",
+        area: "juicios",
+        client_id: null,
+        project_id: d.projectId,
+        assigned_to: null,
+        clients: m?.clientName ? { name: m.clientName } : null,
+        projects: m?.projectName ? { name: m.projectName } : null,
+      };
+    });
+}
