@@ -8,7 +8,8 @@
 
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
-import { ExternalLink, Link2, Bot, Loader2 } from "lucide-react";
+import { ExternalLink, Link2, Bot, Loader2, Video } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { MtgMeetingRow } from "@/lib/mtg/db";
@@ -20,12 +21,38 @@ export function MtgCallCaptureBar(props: {
   onBotSent?: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [mediaBusy, setMediaBusy] = useState(false);
+  const [media, setMedia] = useState<{ video_url: string | null; audio_url: string | null } | null>(
+    null,
+  );
   const joinUrl = props.meeting.teams_join_url;
   const cap = assessKawiilitoCapabilities({
     status: props.meeting.status,
     teamsJoinUrl: props.meeting.teams_join_url,
     teamsOnlineMeetingId: props.meeting.teams_online_meeting_id,
   });
+
+  const onViewRecording = async () => {
+    setMediaBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("mtg-recall-media", {
+        body: { meeting_id: props.meeting.id },
+      });
+      if (error) {
+        const ctx = (error as { context?: Response }).context;
+        const detail = ctx ? await ctx.json().catch(() => null) : null;
+        throw new Error(detail?.error ?? error.message);
+      }
+      if (data?.error) throw new Error(data.error);
+      setMedia({ video_url: data.video_url ?? null, audio_url: data.audio_url ?? null });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo abrir la grabación", {
+        duration: 10000,
+      });
+    } finally {
+      setMediaBusy(false);
+    }
+  };
 
   const onInviteKawiilito = async () => {
     if (!cap.meetingReady) {
@@ -102,7 +129,43 @@ export function MtgCallCaptureBar(props: {
             </span>
           )}
         </Button>
+        {props.meeting.recall_bot_id && (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={onViewRecording}
+            disabled={mediaBusy}
+          >
+            {mediaBusy ? (
+              <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+            ) : (
+              <Video className="h-3.5 w-3.5 mr-1" />
+            )}
+            Ver grabación
+          </Button>
+        )}
       </div>
+      <Dialog open={!!media} onOpenChange={(o) => !o && setMedia(null)}>
+        <DialogContent className="sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Grabación de la llamada</DialogTitle>
+          </DialogHeader>
+          {media?.video_url ? (
+            <video src={media.video_url} controls className="w-full rounded-md bg-black" />
+          ) : media?.audio_url ? (
+            <audio src={media.audio_url} controls className="w-full" />
+          ) : null}
+          <a
+            className="text-xs underline text-muted-foreground"
+            href={media?.video_url ?? media?.audio_url ?? "#"}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Descargar / abrir en otra pestaña (el enlace es temporal)
+          </a>
+        </DialogContent>
+      </Dialog>
       <p className="text-[11px] text-muted-foreground leading-snug">
         {joinUrl
           ? "Link listo: Invitar Kawiilito envía el bot de Recall (transcripción con hablantes). También puedes grabar en Teams o con Audio de llamada."
