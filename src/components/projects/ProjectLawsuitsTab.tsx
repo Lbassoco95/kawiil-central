@@ -108,9 +108,11 @@ interface ProjectLawsuitsTabProps {
   projectId: string;
   organizationId: string;
   clientId?: string | null;
+  dropboxPath?: string;
+  lockDropboxToPath?: boolean;
 }
 
-export function ProjectLawsuitsTab({ projectId, organizationId, clientId }: ProjectLawsuitsTabProps) {
+export function ProjectLawsuitsTab({ projectId, organizationId, clientId, dropboxPath, lockDropboxToPath }: ProjectLawsuitsTabProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const openId = searchParams.get("lawsuitId");
   const setOpenId = (id: string | null) =>
@@ -450,6 +452,8 @@ export function ProjectLawsuitsTab({ projectId, organizationId, clientId }: Proj
       <LawsuitWorkspaceSheet
         lawsuit={lawsuits.find((l) => l.id === openId) ?? null}
         clientId={clientId}
+        dropboxPath={dropboxPath}
+        lockDropboxToPath={lockDropboxToPath}
         onClose={() => setOpenId(null)}
         onEdit={openEdit}
       />

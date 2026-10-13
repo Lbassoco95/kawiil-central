@@ -28,9 +28,19 @@ export interface CommentItemData {
   profile?: { full_name?: string | null; avatar_url?: string | null } | null;
 }
 
+/** Guardado alterno de la edición (p. ej. comentarios de juicio); por defecto edita task_comments. */
+export interface CommentSaver {
+  mutate: (
+    vars: { commentId: string; content: string; mentions: string[]; previousMentions: string[] },
+    opts: { onSuccess: () => void },
+  ) => void;
+  isPending: boolean;
+}
+
 interface Props {
   comment: CommentItemData;
-  taskId: string;
+  taskId?: string;
+  saveComment?: CommentSaver;
   currentUserId?: string;
   profiles: CommentProfile[];
   knownNames: string[];
@@ -44,8 +54,12 @@ function wasEdited(comment: CommentItemData): boolean {
   return updated - created > 2000;
 }
 
-export function CommentItem({ comment, taskId, currentUserId, profiles, knownNames }: Props) {
-  const updateComment = useUpdateComment();
+export function CommentItem({ comment, taskId, saveComment, currentUserId, profiles, knownNames }: Props) {
+  const updateTaskComment = useUpdateComment();
+  const updateComment: CommentSaver = saveComment ?? {
+    mutate: (vars, opts) => updateTaskComment.mutate({ ...vars, taskId: taskId! }, opts),
+    isPending: updateTaskComment.isPending,
+  };
   const editorRef = useRef<RichCommentEditorHandle>(null);
   const [editing, setEditing] = useState(false);
   const [editHtml, setEditHtml] = useState("");
@@ -70,7 +84,6 @@ export function CommentItem({ comment, taskId, currentUserId, profiles, knownNam
     updateComment.mutate(
       {
         commentId: comment.id,
-        taskId,
         content,
         mentions: editMentions,
         previousMentions: comment.mentions ?? [],
