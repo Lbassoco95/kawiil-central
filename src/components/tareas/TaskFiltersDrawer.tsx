@@ -28,6 +28,21 @@ export type TaskAdvancedFilters = {
   priority?: string | null;
 };
 
+/** Aplica los filtros avanzados a una lista de tareas (el grupo se expande a sus clientes). */
+export function matchesTaskAdvancedFilters(
+  t: { client_id?: string | null; project_id?: string | null; assigned_to?: string | null; area?: string | null; priority?: string | null },
+  f: TaskAdvancedFilters,
+  groupClientIds: ReadonlySet<string> | null,
+): boolean {
+  if (f.clientId && t.client_id !== f.clientId) return false;
+  if (f.groupId && !(t.client_id && groupClientIds?.has(t.client_id))) return false;
+  if (f.projectId && t.project_id !== f.projectId) return false;
+  if (f.assignedTo && t.assigned_to !== f.assignedTo) return false;
+  if (f.area && t.area !== f.area) return false;
+  if (f.priority && t.priority !== f.priority) return false;
+  return true;
+}
+
 const STORAGE_KEY = "kawiil-tareas-filters";
 
 const EMPTY: TaskAdvancedFilters = {
