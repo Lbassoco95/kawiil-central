@@ -6,10 +6,12 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronUp, FileText } from "lucide-react";
+import { ChevronDown, ChevronUp, Copy, FileText } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { KawiilAiMarkdown } from "@/components/shared/KawiilAiMarkdown";
 import { mtgDb } from "@/lib/mtg/db";
+import { copyMinutes } from "@/lib/mtg/minutesEmail";
 
 export function MtgSummaryCard({ meetingId }: { meetingId: string }) {
   const [open, setOpen] = useState(true);
@@ -42,6 +44,23 @@ export function MtgSummaryCard({ meetingId }: { meetingId: string }) {
           </span>
         </p>
         <div className="flex items-center gap-1">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs"
+            onClick={async () => {
+              try {
+                const kind = await copyMinutes(data.content_md ?? "");
+                toast.success(kind === "rich" ? "Resumen copiado con formato" : "Resumen copiado (texto)");
+              } catch {
+                toast.error("No se pudo copiar");
+              }
+            }}
+          >
+            <Copy className="h-3.5 w-3.5 mr-1" />
+            Copiar
+          </Button>
           <Button asChild size="sm" variant="outline" className="h-7 text-xs">
             <Link to={`/juntas/${meetingId}/minuta`}>Abrir minuta completa</Link>
           </Button>

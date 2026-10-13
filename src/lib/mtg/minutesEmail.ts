@@ -22,7 +22,25 @@ export function minutesToHtml(md: string): string {
   return `<div style="${WRAP}">${body}</div>`;
 }
 
-/** Copia la minuta con formato (y como texto plano de respaldo). */
+/**
+ * Markdown → texto plano legible (WhatsApp, notas, campos de texto): sin asteriscos ni
+ * almohadillas; los encabezados quedan en mayúsculas y las listas con viñetas.
+ */
+export function mdToPlainText(md: string): string {
+  return md
+    .replace(/\r\n/g, "\n")
+    .replace(/^#\s+(.+)$/gm, (_, t: string) => `${t.toUpperCase()}\n`)
+    .replace(/^##+\s+(.+)$/gm, (_, t: string) => `\n${t.toUpperCase()}`)
+    .replace(/^\s*[-*]\s+/gm, "• ")
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/__(.+?)__/g, "$1")
+    .replace(/(^|[\s(])_(.+?)_(?=[\s).,;:]|$)/g, "$1$2")
+    .replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, "$1 ($2)")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/** Copia la minuta con formato (y como texto plano limpio de respaldo). */
 export async function copyMinutes(md: string): Promise<"rich" | "plain"> {
   const html = minutesToHtml(md);
   try {
@@ -30,7 +48,7 @@ export async function copyMinutes(md: string): Promise<"rich" | "plain"> {
       await navigator.clipboard.write([
         new ClipboardItem({
           "text/html": new Blob([html], { type: "text/html" }),
-          "text/plain": new Blob([md], { type: "text/plain" }),
+          "text/plain": new Blob([mdToPlainText(md)], { type: "text/plain" }),
         }),
       ]);
       return "rich";
@@ -38,7 +56,7 @@ export async function copyMinutes(md: string): Promise<"rich" | "plain"> {
   } catch {
     /* cae a texto plano */
   }
-  await navigator.clipboard.writeText(md);
+  await navigator.clipboard.writeText(mdToPlainText(md));
   return "plain";
 }
 
