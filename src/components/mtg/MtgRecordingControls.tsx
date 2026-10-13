@@ -26,6 +26,8 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { MtgMeetingRow, MtgSeriesRow } from "@/lib/mtg/db";
 import { useMtgRecordings } from "@/hooks/useMtgRecordings";
+import { supabase } from "@/integrations/supabase/client";
+import { MTG_BUCKET } from "@/lib/mtg/storagePaths";
 import { canUploadRecording } from "@/lib/mtg/uploadRecording";
 import {
   clearPendingRecording,
@@ -75,6 +77,49 @@ const PHASE_META: Record<
     value: 100,
   },
 };
+
+/** Escuchar / descargar una toma guardada (signed URL de vida corta). */
+function TakeActions({ path, fileName }: { path: string; fileName: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const sign = async (download: boolean) => {
+    setBusy(true);
+    try {
+      const { data, error } = await supabase.storage
+        .from(MTG_BUCKET)
+        .createSignedUrl(path, 900, download ? { download: fileName } : undefined);
+      if (error || !data?.signedUrl) throw error ?? new Error("Sin URL");
+      if (download) {
+        const a = document.createElement("a");
+        a.href = data.signedUrl;
+        a.rel = "noopener";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      } else {
+        setUrl(data.signedUrl);
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo abrir la grabación");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <span className="inline-flex flex-wrap items-center gap-2">
+      <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-xs" disabled={busy} onClick={() => void sign(false)}>
+        Escuchar
+      </Button>
+      <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-xs" disabled={busy} onClick={() => void sign(true)}>
+        <Download className="h-3 w-3 mr-1" />
+        Descargar
+      </Button>
+      {url && <audio controls autoPlay src={url} className="h-8 w-full max-w-sm" />}
+    </span>
+  );
+}
 
 function formatElapsed(sec: number): string {
   const mm = String(Math.floor(sec / 60)).padStart(2, "0");
@@ -388,6 +433,7 @@ export function MtgRecordingControls(props: {
               <span className={t.transcribed_at ? "text-emerald-700 dark:text-emerald-400" : ""}>
                 {t.transcribed_at ? "transcrita" : "sin transcribir"}
               </span>
+              <TakeActions path={t.path} fileName={t.file_name ?? `toma-${i + 1}.webm`} />
             </li>
           ))}
         </ul>
