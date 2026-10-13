@@ -188,6 +188,24 @@ async function processTranscript(admin: ReturnType<typeof createClient>, meeting
     },
     status: "pending",
   });
+
+  // Resumen con IA con la transcripción atribuida (en segundo plano: el webhook responde ya).
+  const summarize = fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/mtg-summarize-meeting`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ meeting_id: meeting.id, language: "es" }),
+  })
+    .then(async (r) => {
+      if (!r.ok) console.error("mtg-summarize-meeting", r.status, (await r.text()).slice(0, 300));
+    })
+    .catch((e) => console.error("mtg-summarize-meeting", e));
+  // deno-lint-ignore no-explicit-any
+  const rt = (globalThis as any).EdgeRuntime;
+  if (rt?.waitUntil) rt.waitUntil(summarize);
+  else await summarize;
 }
 
 serve(async (req) => {
@@ -211,23 +229,29 @@ serve(async (req) => {
   if (!botId) return json({ ok: true, ignored: "sin bot id" });
 
   const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-  const { data: meeting } = await admin
-    .from("mtg_meetings")
-    .select("id, organization_id, series_id, client_id, transcript_path, recall_bot_id")
-    .eq("recall_bot_id", botId)
-    .maybeSingle();
+  const cols = "id, organization_id, series_id, client_id, transcript_path, recall_bot_id";
+  let { data: meeting } = await admin.from("mtg_meetings").select(cols).eq("recall_bot_id", botId).maybeSingle();
+  // Si la junta ya apunta a otro bot (reenvío), se resuelve por el metadata del bot.
+  if (!meeting && evt.data?.bot?.metadata?.meeting_id) {
+    ({ data: meeting } = await admin.from("mtg_meetings").select(cols).eq("id", evt.data.bot.metadata.meeting_id).maybeSingle());
+  }
   if (!meeting) return json({ ok: true, ignored: "bot sin junta" });
+  // Solo el bot vigente actualiza el estado; los bots anteriores solo aportan su transcripción.
+  const isCurrent = meeting.recall_bot_id === botId;
 
   try {
-    if (event.startsWith("bot.")) {
+    if (event.startsWith("bot.") && isCurrent) {
       const status = event.slice(4);
       await admin.from("mtg_meetings").update({ recall_bot_status: status }).eq("id", meeting.id);
-      if (status === "fatal") {
+      if (status === "fatal" && !meeting.transcript_path) {
+        const sub = evt.data?.data?.sub_code ?? evt.data?.data?.code ?? "fatal";
         await admin
           .from("mtg_meetings")
           .update({
             transcript_status: "failed",
-            transcript_unavailable_reason: `Recall bot falló: ${evt.data?.data?.sub_code ?? evt.data?.data?.code ?? "fatal"}`.slice(0, 240),
+            transcript_unavailable_reason: (sub === "timeout_exceeded_waiting_room"
+              ? "Kawiilito no fue admitido a tiempo en la llamada"
+              : `Recall bot falló: ${sub}`).slice(0, 240),
           })
           .eq("id", meeting.id);
       }
