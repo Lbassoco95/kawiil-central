@@ -9,6 +9,7 @@ import { invokeSavioFinanceWrite } from "@/lib/savioFinanceWriteInvoke";
 import { extractSavioIdFromWriteData } from "@/lib/clientSavioLink";
 import { syncComplianceProjectDescription } from "@/lib/ensureComplianceProject";
 import { buildDefaultConstitutionSteps } from "@/lib/constitutionSteps";
+import { sortAlpha } from "@/lib/sortAlpha";
 
 export type Client = Tables<"clients">;
 export type ClientInsert = TablesInsert<"clients">;
@@ -44,11 +45,11 @@ export function useClients() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("clients")
-        .select("*")
-        .order("created_at", { ascending: false });
+        .select("*");
 
       if (error) throw error;
-      return data as Client[];
+      // Alfabético para que todos los selectores de cliente salgan en orden.
+      return sortAlpha(data as Client[], (c) => c.name);
     },
     enabled: !!user,
   });

@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { sortAlpha } from "@/lib/sortAlpha";
 
 export interface ClientGroup {
   id: string;
@@ -27,10 +28,9 @@ export function useClientGroups() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("client_groups" as any)
-        .select("*")
-        .order("name");
+        .select("*");
       if (error) throw error;
-      return (data || []) as ClientGroup[];
+      return sortAlpha((data || []) as unknown as ClientGroup[], (g) => g.name);
     },
     enabled: !!user,
   });
@@ -67,7 +67,7 @@ export function useClientGroupsForClient(clientId: string | undefined) {
         .select("*")
         .in("id", groupIds);
       if (gErr) return [];
-      return (groups || []) as ClientGroup[];
+      return sortAlpha((groups || []) as unknown as ClientGroup[], (g) => g.name);
     },
     enabled: !!clientId,
   });

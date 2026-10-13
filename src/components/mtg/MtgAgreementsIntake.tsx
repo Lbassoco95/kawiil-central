@@ -14,6 +14,8 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { useClients } from "@/hooks/useClients";
+import { useClientGroups } from "@/hooks/useClientGroups";
+import { sortAlpha } from "@/lib/sortAlpha";
 import { useProfiles } from "@/hooks/useTasks";
 import { supabase } from "@/integrations/supabase/client";
 import type { MtgAgreementRow, MtgMeetingRow, MtgSeriesRow } from "@/lib/mtg/db";
@@ -35,6 +37,36 @@ export function MtgAgreementsIntake(props: {
 }) {
   const { data: clients = [] } = useClients();
   const { data: profiles = [] } = useProfiles();
+  const { data: groups = [] } = useClientGroups();
+  const { data: groupMembers = [] } = useQuery({
+    queryKey: ["client-group-members-all"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .from("client_group_members" as any)
+        .select("group_id, client_id");
+      if (error) throw error;
+      return (data ?? []) as unknown as { group_id: string; client_id: string }[];
+    },
+  });
+  // Grupos (alfabético) con sus empresas (alfabético): elegir una empresa de un grupo.
+  const groupOptions = useMemo(
+    () =>
+      groups
+        .map((g) => ({
+          id: g.id,
+          name: g.name,
+          members: sortAlpha(
+            groupMembers
+              .filter((m) => m.group_id === g.id)
+              .map((m) => clients.find((c) => c.id === m.client_id))
+              .filter((c): c is NonNullable<typeof c> => !!c),
+            (c) => c.name,
+          ),
+        }))
+        .filter((g) => g.members.length > 0),
+    [groups, groupMembers, clients],
+  );
   const [text, setText] = useState("");
   const [owner, setOwner] = useState("");
   const [due, setDue] = useState("");
@@ -219,12 +251,23 @@ export function MtgAgreementsIntake(props: {
             value={pickedClient}
             onChange={(e) => setPickedClient(e.target.value)}
           >
-            <option value="">Cliente…</option>
-            {clients.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
+            <option value="">Cliente o grupo…</option>
+            {groupOptions.map((g) => (
+              <optgroup key={g.id} label={`Grupo: ${g.name}`}>
+                {g.members.map((c) => (
+                  <option key={`${g.id}-${c.id}`} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </optgroup>
             ))}
+            <optgroup label="Clientes">
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </optgroup>
           </select>
         </div>
       )}
