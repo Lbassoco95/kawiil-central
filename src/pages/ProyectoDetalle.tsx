@@ -9,6 +9,7 @@ import {
   Calculator,
   CheckSquare,
   Scale,
+  Gavel,
   Building2,
   FileSpreadsheet,
   ClipboardList,
@@ -31,6 +32,7 @@ import { ProjectCommentsTab } from "@/components/projects/ProjectCommentsTab";
 import { ProjectLogTab } from "@/components/projects/ProjectLogTab";
 import { MeetingMinutesDialog } from "@/components/projects/MeetingMinutesDialog";
 import { LawsuitDashboard } from "@/components/projects/LawsuitDashboard";
+import { ProjectLawsuitsTab } from "@/components/projects/ProjectLawsuitsTab";
 import { AccountingDashboard } from "@/components/projects/AccountingDashboard";
 import { ConstitutionDashboard } from "@/components/projects/ConstitutionDashboard";
 import { AnnualDeclarationDashboard } from "@/components/projects/AnnualDeclarationDashboard";
@@ -458,6 +460,7 @@ const ProyectoDetalle = () => {
   const isGestoria = project?.area === "gestoria";
   const isLawsuit = project?.area === "juicios" && (project as any)?.lawsuit_details;
   const isCumplimiento = project?.area === "cumplimiento";
+  const isJuiciosArea = project?.area === "juicios";
   const compliancePhaseAnchorYmd = useMemo(
     () =>
       project?.area === "cumplimiento"
@@ -476,6 +479,7 @@ const ProyectoDetalle = () => {
     if (isGestoria) return "gestoria";
     if (hasConstitution) return "constitucion";
     if (isLawsuit) return "juicio";
+    if (isJuiciosArea) return "juicios";
     if (hasAccounting) return "contabilidad";
     return "general";
   });
@@ -555,6 +559,7 @@ const ProyectoDetalle = () => {
   if (hasAccounting) projectTabs.push({ key: "contabilidad", label: "Contabilidad", icon: Calculator });
   if (hasAccounting) projectTabs.push({ key: "declaracion_anual", label: "Declaración Anual", icon: FileSpreadsheet });
   if (isLawsuit) projectTabs.push({ key: "juicio", label: "Juicio", icon: Scale });
+  if (isJuiciosArea) projectTabs.push({ key: "juicios", label: "Control de juicios", icon: Gavel });
   if (isCumplimiento) projectTabs.push({ key: "cumplimiento", label: "Cumplimiento", icon: Shield });
   projectTabs.push({
     key: "tareas",
@@ -797,6 +802,10 @@ const ProyectoDetalle = () => {
             lockDropboxToInitialPath={lockDropboxToInitialPath}
             clientId={project.client_id || undefined}
           />
+        )}
+
+        {tab === "juicios" && isJuiciosArea && (
+          <ProjectLawsuitsTab projectId={project.id} organizationId={project.organization_id} />
         )}
 
         {tab === "cumplimiento" && isCumplimiento && (
