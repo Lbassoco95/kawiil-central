@@ -79,6 +79,7 @@ export type MtgMeetingRow = {
     | "no_show";
   /** Equipo interno de esta junta (se suma al de la serie). */
   attendees_internal: string[];
+  project_id: string | null;
   facilitator_user_id: string | null;
   note_taker_user_id: string | null;
   outlook_event_id: string | null;

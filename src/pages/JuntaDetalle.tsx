@@ -57,6 +57,8 @@ import { MtgRecordingControls } from "@/components/mtg/MtgRecordingControls";
 import { MtgSummaryCard } from "@/components/mtg/MtgSummaryCard";
 import { MtgTeamDialog } from "@/components/mtg/MtgTeamDialog";
 import { meetingTeamIds } from "@/lib/mtg/meetingTeam";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { MtgAssignClientDialog } from "@/components/mtg/MtgAssignClientDialog";
 import { MtgTopicHistoryDrawer } from "@/components/mtg/MtgTopicHistoryDrawer";
 import { MtgArchiveSection } from "@/components/mtg/MtgArchiveSection";
@@ -89,6 +91,19 @@ export default function JuntaDetalle() {
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [historyTopic, setHistoryTopic] = useState<{ id: string; title: string } | null>(null);
   const [assignClientOpen, setAssignClientOpen] = useState(false);
+  const meetingProjectId = board.data?.meeting.project_id ?? null;
+  const projectQ = useQuery({
+    queryKey: ["mtg-meeting-project", meetingProjectId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("projects")
+        .select("id, name")
+        .eq("id", meetingProjectId!)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!meetingProjectId,
+  });
   const [joinLinkOpen, setJoinLinkOpen] = useState(false);
   const [teamOpen, setTeamOpen] = useState(false);
   const [importResumenOpen, setImportResumenOpen] = useState(false);
@@ -680,7 +695,7 @@ export default function JuntaDetalle() {
                 crear tareas por empresa. La plantilla de sesión se alimenta en el tablero.
               </p>
               <Button size="sm" variant="secondary" onClick={() => setAssignClientOpen(true)}>
-                Asignar cliente(s)
+                Asignar cliente / proyecto
               </Button>
             </div>
           )}
@@ -694,8 +709,19 @@ export default function JuntaDetalle() {
                   </span>
                 </p>
               )}
+              {meeting.project_id && (
+                <p className="text-xs text-muted-foreground">
+                  Proyecto:{" "}
+                  <Link
+                    to={`/proyectos/${meeting.project_id}`}
+                    className="text-foreground font-medium underline-offset-2 hover:underline"
+                  >
+                    {projectQ.data?.name ?? "ver proyecto"}
+                  </Link>
+                </p>
+              )}
               <Button size="sm" variant="ghost" onClick={() => setAssignClientOpen(true)}>
-                {entities.length > 1 ? "Editar clientes" : "Cambiar / añadir clientes"}
+                {entities.length > 1 ? "Editar clientes y proyecto" : "Cliente / proyecto"}
               </Button>
             </div>
           )}
@@ -1054,6 +1080,7 @@ export default function JuntaDetalle() {
           meetingId={meeting.id}
           currentClientId={meeting.client_id}
           currentEntityClientIds={entities.map((e) => e.client_id)}
+          currentProjectId={meeting.project_id}
           onDone={() => board.invalidate()}
         />
       )}
