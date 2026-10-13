@@ -20,7 +20,8 @@ import type { MtgAgreementRow, MtgMeetingRow, MtgSeriesRow } from "@/lib/mtg/db"
 import { addProposedAgreements, matchProfileByName, parseCommitments } from "@/lib/mtg/commitments";
 import { captureAgreement } from "@/lib/mtg/captureAgreement";
 
-type Row = { text: string; owner: string | null; ownerUserId: string; dueDate: string; dueHint: string | null; ref: string | null; selected: boolean };
+type Row = { text: string; owner: string | null; ownerUserId: string; dueDate: string; dueHint: string | null; ref: string | null; selected: boolean; projectId: string };
+type ProjectOpt = { id: string; name: string; client_id: string };
 
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
 
@@ -55,20 +56,31 @@ export function MtgAgreementsIntake(props: {
     (pickedClient || null);
   const clientName = clients.find((c) => c.id === clientId)?.name;
 
+  // Proyectos de todas las empresas de la junta: cada compromiso puede ir a uno distinto.
+  const clientIds = [
+    ...new Set(
+      [props.meeting.client_id, ...entities.map((e) => e.client_id), pickedClient].filter(Boolean) as string[],
+    ),
+  ];
   const { data: projects = [] } = useQuery({
-    queryKey: ["mtg-intake-projects", clientId],
-    enabled: !!clientId,
+    queryKey: ["mtg-intake-projects", clientIds.join(",")],
+    enabled: clientIds.length > 0,
     queryFn: async () => {
       const { data } = await supabase
         .from("projects")
-        .select("id, name")
-        .eq("client_id", clientId!)
+        .select("id, name, client_id")
+        .in("client_id", clientIds)
         .eq("status", "activo")
         .order("name");
-      return (data ?? []) as { id: string; name: string }[];
+      return (data ?? []) as ProjectOpt[];
     },
   });
-  useEffect(() => setProjectId(""), [clientId]);
+  const projectLabel = (p: ProjectOpt) =>
+    clientIds.length > 1 ? `${clients.find((c) => c.id === p.client_id)?.name ?? "—"} · ${p.name}` : p.name;
+  const applyProjectToAll = (id: string) => {
+    setProjectId(id);
+    if (id) setRows((rs) => rs.map((r) => (r.selected ? { ...r, projectId: id } : r)));
+  };
 
   // Compromisos del resumen que aún no son acuerdos.
   const pending = useMemo(() => {
@@ -87,6 +99,7 @@ export function MtgAgreementsIntake(props: {
         dueHint: c.dueHint,
         ref: c.ref,
         selected: true,
+        projectId: "",
       })),
     );
     // se rehace solo cuando cambian los compromisos o llegan los perfiles
@@ -140,9 +153,12 @@ export function MtgAgreementsIntake(props: {
   };
 
   const asTasks = async () => {
-    if (!guard() || selected.length === 0) return;
-    if (!projectId) {
-      toast.error("Elige el proyecto", { description: "Las tareas se crean dentro de un proyecto del cliente." });
+    if (selected.length === 0) return;
+    const missing = selected.filter((r) => !r.projectId);
+    if (missing.length > 0) {
+      toast.error(`Falta el proyecto en ${missing.length} compromiso(s)`, {
+        description: "Elige el proyecto de cada tarea (o usa «Proyecto para todas»).",
+      });
       return;
     }
     setBusy(true);
@@ -151,13 +167,14 @@ export function MtgAgreementsIntake(props: {
     for (const r of selected) {
       try {
         const profile = profiles.find((p) => p.user_id === r.ownerUserId);
+        const proj = projects.find((p) => p.id === r.projectId);
         await captureAgreement({
           organizationId: props.organizationId,
           actorUserId: props.actorUserId,
           meetingId: props.meeting.id,
-          clientId,
-          entityKey: entityKey || null,
-          projectId,
+          clientId: proj?.client_id ?? clientId,
+          entityKey: entities.find((e) => e.client_id === proj?.client_id)?.key ?? (entityKey || null),
+          projectId: r.projectId,
           text: r.text,
           ownerSide: r.ownerUserId ? "kawiil" : "client",
           ownerUserId: r.ownerUserId || null,
@@ -172,7 +189,7 @@ export function MtgAgreementsIntake(props: {
       }
     }
     setBusy(false);
-    if (ok > 0) toast.success(`${ok} tarea(s) creada(s) en el proyecto`);
+    if (ok > 0) toast.success(`${ok} tarea(s) creada(s) en sus proyectos`);
     if (failed.length > 0) toast.error(`No se pudieron cargar ${failed.length}`, { description: failed.join("\n"), duration: 12000 });
     props.onChanged();
   };
@@ -273,6 +290,24 @@ export function MtgAgreementsIntake(props: {
                     title={r.dueHint ? `Plazo dicho: ${r.dueHint}` : "Fecha límite"}
                   />
                 </div>
+                <div className="pl-6">
+                  <select
+                    className="h-8 w-full rounded-md border bg-background px-2 text-xs"
+                    value={r.projectId}
+                    onChange={(e) => patch(i, { projectId: e.target.value })}
+                    disabled={projects.length === 0}
+                    title="Proyecto de esta tarea"
+                  >
+                    <option value="">
+                      {projects.length ? "Proyecto de esta tarea…" : clientIds.length ? "Sin proyectos activos" : "Elige cliente primero"}
+                    </option>
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {projectLabel(p)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 {r.dueHint && !r.dueDate && <p className="pl-6 text-[11px] text-muted-foreground">Plazo dicho: {r.dueHint}</p>}
               </div>
             ))}
@@ -282,13 +317,13 @@ export function MtgAgreementsIntake(props: {
             <select
               className="sm:col-span-3 h-9 rounded-md border bg-background px-2 text-sm"
               value={projectId}
-              onChange={(e) => setProjectId(e.target.value)}
-              disabled={!clientId}
+              onChange={(e) => applyProjectToAll(e.target.value)}
+              disabled={projects.length === 0}
             >
-              <option value="">{clientId ? (projects.length ? "Proyecto de las tareas…" : "Sin proyectos activos") : "Elige cliente primero"}</option>
+              <option value="">{projects.length ? "Proyecto para todas (opcional)…" : clientIds.length ? "Sin proyectos activos" : "Elige cliente primero"}</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name}
+                  {projectLabel(p)}
                 </option>
               ))}
             </select>
