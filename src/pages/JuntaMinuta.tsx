@@ -271,9 +271,14 @@ export default function JuntaMinuta() {
               {draftBusy ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : null}
               Generar borrador de minuta
             </Button>
+            {current?.status === "approved" ? (
+              <span className="inline-flex items-center rounded-md bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                Minuta aprobada
+              </span>
+            ) : (
             <Button
               size="sm"
-              disabled={!approval.ok || !current || current.status === "approved"}
+              disabled={!approval.ok || !current}
               title={!approval.ok ? approval.reason : undefined}
               onClick={async () => {
                 if (!current || !approval.ok) return;
@@ -296,6 +301,10 @@ export default function JuntaMinuta() {
             >
               Aprobar minuta
             </Button>
+            )}
+            {current?.status !== "approved" && !approval.ok && approval.reason && (
+              <span className="basis-full text-right text-xs text-amber-700 dark:text-amber-400">{approval.reason}</span>
+            )}
             {series?.send_minutes_to_client && meeting.status === "minutes_approved" && (
               <Button
                 size="sm"

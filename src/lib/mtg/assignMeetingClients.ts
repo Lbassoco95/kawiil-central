@@ -1,7 +1,7 @@
 /**
  * Asignar varios clientes a una junta (serie de grupo multi-empresa).
- * Si ya hay una serie group con esos clientes, la vincula; si no, actualiza
- * entities de la serie existente o deja client_id primario + entities en serie.
+ * Si la junta ya tiene serie, actualiza sus entities; si no, crea una serie ad hoc
+ * propia (nunca la mezcla con otra serie existente).
  */
 
 import { supabase } from "@/integrations/supabase/client";
@@ -75,54 +75,32 @@ export async function assignMeetingClients(opts: {
     if (uErr) throw uErr;
     series = { ...series, entities };
   } else {
-    // Buscar serie group que ya tenga alguno de estos client_ids en entities
-    const { data: candidates } = await mtgDb
+    // Una junta sin serie NUNCA se pega a una serie existente (otra cadencia u otra
+    // empresa): se crea una serie propia ad hoc con las empresas elegidas.
+    // Serie ad hoc multi-cliente anclada al cliente primario (entities = N)
+    const { data: created, error: cErr } = await mtgDb
       .from("mtg_series")
+      .insert({
+        organization_id: opts.organizationId,
+        anchor_type: "client",
+        anchor_id: primary,
+        client_id: primary,
+        title: (meeting.title?.trim() || `Junta multi-cliente · ${entities.map((e) => e.label).join(" · ")}`).slice(0, 120),
+        cadence: "adhoc",
+        default_duration_min: meeting.duration_min ?? 60,
+        entities,
+        agenda_template: [],
+        attendees_internal: [],
+        attendees_client: [],
+        send_minutes_to_client: false,
+        auto_transcript: false,
+        active: true,
+        created_by: opts.actorUserId,
+      })
       .select("*")
-      .eq("organization_id", opts.organizationId)
-      .eq("active", true)
-      .eq("anchor_type", "group")
-      .order("created_at", { ascending: false })
-      .limit(40);
-    const match = (candidates ?? []).find((s) => {
-      const ents = (s.entities ?? []) as MtgEntity[];
-      return entities.some((e) => ents.some((x) => x.client_id === e.client_id));
-    });
-    if (match) {
-      series = match as MtgSeriesRow;
-      const merged = mergeEntities((series.entities ?? []) as MtgEntity[], entities);
-      const { error: uErr } = await mtgDb
-        .from("mtg_series")
-        .update({ entities: merged })
-        .eq("id", series.id);
-      if (uErr) throw uErr;
-      series = { ...series, entities: merged };
-    } else {
-      // Serie ad hoc multi-cliente anclada al cliente primario (entities = N)
-      const { data: created, error: cErr } = await mtgDb
-        .from("mtg_series")
-        .insert({
-          organization_id: opts.organizationId,
-          anchor_type: "client",
-          anchor_id: primary,
-          client_id: primary,
-          title: `Junta multi-cliente · ${entities.map((e) => e.label).join(" · ")}`.slice(0, 120),
-          cadence: "adhoc",
-          default_duration_min: meeting.duration_min ?? 60,
-          entities,
-          agenda_template: [],
-          attendees_internal: [],
-          attendees_client: [],
-          send_minutes_to_client: false,
-          auto_transcript: false,
-          active: true,
-          created_by: opts.actorUserId,
-        })
-        .select("*")
-        .single();
-      if (cErr || !created) throw cErr ?? new Error("No se pudo crear la serie");
-      series = created as MtgSeriesRow;
-    }
+      .single();
+    if (cErr || !created) throw cErr ?? new Error("No se pudo crear la serie");
+    series = created as MtgSeriesRow;
 
     // Vincular junta (puede fallar uq_series_day si ya hay otra ese día)
     const { error: linkErr } = await mtgDb
@@ -173,11 +151,4 @@ export async function assignMeetingClients(opts: {
     series,
     entities: series.entities ?? entities,
   };
-}
-
-function mergeEntities(existing: MtgEntity[], incoming: MtgEntity[]): MtgEntity[] {
-  const byClient = new Map<string, MtgEntity>();
-  for (const e of existing) byClient.set(e.client_id, e);
-  for (const e of incoming) byClient.set(e.client_id, e);
-  return [...byClient.values()];
 }

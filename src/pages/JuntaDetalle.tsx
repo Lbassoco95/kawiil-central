@@ -72,7 +72,6 @@ import {
   shouldSeekGroupBoard,
 } from "@/lib/mtg/findGroupBoardMeeting";
 
-const PROJECTION_KEY = "mtg-projection-mode";
 
 export default function JuntaDetalle() {
   const { meetingId } = useParams<{ meetingId: string }>();
@@ -81,13 +80,8 @@ export default function JuntaDetalle() {
   const { data: profiles = [] } = useProfiles();
   const board = useMtgBoard(meetingId);
   const [entityFilter, setEntityFilter] = useState<string>("all");
-  const [projection, setProjection] = useState(() => {
-    try {
-      return localStorage.getItem(PROJECTION_KEY) === "1";
-    } catch {
-      return false;
-    }
-  });
+  // La proyección solo se activa cuando se pide (no se recuerda entre juntas).
+  const [projection, setProjection] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [historyTopic, setHistoryTopic] = useState<{ id: string; title: string } | null>(null);
   const [assignClientOpen, setAssignClientOpen] = useState(false);
@@ -118,14 +112,6 @@ export default function JuntaDetalle() {
   });
   const debounceTimers = useRef<Map<string, number>>(new Map());
   const redirectedRef = useRef(false);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(PROJECTION_KEY, projection ? "1" : "0");
-    } catch {
-      /* ignore */
-    }
-  }, [projection]);
 
   useEffect(() => {
     if (!projection) return;
