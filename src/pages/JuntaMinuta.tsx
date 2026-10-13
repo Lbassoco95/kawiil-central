@@ -40,6 +40,7 @@ import {
   rejectProposedAgreement,
 } from "@/lib/mtg/approveMinutes";
 import { assignProjectAndCreateTask } from "@/lib/mtg/captureAgreement";
+import { MtgAgreementsIntake } from "@/components/mtg/MtgAgreementsIntake";
 import { MtgPeoplePanel } from "@/components/mtg/MtgPeoplePanel";
 import { MtgUploadTranscriptButton } from "@/components/mtg/MtgUploadTranscriptButton";
 import { ArrowLeft, Loader2 } from "lucide-react";
@@ -332,6 +333,17 @@ export default function JuntaMinuta() {
                 meeting={q.data.meeting}
                 series={q.data.series}
                 minutesMd={md}
+              />
+            )}
+            {user && q.data && (
+              <MtgAgreementsIntake
+                organizationId={q.data.meeting.organization_id}
+                actorUserId={user.id}
+                meeting={q.data.meeting}
+                series={q.data.series}
+                minutesMd={md}
+                agreements={agreements}
+                onChanged={invalidate}
               />
             )}
             <h2 className="font-semibold text-sm">Acuerdos propuestos</h2>
