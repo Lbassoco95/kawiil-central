@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { collectLawsuitDeadlines, lawsuitsForUser } from "@/lib/lawsuits";
 
 export interface AssignedStep {
   id: string;
@@ -8,12 +9,14 @@ export interface AssignedStep {
   stepLabel: string;
   status: string;
   dueDate: string | null;
-  sourceType: "gestoria" | "constitucion" | "contabilidad" | "declaracion_anual" | "juicio";
+  sourceType: "gestoria" | "constitucion" | "contabilidad" | "declaracion_anual" | "juicio" | "juicio_plazo";
   sourceLabel: string;
   projectId: string;
   projectName: string;
   clientName: string | null;
   isCollaborator?: boolean;
+  /** Solo en plazos/audiencias de juicios: juicio al que pertenecen. */
+  lawsuitId?: string;
 }
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -22,6 +25,7 @@ const SOURCE_LABELS: Record<string, string> = {
   contabilidad: "Contabilidad",
   declaracion_anual: "Decl. Anual",
   juicio: "Juicio",
+  juicio_plazo: "Plazo juicio",
 };
 
 /** Fecha límite efectiva en JSON de pasos (snake_case, camelCase legacy o campo date). */
@@ -110,6 +114,45 @@ export function useAssignedSteps() {
             }
           }
         }
+      }
+
+      // Plazos y audiencias de juicios (project_lawsuits) de proyectos donde participas
+      const [{ data: openLawsuits }, { data: myTeam }] = await Promise.all([
+        supabase
+          .from("project_lawsuits")
+          .select(
+            "id, name, project_id, status, next_hearing_date, next_deadline_date, next_deadline_note, projects(name, responsible_user_id, clients(name))",
+          )
+          .not("status", "in", "(concluido,archivado)"),
+        supabase.from("project_team").select("project_id").eq("user_id", userId),
+      ]);
+
+      const lawsuitRows = (openLawsuits ?? []).map((l) => ({
+        ...l,
+        responsible_user_id: l.projects?.responsible_user_id ?? null,
+      }));
+      const mine = lawsuitsForUser(
+        lawsuitRows,
+        userId,
+        (myTeam ?? []).map((t) => t.project_id),
+      );
+      const mineById = new Map(mine.map((l) => [l.id, l]));
+      for (const d of collectLawsuitDeadlines(mine)) {
+        const l = mineById.get(d.lawsuitId)!;
+        steps.push({
+          id: `lw_${d.lawsuitId}_${d.kind}`,
+          stepKey: d.kind,
+          stepLabel: `${d.label}: ${d.lawsuitName}`,
+          status: "pendiente",
+          dueDate: d.date,
+          sourceType: "juicio_plazo",
+          sourceLabel: SOURCE_LABELS.juicio_plazo,
+          projectId: d.projectId,
+          projectName: l.projects?.name ?? "Proyecto",
+          clientName: l.projects?.clients?.name ?? null,
+          isCollaborator: l.responsible_user_id !== userId,
+          lawsuitId: d.lawsuitId,
+        });
       }
 
       // Accounting periods

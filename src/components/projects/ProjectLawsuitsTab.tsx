@@ -134,6 +134,7 @@ export function ProjectLawsuitsTab({ projectId, organizationId, clientId }: Proj
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey });
     queryClient.invalidateQueries({ queryKey: ["dashboard-lawsuits"] });
+    queryClient.invalidateQueries({ queryKey: ["assigned-steps"] });
   };
 
   const { data: lawsuits = [], isLoading } = useQuery({
