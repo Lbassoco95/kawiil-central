@@ -7,15 +7,19 @@
  */
 
 import { Button } from "@/components/ui/button";
-import { ExternalLink, Link2, Bot } from "lucide-react";
+import { useState } from "react";
+import { ExternalLink, Link2, Bot, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 import type { MtgMeetingRow } from "@/lib/mtg/db";
 import { assessKawiilitoCapabilities } from "@/lib/mtg/kawiilitoCapabilities";
 
 export function MtgCallCaptureBar(props: {
   meeting: MtgMeetingRow;
   onPasteLink: () => void;
+  onBotSent?: () => void;
 }) {
+  const [busy, setBusy] = useState(false);
   const joinUrl = props.meeting.teams_join_url;
   const cap = assessKawiilitoCapabilities({
     status: props.meeting.status,
@@ -23,24 +27,33 @@ export function MtgCallCaptureBar(props: {
     teamsOnlineMeetingId: props.meeting.teams_online_meeting_id,
   });
 
-  const onInviteKawiilito = () => {
-    const detail = cap.lines.join(" ");
+  const onInviteKawiilito = async () => {
     if (!cap.meetingReady) {
-      toast.message(detail, { duration: 10000 });
+      toast.message(cap.lines.join(" "), { duration: 10000 });
       return;
     }
     if (!cap.hasJoinUrl) {
-      toast.message(detail, { duration: 10000 });
+      toast.message(cap.lines.join(" "), { duration: 10000 });
       props.onPasteLink();
       return;
     }
-    toast.message(detail, {
-      duration: 14000,
-      description:
-        "Mientras no haya bot join: Unirse a Teams (graba ahí) o «Audio de llamada» en este tablero → Storage → Whisper → minuta (cerebro Hetzner).",
-    });
-    if (joinUrl) {
-      window.open(joinUrl, "_blank", "noopener,noreferrer");
+    setBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("mtg-recall-join", {
+        body: { meeting_id: props.meeting.id },
+      });
+      if (error) {
+        const ctx = (error as { context?: Response }).context;
+        const detail = ctx ? await ctx.json().catch(() => null) : null;
+        throw new Error(detail?.error ?? error.message);
+      }
+      if (data?.error) throw new Error(data.error);
+      toast.success("Kawiilito va en camino: admítelo en la sala de espera de Teams");
+      props.onBotSent?.();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo enviar el bot");
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -48,7 +61,7 @@ export function MtgCallCaptureBar(props: {
     <div className="space-y-1.5 rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-sm">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs text-muted-foreground mr-1">
-          Teams · captura (cerebro Hetzner = minutas, no el bot)
+          Teams · captura
         </span>
         {joinUrl ? (
           <Button asChild size="sm" variant="default">
@@ -74,15 +87,25 @@ export function MtgCallCaptureBar(props: {
           size="sm"
           variant="secondary"
           onClick={onInviteKawiilito}
-          title="Qué hay conectado para capturar (Hetzner / Teams / browser)"
+          disabled={busy}
+          title="Envía el bot de Recall a la llamada: graba y transcribe con quién habla"
         >
-          <Bot className="h-3.5 w-3.5 mr-1" />
-          Invitar Kawiilito
+          {busy ? (
+            <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+          ) : (
+            <Bot className="h-3.5 w-3.5 mr-1" />
+          )}
+          {props.meeting.recall_bot_id ? "Reenviar Kawiilito" : "Invitar Kawiilito"}
+          {props.meeting.recall_bot_status && (
+            <span className="ml-2 rounded bg-background/60 px-1.5 text-[10px]">
+              {props.meeting.recall_bot_status}
+            </span>
+          )}
         </Button>
       </div>
       <p className="text-[11px] text-muted-foreground leading-snug">
         {joinUrl
-          ? "Link listo: graba en Teams o con Audio de llamada → queda en Storage; el cerebro de Hetzner arma la minuta después. Bot que entra solo = roadmap."
+          ? "Link listo: Invitar Kawiilito envía el bot de Recall (transcripción con hablantes). También puedes grabar en Teams o con Audio de llamada."
           : "Sin link: pégalo. Kawiilito-join y extracción Graph automática aún no están conectados; sí lo están grabación en browser + Whisper + openclaw para minuta."}
       </p>
     </div>

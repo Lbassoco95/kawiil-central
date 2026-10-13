@@ -58,11 +58,6 @@ function segmentsToVtt(segments: WhisperSegment[]): string {
   return lines.join("\n");
 }
 
-function isSpanish(code: string | null | undefined): boolean {
-  if (!code) return false;
-  const c = code.trim().toLowerCase();
-  return c === "es" || c === "spa" || c.startsWith("es-") || c.startsWith("spa");
-}
 
 function buildStoragePath(opts: {
   organizationId: string;
@@ -158,10 +153,27 @@ async function whisperTranscribeChunk(opts: {
   return { segments, duration, language };
 }
 
+type TargetLang = "es" | "en" | "zh";
+const TARGET_NAME: Record<TargetLang, string> = {
+  es: "español de México",
+  en: "English",
+  zh: "中文简体",
+};
+const CJK = /[\u3040-\u30ff\u3400-\u9fff]/;
+
+/** ¿Este segmento NO está ya en el idioma destino? (la detección por toma no basta: hay mezcla). */
+function needsTranslation(text: string, target: TargetLang): boolean {
+  if (!text.trim()) return false;
+  if (target === "es") return CJK.test(text);
+  if (target === "zh") return !CJK.test(text);
+  return true; // en: el modelo deja igual lo que ya está en inglés
+}
+
 async function translateSegmentBatch(
   apiKey: string,
   batch: { i: number; t: string }[],
   sourceLang: string | null,
+  target: TargetLang = "es",
 ): Promise<Map<number, string>> {
   const resp = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -177,7 +189,7 @@ async function translateSegmentBatch(
         {
           role: "system",
           content:
-            "Traduce al español de México textos de una junta de trabajo. " +
+            `Traduce a ${TARGET_NAME[target]} textos de una junta de trabajo (pueden mezclar español y chino). ` +
             "Devuelve JSON {\"items\":[{\"i\":number,\"t\":string}]} con el mismo índice i. " +
             "Conserva nombres propios, marcas y términos técnicos cuando no tengan traducción natural. " +
             "No agregues comentarios.",
@@ -216,33 +228,32 @@ async function translateSegmentBatch(
   return byIndex;
 }
 
-async function translateSegmentsToSpanish(
+async function translateSegmentsToTarget(
   apiKey: string,
   segments: WhisperSegment[],
   sourceLang: string | null,
-): Promise<WhisperSegment[]> {
-  if (segments.length === 0) return segments;
+  target: TargetLang,
+): Promise<{ segments: WhisperSegment[]; translatedCount: number }> {
+  // Solo se traducen los segmentos que no están ya en el idioma destino.
+  const idxs = segments.map((s, i) => (needsTranslation(s.text, target) ? i : -1)).filter((i) => i >= 0);
+  if (idxs.length === 0) return { segments, translatedCount: 0 };
   const byIndex = new Map<number, string>();
   const batchSize = 80;
-  const starts: number[] = [];
-  for (let start = 0; start < segments.length; start += batchSize) starts.push(start);
+  const batches: number[][] = [];
+  for (let k = 0; k < idxs.length; k += batchSize) batches.push(idxs.slice(k, k + batchSize));
   // En paralelo (5 a la vez) para no rozar el timeout de la función.
-  for (let g = 0; g < starts.length; g += 5) {
+  for (let g = 0; g < batches.length; g += 5) {
     const parts = await Promise.all(
-      starts.slice(g, g + 5).map((start) =>
-        translateSegmentBatch(
-          apiKey,
-          segments.slice(start, start + batchSize).map((s, j) => ({ i: start + j, t: s.text })),
-          sourceLang,
-        ),
+      batches.slice(g, g + 5).map((batch) =>
+        translateSegmentBatch(apiKey, batch.map((i) => ({ i, t: segments[i].text })), sourceLang, target),
       ),
     );
     for (const part of parts) for (const [k, v] of part) byIndex.set(k, v);
   }
-  return segments.map((s, idx) => ({
-    ...s,
-    text: byIndex.get(idx) || s.text,
-  }));
+  return {
+    segments: segments.map((s, i) => ({ ...s, text: byIndex.get(i) || s.text })),
+    translatedCount: idxs.length,
+  };
 }
 
 serve(async (req) => {
@@ -536,15 +547,13 @@ serve(async (req) => {
       );
     }
 
-    let translated = false;
-    if (!isSpanish(languageDetected)) {
-      segments = await translateSegmentsToSpanish(
-        openaiKey,
-        segments,
-        languageDetected,
-      );
-      translated = true;
-    }
+    // Siempre se entrega en el idioma elegido (default español), aunque Whisper
+    // haya etiquetado la toma como "spanish" y haya partes en chino.
+    const tl = String(body?.target_language ?? "es").toLowerCase();
+    const targetLang: TargetLang = tl === "en" || tl === "zh" ? tl : "es";
+    const tr = await translateSegmentsToTarget(openaiKey, segments, languageDetected, targetLang);
+    segments = tr.segments;
+    const translated = tr.translatedCount > 0;
 
     const vtt = segmentsToVtt(segments);
     let series: { anchor_type: string; anchor_id: string } | null = null;
@@ -596,6 +605,8 @@ serve(async (req) => {
         path: transcriptPath,
         language_detected: languageDetected,
         translated_to_spanish: translated,
+        target_language: targetLang,
+        translated_segments: tr.translatedCount,
         segments: segments.length,
         chunks: chunks.length,
         size_bytes: bytes.byteLength,
@@ -625,6 +636,8 @@ serve(async (req) => {
         transcript_path: transcriptPath,
         language_detected: languageDetected,
         translated_to_spanish: translated,
+        translated_segments: tr.translatedCount,
+        target_language: targetLang,
         enqueued_minutes: enqueued,
         segments: segments.length,
         chunks: chunks.length,
