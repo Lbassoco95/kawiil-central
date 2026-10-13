@@ -54,6 +54,7 @@ import {
 import { toast } from "sonner";
 import { MtgUploadTranscriptButton } from "@/components/mtg/MtgUploadTranscriptButton";
 import { MtgRecordingControls } from "@/components/mtg/MtgRecordingControls";
+import { MtgSummaryCard } from "@/components/mtg/MtgSummaryCard";
 import { MtgTeamDialog } from "@/components/mtg/MtgTeamDialog";
 import { meetingTeamIds } from "@/lib/mtg/meetingTeam";
 import { MtgAssignClientDialog } from "@/components/mtg/MtgAssignClientDialog";
@@ -637,6 +638,8 @@ export default function JuntaDetalle() {
               onDone={() => board.invalidate()}
             />
           )}
+
+          <MtgSummaryCard meetingId={meeting.id} />
 
           {meeting.recording_path ? (
             <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2.5 text-sm space-y-0.5">
