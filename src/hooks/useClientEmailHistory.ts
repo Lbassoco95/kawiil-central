@@ -4,6 +4,8 @@ import { useAuth } from "@/contexts/AuthContext";
 
 /** `action` con el que se guarda en activity_log cada correo enviado desde la ficha del cliente. */
 export const CLIENT_EMAIL_SENT_ACTION = "email_sent";
+/** `action` de los correos programados desde la ficha (aún no han salido al registrarse). */
+export const CLIENT_EMAIL_SCHEDULED_ACTION = "email_scheduled";
 
 export const clientEmailHistoryKey = (clientId: string | undefined) =>
   ["client-email-history", clientId] as const;
@@ -17,6 +19,8 @@ export interface ClientEmailHistoryItem {
   cc: string[];
   attachments: string[];
   from: string | null;
+  /** Presente solo en correos programados: cuándo debe salir. */
+  scheduledAt: string | null;
 }
 
 const asStrings = (v: unknown): string[] =>
@@ -30,10 +34,10 @@ export function useClientEmailHistory(clientId: string | undefined) {
     queryFn: async (): Promise<ClientEmailHistoryItem[]> => {
       const { data, error } = await supabase
         .from("activity_log")
-        .select("id, user_id, details, created_at")
+        .select("id, user_id, action, details, created_at")
         .eq("entity_type", "client")
         .eq("entity_id", clientId!)
-        .eq("action", CLIENT_EMAIL_SENT_ACTION)
+        .in("action", [CLIENT_EMAIL_SENT_ACTION, CLIENT_EMAIL_SCHEDULED_ACTION])
         .order("created_at", { ascending: false })
         .limit(50);
       if (error) throw error;
@@ -48,6 +52,10 @@ export function useClientEmailHistory(clientId: string | undefined) {
           cc: asStrings(d.cc),
           attachments: asStrings(d.attachments),
           from: typeof d.from === "string" ? d.from : null,
+          scheduledAt:
+            row.action === CLIENT_EMAIL_SCHEDULED_ACTION && typeof d.scheduled_at === "string"
+              ? d.scheduled_at
+              : null,
         };
       });
     },
