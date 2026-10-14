@@ -1,4 +1,4 @@
-import { Mail, Paperclip } from "lucide-react";
+import { CalendarClock, Mail, Paperclip } from "lucide-react";
 import { useClientEmailHistory } from "@/hooks/useClientEmailHistory";
 import { formatDateMX } from "@/lib/dateUtils";
 
@@ -28,7 +28,19 @@ export function ClientEmailHistorySection({ clientId, profilesByUserId }: Props)
             <li key={it.id} className="py-2.5 first:pt-0 last:pb-0">
               <div className="flex items-start justify-between gap-3">
                 <p className="text-[13px] font-medium text-foreground truncate">{it.subject}</p>
-                <span className="shrink-0 text-[11px] text-muted-foreground">{formatDateMX(it.created_at)}</span>
+                <span className="shrink-0 text-[11px] text-muted-foreground">
+                  {it.scheduledAt ? (
+                    <span
+                      className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-300"
+                      title={`Registrado el ${formatDateMX(it.created_at)}`}
+                    >
+                      <CalendarClock className="h-3 w-3" />
+                      Programado · {new Date(it.scheduledAt).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}
+                    </span>
+                  ) : (
+                    formatDateMX(it.created_at)
+                  )}
+                </span>
               </div>
               <p className="text-[12px] text-muted-foreground truncate">
                 Para: {it.to.join(", ") || "—"}

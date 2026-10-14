@@ -7,7 +7,11 @@ import { useClientTaxProfiles } from "@/hooks/useClientTaxProfiles";
 import { useAuth } from "@/contexts/AuthContext";
 import { collectClientEmails } from "@/lib/clientEmails";
 import { logEntityActivity } from "@/lib/activityLog";
-import { CLIENT_EMAIL_SENT_ACTION, clientEmailHistoryKey } from "@/hooks/useClientEmailHistory";
+import {
+  CLIENT_EMAIL_SCHEDULED_ACTION,
+  CLIENT_EMAIL_SENT_ACTION,
+  clientEmailHistoryKey,
+} from "@/hooks/useClientEmailHistory";
 
 interface Props {
   client: { id: string; name: string; email: string | null; organization_id: string };
@@ -17,7 +21,7 @@ interface Props {
 /**
  * Abre el redactor de correo con los correos registrados del cliente (ficha +
  * perfiles fiscales) ya cargados en "Para", para no salir del módulo de clientes.
- * Cada envío queda en el historial del cliente (activity_log).
+ * Cada envío (y cada envío programado) queda en el historial del cliente (activity_log).
  */
 export function ClientEmailButton({ client, size = "sm" }: Props) {
   const [open, setOpen] = useState(false);
@@ -35,13 +39,14 @@ export function ClientEmailButton({ client, size = "sm" }: Props) {
     void logEntityActivity(user.id, client.organization_id, {
       entityType: "client",
       entityId: client.id,
-      action: CLIENT_EMAIL_SENT_ACTION,
+      action: info.scheduledAt ? CLIENT_EMAIL_SCHEDULED_ACTION : CLIENT_EMAIL_SENT_ACTION,
       details: {
         subject: info.subject,
         to: info.to,
         cc: info.cc,
         attachments: info.attachmentNames,
         from: info.fromEmail,
+        ...(info.scheduledAt ? { scheduled_at: info.scheduledAt } : {}),
       },
     }).then(() => qc.invalidateQueries({ queryKey: clientEmailHistoryKey(client.id) }));
   };

@@ -114,8 +114,9 @@ interface ComposeEmailDialogProps {
    */
   onAfterSend?: (info: SentAccountingEmailInfo) => void;
   /**
-   * Se dispara tras CADA envío inmediato exitoso (no los programados), con o sin
-   * plantilla contable. Sirve para registrar el correo (p. ej. historial del cliente).
+   * Se dispara tras CADA envío exitoso, con o sin plantilla contable, y también al
+   * programar un envío (en ese caso `scheduledAt` trae la fecha ISO). Sirve para
+   * registrar el correo (p. ej. historial del cliente).
    */
   onSent?: (info: SentEmailInfo) => void;
 }
@@ -126,6 +127,8 @@ export interface SentEmailInfo {
   subject: string;
   attachmentNames: string[];
   fromEmail: string | null;
+  /** Solo en envíos programados: fecha/hora ISO en que saldrá el correo. */
+  scheduledAt?: string;
 }
 
 /** Firma limpia (nombre + correo) para cuentas vinculadas, cuando no hay firma guardada de esa cuenta. */
@@ -548,6 +551,18 @@ export function ComposeEmailDialog({
         },
       });
       if (error) throw error;
+      try {
+        onSent?.({
+          to: toList,
+          cc: parseRecipients(cc),
+          subject: subject || "(Sin asunto)",
+          attachmentNames: pendingFiles.map((f) => f.name),
+          fromEmail: fromOption?.email || null,
+          scheduledAt: when.toISOString(),
+        });
+      } catch (err) {
+        console.warn("[compose] onSent (programado) falló", err);
+      }
       toast.success(`Correo programado para ${when.toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}`);
       onOpenChange(false);
     } catch (e) {
