@@ -129,6 +129,8 @@ export interface SentEmailInfo {
   fromEmail: string | null;
   /** Solo en envíos programados: fecha/hora ISO en que saldrá el correo. */
   scheduledAt?: string;
+  /** Solo en envíos programados: id del trabajo en scheduled_mail_jobs (para consultar su estado). */
+  scheduledJobId?: string;
 }
 
 /** Firma limpia (nombre + correo) para cuentas vinculadas, cuando no hay firma guardada de esa cuenta. */
@@ -529,13 +531,19 @@ export function ComposeEmailDialog({
     const toList = parseRecipients(to);
     if (!toList.length) { toast.error("Añade al menos un destinatario"); return; }
     if (!user) { toast.error("No autenticado"); return; }
+    // El worker envía con la cuenta Microsoft principal; con una cuenta vinculada saldría
+    // desde otro remitente del que el usuario eligió.
+    if (fromOption && fromOption.kind !== "primary") {
+      toast.error("Para programar un envío usa tu cuenta principal en «De»");
+      return;
+    }
     let attachments: ComposerAttachment[] = [];
     if (pendingFiles.length > 0) {
       try { attachments = await filesToComposerAttachments(pendingFiles); }
       catch (error) { toast.error(error instanceof Error ? error.message : "Error con adjuntos"); return; }
     }
     try {
-      const { error } = await supabase.from("scheduled_mail_jobs").insert({
+      const { data: job, error } = await supabase.from("scheduled_mail_jobs").insert({
         user_id: user.id,
         scheduled_at: when.toISOString(),
         kind: "send_new",
@@ -549,7 +557,7 @@ export function ComposeEmailDialog({
           bcc_recipients: parseRecipients(bcc).map(e => ({ emailAddress: { address: e } })),
           ...(attachments.length ? { attachments } : {}),
         },
-      });
+      }).select("id").single();
       if (error) throw error;
       try {
         onSent?.({
@@ -559,6 +567,7 @@ export function ComposeEmailDialog({
           attachmentNames: pendingFiles.map((f) => f.name),
           fromEmail: fromOption?.email || null,
           scheduledAt: when.toISOString(),
+          scheduledJobId: job?.id,
         });
       } catch (err) {
         console.warn("[compose] onSent (programado) falló", err);

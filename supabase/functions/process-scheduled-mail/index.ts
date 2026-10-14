@@ -49,12 +49,7 @@ async function refreshTokenIfNeeded(supabaseAdmin: Svc, userId: string, tokenRow
   return data.access_token as string;
 }
 
-async function processSendDraftJob(
-  svc: Svc,
-  userId: string,
-  draftId: string,
-  payload: Record<string, unknown>,
-) {
+async function getAccessToken(svc: Svc, userId: string): Promise<string> {
   const { data: tokenRow, error: tokenError } = await svc
     .from("microsoft_tokens")
     .select("*")
@@ -65,7 +60,74 @@ async function processSendDraftJob(
     throw new Error("Microsoft no conectado para este usuario");
   }
 
-  const accessToken = await refreshTokenIfNeeded(svc, userId, tokenRow as Record<string, unknown>);
+  return await refreshTokenIfNeeded(svc, userId, tokenRow as Record<string, unknown>);
+}
+
+/**
+ * Correo nuevo programado desde el redactor (kind = 'send_new'): no hay borrador, así que se
+ * arma el mensaje con el payload y se envía con /me/sendMail. El payload guarda los
+ * destinatarios ya en formato Graph (to_recipients, cc_recipients, bcc_recipients).
+ */
+async function processSendNewJob(svc: Svc, userId: string, payload: Record<string, unknown>) {
+  const accessToken = await getAccessToken(svc, userId);
+
+  const toRecipients = Array.isArray(payload.to_recipients) ? payload.to_recipients : [];
+  if (toRecipients.length === 0) throw new Error("El envío programado no tiene destinatarios");
+
+  const message: Record<string, unknown> = {
+    subject: typeof payload.subject === "string" && payload.subject ? payload.subject : "(Sin asunto)",
+    body: {
+      contentType: "HTML",
+      content: typeof payload.body_html === "string" && payload.body_html ? payload.body_html : "<p></p>",
+    },
+    toRecipients,
+  };
+  if (Array.isArray(payload.cc_recipients) && payload.cc_recipients.length > 0) {
+    message.ccRecipients = payload.cc_recipients;
+  }
+  if (Array.isArray(payload.bcc_recipients) && payload.bcc_recipients.length > 0) {
+    message.bccRecipients = payload.bcc_recipients;
+  }
+  if (payload.is_delivery_receipt_requested === true) message.isDeliveryReceiptRequested = true;
+  if (payload.is_read_receipt_requested === true) message.isReadReceiptRequested = true;
+
+  const attachments = Array.isArray(payload.attachments) ? payload.attachments : [];
+  const fileAttachments = attachments.flatMap((raw) => {
+    const att = raw as Record<string, unknown>;
+    const name = typeof att.name === "string" ? att.name : "";
+    const contentBytes = typeof att.contentBytes === "string" ? att.contentBytes : "";
+    if (!name || !contentBytes) return [];
+    return [{
+      "@odata.type": "#microsoft.graph.fileAttachment",
+      name,
+      contentType: typeof att.contentType === "string" ? att.contentType : "application/octet-stream",
+      contentBytes,
+    }];
+  });
+  if (fileAttachments.length > 0) message.attachments = fileAttachments;
+
+  const res = await fetch(`${GRAPH_BASE}/me/sendMail`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+      ...GRAPH_PREFER_IMMUTABLE,
+    },
+    body: JSON.stringify({ message, saveToSentItems: true }),
+  });
+  if (!res.ok) {
+    const errBody = await res.text();
+    throw new Error(`Enviar [${res.status}]: ${errBody.slice(0, 500)}`);
+  }
+}
+
+async function processSendDraftJob(
+  svc: Svc,
+  userId: string,
+  draftId: string,
+  payload: Record<string, unknown>,
+) {
+  const accessToken = await getAccessToken(svc, userId);
 
   const patch: Record<string, unknown> = {};
   const bodyHtml = typeof payload.body_html === "string" ? payload.body_html : "";
@@ -193,6 +255,8 @@ Deno.serve(async (req) => {
 
         if (locked.kind === "send_draft") {
           await processSendDraftJob(svc, locked.user_id as string, locked.draft_id as string, payload);
+        } else if (locked.kind === "send_new") {
+          await processSendNewJob(svc, locked.user_id as string, payload);
         } else {
           throw new Error(`Tipo de trabajo no soportado: ${locked.kind}`);
         }

@@ -46,7 +46,7 @@ export function ClientEmailButton({ client, size = "sm" }: Props) {
         cc: info.cc,
         attachments: info.attachmentNames,
         from: info.fromEmail,
-        ...(info.scheduledAt ? { scheduled_at: info.scheduledAt } : {}),
+        ...(info.scheduledAt ? { scheduled_at: info.scheduledAt, job_id: info.scheduledJobId ?? null } : {}),
       },
     }).then(() => qc.invalidateQueries({ queryKey: clientEmailHistoryKey(client.id) }));
   };

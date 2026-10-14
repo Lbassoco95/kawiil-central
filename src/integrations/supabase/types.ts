@@ -4837,7 +4837,7 @@ export type Database = {
       scheduled_mail_jobs: {
         Row: {
           created_at: string
-          draft_id: string
+          draft_id: string | null
           error_message: string | null
           id: string
           kind: Database["public"]["Enums"]["scheduled_mail_job_kind"]
@@ -4849,7 +4849,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
-          draft_id: string
+          draft_id?: string | null
           error_message?: string | null
           id?: string
           kind?: Database["public"]["Enums"]["scheduled_mail_job_kind"]
@@ -4861,7 +4861,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
-          draft_id?: string
+          draft_id?: string | null
           error_message?: string | null
           id?: string
           kind?: Database["public"]["Enums"]["scheduled_mail_job_kind"]
@@ -5710,6 +5710,16 @@ export type Database = {
       }
     }
     Functions: {
+      scheduled_mail_job_status: {
+        Args: { p_job_ids: string[] }
+        Returns: {
+          error_message: string
+          id: string
+          scheduled_at: string
+          sent_at: string
+          status: string
+        }[]
+      }
       ai_project_user_can_edit: {
         Args: { _ai_project_id: string; _user_id: string }
         Returns: boolean
@@ -6002,7 +6012,7 @@ export type Database = {
       client_type: "persona_moral" | "persona_fisica"
       document_source: "supabase" | "dropbox"
       project_status: "activo" | "pausado" | "completado" | "cancelado"
-      scheduled_mail_job_kind: "send_draft"
+      scheduled_mail_job_kind: "send_draft" | "send_new"
       scheduled_mail_job_status:
         | "pending"
         | "processing"
@@ -6162,7 +6172,7 @@ export const Constants = {
       client_type: ["persona_moral", "persona_fisica"],
       document_source: ["supabase", "dropbox"],
       project_status: ["activo", "pausado", "completado", "cancelado"],
-      scheduled_mail_job_kind: ["send_draft"],
+      scheduled_mail_job_kind: ["send_draft", "send_new"],
       scheduled_mail_job_status: [
         "pending",
         "processing",
