@@ -1,4 +1,4 @@
-import { toDateStringMX } from "@/lib/dateUtils";
+import { addDaysToYmd, toDateStringMX } from "@/lib/dateUtils";
 
 export const LAWSUIT_STATUS_OPTIONS = [
   { value: "en_tramite", label: "En trámite", className: "bg-blue-500/10 text-blue-700 border-blue-500/30" },
@@ -163,4 +163,46 @@ export function lawsuitDeadlinesAsCalendarTasks(
         projects: m?.projectName ? { name: m.projectName } : null,
       };
     });
+}
+
+export type LawsuitOutlookKind = "hearing" | "deadline";
+
+export interface LawsuitOutlookSource {
+  id: string;
+  name: string;
+  project_id: string;
+  status: string;
+  case_number: string | null;
+  court: string | null;
+  next_hearing_date: string | null;
+  next_deadline_date: string | null;
+  next_deadline_note: string | null;
+}
+
+const OUTLOOK_TZ = "America/Mexico_City";
+
+/**
+ * Evento de día completo de Outlook para la audiencia o el plazo de un juicio.
+ * Devuelve null si no hay fecha o el juicio está cerrado (no debe haber evento).
+ * Sin invitados: el evento queda solo en el calendario de quien lo sincroniza.
+ */
+export function lawsuitOutlookEvent(l: LawsuitOutlookSource, kind: LawsuitOutlookKind, appOrigin: string) {
+  const date = kind === "hearing" ? l.next_hearing_date : l.next_deadline_date;
+  if (!date || CLOSED_LAWSUIT_STATUSES.includes(l.status)) return null;
+  const label = kind === "hearing" ? "Audiencia" : l.next_deadline_note?.trim() || "Plazo";
+  const lines = [
+    `Juicio: ${l.name}`,
+    l.case_number ? `Expediente: ${l.case_number}` : null,
+    l.court ? `Juzgado: ${l.court}` : null,
+    "",
+    `Abrir en Kawiil OS: ${appOrigin}/proyectos/${l.project_id}?tab=juicios&lawsuitId=${l.id}`,
+  ].filter((x): x is string => x !== null);
+  return {
+    subject: `⚖️ ${label}: ${l.name}`,
+    isAllDay: true,
+    start: { dateTime: `${date}T00:00:00`, timeZone: OUTLOOK_TZ },
+    end: { dateTime: `${addDaysToYmd(date, 1)}T00:00:00`, timeZone: OUTLOOK_TZ },
+    body: { contentType: "text", content: lines.join("\n") },
+    categories: ["Juicios"],
+  };
 }

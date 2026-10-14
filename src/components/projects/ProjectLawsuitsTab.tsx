@@ -28,6 +28,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
+import {
+  isLawsuitSyncedBy,
+  syncLawsuitToOutlook,
+  useLawsuitOutlookSync,
+} from "@/hooks/useLawsuitOutlookSync";
 import { LawsuitWorkspaceSheet } from "@/components/projects/LawsuitWorkspaceSheet";
 import {
   CLOSED_LAWSUIT_STATUSES,
@@ -133,6 +138,7 @@ export function ProjectLawsuitsTab({ projectId, organizationId, clientId, dropbo
   const [deleting, setDeleting] = useState<LawsuitRow | null>(null);
 
   const queryKey = ["project-lawsuits", projectId];
+  const outlookSync = useLawsuitOutlookSync();
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey });
     queryClient.invalidateQueries({ queryKey: ["dashboard-lawsuits"] });
@@ -182,11 +188,17 @@ export function ProjectLawsuitsTab({ projectId, organizationId, clientId, dropbo
         });
         if (error) throw error;
       }
+      return payload;
     },
-    onSuccess: () => {
+    onSuccess: (payload) => {
       invalidate();
       toast.success(editingId ? "Juicio actualizado" : "Juicio agregado");
       setDialogOpen(false);
+      // Si ya está en mi Outlook, las fechas nuevas se reflejan allá.
+      const prev = lawsuits.find((l) => l.id === editingId);
+      if (prev && isLawsuitSyncedBy(prev, user?.id)) {
+        outlookSync.mutate({ lawsuit: { ...prev, ...payload }, silent: true });
+      }
     },
     onError: (e: Error) => toast.error("No se pudo guardar el juicio: " + e.message),
   });
@@ -196,12 +208,27 @@ export function ProjectLawsuitsTab({ projectId, organizationId, clientId, dropbo
       const { error } = await supabase.from("project_lawsuits").update({ status }).eq("id", id);
       if (error) throw error;
     },
-    onSuccess: invalidate,
+    onSuccess: (_, { id, status }) => {
+      invalidate();
+      const prev = lawsuits.find((l) => l.id === id);
+      if (prev && isLawsuitSyncedBy(prev, user?.id)) {
+        outlookSync.mutate({ lawsuit: { ...prev, status }, silent: true });
+      }
+    },
     onError: (e: Error) => toast.error("No se pudo cambiar el estatus: " + e.message),
   });
 
   const remove = useMutation({
     mutationFn: async (id: string) => {
+      // Quita de mi Outlook los eventos del juicio (sin bloquear el borrado si falla).
+      const prev = lawsuits.find((l) => l.id === id);
+      if (prev && isLawsuitSyncedBy(prev, user?.id)) {
+        try {
+          await syncLawsuitToOutlook({ ...prev, status: "archivado" }, user!.id);
+        } catch {
+          toast.warning("No se pudieron quitar los eventos de Outlook; bórralos a mano si siguen ahí.");
+        }
+      }
       const { error } = await supabase.from("project_lawsuits").delete().eq("id", id);
       if (error) throw error;
     },
@@ -274,6 +301,11 @@ export function ProjectLawsuitsTab({ projectId, organizationId, clientId, dropbo
                           {l.name}
                         </button>
                         {typeLabel && <Badge variant="outline">{typeLabel}</Badge>}
+                        {(l.outlook_hearing_event_id || l.outlook_deadline_event_id) && (
+                          <Badge variant="outline" className="text-[10px]" title="Sus fechas están en Outlook">
+                            📅 Outlook
+                          </Badge>
+                        )}
                       </div>
                       <div className="text-xs text-muted-foreground space-x-2">
                         {l.case_number && <span>Exp. {l.case_number}</span>}

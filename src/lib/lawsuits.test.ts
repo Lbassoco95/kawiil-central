@@ -4,6 +4,7 @@ import {
   currentStageLabel,
   lawsuitCalendarHref,
   lawsuitDeadlinesAsCalendarTasks,
+  lawsuitOutlookEvent,
   lawsuitsForUser,
   parseLawsuitStages,
 } from "./lawsuits";
@@ -94,5 +95,42 @@ describe("calendario", () => {
     expect(lawsuitCalendarHref("lw:p1:l1:plazo")).toBe("/proyectos/p1?tab=juicios&lawsuitId=l1");
     expect(lawsuitCalendarHref("a1b2c3")).toBeNull();
     expect(lawsuitCalendarHref("lw:p1")).toBeNull();
+  });
+});
+
+describe("outlook", () => {
+  const l = {
+    id: "l1",
+    name: "37/2016",
+    project_id: "p1",
+    status: "en_tramite",
+    case_number: "37/2016",
+    court: "Juzgado Civil 25 CDMX",
+    next_hearing_date: "2026-10-31",
+    next_deadline_date: "2026-10-16",
+    next_deadline_note: "Revisar expediente",
+  };
+
+  it("arma un evento de día completo con el día siguiente como fin", () => {
+    const ev = lawsuitOutlookEvent(l, "deadline", "https://app.test");
+    expect(ev).toMatchObject({
+      subject: "⚖️ Revisar expediente: 37/2016",
+      isAllDay: true,
+      start: { dateTime: "2026-10-16T00:00:00" },
+      end: { dateTime: "2026-10-17T00:00:00" },
+    });
+    expect(ev!.body.content).toContain("https://app.test/proyectos/p1?tab=juicios&lawsuitId=l1");
+    expect(ev!.body.content).toContain("Juzgado: Juzgado Civil 25 CDMX");
+  });
+
+  it("el fin cruza de mes correctamente", () => {
+    const ev = lawsuitOutlookEvent(l, "hearing", "https://app.test");
+    expect(ev!.subject).toBe("⚖️ Audiencia: 37/2016");
+    expect(ev!.end.dateTime).toBe("2026-11-01T00:00:00");
+  });
+
+  it("sin fecha o con juicio cerrado no hay evento", () => {
+    expect(lawsuitOutlookEvent({ ...l, next_hearing_date: null }, "hearing", "x")).toBeNull();
+    expect(lawsuitOutlookEvent({ ...l, status: "concluido" }, "deadline", "x")).toBeNull();
   });
 });

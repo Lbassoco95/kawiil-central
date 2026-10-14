@@ -4330,6 +4330,9 @@ export type Database = {
           next_hearing_date: string | null
           notes: string | null
           organization_id: string
+          outlook_deadline_event_id: string | null
+          outlook_hearing_event_id: string | null
+          outlook_synced_by: string | null
           plaintiff: string | null
           project_id: string
           stages: Json
@@ -4352,6 +4355,9 @@ export type Database = {
           next_hearing_date?: string | null
           notes?: string | null
           organization_id: string
+          outlook_deadline_event_id?: string | null
+          outlook_hearing_event_id?: string | null
+          outlook_synced_by?: string | null
           plaintiff?: string | null
           project_id: string
           stages?: Json
@@ -4374,6 +4380,9 @@ export type Database = {
           next_hearing_date?: string | null
           notes?: string | null
           organization_id?: string
+          outlook_deadline_event_id?: string | null
+          outlook_hearing_event_id?: string | null
+          outlook_synced_by?: string | null
           plaintiff?: string | null
           project_id?: string
           stages?: Json
