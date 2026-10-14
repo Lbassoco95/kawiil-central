@@ -13,6 +13,8 @@ import { ClientProjectsTab } from "@/components/clients/ClientProjectsTab";
 import { ClientMeetingsTab } from "@/components/clients/ClientMeetingsTab";
 import { ClientOffboardingSection } from "@/components/clients/ClientOffboardingSection";
 import { ClientEditDialog } from "@/components/clients/ClientEditDialog";
+import { ClientEmailButton } from "@/components/clients/ClientEmailButton";
+import { ClientEmailHistorySection } from "@/components/clients/ClientEmailHistorySection";
 import { ClientHealthScoreCard } from "@/components/clients/ClientHealthScoreCard";
 import { ClientSatgoPanel } from "@/components/clients/ClientSatgoPanel";
 import { ClientTaxProfilesSection } from "@/components/clients/ClientTaxProfilesSection";
@@ -289,10 +291,13 @@ const ClienteDetalle = () => {
                 </p>
               )}
             </div>
-            <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
-              <Pencil className="mr-1.5 h-3.5 w-3.5" />
-              Editar
-            </Button>
+            <div className="flex shrink-0 items-center gap-2">
+              <ClientEmailButton client={client} />
+              <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
+                <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                Editar
+              </Button>
+            </div>
           </div>
           <TeamVisibilityBanner
             responsibleHeading="Responsable del cliente"
@@ -426,6 +431,8 @@ const ClienteDetalle = () => {
                 <p className="text-sm text-muted-foreground">Sin carpeta vinculada.</p>
               )}
             </section>
+
+            <ClientEmailHistorySection clientId={client.id} profilesByUserId={profilesByUserId} />
 
             {client.notes && (
               <section className="glass-card p-5 md:col-span-2">

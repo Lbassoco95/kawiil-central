@@ -113,6 +113,19 @@ interface ComposeEmailDialogProps {
    * `src/lib/accountingEmailStepSync.ts`.
    */
   onAfterSend?: (info: SentAccountingEmailInfo) => void;
+  /**
+   * Se dispara tras CADA envío inmediato exitoso (no los programados), con o sin
+   * plantilla contable. Sirve para registrar el correo (p. ej. historial del cliente).
+   */
+  onSent?: (info: SentEmailInfo) => void;
+}
+
+export interface SentEmailInfo {
+  to: string[];
+  cc: string[];
+  subject: string;
+  attachmentNames: string[];
+  fromEmail: string | null;
 }
 
 /** Firma limpia (nombre + correo) para cuentas vinculadas, cuando no hay firma guardada de esa cuenta. */
@@ -141,6 +154,7 @@ export function ComposeEmailDialog({
   defaultTemplateContext,
   showAccountingTemplates = true,
   onAfterSend,
+  onSent,
 }: ComposeEmailDialogProps) {
   const [to, setTo] = useState("");
   const [cc, setCc] = useState("");
@@ -373,6 +387,17 @@ export function ComposeEmailDialog({
    */
   const emitAfterSend = useCallback(
     (recipients: string[], attachmentNames: string[]) => {
+      try {
+        onSent?.({
+          to: recipients,
+          cc: parseRecipients(cc),
+          subject: subject || "(Sin asunto)",
+          attachmentNames,
+          fromEmail: fromOption?.email || null,
+        });
+      } catch (err) {
+        console.warn("[compose] onSent falló", err);
+      }
       const info = appliedTemplateInfo;
       if (!info?.templateCategory || !onAfterSend) return;
       onAfterSend({
@@ -388,7 +413,7 @@ export function ComposeEmailDialog({
       });
       setAppliedTemplateInfo(null);
     },
-    [appliedTemplateInfo, onAfterSend, defaultTemplateContext, subject],
+    [appliedTemplateInfo, onAfterSend, onSent, defaultTemplateContext, subject, cc, fromOption],
   );
 
   const handleSend = async () => {
