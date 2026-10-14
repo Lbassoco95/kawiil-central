@@ -1,6 +1,39 @@
 import { CalendarClock, Mail, Paperclip } from "lucide-react";
-import { useClientEmailHistory } from "@/hooks/useClientEmailHistory";
+import {
+  useClientEmailHistory,
+  type ClientEmailHistoryItem,
+  type ScheduledEmailStatus,
+} from "@/hooks/useClientEmailHistory";
 import { formatDateMX } from "@/lib/dateUtils";
+
+const fmtDateTime = (iso: string) =>
+  new Date(iso).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" });
+
+const STATUS_STYLE: Record<ScheduledEmailStatus, { label: string; className: string }> = {
+  pending: { label: "Programado", className: "text-amber-700 dark:text-amber-300" },
+  processing: { label: "Enviando", className: "text-amber-700 dark:text-amber-300" },
+  sent: { label: "Enviado", className: "text-emerald-700 dark:text-emerald-300" },
+  failed: { label: "Falló", className: "text-destructive" },
+  cancelled: { label: "Cancelado", className: "text-muted-foreground" },
+  unknown: { label: "Programado", className: "text-amber-700 dark:text-amber-300" },
+};
+
+function ScheduledBadge({ item }: { item: ClientEmailHistoryItem }) {
+  const status = item.scheduledStatus ?? "unknown";
+  const { label, className } = STATUS_STYLE[status];
+  const when =
+    status === "sent" && item.sentAt ? item.sentAt : (item.scheduledAt as string);
+  const title =
+    status === "failed" && item.errorMessage
+      ? `No se pudo enviar: ${item.errorMessage}`
+      : `Registrado el ${formatDateMX(item.created_at)}`;
+  return (
+    <span className={`inline-flex items-center gap-1 ${className}`} title={title}>
+      <CalendarClock className="h-3 w-3" />
+      {label} · {fmtDateTime(when)}
+    </span>
+  );
+}
 
 interface Props {
   clientId: string;
@@ -29,17 +62,7 @@ export function ClientEmailHistorySection({ clientId, profilesByUserId }: Props)
               <div className="flex items-start justify-between gap-3">
                 <p className="text-[13px] font-medium text-foreground truncate">{it.subject}</p>
                 <span className="shrink-0 text-[11px] text-muted-foreground">
-                  {it.scheduledAt ? (
-                    <span
-                      className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-300"
-                      title={`Registrado el ${formatDateMX(it.created_at)}`}
-                    >
-                      <CalendarClock className="h-3 w-3" />
-                      Programado · {new Date(it.scheduledAt).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}
-                    </span>
-                  ) : (
-                    formatDateMX(it.created_at)
-                  )}
+                  {it.scheduledAt ? <ScheduledBadge item={it} /> : formatDateMX(it.created_at)}
                 </span>
               </div>
               <p className="text-[12px] text-muted-foreground truncate">
@@ -48,7 +71,7 @@ export function ClientEmailHistorySection({ clientId, profilesByUserId }: Props)
               </p>
               <p className="text-[11px] text-muted-foreground/80 flex items-center gap-1.5">
                 <span>
-                  Enviado por {(it.user_id && profilesByUserId.get(it.user_id)?.full_name) || "—"}
+                  {it.scheduledAt ? "Programado por" : "Enviado por"} {(it.user_id && profilesByUserId.get(it.user_id)?.full_name) || "—"}
                   {it.from && ` desde ${it.from}`}
                 </span>
                 {it.attachments.length > 0 && (
