@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { collectLawsuitDeadlines, currentStageLabel, lawsuitsForUser, parseLawsuitStages } from "./lawsuits";
+import {
+  collectLawsuitDeadlines,
+  currentStageLabel,
+  lawsuitCalendarHref,
+  lawsuitDeadlinesAsCalendarTasks,
+  lawsuitsForUser,
+  parseLawsuitStages,
+} from "./lawsuits";
 
 const base = {
   project_id: "p1",
@@ -60,5 +67,32 @@ describe("lawsuitsForUser", () => {
 
   it("no incluye proyectos ajenos", () => {
     expect(lawsuitsForUser(rows, "u9", [])).toEqual([]);
+  });
+});
+
+describe("calendario", () => {
+  const deadlines = collectLawsuitDeadlines(
+    [
+      { ...base, id: "l1", name: "37/2016", status: "en_tramite", next_deadline_date: "2026-10-16", next_deadline_note: "Revisar expediente" },
+      { ...base, id: "l2", name: "2301/2014", status: "en_tramite", next_hearing_date: "2026-11-20" },
+    ],
+    "2026-10-13",
+  );
+
+  it("filtra por rango y construye filas tipo tarea", () => {
+    const rows = lawsuitDeadlinesAsCalendarTasks(deadlines, "2026-10-01", "2026-10-31");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      id: "lw:p1:l1:plazo",
+      title: "⚖️ Revisar expediente: 37/2016",
+      due_date: "2026-10-16",
+      project_id: "p1",
+    });
+  });
+
+  it("el id sintético lleva al juicio y los demás ids no", () => {
+    expect(lawsuitCalendarHref("lw:p1:l1:plazo")).toBe("/proyectos/p1?tab=juicios&lawsuitId=l1");
+    expect(lawsuitCalendarHref("a1b2c3")).toBeNull();
+    expect(lawsuitCalendarHref("lw:p1")).toBeNull();
   });
 });

@@ -6,6 +6,7 @@ import { CalendarView } from "@/components/microsoft/CalendarView";
 import { MicrosoftConnectCard } from "@/components/microsoft/MicrosoftConnectCard";
 import { useMicrosoftConnection, useCalendarEvents } from "@/hooks/useMicrosoft";
 import { useTasksForCalendar } from "@/hooks/useTasks";
+import { useLawsuitDeadlinesForCalendar } from "@/hooks/useLawsuitDeadlinesForCalendar";
 import { toast } from "sonner";
 import {
   addDaysToYmd,
@@ -58,6 +59,7 @@ const Microsoft365Calendario = () => {
   const { data: todayEventsData } = useCalendarEvents(dayRange.start, dayRange.endExclusive);
   const { data: weekEventsData } = useCalendarEvents(weekRange.start, weekRange.endExclusive);
   const { data: weekTasks } = useTasksForCalendar(monYmd, sunYmd);
+  const weekLawsuitDeadlines = useLawsuitDeadlinesForCalendar(monYmd, sunYmd);
 
   const todayEvents = Array.isArray(todayEventsData) ? todayEventsData : [];
   const weekEvents = Array.isArray(weekEventsData) ? weekEventsData : [];
@@ -99,7 +101,7 @@ const Microsoft365Calendario = () => {
 
   const aiTasksDue = useMemo(() => {
     if (!Array.isArray(weekTasks)) return [];
-    return weekTasks
+    return [...weekTasks, ...weekLawsuitDeadlines]
       .map((t: any) => {
         const due: string | undefined = t?.due_date || t?.due_at || t?.dueDate;
         if (!due) return null;
@@ -111,7 +113,7 @@ const Microsoft365Calendario = () => {
         };
       })
       .filter(Boolean) as Array<{ title: string; due: string; status?: string; priority: string | null }>;
-  }, [weekTasks]);
+  }, [weekTasks, weekLawsuitDeadlines]);
 
   const aiPeriodLabel = useMemo(() => {
     const start = formatMX(new Date(monYmd + "T00:00:00"), "EEE d MMM");

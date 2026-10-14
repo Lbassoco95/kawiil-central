@@ -17,6 +17,8 @@ import {
   useOutlookCategories, useCreateOutlookCategory, useDeleteOutlookCategory,
 } from "@/hooks/useMicrosoft";
 import { useTasksForCalendar } from "@/hooks/useTasks";
+import { useLawsuitDeadlinesForCalendar } from "@/hooks/useLawsuitDeadlinesForCalendar";
+import { lawsuitCalendarHref } from "@/lib/lawsuits";
 import { CDMX_TZ, formatMX } from "@/lib/dateUtils";
 import {
   format,
@@ -275,6 +277,9 @@ const PRIORITY_COLORS: Record<string, string> = {
 };
 
 function taskDetailHref(taskId: string) {
+  // Los plazos/audiencias de juicios entran con id sintético y abren el juicio.
+  const lawsuitHref = lawsuitCalendarHref(taskId);
+  if (lawsuitHref) return lawsuitHref;
   return `/tareas?taskId=${encodeURIComponent(taskId)}`;
 }
 
@@ -833,7 +838,14 @@ export function CalendarView({
   const createEvent = useCreateCalendarEvent();
   const deleteEvent = useDeleteCalendarEvent();
 
-  const { data: kawiilTasks = [] } = useTasksForCalendar(rangeStart, rangeEnd);
+  const { data: dueTasks = [] } = useTasksForCalendar(rangeStart, rangeEnd);
+  const lawsuitDeadlineTasks = useLawsuitDeadlinesForCalendar(rangeStart, rangeEnd);
+  // Tareas con vencimiento + plazos/audiencias de juicios, ordenados por fecha.
+  const kawiilTasks = useMemo(
+    () =>
+      [...dueTasks, ...lawsuitDeadlineTasks].sort((a, b) => String(a.due_date).localeCompare(String(b.due_date))),
+    [dueTasks, lawsuitDeadlineTasks],
+  );
 
   // #3 — Ubicación/estatus de trabajo por día del usuario actual.
   const { user: authUser } = useAuth();
