@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ListChecks, NotebookPen, Plus, Trash2, Pencil, CheckSquare } from "lucide-react";
+import { CalendarPlus, ListChecks, NotebookPen, Plus, Trash2, Pencil, CheckSquare } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -23,6 +23,8 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { isLawsuitSyncedBy, useLawsuitOutlookSync } from "@/hooks/useLawsuitOutlookSync";
+import { useMicrosoftConnection } from "@/hooks/useMicrosoft";
 import { LawsuitCommentsPanel } from "@/components/projects/LawsuitCommentsPanel";
 import { TaskFormDialog } from "@/components/tasks/TaskFormDialog";
 import type { Database } from "@/integrations/supabase/types";
@@ -42,6 +44,13 @@ interface Props {
 
 export function LawsuitWorkspaceSheet({ lawsuit, clientId, dropboxPath, lockDropboxToPath, onClose, onEdit }: Props) {
   const lawsuitId = lawsuit?.id;
+  const { user } = useAuth();
+  const { isConnected } = useMicrosoftConnection();
+  const outlookSync = useLawsuitOutlookSync();
+  const hasDates = !!(lawsuit?.next_hearing_date || lawsuit?.next_deadline_date);
+  const hasEvents = !!(lawsuit?.outlook_hearing_event_id || lawsuit?.outlook_deadline_event_id);
+  const mine = !!lawsuit && isLawsuitSyncedBy(lawsuit, user?.id);
+  const syncedByOther = hasEvents && !mine;
   const status = LAWSUIT_STATUS_OPTIONS.find((s) => s.value === lawsuit?.status);
   const typeLabel = LAWSUIT_TYPE_OPTIONS.find((t) => t.value === lawsuit?.lawsuit_type)?.label;
 
@@ -58,9 +67,30 @@ export function LawsuitWorkspaceSheet({ lawsuit, clientId, dropboxPath, lockDrop
                   {typeLabel && <Badge variant="outline">{typeLabel}</Badge>}
                   {lawsuit.case_number && <span>Exp. {lawsuit.case_number}</span>}
                   {lawsuit.court && <span>· {lawsuit.court}</span>}
-                  <Button variant="ghost" size="sm" className="h-6 px-2 ml-auto" onClick={() => onEdit(lawsuit)}>
-                    <Pencil className="h-3 w-3 mr-1" /> Editar datos
-                  </Button>
+                  <div className="ml-auto flex items-center gap-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-6 px-2"
+                      disabled={outlookSync.isPending || syncedByOther || (!hasDates && !hasEvents) || !isConnected}
+                      title={
+                        !isConnected
+                          ? "Conecta Microsoft 365 en Calendario para usar Outlook"
+                          : syncedByOther
+                            ? "Ya está en el Outlook de otra persona"
+                            : !hasDates && !hasEvents
+                              ? "Agrega una audiencia o un plazo para enviarlo a Outlook"
+                              : "Crea o actualiza las fechas de este juicio en tu Outlook (día completo, sin invitados)"
+                      }
+                      onClick={() => outlookSync.mutate({ lawsuit })}
+                    >
+                      <CalendarPlus className="h-3 w-3 mr-1" />
+                      {outlookSync.isPending ? "Sincronizando…" : mine ? "Actualizar en Outlook" : "Agregar a Outlook"}
+                    </Button>
+                    <Button variant="ghost" size="sm" className="h-6 px-2" onClick={() => onEdit(lawsuit)}>
+                      <Pencil className="h-3 w-3 mr-1" /> Editar datos
+                    </Button>
+                  </div>
                 </div>
               </SheetDescription>
             </SheetHeader>
