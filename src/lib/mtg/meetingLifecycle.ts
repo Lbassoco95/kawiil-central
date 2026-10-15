@@ -160,3 +160,142 @@ export async function cancelMeeting(opts: {
 export function unreviewedCount(updates: { reviewed: boolean }[]): number {
   return updates.filter((u) => !u.reviewed).length;
 }
+
+const ARCHIVABLE_STATUSES: MtgMeetingStatus[] = [
+  "ended",
+  "minutes_draft",
+  "minutes_review",
+  "minutes_approved",
+  "closed",
+];
+
+export function canArchive(meeting: Pick<MtgMeetingRow, "status" | "archived_at">): boolean {
+  return !meeting.archived_at && ARCHIVABLE_STATUSES.includes(meeting.status);
+}
+
+/** Archiva una junta ya terminada: se oculta de la vista general, conserva todo. */
+export async function archiveMeeting(opts: {
+  organizationId: string;
+  actorUserId: string;
+  meeting: MtgMeetingRow;
+}): Promise<MtgMeetingRow> {
+  if (!canArchive(opts.meeting)) {
+    throw new Error("Solo se pueden archivar juntas que ya terminaron.");
+  }
+  const { data, error } = await mtgDb
+    .from("mtg_meetings")
+    .update({ archived_at: new Date().toISOString() })
+    .eq("id", opts.meeting.id)
+    .select("*")
+    .single();
+  if (error) throw error;
+  await logMtgAudit({
+    organizationId: opts.organizationId,
+    actorUserId: opts.actorUserId,
+    entityType: "meeting",
+    entityId: opts.meeting.id,
+    action: MTG_AUDIT_ACTION.MEETING_ARCHIVED,
+  });
+  return data as MtgMeetingRow;
+}
+
+export async function unarchiveMeeting(opts: {
+  organizationId: string;
+  actorUserId: string;
+  meeting: MtgMeetingRow;
+}): Promise<MtgMeetingRow> {
+  const { data, error } = await mtgDb
+    .from("mtg_meetings")
+    .update({ archived_at: null })
+    .eq("id", opts.meeting.id)
+    .select("*")
+    .single();
+  if (error) throw error;
+  await logMtgAudit({
+    organizationId: opts.organizationId,
+    actorUserId: opts.actorUserId,
+    entityType: "meeting",
+    entityId: opts.meeting.id,
+    action: MTG_AUDIT_ACTION.MEETING_UNARCHIVED,
+  });
+  return data as MtgMeetingRow;
+}
+
+/** Qué tiene guardado una junta (para decidir si se puede eliminar sin perder nada). */
+export type MeetingContentSummary = {
+  isEmpty: boolean;
+  reasons: string[];
+};
+
+export async function getMeetingContentSummary(
+  meeting: Pick<MtgMeetingRow, "id" | "recording_path" | "transcript_path" | "minutes_id">,
+): Promise<MeetingContentSummary> {
+  const reasons: string[] = [];
+  if (meeting.recording_path) reasons.push("grabación");
+  if (meeting.transcript_path) reasons.push("transcripción");
+  if (meeting.minutes_id) reasons.push("minuta");
+
+  const count = async (table: string, extra?: (q: any) => any) => {
+    let q = mtgDb.from(table).select("id", { count: "exact", head: true }).eq("meeting_id", meeting.id);
+    if (extra) q = extra(q);
+    const { count: n, error } = await q;
+    if (error) throw error;
+    return n ?? 0;
+  };
+
+  const [recordings, minutes, agreements, decisions, editedUpdates] = await Promise.all([
+    count("mtg_meeting_recordings"),
+    count("mtg_minutes"),
+    count("mtg_agreements"),
+    count("mtg_decisions"),
+    // 'prepared' = relleno automático del tablero; lo demás lo escribió una persona o el modelo.
+    count("mtg_topic_updates", (q) => q.neq("origin", "prepared")),
+  ]);
+  if (recordings) reasons.push("grabaciones");
+  if (minutes && !reasons.includes("minuta")) reasons.push("minuta");
+  if (agreements) reasons.push("acuerdos");
+  if (decisions) reasons.push("decisiones");
+  if (editedUpdates) reasons.push("notas en temas");
+
+  return { isEmpty: reasons.length === 0, reasons };
+}
+
+/**
+ * Elimina una junta SOLO si no tiene nada guardado. Con contenido, hay que
+ * cancelarla (se conserva el historial). El borrado exige admin/manager (RLS).
+ */
+export async function deleteEmptyMeeting(opts: {
+  organizationId: string;
+  actorUserId: string;
+  meeting: MtgMeetingRow;
+}): Promise<void> {
+  const summary = await getMeetingContentSummary(opts.meeting);
+  if (!summary.isEmpty) {
+    throw new Error(
+      `Esta junta tiene ${summary.reasons.join(", ")}; no se puede eliminar. Cancélala para conservar el historial.`,
+    );
+  }
+  const { data, error } = await mtgDb
+    .from("mtg_meetings")
+    .delete()
+    .eq("id", opts.meeting.id)
+    .select("id");
+  if (error) throw error;
+  if (!data || data.length === 0) {
+    throw new Error("No se eliminó: solo admin/manager pueden borrar juntas.");
+  }
+
+  await cancelRemindersForMeeting(opts.meeting.id);
+  await logMtgAudit({
+    organizationId: opts.organizationId,
+    actorUserId: opts.actorUserId,
+    entityType: "meeting",
+    entityId: opts.meeting.id,
+    action: MTG_AUDIT_ACTION.MEETING_DELETED,
+    snapshot: {
+      title: opts.meeting.title,
+      scheduled_at: opts.meeting.scheduled_at,
+      status: opts.meeting.status,
+    },
+  });
+}

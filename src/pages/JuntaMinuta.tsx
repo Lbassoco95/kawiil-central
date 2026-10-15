@@ -45,6 +45,7 @@ import { completeConfirmedAgreement } from "@/lib/mtg/captureAgreement";
 import { MtgAgreementsIntake } from "@/components/mtg/MtgAgreementsIntake";
 import { MtgMinutesView } from "@/components/mtg/MtgMinutesView";
 import { MtgPeoplePanel } from "@/components/mtg/MtgPeoplePanel";
+import { MtgDownloadTranscriptButton } from "@/components/mtg/MtgDownloadTranscriptButton";
 import { MtgUploadTranscriptButton } from "@/components/mtg/MtgUploadTranscriptButton";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -237,6 +238,7 @@ export default function JuntaMinuta() {
             </Link>
           </Button>
           <div className="flex flex-wrap gap-2">
+            <MtgDownloadTranscriptButton meeting={meeting} title={series?.title ?? meeting.title} />
             {user && (
               <MtgUploadTranscriptButton
                 organizationId={orgId}

@@ -53,6 +53,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { MtgUploadTranscriptButton } from "@/components/mtg/MtgUploadTranscriptButton";
+import { MtgDownloadTranscriptButton } from "@/components/mtg/MtgDownloadTranscriptButton";
+import { MtgMeetingActionsMenu } from "@/components/mtg/MtgMeetingActionsMenu";
 import { MtgRecordingControls } from "@/components/mtg/MtgRecordingControls";
 import { MtgSummaryCard } from "@/components/mtg/MtgSummaryCard";
 import { MtgTeamDialog } from "@/components/mtg/MtgTeamDialog";
@@ -597,6 +599,15 @@ export default function JuntaDetalle() {
                   onDone={() => board.invalidate()}
                 />
               )}
+              <MtgDownloadTranscriptButton
+                meeting={meeting}
+                title={series?.title ?? meeting.title}
+              />
+              <MtgMeetingActionsMenu
+                meeting={meeting}
+                onChanged={() => board.invalidate()}
+                onDeleted={() => navigate("/juntas", { replace: true })}
+              />
               {(meeting.status === "ended" ||
                 meeting.status === "minutes_draft" ||
                 meeting.status === "minutes_review" ||

@@ -27,3 +27,4 @@ Convención:
 | 2026-09-18 | `2026-09-18_mtg_unmatched_transcripts.rollback.sql` | Rollback unmatched transcripts. |
 | 2026-09-18 | `2026-09-18_mtg_documents_group_and_slack.rollback.sql` | Rollback `documents.client_group_id` + `mtg_series.slack_channel_id`. |
 | 2026-09-18 | *(pendiente apply prod)* | `20260918140000`, `20260918140100`, `20260918140200` **aún no** en `schema_migrations` de prod. Harness local (`verify.sh` B345) debe pasar en Mac de Polo antes de `supabase db push`. Rama: `feat/mtg-juntas-b2`. |
+| 2026-10-15 | `2026-10-15_mtg_meetings_archived_at.rollback.sql` | **Rollback** de `supabase/migrations/20261015120000_mtg_meetings_archived_at.sql`: quita `mtg_meetings.archived_at` (las juntas archivadas vuelven a verse; no se pierde contenido). *(pendiente apply prod)* |

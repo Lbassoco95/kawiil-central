@@ -98,6 +98,8 @@ export type MtgMeetingRow = {
   recall_bot_status: string | null;
   recall_participants: { id?: number | string; name?: string; is_host?: boolean; email?: string | null }[] | null;
   recording_saved_at: string | null;
+  /** Junta archivada (oculta de la vista general); null = visible. */
+  archived_at: string | null;
   transcript_unavailable_reason: string | null;
   minutes_id: string | null;
   created_by: string | null;
