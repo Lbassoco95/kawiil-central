@@ -18,6 +18,7 @@ import { FileDropzone } from "@/components/shared/FileDropzone";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AttachmentPreviewDialog, type PreviewableAttachment } from "@/components/shared/AttachmentPreviewDialog";
 import { documentBucket } from "@/lib/documentBucket";
+import { inferMimeFromFileName } from "@/lib/outlookEmailMedia";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import {
@@ -189,7 +190,7 @@ export function LawsuitDocumentsPanel({ lawsuit, clientId }: Props) {
     try {
       const { data, error } = await supabase.storage.from(documentBucket(d)).download(d.file_path);
       if (error) throw error;
-      setPreview({ name: d.name, contentType: d.mime_type, blob: data });
+      setPreview({ name: d.name, contentType: inferMimeFromFileName(d.name) || d.mime_type, blob: data });
     } catch (e) {
       toast.error("No se pudo abrir el archivo: " + (e instanceof Error ? e.message : ""));
     } finally {
