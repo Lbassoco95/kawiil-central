@@ -4320,6 +4320,7 @@ export type Database = {
         Row: {
           authorized_persons: string[]
           case_number: string | null
+          client_visible: boolean
           court: string | null
           created_at: string
           created_by: string | null
@@ -4345,6 +4346,7 @@ export type Database = {
         Insert: {
           authorized_persons?: string[]
           case_number?: string | null
+          client_visible?: boolean
           court?: string | null
           created_at?: string
           created_by?: string | null
@@ -4370,6 +4372,7 @@ export type Database = {
         Update: {
           authorized_persons?: string[]
           case_number?: string | null
+          client_visible?: boolean
           court?: string | null
           created_at?: string
           created_by?: string | null

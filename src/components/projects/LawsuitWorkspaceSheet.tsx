@@ -32,7 +32,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LawsuitCommentsPanel } from "@/components/projects/LawsuitCommentsPanel";
 import { LawsuitDocumentsPanel } from "@/components/projects/LawsuitDocumentsPanel";
-import { LawsuitClientPortalPanel } from "@/components/projects/LawsuitClientPortalPanel";
+import { LawsuitClientVisibilityPanel } from "@/components/projects/LawsuitClientVisibilityPanel";
 import { TaskFormDialog } from "@/components/tasks/TaskFormDialog";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -113,7 +113,7 @@ export function LawsuitWorkspaceSheet({ lawsuit, clientId, dropboxPath, lockDrop
                 </div>
               </TabsContent>
               <TabsContent value="cliente" className="mt-4">
-                <LawsuitClientPortalPanel lawsuit={lawsuit} />
+                <LawsuitClientVisibilityPanel lawsuit={lawsuit} />
               </TabsContent>
             </Tabs>
           </>

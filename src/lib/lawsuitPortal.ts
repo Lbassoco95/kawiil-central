@@ -1,15 +1,15 @@
 import { supabase } from "@/integrations/supabase/client";
 
 /**
- * La tabla `lawsuit_client_links` aún no está en los tipos generados de Supabase;
+ * La tabla `project_client_links` aún no está en los tipos generados de Supabase;
  * al regenerar `types.ts` este alias puede reemplazarse por `supabase` a secas.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const portalDb = supabase as any;
 
-export interface LawsuitClientLink {
+export interface ProjectClientLink {
   id: string;
-  lawsuit_id: string;
+  project_id: string;
   active: boolean;
   last_viewed_at: string | null;
   locked_until: string | null;

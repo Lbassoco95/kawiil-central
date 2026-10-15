@@ -3,11 +3,11 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 /**
  * client-portal
  * -------------
- * Consulta pública (solo lectura) del avance de un juicio/trámite para el cliente.
+ * Consulta pública (solo lectura) del expediente de un cliente: UN enlace por proyecto.
  *
  * Body: { token: string, code: string }
- * Respuesta: { lawsuit, client_name, stages, entries, documents } con lo que el equipo
- * marcó como visible: actuaciones con `client_visible` y documentos con
+ * Respuesta: { client_name, project_name, lawsuits: [...] }. Solo los juicios/trámites con
+ * `client_visible = true`; de cada uno: etapas, actuaciones con `client_visible` y documentos con
  * `metadata.client_shared = true` (URLs firmadas de 10 minutos).
  *
  * Seguridad: `verify_jwt = false` (el cliente no tiene cuenta). El acceso exige el token
@@ -58,8 +58,8 @@ serve(async (req) => {
     const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
     const { data: link } = await sb
-      .from("lawsuit_client_links")
-      .select("id, lawsuit_id, code_hash, active, failed_attempts, locked_until")
+      .from("project_client_links")
+      .select("id, project_id, code_hash, active, failed_attempts, locked_until")
       .eq("token_hash", await sha256Hex(token))
       .maybeSingle();
     if (!link || !link.active) return json({ error: "Enlace no válido o desactivado" }, 404);
@@ -73,7 +73,7 @@ serve(async (req) => {
       const attempts = (link.failed_attempts ?? 0) + 1;
       const lock = attempts >= MAX_ATTEMPTS;
       await sb
-        .from("lawsuit_client_links")
+        .from("project_client_links")
         .update({
           failed_attempts: lock ? 0 : attempts,
           locked_until: lock ? new Date(Date.now() + LOCK_MINUTES * 60_000).toISOString() : null,
@@ -83,76 +83,72 @@ serve(async (req) => {
     }
 
     await sb
-      .from("lawsuit_client_links")
+      .from("project_client_links")
       .update({ failed_attempts: 0, locked_until: null, last_viewed_at: new Date().toISOString() })
       .eq("id", link.id);
 
-    const { data: lawsuit } = await sb
-      .from("project_lawsuits")
-      .select(
-        "id, project_id, name, lawsuit_type, case_number, court, status, current_stage, stages, filed_date, next_hearing_date, next_deadline_date, next_deadline_note",
-      )
-      .eq("id", link.lawsuit_id)
-      .maybeSingle();
-    if (!lawsuit) return json({ error: "Enlace no válido" }, 404);
-
     const { data: project } = await sb
       .from("projects")
-      .select("client_id, clients(name)")
-      .eq("id", lawsuit.project_id)
+      .select("name, clients(name)")
+      .eq("id", link.project_id)
       .maybeSingle();
+    if (!project) return json({ error: "Enlace no válido" }, 404);
     // deno-lint-ignore no-explicit-any
-    const clientName = ((project as any)?.clients?.name as string | undefined) ?? null;
+    const clientName = ((project as any).clients?.name as string | undefined) ?? null;
 
-    const stages = (Array.isArray(lawsuit.stages) ? lawsuit.stages : [])
-      // deno-lint-ignore no-explicit-any
-      .filter((s: any) => s && typeof s.label === "string")
-      // deno-lint-ignore no-explicit-any
-      .map((s: any) => ({
-        label: s.label as string,
-        completed: s.completed === true,
-        completed_at: typeof s.completed_at === "string" ? s.completed_at : null,
-      }));
-
-    const { data: entries } = await sb
-      .from("project_lawsuit_entries")
-      .select("entry_date, content")
-      .eq("lawsuit_id", lawsuit.id)
+    const { data: lawsuitRows } = await sb
+      .from("project_lawsuits")
+      .select(
+        "id, name, lawsuit_type, case_number, court, status, current_stage, stages, filed_date, next_hearing_date, next_deadline_date, next_deadline_note",
+      )
+      .eq("project_id", link.project_id)
       .eq("client_visible", true)
-      .order("entry_date", { ascending: false })
-      .order("created_at", { ascending: false })
-      .limit(100);
+      .order("created_at", { ascending: true });
 
-    const { data: docRows } = await sb
-      .from("documents")
-      .select("id, name, file_path, file_size, mime_type, created_at, source, metadata")
-      .eq("project_id", lawsuit.project_id)
-      .eq("metadata->>lawsuit_id", lawsuit.id)
-      .eq("metadata->>client_shared", "true")
-      .eq("source", "supabase")
-      .order("created_at", { ascending: false })
-      .limit(100);
+    const lawsuits = [];
+    for (const lawsuit of lawsuitRows ?? []) {
+      const stages = (Array.isArray(lawsuit.stages) ? lawsuit.stages : [])
+        // deno-lint-ignore no-explicit-any
+        .filter((s: any) => s && typeof s.label === "string")
+        // deno-lint-ignore no-explicit-any
+        .map((s: any) => ({
+          label: s.label as string,
+          completed: s.completed === true,
+          completed_at: typeof s.completed_at === "string" ? s.completed_at : null,
+        }));
 
-    const documents = [];
-    for (const d of docRows ?? []) {
-      if (!d.file_path) continue;
-      const bucket = (d.metadata as { bucket?: unknown } | null)?.bucket;
-      const { data: signed } = await sb.storage
-        .from(typeof bucket === "string" && bucket ? bucket : "documents")
-        .createSignedUrl(d.file_path, SIGNED_URL_SECONDS, { download: d.name });
-      if (!signed?.signedUrl) continue;
-      documents.push({
-        id: d.id,
-        name: d.name,
-        size: d.file_size,
-        created_at: d.created_at,
-        url: signed.signedUrl,
-      });
-    }
+      const { data: entries } = await sb
+        .from("project_lawsuit_entries")
+        .select("entry_date, content")
+        .eq("lawsuit_id", lawsuit.id)
+        .eq("client_visible", true)
+        .order("entry_date", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(100);
 
-    return json({
-      client_name: clientName,
-      lawsuit: {
+      const { data: docRows } = await sb
+        .from("documents")
+        .select("id, name, file_path, file_size, created_at, metadata")
+        .eq("project_id", link.project_id)
+        .eq("metadata->>lawsuit_id", lawsuit.id)
+        .eq("metadata->>client_shared", "true")
+        .eq("source", "supabase")
+        .order("created_at", { ascending: false })
+        .limit(100);
+
+      const documents = [];
+      for (const d of docRows ?? []) {
+        if (!d.file_path) continue;
+        const bucket = (d.metadata as { bucket?: unknown } | null)?.bucket;
+        const { data: signed } = await sb.storage
+          .from(typeof bucket === "string" && bucket ? bucket : "documents")
+          .createSignedUrl(d.file_path, SIGNED_URL_SECONDS, { download: d.name });
+        if (!signed?.signedUrl) continue;
+        documents.push({ id: d.id, name: d.name, size: d.file_size, created_at: d.created_at, url: signed.signedUrl });
+      }
+
+      lawsuits.push({
+        id: lawsuit.id,
         name: lawsuit.name,
         lawsuit_type: lawsuit.lawsuit_type,
         case_number: lawsuit.case_number,
@@ -163,11 +159,13 @@ serve(async (req) => {
         next_hearing_date: lawsuit.next_hearing_date,
         next_deadline_date: lawsuit.next_deadline_date,
         next_deadline_note: lawsuit.next_deadline_note,
-      },
-      stages,
-      entries: entries ?? [],
-      documents,
-    });
+        stages,
+        entries: entries ?? [],
+        documents,
+      });
+    }
+
+    return json({ client_name: clientName, project_name: project.name, lawsuits });
   } catch (e) {
     console.error("client-portal error", e);
     return json({ error: "No se pudo cargar la información" }, 500);

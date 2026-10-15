@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Scale, Plus, Pencil, Trash2, Calendar, AlertTriangle, Gavel, FolderOpen } from "lucide-react";
+import { Scale, Plus, Pencil, Trash2, Calendar, AlertTriangle, Gavel, FolderOpen, Share2 } from "lucide-react";
 import { isPast, isToday } from "date-fns";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { LawsuitWorkspaceSheet } from "@/components/projects/LawsuitWorkspaceSheet";
+import { ProjectClientPortalPanel } from "@/components/projects/ProjectClientPortalPanel";
 import {
   CLOSED_LAWSUIT_STATUSES,
   statusMeta,
@@ -147,6 +148,7 @@ export function ProjectLawsuitsTab({ projectId, organizationId, clientId, dropbo
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [deleting, setDeleting] = useState<LawsuitRow | null>(null);
+  const [portalOpen, setPortalOpen] = useState(false);
 
   const queryKey = ["project-lawsuits", projectId];
   const invalidate = () => {
@@ -264,9 +266,14 @@ export function ProjectLawsuitsTab({ projectId, organizationId, clientId, dropbo
               : `${activeCount} activo${activeCount === 1 ? "" : "s"} · ${lawsuits.length} en total`}
           </p>
         </div>
-        <Button size="sm" onClick={openNew}>
-          <Plus className="h-4 w-4 mr-1" /> Nuevo juicio o trámite
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => setPortalOpen(true)}>
+            <Share2 className="h-4 w-4 mr-1" /> Acceso del cliente
+          </Button>
+          <Button size="sm" onClick={openNew}>
+            <Plus className="h-4 w-4 mr-1" /> Nuevo juicio o trámite
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -294,6 +301,11 @@ export function ProjectLawsuitsTab({ projectId, organizationId, clientId, dropbo
                           {l.name}
                         </button>
                         {typeLabel && <Badge variant="outline">{typeLabel}</Badge>}
+                        {l.client_visible && (
+                          <Badge variant="outline" className="bg-blue-500/10 text-blue-700 border-blue-500/30">
+                            Visible para el cliente
+                          </Badge>
+                        )}
                       </div>
                       <div className="text-xs text-muted-foreground space-x-2">
                         {l.case_number && <span>Exp. {l.case_number}</span>}
@@ -511,6 +523,18 @@ export function ProjectLawsuitsTab({ projectId, organizationId, clientId, dropbo
               {save.isPending ? "Guardando…" : "Guardar"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={portalOpen} onOpenChange={setPortalOpen}>
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Acceso del cliente al proyecto</DialogTitle>
+          </DialogHeader>
+          <ProjectClientPortalPanel projectId={projectId} organizationId={organizationId} />
+          <p className="text-xs text-muted-foreground">
+            Para publicar un juicio o trámite, ábrelo y activa «Visible para el cliente» en su pestaña Cliente.
+          </p>
         </DialogContent>
       </Dialog>
 
