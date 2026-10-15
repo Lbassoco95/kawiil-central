@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { FunctionsHttpError } from "@supabase/functions-js";
 import { formatDateMX } from "@/lib/dateUtils";
 import { LAWSUIT_TYPE_OPTIONS, statusMeta } from "@/lib/lawsuits";
+import { inferMimeFromFileName } from "@/lib/outlookEmailMedia";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -26,7 +27,14 @@ interface PortalLawsuit {
   next_deadline_note: string | null;
   stages: { label: string; completed: boolean; completed_at: string | null }[];
   entries: { entry_date: string; content: string }[];
-  documents: { id: string; name: string; size: number | null; created_at: string; url: string }[];
+  documents: {
+    id: string;
+    name: string;
+    size: number | null;
+    mime_type: string | null;
+    created_at: string;
+    url: string;
+  }[];
   messages: { id: string; sender: "team" | "client"; author_name: string | null; content: string; created_at: string }[];
 }
 
@@ -130,6 +138,28 @@ export default function PortalCliente() {
     return null;
   };
 
+  /** Bytes del documento, servidos por la función (sin depender de CORS del Storage). */
+  const fetchDocument = async (documentId: string): Promise<{ blob: Blob } | { error: string }> => {
+    if (!token || !activeCode) return { error: "Vuelve a ingresar el código" };
+    const { data: res, error: err } = await supabase.functions.invoke<Blob>("client-portal", {
+      body: { token, code: activeCode, action: "file", document_id: documentId },
+    });
+    if (err) {
+      let message = "No se pudo abrir el documento. Usa Descargar.";
+      if (err instanceof FunctionsHttpError) {
+        try {
+          const j = await err.context.json();
+          if (j?.error) message = j.error;
+        } catch {
+          /* cuerpo no JSON */
+        }
+      }
+      return { error: message };
+    }
+    if (!(res instanceof Blob)) return { error: "No se pudo abrir el documento. Usa Descargar." };
+    return { blob: res };
+  };
+
   if (!data) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -181,7 +211,7 @@ export default function PortalCliente() {
         </header>
 
         {data.lawsuits.map((l, i) => (
-          <LawsuitSection key={l.id} lawsuit={l} defaultOpen={data.lawsuits.length === 1 || i === 0} onSend={sendMessage} />
+          <LawsuitSection key={l.id} lawsuit={l} defaultOpen={data.lawsuits.length === 1 || i === 0} onSend={sendMessage} onFetchDocument={fetchDocument} />
         ))}
 
         <p className="pt-2 text-center text-[11px] text-muted-foreground">
@@ -196,10 +226,12 @@ function LawsuitSection({
   lawsuit,
   defaultOpen,
   onSend,
+  onFetchDocument,
 }: {
   lawsuit: PortalLawsuit;
   defaultOpen: boolean;
   onSend: (lawsuitId: string, content: string) => Promise<string | null>;
+  onFetchDocument: (documentId: string) => Promise<{ blob: Blob } | { error: string }>;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const [draft, setDraft] = useState("");
@@ -219,15 +251,11 @@ function LawsuitSection({
   const openDocument = async (d: PortalLawsuit["documents"][number]) => {
     setOpeningId(d.id);
     setPreviewError(null);
-    try {
-      const resp = await fetch(d.url);
-      if (!resp.ok) throw new Error("expired");
-      setPreview({ name: d.name, contentType: resp.headers.get("content-type"), blob: await resp.blob() });
-    } catch {
-      setPreviewError("No se pudo abrir el documento. Recarga la página e inténtalo de nuevo, o usa Descargar.");
-    } finally {
-      setOpeningId(null);
-    }
+    const res = await onFetchDocument(d.id);
+    if ("error" in res) setPreviewError(res.error);
+    // El tipo se deduce primero del nombre del archivo (más fiable que el mime guardado).
+    else setPreview({ name: d.name, contentType: inferMimeFromFileName(d.name) || d.mime_type, blob: res.blob });
+    setOpeningId(null);
   };
 
   const submit = async () => {

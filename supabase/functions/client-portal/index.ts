@@ -8,6 +8,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
  * Body: { token: string, code: string, action?: "get" | "send", lawsuit_id?, content? }
  *   - "get" (por defecto): devuelve el expediente (ver abajo).
  *   - "send": el cliente envía un mensaje al equipo sobre un asunto publicado.
+ *   - "file" (con document_id): devuelve los bytes de un documento compartido para la vista previa
+ *     (se sirve desde la función para no depender de CORS ni de la cabecera de descarga del Storage).
  * Respuesta de "get": { client_name, project_name, lawsuits: [...] }. Solo los juicios/trámites con
  * `client_visible = true`; de cada uno: etapas, actuaciones con `client_visible` y documentos con
  * `metadata.client_shared = true` (URLs firmadas de 30 minutos).
@@ -27,6 +29,7 @@ const MAX_ATTEMPTS = 5;
 const LOCK_MINUTES = 15;
 const SIGNED_URL_SECONDS = 1800;
 const MAX_MESSAGE_CHARS = 2000;
+const MAX_PREVIEW_BYTES = 25 * 1024 * 1024;
 const MAX_MESSAGES_PER_HOUR = 10;
 
 function json(payload: unknown, status = 200) {
@@ -59,8 +62,9 @@ serve(async (req) => {
       action?: unknown;
       lawsuit_id?: unknown;
       content?: unknown;
+      document_id?: unknown;
     };
-    const action = body.action === "send" ? "send" : "get";
+    const action = body.action === "send" ? "send" : body.action === "file" ? "file" : "get";
     const token = typeof body.token === "string" ? body.token.trim() : "";
     const code = typeof body.code === "string" ? body.code.trim() : "";
     if (!/^[A-Za-z0-9_-]{20,64}$/.test(token)) return json({ error: "Enlace no válido" }, 404);
@@ -110,6 +114,45 @@ serve(async (req) => {
     if (!project) return json({ error: "Enlace no válido" }, 404);
     // deno-lint-ignore no-explicit-any
     const clientName = ((project as any).clients?.name as string | undefined) ?? null;
+
+    if (action === "file") {
+      const documentId = typeof body.document_id === "string" ? body.document_id : "";
+      const { data: doc } = await sb
+        .from("documents")
+        .select("id, name, file_path, file_size, metadata")
+        .eq("id", documentId)
+        .eq("project_id", link.project_id)
+        .eq("metadata->>client_shared", "true")
+        .eq("source", "supabase")
+        .maybeSingle();
+      const lawsuitId = (doc?.metadata as { lawsuit_id?: unknown } | null)?.lawsuit_id;
+      if (!doc || !doc.file_path || typeof lawsuitId !== "string") return json({ error: "Documento no disponible" }, 404);
+
+      // Solo si el asunto al que pertenece sigue publicado para el cliente.
+      const { data: published } = await sb
+        .from("project_lawsuits")
+        .select("id")
+        .eq("id", lawsuitId)
+        .eq("project_id", link.project_id)
+        .eq("client_visible", true)
+        .maybeSingle();
+      if (!published) return json({ error: "Documento no disponible" }, 404);
+
+      if ((doc.file_size ?? 0) > MAX_PREVIEW_BYTES) {
+        return json({ error: "El archivo es muy grande para la vista previa. Usa Descargar.", code: "too_large" }, 413);
+      }
+
+      const bucket = (doc.metadata as { bucket?: unknown } | null)?.bucket;
+      const { data: blob, error: downloadError } = await sb.storage
+        .from(typeof bucket === "string" && bucket ? bucket : "documents")
+        .download(doc.file_path);
+      if (downloadError || !blob) return json({ error: "No se pudo abrir el documento" }, 404);
+
+      // Siempre como binario: el tipo real lo decide el visor con el nombre del archivo.
+      return new Response(blob, {
+        headers: { ...corsHeaders, "Content-Type": "application/octet-stream" },
+      });
+    }
 
     if (action === "send") {
       const lawsuitId = typeof body.lawsuit_id === "string" ? body.lawsuit_id : "";
@@ -205,7 +248,7 @@ serve(async (req) => {
 
       const { data: docRows } = await sb
         .from("documents")
-        .select("id, name, file_path, file_size, created_at, metadata")
+        .select("id, name, file_path, file_size, mime_type, created_at, metadata")
         .eq("project_id", link.project_id)
         .eq("metadata->>lawsuit_id", lawsuit.id)
         .eq("metadata->>client_shared", "true")
@@ -221,7 +264,14 @@ serve(async (req) => {
           .from(typeof bucket === "string" && bucket ? bucket : "documents")
           .createSignedUrl(d.file_path, SIGNED_URL_SECONDS, { download: d.name });
         if (!signed?.signedUrl) continue;
-        documents.push({ id: d.id, name: d.name, size: d.file_size, created_at: d.created_at, url: signed.signedUrl });
+        documents.push({
+          id: d.id,
+          name: d.name,
+          size: d.file_size,
+          mime_type: d.mime_type,
+          created_at: d.created_at,
+          url: signed.signedUrl,
+        });
       }
 
       const { data: messages } = await sb
