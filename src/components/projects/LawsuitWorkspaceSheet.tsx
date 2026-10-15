@@ -10,7 +10,7 @@ import {
   CLOSED_LAWSUIT_STATUSES,
   defaultStagesForType,
   isLegalProcedure,
-  LAWSUIT_STATUS_OPTIONS,
+  statusMeta,
   LAWSUIT_TYPE_OPTIONS,
   currentStageLabel,
   parseLawsuitStages,
@@ -43,7 +43,7 @@ interface Props {
 
 export function LawsuitWorkspaceSheet({ lawsuit, clientId, dropboxPath, lockDropboxToPath, onClose, onEdit }: Props) {
   const lawsuitId = lawsuit?.id;
-  const status = LAWSUIT_STATUS_OPTIONS.find((s) => s.value === lawsuit?.status);
+  const status = lawsuit ? statusMeta(lawsuit.status, lawsuit.lawsuit_type) : undefined;
   const typeLabel = LAWSUIT_TYPE_OPTIONS.find((t) => t.value === lawsuit?.lawsuit_type)?.label;
 
   return (

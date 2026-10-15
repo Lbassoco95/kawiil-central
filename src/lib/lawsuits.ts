@@ -9,6 +9,17 @@ export const LAWSUIT_STATUS_OPTIONS = [
   { value: "archivado", label: "Archivado", className: "bg-muted text-muted-foreground border-border" },
 ];
 
+/** Estatus exclusivos de trámites (quejas ante autoridades administrativas). */
+export const PROCEDURE_STATUS_OPTIONS = [
+  { value: "en_tramite", label: "En trámite", className: "bg-blue-500/10 text-blue-700 border-blue-500/30" },
+  { value: "en_espera_respuesta", label: "En espera de respuesta", className: "bg-amber-500/10 text-amber-700 border-amber-500/30" },
+  { value: "en_conciliacion", label: "En conciliación", className: "bg-purple-500/10 text-purple-700 border-purple-500/30" },
+  { value: "convenio", label: "Convenio / acuerdo", className: "bg-teal-500/10 text-teal-700 border-teal-500/30" },
+  { value: "suspendido", label: "Suspendido", className: "bg-slate-500/10 text-slate-700 border-slate-500/30" },
+  { value: "concluido", label: "Concluido", className: "bg-green-500/10 text-green-700 border-green-500/30" },
+  { value: "archivado", label: "Archivado", className: "bg-muted text-muted-foreground border-border" },
+];
+
 export const LAWSUIT_TYPE_OPTIONS = [
   { value: "laboral", label: "Laboral" },
   { value: "mercantil", label: "Mercantil" },
@@ -27,6 +38,21 @@ const PROCEDURE_TYPES = ["queja_profeco", "queja_condusef", "otro_tramite"];
 
 export function isLegalProcedure(type: string | null | undefined): boolean {
   return !!type && PROCEDURE_TYPES.includes(type);
+}
+
+/** Estatus disponibles según sea juicio o trámite. */
+export function statusOptionsForType(type: string | null | undefined) {
+  return isLegalProcedure(type) ? PROCEDURE_STATUS_OPTIONS : LAWSUIT_STATUS_OPTIONS;
+}
+
+/** Datos de presentación de un estatus (busca en juicios y trámites; cae al primero del tipo). */
+export function statusMeta(status: string, type: string | null | undefined) {
+  const own = statusOptionsForType(type);
+  return (
+    own.find((s) => s.value === status) ??
+    [...LAWSUIT_STATUS_OPTIONS, ...PROCEDURE_STATUS_OPTIONS].find((s) => s.value === status) ??
+    own[0]
+  );
 }
 
 /** Etiquetas de las partes según sea juicio o trámite (quejoso vs. proveedor/institución). */

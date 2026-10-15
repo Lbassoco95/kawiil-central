@@ -31,7 +31,8 @@ import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { LawsuitWorkspaceSheet } from "@/components/projects/LawsuitWorkspaceSheet";
 import {
   CLOSED_LAWSUIT_STATUSES,
-  LAWSUIT_STATUS_OPTIONS,
+  statusMeta,
+  statusOptionsForType,
   LAWSUIT_TYPE_OPTIONS,
   defaultStagesForType,
   partyLabels,
@@ -264,7 +265,7 @@ export function ProjectLawsuitsTab({ projectId, organizationId, clientId, dropbo
       ) : (
         <div className="grid gap-3">
           {lawsuits.map((l) => {
-            const status = LAWSUIT_STATUS_OPTIONS.find((s) => s.value === l.status) ?? LAWSUIT_STATUS_OPTIONS[0];
+            const status = statusMeta(l.status, l.lawsuit_type);
             const typeLabel = LAWSUIT_TYPE_OPTIONS.find((t) => t.value === l.lawsuit_type)?.label;
             const parties = [l.plaintiff, l.defendant].filter(Boolean).join(" vs ");
             return (
@@ -293,7 +294,7 @@ export function ProjectLawsuitsTab({ projectId, organizationId, clientId, dropbo
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {LAWSUIT_STATUS_OPTIONS.map((s) => (
+                          {statusOptionsForType(l.lawsuit_type).map((s) => (
                             <SelectItem key={s.value} value={s.value}>
                               {s.label}
                             </SelectItem>
@@ -357,7 +358,16 @@ export function ProjectLawsuitsTab({ projectId, organizationId, clientId, dropbo
             </div>
             <div className="space-y-1.5">
               <Label>Tipo / materia</Label>
-              <Select value={form.lawsuit_type} onValueChange={(v) => set("lawsuit_type", v)}>
+              <Select
+                value={form.lawsuit_type}
+                onValueChange={(v) =>
+                  setForm((f) => ({
+                    ...f,
+                    lawsuit_type: v,
+                    status: statusOptionsForType(v).some((o) => o.value === f.status) ? f.status : "en_tramite",
+                  }))
+                }
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecciona" />
                 </SelectTrigger>
@@ -377,7 +387,7 @@ export function ProjectLawsuitsTab({ projectId, organizationId, clientId, dropbo
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {LAWSUIT_STATUS_OPTIONS.map((s) => (
+                  {statusOptionsForType(form.lawsuit_type).map((s) => (
                     <SelectItem key={s.value} value={s.value}>
                       {s.label}
                     </SelectItem>

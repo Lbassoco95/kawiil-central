@@ -5,6 +5,8 @@ import {
   defaultStagesForType,
   isLegalProcedure,
   partyLabels,
+  statusMeta,
+  statusOptionsForType,
   lawsuitCalendarHref,
   lawsuitDeadlinesAsCalendarTasks,
   lawsuitsForUser,
@@ -113,5 +115,14 @@ describe("trámites legales", () => {
     expect(defaultStagesForType("queja_condusef")[0].key).toBe("reclamacion");
     expect(defaultStagesForType("civil")[0].key).toBe("demanda");
     expect(defaultStagesForType(null).every((s) => !s.completed)).toBe(true);
+  });
+});
+
+describe("estatus por tipo", () => {
+  it("los trámites tienen estatus propios y los juicios no los ven", () => {
+    expect(statusOptionsForType("queja_profeco").map((s) => s.value)).toContain("en_conciliacion");
+    expect(statusOptionsForType("civil").map((s) => s.value)).not.toContain("en_conciliacion");
+    expect(statusMeta("convenio", "civil").label).toBe("Convenio / acuerdo");
+    expect(statusMeta("amparo", "queja_profeco").label).toBe("Amparo");
   });
 });
