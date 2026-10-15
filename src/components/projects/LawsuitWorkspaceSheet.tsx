@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ListChecks, NotebookPen, Plus, Trash2, Pencil, CheckSquare } from "lucide-react";
+import { ListChecks, NotebookPen, Plus, Trash2, Pencil, CheckSquare, Sparkles, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatDateMX, toDateStringMX } from "@/lib/dateUtils";
+import { commentPlainText, parseComment } from "@/lib/commentContent";
 import {
   CLOSED_LAWSUIT_STATUSES,
   defaultStagesForType,
@@ -13,6 +14,8 @@ import {
   statusMeta,
   LAWSUIT_TYPE_OPTIONS,
   currentStageLabel,
+  mergeSuggestedStages,
+  type SuggestedStage,
   parseLawsuitStages,
   type LawsuitStage,
 } from "@/lib/lawsuits";
@@ -22,6 +25,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { LawsuitCommentsPanel } from "@/components/projects/LawsuitCommentsPanel";
@@ -148,6 +152,88 @@ function StagesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
 
   const done = stages.filter((s) => s.completed).length;
 
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<SuggestedStage[]>([]);
+  const [picked, setPicked] = useState<Set<number>>(new Set());
+  const [replacePending, setReplacePending] = useState(true);
+
+  const suggestWithAi = async () => {
+    setAiOpen(true);
+    setAiBusy(true);
+    setAiError(null);
+    setSuggestions([]);
+    try {
+      const [entriesRes, commentsRes] = await Promise.all([
+        supabase
+          .from("project_lawsuit_entries")
+          .select("entry_date, content")
+          .eq("lawsuit_id", lawsuit.id)
+          .order("entry_date", { ascending: false })
+          .limit(25),
+        supabase
+          .from("project_lawsuit_comments")
+          .select("created_at, content")
+          .eq("lawsuit_id", lawsuit.id)
+          .order("created_at", { ascending: false })
+          .limit(25),
+      ]);
+      const documents: string[] = [];
+      const comments = (commentsRes.data ?? []).map((c) => {
+        const { body, attachments } = parseComment(c.content);
+        attachments.forEach((a) => documents.push(a.name));
+        return { date: c.created_at.slice(0, 10), text: commentPlainText(body) };
+      });
+      const { data, error } = await supabase.functions.invoke<{
+        stages?: SuggestedStage[];
+        error?: string;
+        message?: string;
+      }>("lawsuit-ai-stages", {
+        body: {
+          lawsuit: {
+            name: lawsuit.name,
+            type: lawsuit.lawsuit_type,
+            typeLabel: LAWSUIT_TYPE_OPTIONS.find((t) => t.value === lawsuit.lawsuit_type)?.label,
+            isProcedure: isLegalProcedure(lawsuit.lawsuit_type),
+            caseNumber: lawsuit.case_number,
+            court: lawsuit.court,
+            plaintiff: lawsuit.plaintiff,
+            defendant: lawsuit.defendant,
+            status: lawsuit.status,
+            filedDate: lawsuit.filed_date,
+            notes: lawsuit.notes,
+          },
+          stages: stages.map((st) => ({ label: st.label, completed: st.completed })),
+          entries: (entriesRes.data ?? []).map((e) => ({ date: e.entry_date, content: e.content })),
+          comments,
+          documents: Array.from(new Set(documents)),
+        },
+      });
+      if (error) throw new Error(error.message || "Error invocando IA");
+      const list = data?.stages ?? [];
+      if (list.length === 0) throw new Error(data?.message || "La IA no devolvió etapas");
+      setSuggestions(list);
+      setPicked(new Set(list.map((_, i) => i)));
+    } catch (e) {
+      setAiError(e instanceof Error ? e.message : "Error desconocido");
+    } finally {
+      setAiBusy(false);
+    }
+  };
+
+  const applySuggestions = () => {
+    const chosen = suggestions.filter((_, i) => picked.has(i));
+    saveStages.mutate(mergeSuggestedStages(stages, chosen, replacePending));
+    setAiOpen(false);
+  };
+
+  const aiButton = (
+    <Button size="sm" variant="outline" onClick={suggestWithAi} disabled={aiBusy || saveStages.isPending}>
+      <Sparkles className="h-3.5 w-3.5 mr-1" /> Sugerir etapas con IA
+    </Button>
+  );
+
   return (
     <div className="space-y-3">
       {stages.length === 0 ? (
@@ -156,16 +242,22 @@ function StagesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
           <p className="text-sm text-muted-foreground">
             Aún no hay etapas. Carga las estándar de este tipo o agrega las tuyas.
           </p>
-          <Button size="sm" variant="outline" onClick={() => saveStages.mutate(defaultStagesForType(lawsuit.lawsuit_type))}>
-            Cargar etapas estándar
-          </Button>
+          <div className="flex flex-wrap justify-center gap-2">
+            {aiButton}
+            <Button size="sm" variant="outline" onClick={() => saveStages.mutate(defaultStagesForType(lawsuit.lawsuit_type))}>
+              Cargar etapas estándar
+            </Button>
+          </div>
         </div>
       ) : (
         <>
+          <div className="flex items-center justify-between gap-2">
           <p className="text-xs text-muted-foreground">
             {done} de {stages.length} etapas completadas
             {closed ? (isLegalProcedure(lawsuit.lawsuit_type) ? " · trámite cerrado" : " · juicio cerrado") : ""}
           </p>
+          {aiButton}
+          </div>
           <ul className="divide-y divide-border/50 rounded-lg border">
             {stages.map((s) => (
               <li key={s.key} className="flex items-center gap-3 px-3 py-2">
@@ -200,6 +292,68 @@ function StagesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
           <Plus className="h-4 w-4" />
         </Button>
       </div>
+
+      <Dialog open={aiOpen} onOpenChange={(o) => !aiBusy && setAiOpen(o)}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Etapas sugeridas por IA</DialogTitle>
+            <DialogDescription>
+              Se basan en los datos del expediente, notas, actuaciones, comentarios y nombres de los documentos
+              adjuntos. Revísalas antes de aplicarlas.
+            </DialogDescription>
+          </DialogHeader>
+          {aiBusy ? (
+            <div className="flex items-center gap-2 py-6 justify-center text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Analizando la información del asunto…
+            </div>
+          ) : aiError ? (
+            <p className="text-sm text-destructive py-2">{aiError}</p>
+          ) : (
+            <div className="space-y-3">
+              <ul className="divide-y divide-border/50 rounded-lg border">
+                {suggestions.map((sg, i) => (
+                  <li key={i} className="flex items-start gap-3 px-3 py-2">
+                    <Checkbox
+                      className="mt-0.5"
+                      checked={picked.has(i)}
+                      onCheckedChange={() =>
+                        setPicked((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(i)) next.delete(i);
+                          else next.add(i);
+                          return next;
+                        })
+                      }
+                    />
+                    <div className="min-w-0">
+                      <div className="text-sm">{sg.label}</div>
+                      {sg.reason && <div className="text-[11px] text-muted-foreground">{sg.reason}</div>}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              {stages.some((st) => !st.completed) && (
+                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Checkbox checked={replacePending} onCheckedChange={(v) => setReplacePending(v === true)} />
+                  Reemplazar las etapas pendientes actuales (las completadas se conservan)
+                </label>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAiOpen(false)} disabled={aiBusy}>
+              Cancelar
+            </Button>
+            {!aiBusy && aiError ? (
+              <Button onClick={suggestWithAi}>Reintentar</Button>
+            ) : (
+              <Button onClick={applySuggestions} disabled={aiBusy || picked.size === 0}>
+                Aplicar {picked.size > 0 ? `(${picked.size})` : ""}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

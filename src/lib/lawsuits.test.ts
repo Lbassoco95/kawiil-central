@@ -4,6 +4,7 @@ import {
   currentStageLabel,
   defaultStagesForType,
   isLegalProcedure,
+  mergeSuggestedStages,
   partyLabels,
   statusMeta,
   statusOptionsForType,
@@ -124,5 +125,30 @@ describe("estatus por tipo", () => {
     expect(statusOptionsForType("civil").map((s) => s.value)).not.toContain("en_conciliacion");
     expect(statusMeta("convenio", "civil").label).toBe("Convenio / acuerdo");
     expect(statusMeta("amparo", "queja_profeco").label).toBe("Amparo");
+  });
+});
+
+describe("mergeSuggestedStages", () => {
+  const current = parseLawsuitStages([
+    { key: "a", label: "Denuncia", completed: true, completed_at: "2026-09-21" },
+    { key: "b", label: "Emplazamiento" },
+  ]);
+
+  it("reemplaza las pendientes y conserva las completadas sin duplicarlas", () => {
+    const res = mergeSuggestedStages(current, [{ label: "denuncia" }, { label: "Investigación ante el MP" }], true, 1);
+    expect(res.map((s) => s.label)).toEqual(["Denuncia", "Investigación ante el MP"]);
+    expect(res[0].completed).toBe(true);
+    expect(res[1]).toMatchObject({ key: "ia-1-1", completed: false });
+  });
+
+  it("sin reemplazar agrega solo las que faltan (ignora acentos y mayúsculas)", () => {
+    const res = mergeSuggestedStages(current, [{ label: "EMPLAZAMIENTO" }, { label: "Sentencia" }], false, 1);
+    expect(res.map((s) => s.label)).toEqual(["Denuncia", "Emplazamiento", "Sentencia"]);
+  });
+});
+
+describe("etapas penales", () => {
+  it("los asuntos penales no cargan etapas civiles", () => {
+    expect(defaultStagesForType("penal")[0].key).toBe("denuncia");
   });
 });

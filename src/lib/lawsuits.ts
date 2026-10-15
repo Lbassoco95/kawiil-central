@@ -113,6 +113,18 @@ const OTHER_PROCEDURE_STAGES = [
   ["seguimiento", "Cumplimiento / seguimiento"],
 ];
 
+const PENAL_STAGES = [
+  ["denuncia", "Denuncia o querella"],
+  ["investigacion", "Investigación inicial ante el MP"],
+  ["determinacion", "Determinación del MP (judicialización)"],
+  ["audiencia_inicial", "Audiencia inicial y vinculación a proceso"],
+  ["complementaria", "Investigación complementaria"],
+  ["intermedia", "Etapa intermedia"],
+  ["juicio_oral", "Juicio oral"],
+  ["sentencia", "Sentencia"],
+  ["impugnacion", "Apelación o amparo"],
+];
+
 function toStages(rows: string[][]): LawsuitStage[] {
   return rows.map(([key, label]) => ({ key, label, completed: false, completed_at: null }));
 }
@@ -126,6 +138,8 @@ export function defaultStagesForType(type: string | null | undefined): LawsuitSt
       return toStages(CONDUSEF_STAGES);
     case "otro_tramite":
       return toStages(OTHER_PROCEDURE_STAGES);
+    case "penal":
+      return toStages(PENAL_STAGES);
     default:
       return DEFAULT_LAWSUIT_STAGES.map((s) => ({ ...s }));
   }
@@ -253,4 +267,36 @@ export function lawsuitDeadlinesAsCalendarTasks(
         projects: m?.projectName ? { name: m.projectName } : null,
       };
     });
+}
+
+export interface SuggestedStage {
+  label: string;
+  reason?: string;
+}
+
+const normLabel = (s: string) =>
+  s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+
+/**
+ * Combina las etapas sugeridas por IA con las actuales. Las completadas siempre se
+ * conservan; las pendientes se reemplazan (replacePending) o se respetan y se
+ * añaden solo las que no existan ya (comparación sin acentos ni mayúsculas).
+ */
+export function mergeSuggestedStages(
+  current: LawsuitStage[],
+  suggested: SuggestedStage[],
+  replacePending: boolean,
+  now = Date.now(),
+): LawsuitStage[] {
+  const kept = replacePending ? current.filter((s) => s.completed) : [...current];
+  const seen = new Set(kept.map((s) => normLabel(s.label)));
+  const added: LawsuitStage[] = [];
+  suggested.forEach((s, i) => {
+    const label = s.label.trim();
+    const key = normLabel(label);
+    if (!label || seen.has(key)) return;
+    seen.add(key);
+    added.push({ key: `ia-${now}-${i}`, label, completed: false, completed_at: null });
+  });
+  return [...kept, ...added];
 }
