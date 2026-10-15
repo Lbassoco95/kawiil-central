@@ -161,6 +161,66 @@ export function unreviewedCount(updates: { reviewed: boolean }[]): number {
   return updates.filter((u) => !u.reviewed).length;
 }
 
+const ARCHIVABLE_STATUSES: MtgMeetingStatus[] = [
+  "ended",
+  "minutes_draft",
+  "minutes_review",
+  "minutes_approved",
+  "closed",
+];
+
+export function canArchive(meeting: Pick<MtgMeetingRow, "status" | "archived_at">): boolean {
+  return !meeting.archived_at && ARCHIVABLE_STATUSES.includes(meeting.status);
+}
+
+/** Archiva una junta ya terminada: se oculta de la vista general, conserva todo. */
+export async function archiveMeeting(opts: {
+  organizationId: string;
+  actorUserId: string;
+  meeting: MtgMeetingRow;
+}): Promise<MtgMeetingRow> {
+  if (!canArchive(opts.meeting)) {
+    throw new Error("Solo se pueden archivar juntas que ya terminaron.");
+  }
+  const { data, error } = await mtgDb
+    .from("mtg_meetings")
+    .update({ archived_at: new Date().toISOString() })
+    .eq("id", opts.meeting.id)
+    .select("*")
+    .single();
+  if (error) throw error;
+  await logMtgAudit({
+    organizationId: opts.organizationId,
+    actorUserId: opts.actorUserId,
+    entityType: "meeting",
+    entityId: opts.meeting.id,
+    action: MTG_AUDIT_ACTION.MEETING_ARCHIVED,
+  });
+  return data as MtgMeetingRow;
+}
+
+export async function unarchiveMeeting(opts: {
+  organizationId: string;
+  actorUserId: string;
+  meeting: MtgMeetingRow;
+}): Promise<MtgMeetingRow> {
+  const { data, error } = await mtgDb
+    .from("mtg_meetings")
+    .update({ archived_at: null })
+    .eq("id", opts.meeting.id)
+    .select("*")
+    .single();
+  if (error) throw error;
+  await logMtgAudit({
+    organizationId: opts.organizationId,
+    actorUserId: opts.actorUserId,
+    entityType: "meeting",
+    entityId: opts.meeting.id,
+    action: MTG_AUDIT_ACTION.MEETING_UNARCHIVED,
+  });
+  return data as MtgMeetingRow;
+}
+
 /** Qué tiene guardado una junta (para decidir si se puede eliminar sin perder nada). */
 export type MeetingContentSummary = {
   isEmpty: boolean;

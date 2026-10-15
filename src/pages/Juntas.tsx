@@ -47,7 +47,7 @@ import {
   Video,
 } from "lucide-react";
 
-type StatusFilter = "all" | "upcoming" | "live" | "minutes" | "closed";
+type StatusFilter = "all" | "upcoming" | "live" | "minutes" | "closed" | "archived";
 
 function joinProviderLabel(url: string | null | undefined): string {
   if (!url) return "Llamada";
@@ -59,6 +59,8 @@ function joinProviderLabel(url: string | null | undefined): string {
 }
 
 function matchesFilter(m: OrgMtgMeeting, filter: StatusFilter): boolean {
+  if (filter === "archived") return !!m.archived_at;
+  if (m.archived_at) return false;
   // Las canceladas / no-show salen de la vista general; siguen en «Cerradas / canceladas».
   if (filter === "all") return m.status !== "cancelled" && m.status !== "no_show";
   if (filter === "upcoming") return m.status === "planned";
@@ -191,6 +193,7 @@ export default function Juntas() {
               <SelectItem value="live">En curso</SelectItem>
               <SelectItem value="minutes">Minuta / revisión</SelectItem>
               <SelectItem value="closed">Cerradas / canceladas</SelectItem>
+              <SelectItem value="archived">Archivadas</SelectItem>
             </SelectContent>
           </Select>
         </div>

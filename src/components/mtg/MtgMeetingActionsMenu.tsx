@@ -16,9 +16,15 @@ import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/hooks/useUserRole";
 import { mtgDb, type MtgMeetingRow } from "@/lib/mtg/db";
-import { cancelMeeting, deleteEmptyMeeting } from "@/lib/mtg/meetingLifecycle";
+import {
+  archiveMeeting,
+  canArchive,
+  cancelMeeting,
+  deleteEmptyMeeting,
+  unarchiveMeeting,
+} from "@/lib/mtg/meetingLifecycle";
 
-type MeetingLike = Pick<MtgMeetingRow, "id" | "organization_id" | "status">;
+type MeetingLike = Pick<MtgMeetingRow, "id" | "organization_id" | "status" | "archived_at">;
 
 export function MtgMeetingActionsMenu(props: {
   meeting: MeetingLike;
@@ -33,7 +39,9 @@ export function MtgMeetingActionsMenu(props: {
   const { meeting } = props;
   const canCancel = meeting.status === "planned" || meeting.status === "in_progress";
   const canDelete = isAdminOrManager;
-  if (!user || (!canCancel && !canDelete)) return null;
+  const showArchive = canArchive(meeting);
+  const showUnarchive = !!meeting.archived_at;
+  if (!user || (!canCancel && !canDelete && !showArchive && !showUnarchive)) return null;
 
   const fullMeeting = async (): Promise<MtgMeetingRow> => {
     const { data, error } = await mtgDb.from("mtg_meetings").select("*").eq("id", meeting.id).single();
@@ -69,6 +77,19 @@ export function MtgMeetingActionsMenu(props: {
       refresh();
     });
 
+  const onArchive = (archive: boolean) =>
+    run(async () => {
+      const opts = {
+        organizationId: meeting.organization_id,
+        actorUserId: user.id,
+        meeting: await fullMeeting(),
+      };
+      if (archive) await archiveMeeting(opts);
+      else await unarchiveMeeting(opts);
+      toast.success(archive ? "Junta archivada (filtro «Archivadas»)" : "Junta restaurada");
+      refresh();
+    });
+
   const onDelete = () =>
     run(async () => {
       if (!window.confirm("¿Eliminar esta junta? Solo se borra si no tiene nada guardado. No se puede deshacer.")) {
@@ -100,6 +121,12 @@ export function MtgMeetingActionsMenu(props: {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+        {showArchive && (
+          <DropdownMenuItem onSelect={() => void onArchive(true)}>Archivar junta</DropdownMenuItem>
+        )}
+        {showUnarchive && (
+          <DropdownMenuItem onSelect={() => void onArchive(false)}>Desarchivar junta</DropdownMenuItem>
+        )}
         {canCancel && <DropdownMenuItem onSelect={() => void onCancel()}>Cancelar junta</DropdownMenuItem>}
         {canDelete && (
           <DropdownMenuItem className="text-destructive" onSelect={() => void onDelete()}>
