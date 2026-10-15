@@ -12,6 +12,7 @@ import {
   lawsuitDeadlinesAsCalendarTasks,
   lawsuitsForUser,
   parseLawsuitStages,
+  setCurrentStage,
 } from "./lawsuits";
 
 const base = {
@@ -150,5 +151,33 @@ describe("mergeSuggestedStages", () => {
 describe("etapas penales", () => {
   it("los asuntos penales no cargan etapas civiles", () => {
     expect(defaultStagesForType("penal")[0].key).toBe("denuncia");
+  });
+});
+
+describe("setCurrentStage", () => {
+  const st = parseLawsuitStages([
+    { key: "a", label: "A", completed: true, completed_at: "2026-09-01" },
+    { key: "b", label: "B" },
+    { key: "c", label: "C" },
+    { key: "d", label: "D", completed: true, completed_at: "2026-10-01" },
+  ]);
+
+  it("avanzar completa las anteriores y deja la elegida en curso", () => {
+    const res = setCurrentStage(st, "c", "2026-10-15");
+    expect(res.map((s) => s.completed)).toEqual([true, true, false, true]);
+    expect(res[0].completed_at).toBe("2026-09-01");
+    expect(res[1].completed_at).toBe("2026-10-15");
+    expect(currentStageLabel(res)).toBe("C");
+  });
+
+  it("retroceder reabre la elegida sin tocar las posteriores", () => {
+    const res = setCurrentStage(st, "a", "2026-10-15");
+    expect(res[0]).toMatchObject({ completed: false, completed_at: null });
+    expect(res[3].completed).toBe(true);
+    expect(currentStageLabel(res)).toBe("A");
+  });
+
+  it("una clave inexistente no cambia nada", () => {
+    expect(setCurrentStage(st, "zzz")).toBe(st);
   });
 });
