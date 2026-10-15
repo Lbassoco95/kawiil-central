@@ -225,80 +225,84 @@ serve(async (req) => {
       .eq("client_visible", true)
       .order("created_at", { ascending: true });
 
-    const lawsuits = [];
-    for (const lawsuit of lawsuitRows ?? []) {
-      const stages = (Array.isArray(lawsuit.stages) ? lawsuit.stages : [])
-        // deno-lint-ignore no-explicit-any
-        .filter((s: any) => s && typeof s.label === "string")
-        // deno-lint-ignore no-explicit-any
-        .map((s: any) => ({
-          label: s.label as string,
-          completed: s.completed === true,
-          completed_at: typeof s.completed_at === "string" ? s.completed_at : null,
-        }));
+    // Asuntos, y dentro de cada uno sus consultas y firmas de URL, en paralelo (antes eran secuenciales).
+    const lawsuits = await Promise.all(
+      (lawsuitRows ?? []).map(async (lawsuit) => {
+        const stages = (Array.isArray(lawsuit.stages) ? lawsuit.stages : [])
+          // deno-lint-ignore no-explicit-any
+          .filter((s: any) => s && typeof s.label === "string")
+          // deno-lint-ignore no-explicit-any
+          .map((s: any) => ({
+            label: s.label as string,
+            completed: s.completed === true,
+            completed_at: typeof s.completed_at === "string" ? s.completed_at : null,
+          }));
 
-      const { data: entries } = await sb
-        .from("project_lawsuit_entries")
-        .select("entry_date, content")
-        .eq("lawsuit_id", lawsuit.id)
-        .eq("client_visible", true)
-        .order("entry_date", { ascending: false })
-        .order("created_at", { ascending: false })
-        .limit(100);
+        const [{ data: entries }, { data: docRows }, { data: messages }] = await Promise.all([
+          sb
+            .from("project_lawsuit_entries")
+            .select("entry_date, content")
+            .eq("lawsuit_id", lawsuit.id)
+            .eq("client_visible", true)
+            .order("entry_date", { ascending: false })
+            .order("created_at", { ascending: false })
+            .limit(100),
+          sb
+            .from("documents")
+            .select("id, name, file_path, file_size, mime_type, created_at, metadata")
+            .eq("project_id", link.project_id)
+            .eq("metadata->>lawsuit_id", lawsuit.id)
+            .eq("metadata->>client_shared", "true")
+            .eq("source", "supabase")
+            .order("created_at", { ascending: false })
+            .limit(100),
+          sb
+            .from("lawsuit_client_messages")
+            .select("id, sender, author_name, content, created_at")
+            .eq("lawsuit_id", lawsuit.id)
+            .order("created_at", { ascending: true })
+            .limit(200),
+        ]);
 
-      const { data: docRows } = await sb
-        .from("documents")
-        .select("id, name, file_path, file_size, mime_type, created_at, metadata")
-        .eq("project_id", link.project_id)
-        .eq("metadata->>lawsuit_id", lawsuit.id)
-        .eq("metadata->>client_shared", "true")
-        .eq("source", "supabase")
-        .order("created_at", { ascending: false })
-        .limit(100);
+        const signedDocs = await Promise.all(
+          (docRows ?? [])
+            .filter((d) => d.file_path)
+            .map(async (d) => {
+              const bucket = (d.metadata as { bucket?: unknown } | null)?.bucket;
+              const { data: signed } = await sb.storage
+                .from(typeof bucket === "string" && bucket ? bucket : "documents")
+                .createSignedUrl(d.file_path as string, SIGNED_URL_SECONDS, { download: d.name });
+              if (!signed?.signedUrl) return null;
+              return {
+                id: d.id,
+                name: d.name,
+                size: d.file_size,
+                mime_type: d.mime_type,
+                created_at: d.created_at,
+                url: signed.signedUrl,
+              };
+            }),
+        );
 
-      const documents = [];
-      for (const d of docRows ?? []) {
-        if (!d.file_path) continue;
-        const bucket = (d.metadata as { bucket?: unknown } | null)?.bucket;
-        const { data: signed } = await sb.storage
-          .from(typeof bucket === "string" && bucket ? bucket : "documents")
-          .createSignedUrl(d.file_path, SIGNED_URL_SECONDS, { download: d.name });
-        if (!signed?.signedUrl) continue;
-        documents.push({
-          id: d.id,
-          name: d.name,
-          size: d.file_size,
-          mime_type: d.mime_type,
-          created_at: d.created_at,
-          url: signed.signedUrl,
-        });
-      }
-
-      const { data: messages } = await sb
-        .from("lawsuit_client_messages")
-        .select("id, sender, author_name, content, created_at")
-        .eq("lawsuit_id", lawsuit.id)
-        .order("created_at", { ascending: true })
-        .limit(200);
-
-      lawsuits.push({
-        id: lawsuit.id,
-        name: lawsuit.name,
-        lawsuit_type: lawsuit.lawsuit_type,
-        case_number: lawsuit.case_number,
-        court: lawsuit.court,
-        status: lawsuit.status,
-        current_stage: lawsuit.current_stage,
-        filed_date: lawsuit.filed_date,
-        next_hearing_date: lawsuit.next_hearing_date,
-        next_deadline_date: lawsuit.next_deadline_date,
-        next_deadline_note: lawsuit.next_deadline_note,
-        stages,
-        entries: entries ?? [],
-        documents,
-        messages: messages ?? [],
-      });
-    }
+        return {
+          id: lawsuit.id,
+          name: lawsuit.name,
+          lawsuit_type: lawsuit.lawsuit_type,
+          case_number: lawsuit.case_number,
+          court: lawsuit.court,
+          status: lawsuit.status,
+          current_stage: lawsuit.current_stage,
+          filed_date: lawsuit.filed_date,
+          next_hearing_date: lawsuit.next_hearing_date,
+          next_deadline_date: lawsuit.next_deadline_date,
+          next_deadline_note: lawsuit.next_deadline_note,
+          stages,
+          entries: entries ?? [],
+          documents: signedDocs.filter((d) => d !== null),
+          messages: messages ?? [],
+        };
+      }),
+    );
 
     return json({ client_name: clientName, project_name: project.name, lawsuits });
   } catch (e) {
