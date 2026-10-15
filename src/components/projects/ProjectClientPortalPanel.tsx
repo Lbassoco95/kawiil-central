@@ -11,37 +11,37 @@ import {
   portalDb,
   portalUrl,
   sha256Hex,
-  type LawsuitClientLink,
+  type ProjectClientLink,
 } from "@/lib/lawsuitPortal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import type { Database } from "@/integrations/supabase/types";
-
-type LawsuitRow = Database["public"]["Tables"]["project_lawsuits"]["Row"];
 
 interface Revealed {
   url: string;
   code: string;
 }
 
-/** Enlace privado + código para que el cliente consulte el avance y sus documentos (solo lectura). */
-export function LawsuitClientPortalPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
+/**
+ * Enlace privado + código para que el cliente consulte el expediente completo del proyecto:
+ * todos los juicios/trámites marcados como visibles, con su avance y documentos (solo lectura).
+ */
+export function ProjectClientPortalPanel({ projectId, organizationId }: { projectId: string; organizationId: string }) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [revealed, setRevealed] = useState<Revealed | null>(null);
-  const queryKey = ["lawsuit-client-link", lawsuit.id];
+  const queryKey = ["project-client-link", projectId];
 
   const { data: link, isLoading } = useQuery({
     queryKey,
     queryFn: async () => {
       const { data, error } = await portalDb
-        .from("lawsuit_client_links")
-        .select("id, lawsuit_id, active, last_viewed_at, locked_until, created_at, updated_at")
-        .eq("lawsuit_id", lawsuit.id)
+        .from("project_client_links")
+        .select("id, project_id, active, last_viewed_at, locked_until, created_at, updated_at")
+        .eq("project_id", projectId)
         .maybeSingle();
       if (error) throw error;
-      return (data ?? null) as LawsuitClientLink | null;
+      return (data ?? null) as ProjectClientLink | null;
     },
   });
 
@@ -57,13 +57,13 @@ export function LawsuitClientPortalPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
         locked_until: null,
       };
       if (link) {
-        const { error } = await portalDb.from("lawsuit_client_links").update(fields).eq("id", link.id);
+        const { error } = await portalDb.from("project_client_links").update(fields).eq("id", link.id);
         if (error) throw error;
       } else {
-        const { error } = await portalDb.from("lawsuit_client_links").insert({
+        const { error } = await portalDb.from("project_client_links").insert({
           ...fields,
-          lawsuit_id: lawsuit.id,
-          organization_id: lawsuit.organization_id,
+          project_id: projectId,
+          organization_id: organizationId,
           created_by: user?.id ?? null,
         });
         if (error) throw error;
@@ -79,7 +79,7 @@ export function LawsuitClientPortalPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
 
   const toggleActive = useMutation({
     mutationFn: async (active: boolean) => {
-      const { error } = await portalDb.from("lawsuit_client_links").update({ active }).eq("id", link!.id);
+      const { error } = await portalDb.from("project_client_links").update({ active }).eq("id", link!.id);
       if (error) throw error;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey }),
@@ -96,7 +96,7 @@ export function LawsuitClientPortalPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
   };
 
   const message = revealed
-    ? `Hola, puedes consultar el avance de tu asunto y tus documentos aquí: ${revealed.url}\nCódigo de acceso: ${revealed.code}`
+    ? `Hola, puedes consultar el avance de tus asuntos y sus documentos aquí: ${revealed.url}\nCódigo de acceso: ${revealed.code}`
     : "";
 
   return (
@@ -106,9 +106,9 @@ export function LawsuitClientPortalPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
           <ShieldCheck className="h-3.5 w-3.5" /> Qué ve el cliente
         </p>
         <ul className="list-disc pl-4 space-y-0.5">
-          <li>Etapa actual, avance, estatus, próxima audiencia y plazo.</li>
-          <li>Solo las actuaciones marcadas «Visible para el cliente» (pestaña Actuaciones).</li>
-          <li>Solo los documentos marcados «Compartido con el cliente» (pestaña Documentos).</li>
+          <li>Un solo enlace para todo el proyecto: ve cada juicio o trámite que marques como «Visible para el cliente».</li>
+          <li>De cada uno: etapa actual, avance, estatus, próxima audiencia y plazo.</li>
+          <li>Solo las actuaciones marcadas «Visible para el cliente» y los documentos «Compartidos con el cliente».</li>
           <li>Nunca ve comentarios, tareas ni notas internas. Es solo lectura.</li>
         </ul>
       </div>

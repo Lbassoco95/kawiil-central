@@ -32,9 +32,16 @@ interface Props {
   clientId?: string | null;
 }
 
-function ReadBadge({ status }: { status?: string }) {
+/** Pasado este tiempo sin lectura completada se deja de esperar. */
+const READ_TIMEOUT_MS = 5 * 60 * 1000;
+const isReadStale = (createdAt: string) => Date.now() - new Date(createdAt).getTime() > READ_TIMEOUT_MS;
+
+function ReadBadge({ status, createdAt }: { status?: string; createdAt: string }) {
   if (status === "completed") return <span className="text-[10px] text-green-700 shrink-0">Leído por IA</span>;
-  if (status === "failed") return <span className="text-[10px] text-muted-foreground shrink-0">Sin lectura IA</span>;
+  // Sin resultado tras unos minutos: no se queda «Leyendo…» para siempre.
+  if (status === "failed" || isReadStale(createdAt)) {
+    return <span className="text-[10px] text-muted-foreground shrink-0">Sin lectura IA</span>;
+  }
   return <span className="text-[10px] text-muted-foreground shrink-0">Leyendo…</span>;
 }
 
@@ -84,7 +91,9 @@ export function LawsuitDocumentsPanel({ lawsuit, clientId }: Props) {
     // Mientras haya documentos recién subidos sin leer, revisa cada pocos segundos.
     refetchInterval: (q) => {
       const st = (q.state.data ?? {}) as Record<string, string>;
-      return docIds.some((id) => !st[id] || st[id] === "processing" || st[id] === "pending") ? 8000 : false;
+      return docs.some((d) => st[d.id] !== "completed" && st[d.id] !== "failed" && !isReadStale(d.created_at))
+        ? 8000
+        : false;
     },
   });
 
@@ -242,7 +251,7 @@ export function LawsuitDocumentsPanel({ lawsuit, clientId }: Props) {
                 >
                   <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
                   <span className="text-sm flex-1 truncate">{d.name}</span>
-                  <ReadBadge status={readStatus[d.id]} />
+                  <ReadBadge status={readStatus[d.id]} createdAt={d.created_at} />
                   <span className="text-[11px] text-muted-foreground shrink-0">
                     {formatMX(d.created_at, "dd MMM yyyy")}
                   </span>
