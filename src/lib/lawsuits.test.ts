@@ -2,6 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   collectLawsuitDeadlines,
   currentStageLabel,
+  defaultStagesForType,
+  isLegalProcedure,
+  partyLabels,
+  statusMeta,
+  statusOptionsForType,
   lawsuitCalendarHref,
   lawsuitDeadlinesAsCalendarTasks,
   lawsuitsForUser,
@@ -94,5 +99,30 @@ describe("calendario", () => {
     expect(lawsuitCalendarHref("lw:p1:l1:plazo")).toBe("/proyectos/p1?tab=juicios&lawsuitId=l1");
     expect(lawsuitCalendarHref("a1b2c3")).toBeNull();
     expect(lawsuitCalendarHref("lw:p1")).toBeNull();
+  });
+});
+
+describe("trámites legales", () => {
+  it("distingue trámites de juicios y ajusta las partes", () => {
+    expect(isLegalProcedure("queja_profeco")).toBe(true);
+    expect(isLegalProcedure("civil")).toBe(false);
+    expect(partyLabels("queja_condusef").first).toBe("Quejoso / promovente");
+    expect(partyLabels("civil")).toEqual({ first: "Actor", second: "Demandado" });
+  });
+
+  it("cada tipo carga sus propias etapas", () => {
+    expect(defaultStagesForType("queja_profeco").map((s) => s.key)).toContain("conciliacion");
+    expect(defaultStagesForType("queja_condusef")[0].key).toBe("reclamacion");
+    expect(defaultStagesForType("civil")[0].key).toBe("demanda");
+    expect(defaultStagesForType(null).every((s) => !s.completed)).toBe(true);
+  });
+});
+
+describe("estatus por tipo", () => {
+  it("los trámites tienen estatus propios y los juicios no los ven", () => {
+    expect(statusOptionsForType("queja_profeco").map((s) => s.value)).toContain("en_conciliacion");
+    expect(statusOptionsForType("civil").map((s) => s.value)).not.toContain("en_conciliacion");
+    expect(statusMeta("convenio", "civil").label).toBe("Convenio / acuerdo");
+    expect(statusMeta("amparo", "queja_profeco").label).toBe("Amparo");
   });
 });

@@ -8,8 +8,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { formatDateMX, toDateStringMX } from "@/lib/dateUtils";
 import {
   CLOSED_LAWSUIT_STATUSES,
-  DEFAULT_LAWSUIT_STAGES,
-  LAWSUIT_STATUS_OPTIONS,
+  defaultStagesForType,
+  isLegalProcedure,
+  statusMeta,
   LAWSUIT_TYPE_OPTIONS,
   currentStageLabel,
   parseLawsuitStages,
@@ -42,7 +43,7 @@ interface Props {
 
 export function LawsuitWorkspaceSheet({ lawsuit, clientId, dropboxPath, lockDropboxToPath, onClose, onEdit }: Props) {
   const lawsuitId = lawsuit?.id;
-  const status = LAWSUIT_STATUS_OPTIONS.find((s) => s.value === lawsuit?.status);
+  const status = lawsuit ? statusMeta(lawsuit.status, lawsuit.lawsuit_type) : undefined;
   const typeLabel = LAWSUIT_TYPE_OPTIONS.find((t) => t.value === lawsuit?.lawsuit_type)?.label;
 
   return (
@@ -153,9 +154,9 @@ function StagesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
         <div className="rounded-lg border border-dashed p-6 text-center space-y-3">
           <ListChecks className="h-7 w-7 mx-auto text-muted-foreground/50" />
           <p className="text-sm text-muted-foreground">
-            Este juicio aún no tiene etapas. Carga las estándar o agrega las tuyas.
+            Aún no hay etapas. Carga las estándar de este tipo o agrega las tuyas.
           </p>
-          <Button size="sm" variant="outline" onClick={() => saveStages.mutate(DEFAULT_LAWSUIT_STAGES)}>
+          <Button size="sm" variant="outline" onClick={() => saveStages.mutate(defaultStagesForType(lawsuit.lawsuit_type))}>
             Cargar etapas estándar
           </Button>
         </div>
@@ -163,7 +164,7 @@ function StagesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
         <>
           <p className="text-xs text-muted-foreground">
             {done} de {stages.length} etapas completadas
-            {closed ? " · juicio cerrado" : ""}
+            {closed ? (isLegalProcedure(lawsuit.lawsuit_type) ? " · trámite cerrado" : " · juicio cerrado") : ""}
           </p>
           <ul className="divide-y divide-border/50 rounded-lg border">
             {stages.map((s) => (
