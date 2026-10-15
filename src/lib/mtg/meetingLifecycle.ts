@@ -167,6 +167,8 @@ const ARCHIVABLE_STATUSES: MtgMeetingStatus[] = [
   "minutes_review",
   "minutes_approved",
   "closed",
+  "cancelled",
+  "no_show",
 ];
 
 export function canArchive(meeting: Pick<MtgMeetingRow, "status" | "archived_at">): boolean {
@@ -180,7 +182,7 @@ export async function archiveMeeting(opts: {
   meeting: MtgMeetingRow;
 }): Promise<MtgMeetingRow> {
   if (!canArchive(opts.meeting)) {
-    throw new Error("Solo se pueden archivar juntas que ya terminaron.");
+    throw new Error("Solo se pueden archivar juntas que ya terminaron o se cancelaron.");
   }
   const { data, error } = await mtgDb
     .from("mtg_meetings")
