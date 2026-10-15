@@ -4277,6 +4277,7 @@ export type Database = {
       }
       project_lawsuit_entries: {
         Row: {
+          client_visible: boolean
           content: string
           created_at: string
           created_by: string | null
@@ -4286,6 +4287,7 @@ export type Database = {
           organization_id: string
         }
         Insert: {
+          client_visible?: boolean
           content: string
           created_at?: string
           created_by?: string | null
@@ -4295,6 +4297,7 @@ export type Database = {
           organization_id: string
         }
         Update: {
+          client_visible?: boolean
           content?: string
           created_at?: string
           created_by?: string | null

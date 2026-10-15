@@ -32,6 +32,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LawsuitCommentsPanel } from "@/components/projects/LawsuitCommentsPanel";
 import { LawsuitDocumentsPanel } from "@/components/projects/LawsuitDocumentsPanel";
+import { LawsuitClientPortalPanel } from "@/components/projects/LawsuitClientPortalPanel";
 import { TaskFormDialog } from "@/components/tasks/TaskFormDialog";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -74,12 +75,13 @@ export function LawsuitWorkspaceSheet({ lawsuit, clientId, dropboxPath, lockDrop
             </SheetHeader>
 
             <Tabs defaultValue="etapas" className="mt-4">
-              <TabsList className="grid grid-cols-5 w-full">
+              <TabsList className="grid grid-cols-6 w-full">
                 <TabsTrigger value="etapas" className="px-1 text-xs sm:text-sm">Etapas</TabsTrigger>
                 <TabsTrigger value="actuaciones" className="px-1 text-xs sm:text-sm">Actuaciones</TabsTrigger>
                 <TabsTrigger value="tareas" className="px-1 text-xs sm:text-sm">Tareas</TabsTrigger>
                 <TabsTrigger value="comentarios" className="px-1 text-xs sm:text-sm">Comentarios</TabsTrigger>
                 <TabsTrigger value="documentos" className="px-1 text-xs sm:text-sm">Documentos</TabsTrigger>
+                <TabsTrigger value="cliente" className="px-1 text-xs sm:text-sm">Cliente</TabsTrigger>
               </TabsList>
               <TabsContent value="etapas" className="mt-4">
                 <StagesPanel lawsuit={lawsuit} />
@@ -109,6 +111,9 @@ export function LawsuitWorkspaceSheet({ lawsuit, clientId, dropboxPath, lockDrop
                   lockDropboxToPath={lockDropboxToPath}
                 />
                 </div>
+              </TabsContent>
+              <TabsContent value="cliente" className="mt-4">
+                <LawsuitClientPortalPanel lawsuit={lawsuit} />
               </TabsContent>
             </Tabs>
           </>
@@ -442,6 +447,7 @@ function EntriesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
   const { data: profiles } = useProfiles();
   const [content, setContent] = useState("");
   const [entryDate, setEntryDate] = useState(toDateStringMX());
+  const [clientVisible, setClientVisible] = useState(false);
   const queryKey = ["lawsuit-entries", lawsuit.id];
 
   const { data: entries = [], isLoading } = useQuery({
@@ -465,6 +471,7 @@ function EntriesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
         organization_id: lawsuit.organization_id,
         content: content.trim(),
         entry_date: entryDate,
+        client_visible: clientVisible,
         created_by: user?.id ?? null,
       });
       if (error) throw error;
@@ -472,9 +479,22 @@ function EntriesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey });
       setContent("");
+      setClientVisible(false);
       setEntryDate(toDateStringMX());
     },
     onError: (e: Error) => toast.error("No se pudo guardar la actuación: " + e.message),
+  });
+
+  const setVisible = useMutation({
+    mutationFn: async (v: { id: string; visible: boolean }) => {
+      const { error } = await supabase
+        .from("project_lawsuit_entries")
+        .update({ client_visible: v.visible })
+        .eq("id", v.id);
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey }),
+    onError: (e: Error) => toast.error("No se pudo actualizar: " + e.message),
   });
 
   const remove = useMutation({
@@ -501,6 +521,10 @@ function EntriesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
         />
         <div className="flex items-center gap-2">
           <Input type="date" className="w-40" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} />
+          <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Checkbox checked={clientVisible} onCheckedChange={(v) => setClientVisible(v === true)} />
+            Visible para el cliente
+          </label>
           <Button
             size="sm"
             className="ml-auto"
@@ -523,6 +547,18 @@ function EntriesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
               <div className="flex items-center gap-2 text-[11px] text-muted-foreground mb-1">
                 <span className="font-medium text-foreground">{formatDateMX(e.entry_date)}</span>
                 {nameOf(e.created_by) && <span>· {nameOf(e.created_by)}</span>}
+                <button
+                  type="button"
+                  className={`rounded border px-1.5 py-0.5 text-[10px] ${
+                    e.client_visible
+                      ? "bg-blue-500/10 text-blue-700 border-blue-500/30"
+                      : "text-muted-foreground hover:bg-secondary/40"
+                  }`}
+                  title={e.client_visible ? "Quitar de lo que ve el cliente" : "Mostrar al cliente"}
+                  onClick={() => setVisible.mutate({ id: e.id, visible: !e.client_visible })}
+                >
+                  {e.client_visible ? "Visible para el cliente" : "Interna"}
+                </button>
                 {e.created_by === user?.id && (
                   <Button
                     variant="ghost"
