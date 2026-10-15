@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { CalendarDays, CheckCircle2, ChevronDown, Circle, Download, FileText, Loader2, Lock, Scale, Send } from "lucide-react";
+import { CalendarDays, CheckCircle2, ChevronDown, Circle, Download, Eye, FileText, Loader2, Lock, Scale, Send } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { FunctionsHttpError } from "@supabase/functions-js";
 import { formatDateMX } from "@/lib/dateUtils";
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { AttachmentPreviewDialog, type PreviewableAttachment } from "@/components/shared/AttachmentPreviewDialog";
 
 interface PortalLawsuit {
   id: string;
@@ -33,6 +34,12 @@ interface PortalData {
   client_name: string | null;
   project_name: string;
   lawsuits: PortalLawsuit[];
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 const codeStorageKey = (token: string) => `portal-code:${token}`;
@@ -198,12 +205,30 @@ function LawsuitSection({
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<PreviewableAttachment | null>(null);
+  const [openingId, setOpeningId] = useState<string | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const { stages } = lawsuit;
   const status = statusMeta(lawsuit.status, lawsuit.lawsuit_type);
   const typeLabel = LAWSUIT_TYPE_OPTIONS.find((t) => t.value === lawsuit.lawsuit_type)?.label;
   const done = stages.filter((s) => s.completed).length;
   const percent = stages.length > 0 ? Math.round((done / stages.length) * 100) : 0;
   const currentLabel = stages.find((s) => !s.completed)?.label ?? lawsuit.current_stage;
+
+  /** Abre el documento en el visor (PDF, Word, Excel, imagen, texto) sin salir del portal. */
+  const openDocument = async (d: PortalLawsuit["documents"][number]) => {
+    setOpeningId(d.id);
+    setPreviewError(null);
+    try {
+      const resp = await fetch(d.url);
+      if (!resp.ok) throw new Error("expired");
+      setPreview({ name: d.name, contentType: resp.headers.get("content-type"), blob: await resp.blob() });
+    } catch {
+      setPreviewError("No se pudo abrir el documento. Recarga la página e inténtalo de nuevo, o usa Descargar.");
+    } finally {
+      setOpeningId(null);
+    }
+  };
 
   const submit = async () => {
     const text = draft.trim();
@@ -361,24 +386,45 @@ function LawsuitSection({
               ) : (
                 <ul className="divide-y divide-border/50 rounded-lg border">
                   {lawsuit.documents.map((d) => (
-                    <li key={d.id} className="flex items-center gap-3 px-3 py-2">
-                      <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm">{d.name}</p>
-                        <p className="text-[11px] text-muted-foreground">{formatDateMX(d.created_at)}</p>
+                    <li key={d.id} className="flex flex-wrap items-center gap-3 px-3 py-2.5">
+                      <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />
+                      <div className="min-w-0 flex-1 basis-40">
+                        <p className="break-words text-sm font-medium">{d.name}</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {formatDateMX(d.created_at)}
+                          {d.size ? ` · ${formatBytes(d.size)}` : ""}
+                        </p>
                       </div>
-                      <Button asChild size="sm" variant="outline" className="h-7">
-                        <a href={d.url} download={d.name}>
-                          <Download className="mr-1 h-3.5 w-3.5" /> Descargar
-                        </a>
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8"
+                          disabled={openingId === d.id}
+                          onClick={() => void openDocument(d)}
+                        >
+                          {openingId === d.id ? (
+                            <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Eye className="mr-1 h-3.5 w-3.5" />
+                          )}
+                          Ver
+                        </Button>
+                        <Button asChild size="sm" variant="outline" className="h-8">
+                          <a href={d.url} download={d.name}>
+                            <Download className="mr-1 h-3.5 w-3.5" /> Descargar
+                          </a>
+                        </Button>
+                      </div>
                     </li>
                   ))}
                 </ul>
               )}
+              {previewError && <p className="text-sm text-destructive">{previewError}</p>}
             </section>
           </div>
         )}
+        <AttachmentPreviewDialog attachment={preview} onClose={() => setPreview(null)} />
       </CardContent>
     </Card>
   );
