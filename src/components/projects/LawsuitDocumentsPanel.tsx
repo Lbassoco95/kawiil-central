@@ -19,6 +19,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { AttachmentPreviewDialog, type PreviewableAttachment } from "@/components/shared/AttachmentPreviewDialog";
 import { documentBucket } from "@/lib/documentBucket";
 import { inferMimeFromFileName } from "@/lib/outlookEmailMedia";
+import { PREFETCH_MAX_BYTES, createBlobCache, preloadViewerFor } from "@/lib/blobPrefetch";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import {
@@ -63,6 +64,7 @@ export function LawsuitDocumentsPanel({ lawsuit, clientId }: Props) {
   const [shareOnUpload, setShareOnUpload] = useState(false);
   const [preview, setPreview] = useState<PreviewableAttachment | null>(null);
   const [openingId, setOpeningId] = useState<string | null>(null);
+  const blobs = useRef(createBlobCache());
   const [dupOpen, setDupOpen] = useState(false);
   const [dupName, setDupName] = useState("");
   const dupResolver = useRef<((c: DuplicateResolutionChoice) => void) | null>(null);
@@ -180,6 +182,20 @@ export function LawsuitDocumentsPanel({ lawsuit, clientId }: Props) {
     queryClient.invalidateQueries({ queryKey });
   };
 
+  const loadBlob = (d: DocumentRow) =>
+    blobs.current.get(d.id, async () => {
+      const { data, error } = await supabase.storage.from(documentBucket(d)).download(d.file_path as string);
+      if (error) throw error;
+      return data;
+    });
+
+  /** Precarga al pasar el cursor, para que al abrir ya esté descargado y el visor listo. */
+  const prefetch = (d: DocumentRow) => {
+    if (!d.file_path) return;
+    preloadViewerFor(d.name);
+    if ((d.file_size ?? 0) <= PREFETCH_MAX_BYTES) void loadBlob(d).catch(() => {});
+  };
+
   /** Vista previa con el visor común de la app (PDF, Word, Excel/CSV, imagen y texto). */
   const openPreview = async (d: DocumentRow) => {
     if (!d.file_path) {
@@ -188,9 +204,8 @@ export function LawsuitDocumentsPanel({ lawsuit, clientId }: Props) {
     }
     setOpeningId(d.id);
     try {
-      const { data, error } = await supabase.storage.from(documentBucket(d)).download(d.file_path);
-      if (error) throw error;
-      setPreview({ name: d.name, contentType: inferMimeFromFileName(d.name) || d.mime_type, blob: data });
+      const blob = await loadBlob(d);
+      setPreview({ name: d.name, contentType: inferMimeFromFileName(d.name) || d.mime_type, blob });
     } catch (e) {
       toast.error("No se pudo abrir el archivo: " + (e instanceof Error ? e.message : ""));
     } finally {
@@ -246,6 +261,7 @@ export function LawsuitDocumentsPanel({ lawsuit, clientId }: Props) {
       if (added > 0) toast.success(`${added} archivo(s) subidos al expediente`);
       if (replaced > 0) toast.success(`${replaced} archivo(s) reemplazados`);
       if (failed > 0) toast.error(`${failed} archivo(s) fallaron`);
+      blobs.current.clear(); // un archivo reemplazado conserva su id: se descarta lo precargado
       queryClient.invalidateQueries({ queryKey });
       queryClient.invalidateQueries({ queryKey: ["documents"] });
     } catch (e) {
@@ -315,6 +331,8 @@ export function LawsuitDocumentsPanel({ lawsuit, clientId }: Props) {
                   <button
                     className="flex items-center gap-3 flex-1 min-w-0 px-3 py-2 text-left hover:bg-secondary/30"
                     onClick={() => void openPreview(d)}
+                    onMouseEnter={() => prefetch(d)}
+                    onFocus={() => prefetch(d)}
                     disabled={openingId === d.id}
                   >
                     {openingId === d.id ? (

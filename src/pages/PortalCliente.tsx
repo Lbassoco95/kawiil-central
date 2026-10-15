@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { CalendarDays, CheckCircle2, ChevronDown, Circle, Download, Eye, FileText, Loader2, Lock, Scale, Send } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -6,6 +6,7 @@ import { FunctionsHttpError } from "@supabase/functions-js";
 import { formatDateMX } from "@/lib/dateUtils";
 import { LAWSUIT_TYPE_OPTIONS, statusMeta } from "@/lib/lawsuits";
 import { inferMimeFromFileName } from "@/lib/outlookEmailMedia";
+import { PREFETCH_MAX_BYTES, createBlobCache, preloadViewerFor } from "@/lib/blobPrefetch";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -240,6 +241,7 @@ function LawsuitSection({
   const [preview, setPreview] = useState<PreviewableAttachment | null>(null);
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const blobs = useRef(createBlobCache());
   const { stages } = lawsuit;
   const status = statusMeta(lawsuit.status, lawsuit.lawsuit_type);
   const typeLabel = LAWSUIT_TYPE_OPTIONS.find((t) => t.value === lawsuit.lawsuit_type)?.label;
@@ -248,14 +250,41 @@ function LawsuitSection({
   const currentLabel = stages.find((s) => !s.completed)?.label ?? lawsuit.current_stage;
 
   /** Abre el documento en el visor (PDF, Word, Excel, imagen, texto) sin salir del portal. */
+  /**
+   * Primero directo desde el Storage con la URL firmada (lo más rápido); si el navegador no lo permite,
+   * se pide a la función. El resultado se guarda para no descargarlo dos veces.
+   */
+  const loadBlob = (d: PortalLawsuit["documents"][number]) =>
+    blobs.current.get(d.id, async () => {
+      try {
+        const resp = await fetch(d.url);
+        if (resp.ok) return await resp.blob();
+      } catch {
+        /* sin acceso directo: se usa la función */
+      }
+      const res = await onFetchDocument(d.id);
+      if ("error" in res) throw new Error(res.error);
+      return res.blob;
+    });
+
+  /** Precarga al pasar el cursor / tocar «Ver», para que al abrir ya esté descargado. */
+  const prefetch = (d: PortalLawsuit["documents"][number]) => {
+    preloadViewerFor(d.name);
+    if ((d.size ?? 0) <= PREFETCH_MAX_BYTES) void loadBlob(d).catch(() => {});
+  };
+
   const openDocument = async (d: PortalLawsuit["documents"][number]) => {
     setOpeningId(d.id);
     setPreviewError(null);
-    const res = await onFetchDocument(d.id);
-    if ("error" in res) setPreviewError(res.error);
-    // El tipo se deduce primero del nombre del archivo (más fiable que el mime guardado).
-    else setPreview({ name: d.name, contentType: inferMimeFromFileName(d.name) || d.mime_type, blob: res.blob });
-    setOpeningId(null);
+    try {
+      const blob = await loadBlob(d);
+      // El tipo se deduce primero del nombre del archivo (más fiable que el mime guardado).
+      setPreview({ name: d.name, contentType: inferMimeFromFileName(d.name) || d.mime_type, blob });
+    } catch (e) {
+      setPreviewError(e instanceof Error ? e.message : "No se pudo abrir el documento. Usa Descargar.");
+    } finally {
+      setOpeningId(null);
+    }
   };
 
   const submit = async () => {
@@ -429,6 +458,9 @@ function LawsuitSection({
                           variant="outline"
                           className="h-8"
                           disabled={openingId === d.id}
+                          onMouseEnter={() => prefetch(d)}
+                          onFocus={() => prefetch(d)}
+                          onTouchStart={() => prefetch(d)}
                           onClick={() => void openDocument(d)}
                         >
                           {openingId === d.id ? (
