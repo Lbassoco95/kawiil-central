@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileText, Share2 } from "lucide-react";
+import { FileText, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -16,7 +16,10 @@ import { replaceSupabaseStoredDocumentFile } from "@/lib/supabaseDocumentReplace
 import { mimeTypeForFile } from "@/lib/mimeFromFilename";
 import { FileDropzone } from "@/components/shared/FileDropzone";
 import { Checkbox } from "@/components/ui/checkbox";
-import { DocumentPreviewDialog } from "@/components/documents/DocumentPreviewDialog";
+import { AttachmentPreviewDialog, type PreviewableAttachment } from "@/components/shared/AttachmentPreviewDialog";
+import { documentBucket } from "@/lib/documentBucket";
+import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
 import {
   DuplicateFileResolutionDialog,
   type DuplicateResolutionChoice,
@@ -57,7 +60,8 @@ export function LawsuitDocumentsPanel({ lawsuit, clientId }: Props) {
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [shareOnUpload, setShareOnUpload] = useState(false);
-  const [previewDoc, setPreviewDoc] = useState<DocumentRow | null>(null);
+  const [preview, setPreview] = useState<PreviewableAttachment | null>(null);
+  const [openingId, setOpeningId] = useState<string | null>(null);
   const [dupOpen, setDupOpen] = useState(false);
   const [dupName, setDupName] = useState("");
   const dupResolver = useRef<((c: DuplicateResolutionChoice) => void) | null>(null);
@@ -153,16 +157,44 @@ export function LawsuitDocumentsPanel({ lawsuit, clientId }: Props) {
     if (marker?.kind !== "server_deferred") invokeProcessDocumentForBinaryFile(file, doc.id as string);
   };
 
-  const toggleShared = async (d: DocumentRow) => {
-    const meta = (d.metadata && typeof d.metadata === "object" && !Array.isArray(d.metadata) ? d.metadata : {}) as Record<string, Json>;
-    const next = { ...meta, client_shared: meta.client_shared !== true };
-    const { error } = await supabase.from("documents").update({ metadata: next }).eq("id", d.id);
-    if (error) {
-      toast.error("No se pudo actualizar: " + error.message);
+  const isShared = (d: DocumentRow) => (d.metadata as { client_shared?: unknown } | null)?.client_shared === true;
+
+  /** Publica o quita del portal del cliente uno o varios archivos ya subidos. */
+  const setShared = async (targets: DocumentRow[], shared: boolean) => {
+    const results = await Promise.all(
+      targets.map((d) => {
+        const meta = (d.metadata && typeof d.metadata === "object" && !Array.isArray(d.metadata)
+          ? d.metadata
+          : {}) as Record<string, Json>;
+        return supabase
+          .from("documents")
+          .update({ metadata: { ...meta, client_shared: shared } })
+          .eq("id", d.id);
+      }),
+    );
+    const failed = results.find((r) => r.error);
+    if (failed?.error) toast.error("No se pudo actualizar: " + failed.error.message);
+    else if (targets.length === 1) toast.success(shared ? "Visible para el cliente" : "Ya no lo ve el cliente");
+    else toast.success(shared ? `${targets.length} archivos visibles para el cliente` : `${targets.length} archivos quitados del portal`);
+    queryClient.invalidateQueries({ queryKey });
+  };
+
+  /** Vista previa con el visor común de la app (PDF, Word, Excel/CSV, imagen y texto). */
+  const openPreview = async (d: DocumentRow) => {
+    if (!d.file_path) {
+      toast.error("Este archivo no está almacenado en Kawiil");
       return;
     }
-    toast.success(next.client_shared ? "Compartido con el cliente" : "Ya no se comparte con el cliente");
-    queryClient.invalidateQueries({ queryKey });
+    setOpeningId(d.id);
+    try {
+      const { data, error } = await supabase.storage.from(documentBucket(d)).download(d.file_path);
+      if (error) throw error;
+      setPreview({ name: d.name, contentType: d.mime_type, blob: data });
+    } catch (e) {
+      toast.error("No se pudo abrir el archivo: " + (e instanceof Error ? e.message : ""));
+    } finally {
+      setOpeningId(null);
+    }
   };
 
   const handleFiles = async (files: File[]) => {
@@ -248,48 +280,68 @@ export function LawsuitDocumentsPanel({ lawsuit, clientId }: Props) {
       ) : docs.length === 0 ? (
         <p className="text-xs text-muted-foreground text-center">Aún no hay archivos en el expediente.</p>
       ) : (
-        <ul className="divide-y divide-border/50 rounded-lg border">
-          {docs.map((d) => {
-            const shared = (d.metadata as { client_shared?: unknown } | null)?.client_shared === true;
-            return (
-              <li key={d.id} className="flex items-center">
-                <button
-                  className="flex items-center gap-3 flex-1 min-w-0 px-3 py-2 text-left hover:bg-secondary/30"
-                  onClick={() => setPreviewDoc(d)}
-                >
-                  <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  <span className="text-sm flex-1 truncate">{d.name}</span>
-                  <ReadBadge status={readStatus[d.id]} createdAt={d.created_at} />
-                  <span className="text-[11px] text-muted-foreground shrink-0">
-                    {formatMX(d.created_at, "dd MMM yyyy")}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  className={`mr-2 flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] shrink-0 ${
-                    shared
-                      ? "bg-blue-500/10 text-blue-700 border-blue-500/30"
-                      : "text-muted-foreground hover:bg-secondary/40"
-                  }`}
-                  title={shared ? "Dejar de compartir con el cliente" : "Compartir con el cliente"}
-                  onClick={() => void toggleShared(d)}
-                >
-                  <Share2 className="h-3 w-3" />
-                  {shared ? "Compartido con el cliente" : "Interno"}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <p className="text-xs text-muted-foreground">
+              {docs.filter(isShared).length} de {docs.length} visibles para el cliente
+            </p>
+            <div className="flex items-center gap-1">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                disabled={docs.every(isShared)}
+                onClick={() => void setShared(docs.filter((d) => !isShared(d)), true)}
+              >
+                Compartir todos
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                disabled={!docs.some(isShared)}
+                onClick={() => void setShared(docs.filter(isShared), false)}
+              >
+                Quitar todos
+              </Button>
+            </div>
+          </div>
+          <ul className="divide-y divide-border/50 rounded-lg border">
+            {docs.map((d) => {
+              const shared = isShared(d);
+              return (
+                <li key={d.id} className="flex items-center">
+                  <button
+                    className="flex items-center gap-3 flex-1 min-w-0 px-3 py-2 text-left hover:bg-secondary/30"
+                    onClick={() => void openPreview(d)}
+                    disabled={openingId === d.id}
+                  >
+                    {openingId === d.id ? (
+                      <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
+                    ) : (
+                      <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    )}
+                    <span className="text-sm flex-1 truncate">{d.name}</span>
+                    <ReadBadge status={readStatus[d.id]} createdAt={d.created_at} />
+                    <span className="hidden sm:inline text-[11px] text-muted-foreground shrink-0">
+                      {formatMX(d.created_at, "dd MMM yyyy")}
+                    </span>
+                  </button>
+                  <label
+                    className="mr-3 flex items-center gap-1.5 shrink-0 text-[11px] text-muted-foreground cursor-pointer"
+                    title={shared ? "Dejar de mostrar al cliente" : "Mostrar al cliente"}
+                  >
+                    <Switch checked={shared} onCheckedChange={(v) => void setShared([d], v)} />
+                    <span className={shared ? "text-blue-700" : undefined}>Cliente</span>
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       )}
 
-      <DocumentPreviewDialog
-        open={!!previewDoc}
-        onOpenChange={(o) => {
-          if (!o) setPreviewDoc(null);
-        }}
-        document={previewDoc}
-      />
+      <AttachmentPreviewDialog attachment={preview} onClose={() => setPreview(null)} />
       <DuplicateFileResolutionDialog open={dupOpen} fileName={dupName} onResolve={onDupResolve} />
     </div>
   );
