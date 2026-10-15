@@ -33,6 +33,8 @@ import {
   CLOSED_LAWSUIT_STATUSES,
   LAWSUIT_STATUS_OPTIONS,
   LAWSUIT_TYPE_OPTIONS,
+  defaultStagesForType,
+  partyLabels,
 } from "@/lib/lawsuits";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -176,6 +178,7 @@ export function ProjectLawsuitsTab({ projectId, organizationId, clientId, dropbo
       } else {
         const { error } = await supabase.from("project_lawsuits").insert({
           ...payload,
+          stages: defaultStagesForType(payload.lawsuit_type) as unknown as Database["public"]["Tables"]["project_lawsuits"]["Insert"]["stages"],
           project_id: projectId,
           organization_id: organizationId,
           created_by: user?.id ?? null,
@@ -185,10 +188,10 @@ export function ProjectLawsuitsTab({ projectId, organizationId, clientId, dropbo
     },
     onSuccess: () => {
       invalidate();
-      toast.success(editingId ? "Juicio actualizado" : "Juicio agregado");
+      toast.success(editingId ? "Registro actualizado" : "Agregado al control");
       setDialogOpen(false);
     },
-    onError: (e: Error) => toast.error("No se pudo guardar el juicio: " + e.message),
+    onError: (e: Error) => toast.error("No se pudo guardar: " + e.message),
   });
 
   const quickStatus = useMutation({
@@ -207,7 +210,7 @@ export function ProjectLawsuitsTab({ projectId, organizationId, clientId, dropbo
     },
     onSuccess: () => {
       invalidate();
-      toast.success("Juicio eliminado");
+      toast.success("Eliminado");
       if (deleting?.id === openId) setOpenId(null);
       setDeleting(null);
     },
@@ -236,16 +239,16 @@ export function ProjectLawsuitsTab({ projectId, organizationId, clientId, dropbo
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div>
           <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-1.5">
-            <Scale className="h-4 w-4" /> Juicios del proyecto
+            <Scale className="h-4 w-4" /> Juicios y trámites legales
           </h3>
           <p className="text-[11px] text-muted-foreground/90 mt-0.5">
             {lawsuits.length === 0
-              ? "Aún no hay juicios registrados"
+              ? "Aún no hay juicios ni trámites registrados"
               : `${activeCount} activo${activeCount === 1 ? "" : "s"} · ${lawsuits.length} en total`}
           </p>
         </div>
         <Button size="sm" onClick={openNew}>
-          <Plus className="h-4 w-4 mr-1" /> Agregar juicio
+          <Plus className="h-4 w-4 mr-1" /> Nuevo juicio o trámite
         </Button>
       </div>
 
@@ -255,7 +258,7 @@ export function ProjectLawsuitsTab({ projectId, organizationId, clientId, dropbo
         <Card>
           <CardContent className="py-10 text-center text-sm text-muted-foreground">
             <Gavel className="h-8 w-8 mx-auto mb-2 opacity-40" />
-            Registra cada juicio que lleva este proyecto, con su expediente, juzgado, etapa y fechas clave.
+            Registra cada juicio o trámite legal (queja ante Profeco o Condusef, etc.) por separado, con su expediente, autoridad, etapas, actuaciones y fechas clave.
           </CardContent>
         </Card>
       ) : (
@@ -341,19 +344,19 @@ export function ProjectLawsuitsTab({ projectId, organizationId, clientId, dropbo
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingId ? "Editar juicio" : "Agregar juicio"}</DialogTitle>
+            <DialogTitle>{editingId ? "Editar juicio o trámite" : "Nuevo juicio o trámite"}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="sm:col-span-2 space-y-1.5">
-              <Label>Nombre del juicio *</Label>
+              <Label>Nombre del juicio o trámite *</Label>
               <Input
                 value={form.name}
                 onChange={(e) => set("name", e.target.value)}
-                placeholder="Ej. Juicio sucesorio Porfirio Tacuba"
+                placeholder="Ej. Juicio sucesorio Porfirio Tacuba / Queja Profeco vs. Tienda X"
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Materia</Label>
+              <Label>Tipo / materia</Label>
               <Select value={form.lawsuit_type} onValueChange={(v) => set("lawsuit_type", v)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecciona" />
@@ -383,7 +386,7 @@ export function ProjectLawsuitsTab({ projectId, organizationId, clientId, dropbo
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label>Número de expediente</Label>
+              <Label>Número de expediente / folio</Label>
               <Input value={form.case_number} onChange={(e) => set("case_number", e.target.value)} />
             </div>
             <div className="space-y-1.5">
@@ -391,11 +394,11 @@ export function ProjectLawsuitsTab({ projectId, organizationId, clientId, dropbo
               <Input value={form.court} onChange={(e) => set("court", e.target.value)} />
             </div>
             <div className="space-y-1.5">
-              <Label>Actor</Label>
+              <Label>{partyLabels(form.lawsuit_type).first}</Label>
               <Input value={form.plaintiff} onChange={(e) => set("plaintiff", e.target.value)} />
             </div>
             <div className="space-y-1.5">
-              <Label>Demandado</Label>
+              <Label>{partyLabels(form.lawsuit_type).second}</Label>
               <Input value={form.defendant} onChange={(e) => set("defendant", e.target.value)} />
             </div>
             <div className="sm:col-span-2 space-y-1.5">
@@ -464,7 +467,7 @@ export function ProjectLawsuitsTab({ projectId, organizationId, clientId, dropbo
         onOpenChange={(o) => !o && setDeleting(null)}
         onConfirm={() => deleting && remove.mutate(deleting.id)}
         title="Eliminar juicio"
-        description={`Se eliminará "${deleting?.name ?? ""}" del proyecto. Esta acción no se puede deshacer.`}
+        description={`Se eliminará "${deleting?.name ?? ""}" del control de juicios. Esta acción no se puede deshacer.`}
       />
     </div>
   );

@@ -559,7 +559,7 @@ const ProyectoDetalle = () => {
   if (hasAccounting) projectTabs.push({ key: "contabilidad", label: "Contabilidad", icon: Calculator });
   if (hasAccounting) projectTabs.push({ key: "declaracion_anual", label: "Declaración Anual", icon: FileSpreadsheet });
   if (isLawsuit) projectTabs.push({ key: "juicio", label: "Juicio", icon: Scale });
-  if (isJuiciosArea) projectTabs.push({ key: "juicios", label: "Control de juicios", icon: Gavel });
+  if (isJuiciosArea) projectTabs.push({ key: "juicios", label: "Juicios y trámites", icon: Gavel });
   if (isCumplimiento) projectTabs.push({ key: "cumplimiento", label: "Cumplimiento", icon: Shield });
   projectTabs.push({
     key: "tareas",

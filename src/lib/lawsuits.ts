@@ -17,7 +17,24 @@ export const LAWSUIT_TYPE_OPTIONS = [
   { value: "penal", label: "Penal" },
   { value: "administrativo", label: "Administrativo" },
   { value: "familiar", label: "Familiar" },
+  { value: "queja_profeco", label: "Queja Profeco" },
+  { value: "queja_condusef", label: "Queja Condusef" },
+  { value: "otro_tramite", label: "Otro trámite legal" },
 ];
+
+/** Tipos que son trámites ante una autoridad administrativa (no un juicio tal cual). */
+const PROCEDURE_TYPES = ["queja_profeco", "queja_condusef", "otro_tramite"];
+
+export function isLegalProcedure(type: string | null | undefined): boolean {
+  return !!type && PROCEDURE_TYPES.includes(type);
+}
+
+/** Etiquetas de las partes según sea juicio o trámite (quejoso vs. proveedor/institución). */
+export function partyLabels(type: string | null | undefined): { first: string; second: string } {
+  return isLegalProcedure(type)
+    ? { first: "Quejoso / promovente", second: "Proveedor / institución" }
+    : { first: "Actor", second: "Demandado" };
+}
 
 export const CLOSED_LAWSUIT_STATUSES = ["concluido", "archivado"];
 
@@ -40,6 +57,53 @@ export const DEFAULT_LAWSUIT_STAGES: LawsuitStage[] = [
   { key: "amparo", label: "Amparo" },
   { key: "ejecucion", label: "Ejecución de sentencia" },
 ].map((s) => ({ ...s, completed: false, completed_at: null }));
+
+const PROFECO_STAGES = [
+  ["queja", "Presentación de la queja"],
+  ["admision", "Admisión y notificación al proveedor"],
+  ["informe", "Informe / respuesta del proveedor"],
+  ["conciliacion", "Audiencia de conciliación"],
+  ["convenio", "Convenio o acuerdo"],
+  ["arbitraje", "Arbitraje o procedimiento por infracciones a la ley"],
+  ["resolucion", "Resolución"],
+  ["cumplimiento", "Cumplimiento / seguimiento"],
+];
+
+const CONDUSEF_STAGES = [
+  ["reclamacion", "Reclamación directa ante la UNE de la institución"],
+  ["queja", "Presentación de la queja ante Condusef"],
+  ["informe", "Informe de la institución financiera"],
+  ["conciliacion", "Audiencia de conciliación"],
+  ["convenio", "Convenio o acuerdo"],
+  ["dictamen", "Dictamen / arbitraje"],
+  ["cumplimiento", "Cumplimiento / seguimiento"],
+];
+
+const OTHER_PROCEDURE_STAGES = [
+  ["solicitud", "Presentación de la solicitud o trámite"],
+  ["requerimientos", "Requerimientos de la autoridad"],
+  ["desahogo", "Desahogo de requerimientos"],
+  ["resolucion", "Resolución"],
+  ["seguimiento", "Cumplimiento / seguimiento"],
+];
+
+function toStages(rows: string[][]): LawsuitStage[] {
+  return rows.map(([key, label]) => ({ key, label, completed: false, completed_at: null }));
+}
+
+/** Etapas estándar según el tipo de juicio o trámite. */
+export function defaultStagesForType(type: string | null | undefined): LawsuitStage[] {
+  switch (type) {
+    case "queja_profeco":
+      return toStages(PROFECO_STAGES);
+    case "queja_condusef":
+      return toStages(CONDUSEF_STAGES);
+    case "otro_tramite":
+      return toStages(OTHER_PROCEDURE_STAGES);
+    default:
+      return DEFAULT_LAWSUIT_STAGES.map((s) => ({ ...s }));
+  }
+}
 
 /** Normaliza el JSON `stages` de la BD a una lista tipada (descarta basura). */
 export function parseLawsuitStages(raw: unknown): LawsuitStage[] {
