@@ -10,7 +10,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
  *   - "send": el cliente envía un mensaje al equipo sobre un asunto publicado.
  * Respuesta de "get": { client_name, project_name, lawsuits: [...] }. Solo los juicios/trámites con
  * `client_visible = true`; de cada uno: etapas, actuaciones con `client_visible` y documentos con
- * `metadata.client_shared = true` (URLs firmadas de 10 minutos).
+ * `metadata.client_shared = true` (URLs firmadas de 30 minutos).
  *
  * Seguridad: `verify_jwt = false` (el cliente no tiene cuenta). El acceso exige el token
  * del enlace y un código; tras 5 intentos fallidos el enlace se bloquea 15 minutos.
@@ -25,7 +25,7 @@ const corsHeaders = {
 
 const MAX_ATTEMPTS = 5;
 const LOCK_MINUTES = 15;
-const SIGNED_URL_SECONDS = 600;
+const SIGNED_URL_SECONDS = 1800;
 const MAX_MESSAGE_CHARS = 2000;
 const MAX_MESSAGES_PER_HOUR = 10;
 
