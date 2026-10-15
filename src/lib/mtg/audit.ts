@@ -17,6 +17,7 @@ export const MTG_AUDIT_ACTION = {
   MEETING_STARTED: "meeting_started",
   MEETING_ENDED: "meeting_ended",
   MEETING_CANCELLED: "meeting_cancelled",
+  MEETING_DELETED: "meeting_deleted",
   MEETING_CLIENT_ASSIGNED: "meeting_client_assigned",
   MEETING_JOIN_LINK_SET: "meeting_join_link_set",
   TOPIC_CREATED: "topic_created",

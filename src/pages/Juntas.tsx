@@ -28,6 +28,7 @@ import { formatDateMX } from "@/lib/dateUtils";
 import { MEETING_STATUS, TRANSCRIPT_STATUS, type MtgMeetingStatus } from "@/lib/mtg/constants";
 import { useMtgMeetingsForOrg, type OrgMtgMeeting } from "@/hooks/useMtgMeetingsOrg";
 import { useClients, type Client } from "@/hooks/useClients";
+import { MtgMeetingActionsMenu } from "@/components/mtg/MtgMeetingActionsMenu";
 import { MtgAdhocMeetingDialog } from "@/components/clients/MtgAdhocMeetingDialog";
 import {
   MtgMeetingEntryChooser,
@@ -58,7 +59,8 @@ function joinProviderLabel(url: string | null | undefined): string {
 }
 
 function matchesFilter(m: OrgMtgMeeting, filter: StatusFilter): boolean {
-  if (filter === "all") return true;
+  // Las canceladas / no-show salen de la vista general; siguen en «Cerradas / canceladas».
+  if (filter === "all") return m.status !== "cancelled" && m.status !== "no_show";
   if (filter === "upcoming") return m.status === "planned";
   if (filter === "live") return m.status === "in_progress";
   if (filter === "minutes") {
@@ -303,6 +305,7 @@ export default function Juntas() {
                       <CheckSquare className="h-3.5 w-3.5" />
                       {m.openTasksCount} tareas
                     </span>
+                    <MtgMeetingActionsMenu meeting={m} />
                   </div>
                 </button>
               );
