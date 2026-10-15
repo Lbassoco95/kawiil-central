@@ -4318,6 +4318,7 @@ export type Database = {
       }
       project_lawsuits: {
         Row: {
+          authorized_persons: string[]
           case_number: string | null
           court: string | null
           created_at: string
@@ -4327,6 +4328,7 @@ export type Database = {
           filed_date: string | null
           id: string
           lawsuit_type: string | null
+          lead_attorney: string | null
           name: string
           next_deadline_date: string | null
           next_deadline_note: string | null
@@ -4337,9 +4339,11 @@ export type Database = {
           project_id: string
           stages: Json
           status: string
+          substitute_attorney: string | null
           updated_at: string
         }
         Insert: {
+          authorized_persons?: string[]
           case_number?: string | null
           court?: string | null
           created_at?: string
@@ -4349,6 +4353,7 @@ export type Database = {
           filed_date?: string | null
           id?: string
           lawsuit_type?: string | null
+          lead_attorney?: string | null
           name: string
           next_deadline_date?: string | null
           next_deadline_note?: string | null
@@ -4359,9 +4364,11 @@ export type Database = {
           project_id: string
           stages?: Json
           status?: string
+          substitute_attorney?: string | null
           updated_at?: string
         }
         Update: {
+          authorized_persons?: string[]
           case_number?: string | null
           court?: string | null
           created_at?: string
@@ -4371,6 +4378,7 @@ export type Database = {
           filed_date?: string | null
           id?: string
           lawsuit_type?: string | null
+          lead_attorney?: string | null
           name?: string
           next_deadline_date?: string | null
           next_deadline_note?: string | null
@@ -4381,6 +4389,7 @@ export type Database = {
           project_id?: string
           stages?: Json
           status?: string
+          substitute_attorney?: string | null
           updated_at?: string
         }
         Relationships: [
