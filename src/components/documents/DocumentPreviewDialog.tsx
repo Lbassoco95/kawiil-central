@@ -1,3 +1,5 @@
+import DOMPurify from "dompurify";
+import { getFileType } from "@/lib/documentFileType";
 import { useEffect, useState } from "react";
 import {
   Dialog,
@@ -33,17 +35,6 @@ interface DocumentPreviewDialogProps {
   } | null;
 }
 
-function getFileType(name: string, mimeType?: string | null): "pdf" | "image" | "xml" | "text" | "office" | "unknown" {
-  const ext = name.split(".").pop()?.toLowerCase() ?? "";
-  if (mimeType?.includes("pdf") || ext === "pdf") return "pdf";
-  if (mimeType?.startsWith("image/") || ["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp"].includes(ext)) return "image";
-  if (mimeType?.includes("xml") || ext === "xml") return "xml";
-  if (["txt", "csv", "md", "log"].includes(ext) || mimeType === "text/plain" || mimeType === "text/csv" || mimeType === "text/markdown") return "text";
-  if (["xlsx", "xls", "docx", "doc", "pptx", "ppt"].includes(ext) ||
-      mimeType?.includes("spreadsheet") || mimeType?.includes("document") || mimeType?.includes("presentation")) return "office";
-  return "unknown";
-}
-
 function getFileIcon(type: string) {
   switch (type) {
     case "pdf": return <FileText className="h-5 w-5 text-red-500" />;
@@ -75,6 +66,7 @@ export function DocumentPreviewDialog({ open, onOpenChange, document }: Document
   const [loading, setLoading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [textContent, setTextContent] = useState<string | null>(null);
+  const [docxHtml, setDocxHtml] = useState<string | null>(null);
 
   const fileType = document ? getFileType(document.name, document.mime_type) : "unknown";
 
@@ -83,6 +75,7 @@ export function DocumentPreviewDialog({ open, onOpenChange, document }: Document
     setLoading(true);
     setPreviewUrl(null);
     setTextContent(null);
+    setDocxHtml(null);
 
     try {
       if (fileType === "xml" || fileType === "text") {
@@ -102,6 +95,16 @@ export function DocumentPreviewDialog({ open, onOpenChange, document }: Document
         if (error) throw error;
         const blobUrl = URL.createObjectURL(data);
         setPreviewUrl(blobUrl);
+        // Word (.docx): se muestra el contenido en pantalla; xlsx/pptx se descargan.
+        if (fileType === "office" && document.name.toLowerCase().endsWith(".docx")) {
+          try {
+            const mammoth = await import("mammoth");
+            const { value } = await mammoth.convertToHtml({ arrayBuffer: await data.arrayBuffer() });
+            setDocxHtml(DOMPurify.sanitize(value, { USE_PROFILES: { html: true } }));
+          } catch {
+            setDocxHtml(null);
+          }
+        }
       }
     } catch (err: any) {
       setPreviewUrl(null);
@@ -120,7 +123,10 @@ export function DocumentPreviewDialog({ open, onOpenChange, document }: Document
       URL.revokeObjectURL(previewUrl);
       setPreviewUrl(null);
     }
-    if (!open) setTextContent(null);
+    if (!open) {
+      setTextContent(null);
+      setDocxHtml(null);
+    }
   }, [open, document?.id]);
 
   const handleDownload = async () => {
@@ -155,6 +161,7 @@ export function DocumentPreviewDialog({ open, onOpenChange, document }: Document
     if (!o) {
       setPreviewUrl(null);
       setTextContent(null);
+      setDocxHtml(null);
     }
     onOpenChange(o);
   };
@@ -249,7 +256,14 @@ export function DocumentPreviewDialog({ open, onOpenChange, document }: Document
             </pre>
           )}
 
-          {!isDropbox && !loading && previewUrl && fileType === "office" && (
+          {!isDropbox && !loading && docxHtml && fileType === "office" && (
+            <div
+              className="p-6 text-sm max-h-[60vh] overflow-auto [&_p]:mb-2 [&_h1]:text-lg [&_h1]:font-semibold [&_h2]:font-semibold [&_table]:border [&_td]:border [&_td]:px-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
+              dangerouslySetInnerHTML={{ __html: docxHtml }}
+            />
+          )}
+
+          {!isDropbox && !loading && !docxHtml && previewUrl && fileType === "office" && (
             <div className="flex flex-col items-center justify-center h-64 gap-4 text-center p-6">
               <FileSpreadsheet className="h-12 w-12 text-muted-foreground/50" />
               <div>

@@ -33,6 +33,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { LawsuitCommentsPanel } from "@/components/projects/LawsuitCommentsPanel";
 import { LawsuitDocumentsPanel } from "@/components/projects/LawsuitDocumentsPanel";
 import { LawsuitClientVisibilityPanel } from "@/components/projects/LawsuitClientVisibilityPanel";
+import { LawsuitClientMessagesPanel } from "@/components/projects/LawsuitClientMessagesPanel";
 import { TaskFormDialog } from "@/components/tasks/TaskFormDialog";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -53,6 +54,23 @@ export function LawsuitWorkspaceSheet({ lawsuit, clientId, dropboxPath, lockDrop
   const lawsuitId = lawsuit?.id;
   const status = lawsuit ? statusMeta(lawsuit.status, lawsuit.lawsuit_type) : undefined;
   const typeLabel = LAWSUIT_TYPE_OPTIONS.find((t) => t.value === lawsuit?.lawsuit_type)?.label;
+
+  // Mensajes del cliente sin leer (se muestran junto a la pestaña «Cliente»).
+  const { data: unread = 0 } = useQuery({
+    queryKey: ["lawsuit-client-unread", lawsuitId],
+    enabled: !!lawsuitId,
+    refetchInterval: 30_000,
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("lawsuit_client_messages")
+        .select("id", { count: "exact", head: true })
+        .eq("lawsuit_id", lawsuitId!)
+        .eq("sender", "client")
+        .is("read_by_team_at", null);
+      if (error) throw error;
+      return count ?? 0;
+    },
+  });
 
   return (
     <Sheet open={!!lawsuit} onOpenChange={(o) => !o && onClose()}>
@@ -81,7 +99,9 @@ export function LawsuitWorkspaceSheet({ lawsuit, clientId, dropboxPath, lockDrop
                 <TabsTrigger value="tareas" className="px-1 text-xs sm:text-sm">Tareas</TabsTrigger>
                 <TabsTrigger value="comentarios" className="px-1 text-xs sm:text-sm">Comentarios</TabsTrigger>
                 <TabsTrigger value="documentos" className="px-1 text-xs sm:text-sm">Documentos</TabsTrigger>
-                <TabsTrigger value="cliente" className="px-1 text-xs sm:text-sm">Cliente</TabsTrigger>
+                <TabsTrigger value="cliente" className="px-1 text-xs sm:text-sm">
+                  Cliente{unread > 0 ? ` (${unread})` : ""}
+                </TabsTrigger>
               </TabsList>
               <TabsContent value="etapas" className="mt-4">
                 <StagesPanel lawsuit={lawsuit} />
@@ -114,6 +134,9 @@ export function LawsuitWorkspaceSheet({ lawsuit, clientId, dropboxPath, lockDrop
               </TabsContent>
               <TabsContent value="cliente" className="mt-4">
                 <LawsuitClientVisibilityPanel lawsuit={lawsuit} />
+                <div className="mt-5">
+                  <LawsuitClientMessagesPanel lawsuit={lawsuit} />
+                </div>
               </TabsContent>
             </Tabs>
           </>
