@@ -15,6 +15,7 @@ import { filenameKey, nextDistinctFilename, fileWithName } from "@/lib/duplicate
 import { replaceSupabaseStoredDocumentFile } from "@/lib/supabaseDocumentReplace";
 import { mimeTypeForFile } from "@/lib/mimeFromFilename";
 import { FileDropzone } from "@/components/shared/FileDropzone";
+import { Checkbox } from "@/components/ui/checkbox";
 import { DocumentPreviewDialog } from "@/components/documents/DocumentPreviewDialog";
 import {
   DuplicateFileResolutionDialog,
@@ -55,6 +56,7 @@ export function LawsuitDocumentsPanel({ lawsuit, clientId }: Props) {
   const queryClient = useQueryClient();
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [shareOnUpload, setShareOnUpload] = useState(false);
   const [previewDoc, setPreviewDoc] = useState<DocumentRow | null>(null);
   const [dupOpen, setDupOpen] = useState(false);
   const [dupName, setDupName] = useState("");
@@ -133,6 +135,7 @@ export function LawsuitDocumentsPanel({ lawsuit, clientId }: Props) {
         source: "supabase" as const,
         metadata: {
           [LAWSUIT_ID_KEY]: lawsuit.id,
+          ...(shareOnUpload ? { client_shared: true } : {}),
           ...(marker?.kind === "server_deferred" ? { zip_container: true } : {}),
         },
       })
@@ -234,6 +237,11 @@ export function LawsuitDocumentsPanel({ lawsuit, clientId }: Props) {
         className="text-xs"
         enableFolderPicker
       />
+
+      <label className="flex items-center gap-2 text-xs text-muted-foreground">
+        <Checkbox checked={shareOnUpload} onCheckedChange={(v) => setShareOnUpload(v === true)} />
+        Compartir con el cliente los archivos que suba ahora
+      </label>
 
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Cargando…</p>

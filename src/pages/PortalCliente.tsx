@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { CalendarDays, CheckCircle2, ChevronDown, Circle, Download, FileText, Loader2, Lock, Scale } from "lucide-react";
+import { CalendarDays, CheckCircle2, ChevronDown, Circle, Download, FileText, Loader2, Lock, Scale, Send } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { FunctionsHttpError } from "@supabase/functions-js";
 import { formatDateMX } from "@/lib/dateUtils";
@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 
 interface PortalLawsuit {
   id: string;
@@ -25,6 +26,7 @@ interface PortalLawsuit {
   stages: { label: string; completed: boolean; completed_at: string | null }[];
   entries: { entry_date: string; content: string }[];
   documents: { id: string; name: string; size: number | null; created_at: string; url: string }[];
+  messages: { id: string; sender: "team" | "client"; author_name: string | null; content: string; created_at: string }[];
 }
 
 interface PortalData {
@@ -45,6 +47,7 @@ export default function PortalCliente() {
   const [data, setData] = useState<PortalData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [activeCode, setActiveCode] = useState<string | null>(null);
 
   const load = useCallback(
     async (c: string) => {
@@ -74,6 +77,7 @@ export default function PortalCliente() {
         setError(message);
       } else if (res) {
         setData(res);
+        setActiveCode(c);
         try {
           sessionStorage.setItem(codeStorageKey(token), c);
         } catch {
@@ -95,6 +99,29 @@ export default function PortalCliente() {
       /* almacenamiento no disponible */
     }
   }, [token, load]);
+
+  const sendMessage = async (lawsuitId: string, content: string): Promise<string | null> => {
+    if (!token || !activeCode) return "Vuelve a ingresar el código";
+    const { data: res, error: err } = await supabase.functions.invoke<{ ok?: boolean; error?: string }>(
+      "client-portal",
+      { body: { token, code: activeCode, action: "send", lawsuit_id: lawsuitId, content } },
+    );
+    if (err) {
+      let message = "No se pudo enviar el mensaje";
+      if (err instanceof FunctionsHttpError) {
+        try {
+          const j = await err.context.json();
+          if (j?.error) message = j.error;
+        } catch {
+          /* cuerpo no JSON */
+        }
+      }
+      return message;
+    }
+    if (res?.error) return res.error;
+    await load(activeCode);
+    return null;
+  };
 
   if (!data) {
     return (
@@ -147,7 +174,7 @@ export default function PortalCliente() {
         </header>
 
         {data.lawsuits.map((l, i) => (
-          <LawsuitSection key={l.id} lawsuit={l} defaultOpen={data.lawsuits.length === 1 || i === 0} />
+          <LawsuitSection key={l.id} lawsuit={l} defaultOpen={data.lawsuits.length === 1 || i === 0} onSend={sendMessage} />
         ))}
 
         <p className="pt-2 text-center text-[11px] text-muted-foreground">
@@ -158,14 +185,36 @@ export default function PortalCliente() {
   );
 }
 
-function LawsuitSection({ lawsuit, defaultOpen }: { lawsuit: PortalLawsuit; defaultOpen: boolean }) {
+function LawsuitSection({
+  lawsuit,
+  defaultOpen,
+  onSend,
+}: {
+  lawsuit: PortalLawsuit;
+  defaultOpen: boolean;
+  onSend: (lawsuitId: string, content: string) => Promise<string | null>;
+}) {
   const [open, setOpen] = useState(defaultOpen);
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
   const { stages } = lawsuit;
   const status = statusMeta(lawsuit.status, lawsuit.lawsuit_type);
   const typeLabel = LAWSUIT_TYPE_OPTIONS.find((t) => t.value === lawsuit.lawsuit_type)?.label;
   const done = stages.filter((s) => s.completed).length;
   const percent = stages.length > 0 ? Math.round((done / stages.length) * 100) : 0;
   const currentLabel = stages.find((s) => !s.completed)?.label ?? lawsuit.current_stage;
+
+  const submit = async () => {
+    const text = draft.trim();
+    if (!text || sending) return;
+    setSending(true);
+    setSendError(null);
+    const err = await onSend(lawsuit.id, text);
+    if (err) setSendError(err);
+    else setDraft("");
+    setSending(false);
+  };
 
   return (
     <Card>
@@ -268,6 +317,41 @@ function LawsuitSection({ lawsuit, defaultOpen }: { lawsuit: PortalLawsuit; defa
                   ))}
                 </ul>
               )}
+            </section>
+
+            <section className="space-y-2">
+              <h3 className="text-sm font-medium">Mensajes con tu equipo</h3>
+              {lawsuit.messages.length > 0 && (
+                <ul className="space-y-2">
+                  {lawsuit.messages.map((m) => (
+                    <li
+                      key={m.id}
+                      className={`max-w-[85%] rounded-lg border p-3 ${
+                        m.sender === "client" ? "ml-auto bg-primary/5" : "bg-muted/40"
+                      }`}
+                    >
+                      <p className="mb-1 text-[11px] font-medium text-muted-foreground">
+                        {m.sender === "client" ? "Tú" : m.author_name || "Kawiil"} · {formatDateMX(m.created_at)}
+                      </p>
+                      <p className="whitespace-pre-wrap text-sm">{m.content}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="space-y-2">
+                <Textarea
+                  rows={3}
+                  maxLength={2000}
+                  placeholder="Escribe tu duda o comentario sobre este asunto…"
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                />
+                {sendError && <p className="text-sm text-destructive">{sendError}</p>}
+                <Button size="sm" onClick={() => void submit()} disabled={sending || !draft.trim()}>
+                  {sending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Send className="mr-1 h-4 w-4" />}
+                  Enviar mensaje
+                </Button>
+              </div>
             </section>
 
             <section className="space-y-2">

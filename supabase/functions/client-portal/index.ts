@@ -5,8 +5,10 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
  * -------------
  * Consulta pública (solo lectura) del expediente de un cliente: UN enlace por proyecto.
  *
- * Body: { token: string, code: string }
- * Respuesta: { client_name, project_name, lawsuits: [...] }. Solo los juicios/trámites con
+ * Body: { token: string, code: string, action?: "get" | "send", lawsuit_id?, content? }
+ *   - "get" (por defecto): devuelve el expediente (ver abajo).
+ *   - "send": el cliente envía un mensaje al equipo sobre un asunto publicado.
+ * Respuesta de "get": { client_name, project_name, lawsuits: [...] }. Solo los juicios/trámites con
  * `client_visible = true`; de cada uno: etapas, actuaciones con `client_visible` y documentos con
  * `metadata.client_shared = true` (URLs firmadas de 10 minutos).
  *
@@ -24,6 +26,8 @@ const corsHeaders = {
 const MAX_ATTEMPTS = 5;
 const LOCK_MINUTES = 15;
 const SIGNED_URL_SECONDS = 600;
+const MAX_MESSAGE_CHARS = 2000;
+const MAX_MESSAGES_PER_HOUR = 10;
 
 function json(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -49,7 +53,14 @@ serve(async (req) => {
   if (req.method !== "POST") return json({ error: "Método no permitido" }, 405);
 
   try {
-    const body = (await req.json().catch(() => ({}))) as { token?: unknown; code?: unknown };
+    const body = (await req.json().catch(() => ({}))) as {
+      token?: unknown;
+      code?: unknown;
+      action?: unknown;
+      lawsuit_id?: unknown;
+      content?: unknown;
+    };
+    const action = body.action === "send" ? "send" : "get";
     const token = typeof body.token === "string" ? body.token.trim() : "";
     const code = typeof body.code === "string" ? body.code.trim() : "";
     if (!/^[A-Za-z0-9_-]{20,64}$/.test(token)) return json({ error: "Enlace no válido" }, 404);
@@ -84,7 +95,11 @@ serve(async (req) => {
 
     await sb
       .from("project_client_links")
-      .update({ failed_attempts: 0, locked_until: null, last_viewed_at: new Date().toISOString() })
+      .update({
+        failed_attempts: 0,
+        locked_until: null,
+        ...(action === "get" ? { last_viewed_at: new Date().toISOString() } : {}),
+      })
       .eq("id", link.id);
 
     const { data: project } = await sb
@@ -95,6 +110,68 @@ serve(async (req) => {
     if (!project) return json({ error: "Enlace no válido" }, 404);
     // deno-lint-ignore no-explicit-any
     const clientName = ((project as any).clients?.name as string | undefined) ?? null;
+
+    if (action === "send") {
+      const lawsuitId = typeof body.lawsuit_id === "string" ? body.lawsuit_id : "";
+      const content = typeof body.content === "string" ? body.content.trim() : "";
+      if (!content) return json({ error: "Escribe un mensaje" }, 400);
+      if (content.length > MAX_MESSAGE_CHARS) {
+        return json({ error: `El mensaje es demasiado largo (máximo ${MAX_MESSAGE_CHARS} caracteres)` }, 400);
+      }
+
+      // Solo asuntos de este proyecto que el equipo publicó para el cliente.
+      const { data: target } = await sb
+        .from("project_lawsuits")
+        .select("id, name, organization_id, project_id")
+        .eq("id", lawsuitId)
+        .eq("project_id", link.project_id)
+        .eq("client_visible", true)
+        .maybeSingle();
+      if (!target) return json({ error: "Asunto no disponible" }, 404);
+
+      const since = new Date(Date.now() - 3_600_000).toISOString();
+      const { count } = await sb
+        .from("lawsuit_client_messages")
+        .select("id", { count: "exact", head: true })
+        .eq("lawsuit_id", target.id)
+        .eq("sender", "client")
+        .gte("created_at", since);
+      if ((count ?? 0) >= MAX_MESSAGES_PER_HOUR) {
+        return json({ error: "Enviaste muchos mensajes seguidos. Intenta de nuevo más tarde.", code: "rate_limited" }, 429);
+      }
+
+      const { error: insertError } = await sb.from("lawsuit_client_messages").insert({
+        organization_id: target.organization_id,
+        lawsuit_id: target.id,
+        sender: "client",
+        author_name: clientName,
+        content,
+      });
+      if (insertError) throw insertError;
+
+      // Aviso al responsable del proyecto (no crítico si falla).
+      try {
+        const { data: proj } = await sb
+          .from("projects")
+          .select("responsible_user_id")
+          .eq("id", link.project_id)
+          .maybeSingle();
+        if (proj?.responsible_user_id) {
+          await sb.from("notifications").insert({
+            user_id: proj.responsible_user_id,
+            type: "client_message",
+            title: `Mensaje del cliente en ${target.name}`,
+            body: content.slice(0, 200),
+            entity_type: "project",
+            entity_id: link.project_id,
+            organization_id: target.organization_id,
+          });
+        }
+      } catch (e) {
+        console.error("client-portal notify error", e);
+      }
+      return json({ ok: true });
+    }
 
     const { data: lawsuitRows } = await sb
       .from("project_lawsuits")
@@ -147,6 +224,13 @@ serve(async (req) => {
         documents.push({ id: d.id, name: d.name, size: d.file_size, created_at: d.created_at, url: signed.signedUrl });
       }
 
+      const { data: messages } = await sb
+        .from("lawsuit_client_messages")
+        .select("id, sender, author_name, content, created_at")
+        .eq("lawsuit_id", lawsuit.id)
+        .order("created_at", { ascending: true })
+        .limit(200);
+
       lawsuits.push({
         id: lawsuit.id,
         name: lawsuit.name,
@@ -162,6 +246,7 @@ serve(async (req) => {
         stages,
         entries: entries ?? [],
         documents,
+        messages: messages ?? [],
       });
     }
 

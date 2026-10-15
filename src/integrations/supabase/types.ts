@@ -3342,6 +3342,50 @@ export type Database = {
           },
         ]
       }
+      lawsuit_client_messages: {
+        Row: {
+          author_name: string | null
+          content: string
+          created_at: string
+          created_by: string | null
+          id: string
+          lawsuit_id: string
+          organization_id: string
+          read_by_team_at: string | null
+          sender: string
+        }
+        Insert: {
+          author_name?: string | null
+          content: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          lawsuit_id: string
+          organization_id: string
+          read_by_team_at?: string | null
+          sender: string
+        }
+        Update: {
+          author_name?: string | null
+          content?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          lawsuit_id?: string
+          organization_id?: string
+          read_by_team_at?: string | null
+          sender?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lawsuit_client_messages_lawsuit_id_fkey"
+            columns: ["lawsuit_id"]
+            isOneToOne: false
+            referencedRelation: "project_lawsuits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lead_activities: {
         Row: {
           created_at: string
