@@ -27,29 +27,13 @@ import { useClients } from "@/hooks/useClients";
 import { useClientSelectOptions } from "@/hooks/useClientSelectOptions";
 import { useOrgProfiles } from "@/hooks/useClients";
 import { toast } from "sonner";
-
-const LAWSUIT_TYPES = [
-  { value: "laboral", label: "Laboral" },
-  { value: "mercantil", label: "Mercantil" },
-  { value: "civil", label: "Civil" },
-  { value: "fiscal", label: "Fiscal" },
-  { value: "penal", label: "Penal" },
-  { value: "administrativo", label: "Administrativo" },
-  { value: "familiar", label: "Familiar" },
-];
-
-const DEFAULT_STAGES = [
-  { key: "demanda", label: "Demanda", status: "pendiente", date: null, notes: "", completed_at: null },
-  { key: "emplazamiento", label: "Emplazamiento", status: "pendiente", date: null, notes: "", completed_at: null },
-  { key: "contestacion", label: "Contestación de demanda", status: "pendiente", date: null, notes: "", completed_at: null },
-  { key: "pruebas", label: "Ofrecimiento y admisión de pruebas", status: "pendiente", date: null, notes: "", completed_at: null },
-  { key: "desahogo", label: "Desahogo de pruebas", status: "pendiente", date: null, notes: "", completed_at: null },
-  { key: "alegatos", label: "Alegatos", status: "pendiente", date: null, notes: "", completed_at: null },
-  { key: "sentencia", label: "Sentencia", status: "pendiente", date: null, notes: "", completed_at: null },
-  { key: "apelacion", label: "Apelación", status: "pendiente", date: null, notes: "", completed_at: null },
-  { key: "amparo", label: "Amparo", status: "pendiente", date: null, notes: "", completed_at: null },
-  { key: "ejecucion", label: "Ejecución de sentencia", status: "pendiente", date: null, notes: "", completed_at: null },
-];
+import {
+  LAWSUIT_TYPE_OPTIONS,
+  defaultStagesForType,
+  isLegalProcedure,
+  partyLabels,
+} from "@/lib/lawsuits";
+import type { Database } from "@/integrations/supabase/types";
 
 interface LawsuitFormDialogProps {
   open: boolean;
@@ -81,26 +65,14 @@ export function LawsuitFormDialog({ open, onOpenChange }: LawsuitFormDialogProps
       const { data: orgId } = await supabase.rpc("get_user_org_id", { _user_id: user!.id });
 
       const selectedClient = clients?.find((c) => c.id === clientId);
-      const typeLabel = LAWSUIT_TYPES.find((t) => t.value === lawsuitType)?.label || lawsuitType;
+      const typeLabel = LAWSUIT_TYPE_OPTIONS.find((t) => t.value === lawsuitType)?.label || lawsuitType;
+      const procedure = isLegalProcedure(lawsuitType);
       const opponent = defendant || plaintiff || "";
-      const projectName = opponent
-        ? `Juicio ${typeLabel} - ${selectedClient?.name || "Sin cliente"} vs ${opponent}`
-        : `Juicio ${typeLabel} - ${selectedClient?.name || "Sin cliente"}`;
+      const base = procedure ? typeLabel : `Juicio ${typeLabel}`;
+      const clientLabel = selectedClient?.name || "Sin cliente";
+      const projectName = opponent ? `${base} - ${clientLabel} vs ${opponent}` : `${base} - ${clientLabel}`;
 
-      const lawsuitDetails = {
-        lawsuit_type: lawsuitType,
-        case_number: caseNumber || null,
-        court: court || null,
-        plaintiff: plaintiff || null,
-        defendant: defendant || null,
-        lead_attorney: leadAttorney || null,
-        substitute_attorney: substituteAttorney || null,
-        authorized_persons: authorizedPersons.length > 0 ? authorizedPersons : [],
-        stages: DEFAULT_STAGES,
-        deadlines: [],
-      };
-
-      const { error } = await supabase
+      const { data: project, error } = await supabase
         .from("projects")
         .insert({
           name: projectName,
@@ -110,19 +82,48 @@ export function LawsuitFormDialog({ open, onOpenChange }: LawsuitFormDialogProps
           organization_id: orgId!,
           created_by: user!.id,
           responsible_user_id: responsibleUserId || user!.id,
-          lawsuit_details: lawsuitDetails,
-        } as any);
+        } as any)
+        .select("id")
+        .single();
       if (error) throw error;
+
+      // El registro del juicio/trámite vive en project_lawsuits (pestaña «Juicios y trámites»).
+      const stages = defaultStagesForType(lawsuitType);
+      const people = [
+        leadAttorney && `Abogado titular: ${leadAttorney}`,
+        substituteAttorney && `Abogado sustituto: ${substituteAttorney}`,
+        authorizedPersons.length > 0 && `Autorizados: ${authorizedPersons.join(", ")}`,
+      ].filter(Boolean);
+      const { error: lawsuitError } = await supabase.from("project_lawsuits").insert({
+        project_id: project.id,
+        organization_id: orgId!,
+        name: projectName,
+        lawsuit_type: lawsuitType,
+        case_number: caseNumber || null,
+        court: court || null,
+        plaintiff: plaintiff || null,
+        defendant: defendant || null,
+        status: "en_tramite",
+        current_stage: stages[0]?.label ?? null,
+        stages: stages as unknown as Database["public"]["Tables"]["project_lawsuits"]["Insert"]["stages"],
+        notes: people.length > 0 ? people.join("\n") : null,
+        created_by: user!.id,
+      });
+      if (lawsuitError) {
+        await supabase.from("projects").delete().eq("id", project.id);
+        throw lawsuitError;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["project-lawsuits"] });
       queryClient.invalidateQueries({ queryKey: ["assigned-steps"] });
-      toast.success("Juicio creado exitosamente");
+      toast.success("Creado exitosamente");
       resetForm();
       onOpenChange(false);
     },
     onError: (error) => {
-      toast.error("Error al crear juicio: " + error.message);
+      toast.error("Error al crear: " + error.message);
     },
   });
 
@@ -145,18 +146,18 @@ export function LawsuitFormDialog({ open, onOpenChange }: LawsuitFormDialogProps
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Nuevo Juicio</DialogTitle>
+          <DialogTitle>Nuevo juicio o trámite</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 pt-2">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Tipo de juicio *</Label>
+              <Label>Tipo *</Label>
               <Select value={lawsuitType} onValueChange={setLawsuitType}>
                 <SelectTrigger>
                   <SelectValue placeholder="Seleccionar tipo" />
                 </SelectTrigger>
                 <SelectContent>
-                  {LAWSUIT_TYPES.map((t) => (
+                  {LAWSUIT_TYPE_OPTIONS.map((t) => (
                     <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
                   ))}
                 </SelectContent>
@@ -193,7 +194,7 @@ export function LawsuitFormDialog({ open, onOpenChange }: LawsuitFormDialogProps
             </div>
 
             <div className="space-y-2">
-              <Label>Actor</Label>
+              <Label>{partyLabels(lawsuitType).first}</Label>
               <Input
                 placeholder="Nombre del actor"
                 value={plaintiff}
@@ -202,7 +203,7 @@ export function LawsuitFormDialog({ open, onOpenChange }: LawsuitFormDialogProps
             </div>
 
             <div className="space-y-2">
-              <Label>Demandado</Label>
+              <Label>{partyLabels(lawsuitType).second}</Label>
               <Input
                 placeholder="Nombre del demandado"
                 value={defendant}
@@ -278,7 +279,7 @@ export function LawsuitFormDialog({ open, onOpenChange }: LawsuitFormDialogProps
               onClick={() => createLawsuit.mutate()}
               disabled={!lawsuitType || !clientId || createLawsuit.isPending}
             >
-              {createLawsuit.isPending ? "Creando..." : "Crear juicio"}
+              {createLawsuit.isPending ? "Creando..." : "Crear"}
             </Button>
           </div>
         </div>

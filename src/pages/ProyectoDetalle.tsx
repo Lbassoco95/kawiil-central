@@ -31,7 +31,6 @@ import {
 import { ProjectCommentsTab } from "@/components/projects/ProjectCommentsTab";
 import { ProjectLogTab } from "@/components/projects/ProjectLogTab";
 import { MeetingMinutesDialog } from "@/components/projects/MeetingMinutesDialog";
-import { LawsuitDashboard } from "@/components/projects/LawsuitDashboard";
 import { ProjectLawsuitsTab } from "@/components/projects/ProjectLawsuitsTab";
 import { AccountingDashboard } from "@/components/projects/AccountingDashboard";
 import { ConstitutionDashboard } from "@/components/projects/ConstitutionDashboard";
@@ -458,7 +457,6 @@ const ProyectoDetalle = () => {
   const isConstitutionNacional = project?.area === "constitucion_nacional";
   const hasConstitution = isSoftlanding || isConstitutionNacional;
   const isGestoria = project?.area === "gestoria";
-  const isLawsuit = project?.area === "juicios" && (project as any)?.lawsuit_details;
   const isCumplimiento = project?.area === "cumplimiento";
   const isJuiciosArea = project?.area === "juicios";
   const compliancePhaseAnchorYmd = useMemo(
@@ -468,17 +466,17 @@ const ProyectoDetalle = () => {
         : null,
     [project?.area, project?.start_date, project?.created_at],
   );
-  const lawsuitDetails = (project as any)?.lawsuit_details;
   const constitutionDetails = (project as any)?.constitution_details ?? null;
 
-  const initialTab = searchParams.get("tab");
+  // «juicio» era la pestaña anterior: ahora todo vive en «Juicios y trámites».
+  const rawInitialTab = searchParams.get("tab");
+  const initialTab = rawInitialTab === "juicio" ? "juicios" : rawInitialTab;
 
   const [tab, setTabState] = useState<string>(() => {
     if (initialTab) return initialTab;
     if (isCumplimiento) return "cumplimiento";
     if (isGestoria) return "gestoria";
     if (hasConstitution) return "constitucion";
-    if (isLawsuit) return "juicio";
     if (isJuiciosArea) return "juicios";
     if (hasAccounting) return "contabilidad";
     return "general";
@@ -545,21 +543,19 @@ const ProyectoDetalle = () => {
   const fallbackDropboxPath = normalizedClientName
     ? kawiilTeamPath("CLIENTES", normalizedClientName)
     : kawiilTeamPath("CLIENTES");
-  const effectiveDropboxPath = isLawsuit
+  const effectiveDropboxPath = isJuiciosArea
     ? (clientDropboxPath?.trim() || kawiilTeamPath("JUICIOS"))
     : (clientDropboxPath?.trim() || fallbackDropboxPath);
   const lockDropboxToInitialPath = Boolean(clientDropboxPath?.trim());
 
-  // Build dynamic tabs
-  const projectTabs: { key: string; label: string; icon?: LucideIcon }[] = [
-    { key: "general", label: "General" },
-  ];
+  // Build dynamic tabs (en proyectos de juicios, «Juicios y trámites» va primero)
+  const projectTabs: { key: string; label: string; icon?: LucideIcon }[] = [];
+  if (isJuiciosArea) projectTabs.push({ key: "juicios", label: "Juicios y trámites", icon: Gavel });
+  projectTabs.push({ key: "general", label: "General" });
   if (hasConstitution) projectTabs.push({ key: "constitucion", label: "Constitución", icon: Building2 });
   if (isGestoria) projectTabs.push({ key: "gestoria", label: "Gestoría", icon: ClipboardList });
   if (hasAccounting) projectTabs.push({ key: "contabilidad", label: "Contabilidad", icon: Calculator });
   if (hasAccounting) projectTabs.push({ key: "declaracion_anual", label: "Declaración Anual", icon: FileSpreadsheet });
-  if (isLawsuit) projectTabs.push({ key: "juicio", label: "Juicio", icon: Scale });
-  if (isJuiciosArea) projectTabs.push({ key: "juicios", label: "Juicios y trámites", icon: Gavel });
   if (isCumplimiento) projectTabs.push({ key: "cumplimiento", label: "Cumplimiento", icon: Shield });
   projectTabs.push({
     key: "tareas",
@@ -792,16 +788,6 @@ const ProyectoDetalle = () => {
 
         {tab === "declaracion_anual" && hasAccounting && (
           <AnnualDeclarationDashboard projectId={project.id} clientDropboxPath={effectiveDropboxPath} clientId={project.client_id || undefined} />
-        )}
-
-        {tab === "juicio" && isLawsuit && (
-          <LawsuitDashboard
-            projectId={project.id}
-            lawsuitDetails={lawsuitDetails}
-            dropboxInitialPath={effectiveDropboxPath}
-            lockDropboxToInitialPath={lockDropboxToInitialPath}
-            clientId={project.client_id || undefined}
-          />
         )}
 
         {tab === "juicios" && isJuiciosArea && (

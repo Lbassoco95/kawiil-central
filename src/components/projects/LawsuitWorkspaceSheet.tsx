@@ -119,6 +119,7 @@ export function LawsuitWorkspaceSheet({ lawsuit, clientId, dropboxPath, lockDrop
 }
 
 function StagesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [newStage, setNewStage] = useState("");
   const stages = parseLawsuitStages(lawsuit.stages);
@@ -126,6 +127,7 @@ function StagesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
 
   const saveStages = useMutation({
     mutationFn: async (next: LawsuitStage[]) => {
+      const before = currentStageLabel(stages);
       const update: Database["public"]["Tables"]["project_lawsuits"]["Update"] = {
         stages: next as unknown as Database["public"]["Tables"]["project_lawsuits"]["Update"]["stages"],
       };
@@ -134,9 +136,24 @@ function StagesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
       if (current) update.current_stage = current;
       const { error } = await supabase.from("project_lawsuits").update(update).eq("id", lawsuit.id);
       if (error) throw error;
+      // Cada avance de etapa queda en la bitácora de actuaciones (y alimenta a la IA).
+      if (stages.length > 0 && current !== before) {
+        const text = current
+          ? `Avance de etapa: ${before ? `de «${before}» a ` : "ahora en "}«${current}»`
+          : "Todas las etapas quedaron completadas";
+        await supabase.from("project_lawsuit_entries").insert({
+          lawsuit_id: lawsuit.id,
+          organization_id: lawsuit.organization_id,
+          content: text,
+          entry_date: toDateStringMX(),
+          created_by: user?.id ?? null,
+        });
+        queryClient.invalidateQueries({ queryKey: ["lawsuit-entries", lawsuit.id] });
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["project-lawsuits", lawsuit.project_id] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-lawsuits"] });
     },
     onError: (e: Error) => toast.error("No se pudo guardar las etapas: " + e.message),
   });

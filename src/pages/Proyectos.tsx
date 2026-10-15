@@ -353,7 +353,7 @@ const Proyectos = () => {
               </Button>
               <Button variant="outline" size="sm" onClick={() => setLawsuitOpen(true)}>
                 <Scale className="mr-1.5 h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Nuevo juicio</span>
+                <span className="hidden sm:inline">Nuevo juicio o trámite</span>
               </Button>
               <ProjectCreationDialog />
             </>

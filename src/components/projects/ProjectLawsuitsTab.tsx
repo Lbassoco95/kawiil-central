@@ -93,10 +93,11 @@ function toForm(l: LawsuitRow): FormState {
 
 const orNull = (v: string) => (v.trim() ? v.trim() : null);
 
-function DateChip({ label, date }: { label: string; date: string | null }) {
+/** `alertable`: solo audiencias y plazos pueden estar vencidos; una fecha de presentación pasada es normal. */
+function DateChip({ label, date, alertable = false }: { label: string; date: string | null; alertable?: boolean }) {
   if (!date) return null;
   const d = new Date(`${date}T00:00:00`);
-  const overdue = isPast(d) && !isToday(d);
+  const overdue = alertable && isPast(d) && !isToday(d);
   return (
     <span
       className={`inline-flex items-center gap-1 text-xs ${overdue ? "text-destructive font-medium" : "text-muted-foreground"}`}
@@ -327,10 +328,11 @@ export function ProjectLawsuitsTab({ projectId, organizationId, clientId, dropbo
 
                   <div className="flex flex-wrap gap-x-4 gap-y-1">
                     <DateChip label="Presentado" date={l.filed_date} />
-                    <DateChip label="Próxima audiencia" date={l.next_hearing_date} />
+                    <DateChip label="Próxima audiencia" date={l.next_hearing_date} alertable />
                     <DateChip
                       label={l.next_deadline_note ? `Plazo (${l.next_deadline_note})` : "Próximo plazo"}
                       date={l.next_deadline_date}
+                      alertable
                     />
                   </div>
 
