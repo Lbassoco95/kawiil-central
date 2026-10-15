@@ -232,18 +232,21 @@ export function LawsuitCommentsPanel({ lawsuit, dropboxPath, lockDropboxToPath, 
 
   const toolbar = (
     <>
-      <FileDropzone
-        files={pendingFiles}
-        onChange={uploadFiles}
-        limits={genericLimits}
-        variant="button"
-        disabled={uploading}
-        showChips={false}
-        buttonSize="icon"
-        buttonVariant="ghost"
-        className="shrink-0"
-        enableFolderPicker
-      />
+      {/* En Documentos la subida de archivos vive en LawsuitDocumentsPanel (guarda en `documents`). */}
+      {mode !== "documents" && (
+        <FileDropzone
+          files={pendingFiles}
+          onChange={uploadFiles}
+          limits={genericLimits}
+          variant="button"
+          disabled={uploading}
+          showChips={false}
+          buttonSize="icon"
+          buttonVariant="ghost"
+          className="shrink-0"
+          enableFolderPicker
+        />
+      )}
       <Button
         size="icon"
         variant="ghost"
@@ -320,7 +323,7 @@ export function LawsuitCommentsPanel({ lawsuit, dropboxPath, lockDropboxToPath, 
           <p className="text-sm text-muted-foreground">Cargando…</p>
         ) : docs.length === 0 ? (
           <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-            Sube PDFs y archivos, o elige documentos de Dropbox para consultarlos aquí.
+            Elige documentos de Dropbox o pega enlaces para consultarlos aquí.
           </div>
         ) : (
           <ul className="space-y-2">

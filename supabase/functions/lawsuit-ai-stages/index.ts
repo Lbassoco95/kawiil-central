@@ -13,7 +13,8 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
  *     stages:    [{ label, completed }],     // etapas actuales
  *     entries:   [{ date, content }],        // actuaciones (más recientes primero)
  *     comments:  [{ date, text }],           // comentarios
- *     documents: string[]                    // nombres de archivos adjuntos
+ *     documents: string[],                   // nombres de archivos adjuntos
+ *     documentSummaries: [{ name, summary }] // contenido leído por IA de los documentos
  *   }
  *
  * Respuesta: { stages: [{ label, reason }], model }
@@ -56,6 +57,7 @@ type Lawsuit = Record<string, unknown>;
 type StageIn = { label?: string; completed?: boolean };
 type EntryIn = { date?: string; content?: string };
 type CommentIn = { date?: string; text?: string };
+type DocSummaryIn = { name?: string; summary?: string };
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -70,6 +72,7 @@ serve(async (req) => {
       entries?: EntryIn[];
       comments?: CommentIn[];
       documents?: string[];
+      documentSummaries?: DocSummaryIn[];
     };
 
     const l = payload.lawsuit ?? {};
@@ -88,6 +91,7 @@ serve(async (req) => {
     const entries = (payload.entries ?? []).slice(0, 25);
     const comments = (payload.comments ?? []).slice(0, 25);
     const documents = (payload.documents ?? []).slice(0, 40);
+    const docSummaries = (payload.documentSummaries ?? []).slice(0, 15);
     const isProcedure = l.isProcedure === true;
 
     const system = `Eres un abogado mexicano que organiza el seguimiento de ${isProcedure ? "trámites legales ante autoridades administrativas" : "juicios"} para un despacho.
@@ -95,7 +99,7 @@ Propón la lista de ETAPAS que debe seguir este asunto, en orden cronológico, d
 Reglas:
 - Entre 4 y 12 etapas, cada una con nombre corto (<= 70 caracteres), en español, sin numeración.
 - Usa la vía procesal que corresponda a la materia (penal: denuncia, investigación ante el MP, judicialización, etc.; laboral; mercantil; Profeco/Condusef: queja, conciliación, etc.). No uses etapas civiles genéricas si no aplican.
-- Respeta las etapas ya completadas: no las repitas ni las renombres. Propón solo lo que falta y lo que sigue, tomando en cuenta lo que las actuaciones, comentarios y documentos indican que ya ocurrió.
+- Respeta las etapas ya completadas: no las repitas ni las renombres. Propón solo lo que falta y lo que sigue, tomando en cuenta lo que las actuaciones, comentarios y el contenido de los documentos indican que ya ocurrió.
 - No inventes hechos, fechas ni números de expediente. Si la información es poca, propón las etapas típicas de la materia.
 Devuelve JSON ESTRICTO, sin texto fuera del JSON ni fences markdown:
 { "stages": [ { "label": string, "reason": string } ] }
@@ -132,6 +136,13 @@ Devuelve JSON ESTRICTO, sin texto fuera del JSON ni fences markdown:
     }
     if (documents.length) {
       lines.push("Documentos adjuntos (solo nombres):\n" + documents.map((d) => `- ${clip(d, 140)}`).join("\n"));
+    }
+
+    if (docSummaries.length) {
+      lines.push(
+        "Contenido de los documentos del expediente (resumen generado por IA):\n" +
+          docSummaries.map((d) => `- ${clip(d.name, 120)}: ${clip(d.summary, 1200)}`).join("\n"),
+      );
     }
 
     const aiResp = await fetch(ANTHROPIC_API_URL, {

@@ -29,6 +29,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { LawsuitCommentsPanel } from "@/components/projects/LawsuitCommentsPanel";
+import { LawsuitDocumentsPanel } from "@/components/projects/LawsuitDocumentsPanel";
 import { TaskFormDialog } from "@/components/tasks/TaskFormDialog";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -95,13 +96,17 @@ export function LawsuitWorkspaceSheet({ lawsuit, clientId, dropboxPath, lockDrop
                   lockDropboxToPath={lockDropboxToPath}
                 />
               </TabsContent>
-              <TabsContent value="documentos" className="mt-4">
+              <TabsContent value="documentos" className="mt-4 space-y-5">
+                <LawsuitDocumentsPanel lawsuit={lawsuit} clientId={clientId} />
+                <div className="space-y-2">
+                  <h4 className="text-xs font-medium text-muted-foreground">Enlaces de Dropbox y adjuntos de comentarios</h4>
                 <LawsuitCommentsPanel
                   lawsuit={lawsuit}
                   mode="documents"
                   dropboxPath={dropboxPath}
                   lockDropboxToPath={lockDropboxToPath}
                 />
+                </div>
               </TabsContent>
             </Tabs>
           </>
@@ -180,6 +185,29 @@ function StagesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
           .limit(25),
       ]);
       const documents: string[] = [];
+      // Documentos del expediente ya leídos por IA: nombre + resumen de su contenido.
+      const { data: docRows } = await supabase
+        .from("documents")
+        .select("id, name")
+        .eq("project_id", lawsuit.project_id)
+        .eq("metadata->>lawsuit_id", lawsuit.id)
+        .order("created_at", { ascending: false })
+        .limit(30);
+      const docList = docRows ?? [];
+      const summaries: { name: string; summary: string }[] = [];
+      if (docList.length > 0) {
+        const { data: ext } = await supabase
+          .from("extracted_documents")
+          .select("document_id, ai_summary, document_type")
+          .in("document_id", docList.map((d) => d.id))
+          .eq("extraction_status", "completed");
+        const byId = new Map((ext ?? []).map((e) => [e.document_id, e]));
+        for (const d of docList) {
+          documents.push(d.name);
+          const e = byId.get(d.id);
+          if (e?.ai_summary) summaries.push({ name: d.name, summary: e.ai_summary });
+        }
+      }
       const comments = (commentsRes.data ?? []).map((c) => {
         const { body, attachments } = parseComment(c.content);
         attachments.forEach((a) => documents.push(a.name));
@@ -208,6 +236,7 @@ function StagesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
           entries: (entriesRes.data ?? []).map((e) => ({ date: e.entry_date, content: e.content })),
           comments,
           documents: Array.from(new Set(documents)),
+          documentSummaries: summaries,
         },
       });
       if (error) throw new Error(error.message || "Error invocando IA");
@@ -298,8 +327,8 @@ function StagesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
           <DialogHeader>
             <DialogTitle>Etapas sugeridas por IA</DialogTitle>
             <DialogDescription>
-              Se basan en los datos del expediente, notas, actuaciones, comentarios y nombres de los documentos
-              adjuntos. Revísalas antes de aplicarlas.
+              Se basan en los datos del expediente, notas, actuaciones, comentarios y el contenido de los documentos
+              del expediente que ya fueron leídos. Revísalas antes de aplicarlas.
             </DialogDescription>
           </DialogHeader>
           {aiBusy ? (
