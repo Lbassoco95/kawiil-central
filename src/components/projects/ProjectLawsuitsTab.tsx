@@ -37,6 +37,8 @@ import {
   defaultStagesForType,
   partyLabels,
 } from "@/lib/lawsuits";
+import { UserOrTextSingle, UserOrTextMulti } from "@/components/projects/UserOrTextInput";
+import { useOrgProfiles } from "@/hooks/useClients";
 import type { Database } from "@/integrations/supabase/types";
 
 type LawsuitRow = Database["public"]["Tables"]["project_lawsuits"]["Row"];
@@ -54,6 +56,9 @@ interface FormState {
   next_hearing_date: string;
   next_deadline_date: string;
   next_deadline_note: string;
+  lead_attorney: string;
+  substitute_attorney: string;
+  authorized_persons: string[];
   notes: string;
 }
 
@@ -70,6 +75,9 @@ const EMPTY_FORM: FormState = {
   next_hearing_date: "",
   next_deadline_date: "",
   next_deadline_note: "",
+  lead_attorney: "",
+  substitute_attorney: "",
+  authorized_persons: [],
   notes: "",
 };
 
@@ -87,6 +95,9 @@ function toForm(l: LawsuitRow): FormState {
     next_hearing_date: l.next_hearing_date ?? "",
     next_deadline_date: l.next_deadline_date ?? "",
     next_deadline_note: l.next_deadline_note ?? "",
+    lead_attorney: l.lead_attorney ?? "",
+    substitute_attorney: l.substitute_attorney ?? "",
+    authorized_persons: l.authorized_persons ?? [],
     notes: l.notes ?? "",
   };
 }
@@ -130,6 +141,7 @@ export function ProjectLawsuitsTab({ projectId, organizationId, clientId, dropbo
       { replace: true },
     );
   const { user } = useAuth();
+  const { data: profiles } = useOrgProfiles();
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -172,6 +184,9 @@ export function ProjectLawsuitsTab({ projectId, organizationId, clientId, dropbo
         next_hearing_date: orNull(form.next_hearing_date),
         next_deadline_date: orNull(form.next_deadline_date),
         next_deadline_note: orNull(form.next_deadline_note),
+        lead_attorney: orNull(form.lead_attorney),
+        substitute_attorney: orNull(form.substitute_attorney),
+        authorized_persons: form.authorized_persons.map((a) => a.trim()).filter(Boolean),
         notes: orNull(form.notes),
       };
       if (editingId) {
@@ -336,6 +351,16 @@ export function ProjectLawsuitsTab({ projectId, organizationId, clientId, dropbo
                     />
                   </div>
 
+                  {(l.lead_attorney || l.substitute_attorney || (l.authorized_persons ?? []).length > 0) && (
+                    <div className="text-xs text-muted-foreground space-y-0.5">
+                      {l.lead_attorney && <div>Abogado titular: {l.lead_attorney}</div>}
+                      {l.substitute_attorney && <div>Abogado sustituto: {l.substitute_attorney}</div>}
+                      {(l.authorized_persons ?? []).length > 0 && (
+                        <div>Autorizados: {(l.authorized_persons ?? []).join(", ")}</div>
+                      )}
+                    </div>
+                  )}
+
                   {l.notes && <p className="text-xs text-muted-foreground whitespace-pre-wrap">{l.notes}</p>}
                 </CardContent>
               </Card>
@@ -447,6 +472,30 @@ export function ProjectLawsuitsTab({ projectId, organizationId, clientId, dropbo
                 value={form.next_deadline_note}
                 onChange={(e) => set("next_deadline_note", e.target.value)}
                 placeholder="Ej. Ofrecer pruebas"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Abogado titular</Label>
+              <UserOrTextSingle
+                value={form.lead_attorney}
+                onChange={(v) => set("lead_attorney", v)}
+                profiles={profiles ?? []}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Abogado sustituto</Label>
+              <UserOrTextSingle
+                value={form.substitute_attorney}
+                onChange={(v) => set("substitute_attorney", v)}
+                profiles={profiles ?? []}
+              />
+            </div>
+            <div className="sm:col-span-2 space-y-1.5">
+              <Label>Personas autorizadas</Label>
+              <UserOrTextMulti
+                values={form.authorized_persons}
+                onChange={(v) => set("authorized_persons", v)}
+                profiles={profiles ?? []}
               />
             </div>
             <div className="sm:col-span-2 space-y-1.5">

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, Fragment } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef, Fragment } from "react";
 import { useParams, useNavigate, useSearchParams, Navigate } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { useProjectDetail, useUpdateProject } from "@/hooks/useProjects";
@@ -481,6 +481,15 @@ const ProyectoDetalle = () => {
     if (hasAccounting) return "contabilidad";
     return "general";
   });
+
+  // El estado inicial se calcula antes de que cargue el proyecto, así que en juicios se entraba por
+  // «General». Al cargar, si no hay pestaña explícita en la URL, se va directo a «Juicios y trámites».
+  const juiciosLandingDone = useRef(false);
+  useEffect(() => {
+    if (juiciosLandingDone.current || !project) return;
+    juiciosLandingDone.current = true;
+    if (isJuiciosArea && !searchParams.get("tab") && !searchParams.get("taskId")) setTabState("juicios");
+  }, [project, isJuiciosArea, searchParams]);
 
   const setTab = useCallback((newTab: string) => {
     setTabState(newTab);

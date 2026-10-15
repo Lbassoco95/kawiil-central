@@ -89,11 +89,6 @@ export function LawsuitFormDialog({ open, onOpenChange }: LawsuitFormDialogProps
 
       // El registro del juicio/trámite vive en project_lawsuits (pestaña «Juicios y trámites»).
       const stages = defaultStagesForType(lawsuitType);
-      const people = [
-        leadAttorney && `Abogado titular: ${leadAttorney}`,
-        substituteAttorney && `Abogado sustituto: ${substituteAttorney}`,
-        authorizedPersons.length > 0 && `Autorizados: ${authorizedPersons.join(", ")}`,
-      ].filter(Boolean);
       const { error: lawsuitError } = await supabase.from("project_lawsuits").insert({
         project_id: project.id,
         organization_id: orgId!,
@@ -106,7 +101,9 @@ export function LawsuitFormDialog({ open, onOpenChange }: LawsuitFormDialogProps
         status: "en_tramite",
         current_stage: stages[0]?.label ?? null,
         stages: stages as unknown as Database["public"]["Tables"]["project_lawsuits"]["Insert"]["stages"],
-        notes: people.length > 0 ? people.join("\n") : null,
+        lead_attorney: leadAttorney || null,
+        substitute_attorney: substituteAttorney || null,
+        authorized_persons: authorizedPersons,
         created_by: user!.id,
       });
       if (lawsuitError) {
