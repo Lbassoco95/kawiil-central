@@ -300,3 +300,18 @@ export function mergeSuggestedStages(
   });
   return [...kept, ...added];
 }
+
+/**
+ * Fija en qué etapa va el asunto: las anteriores se marcan como completadas (con la fecha de hoy
+ * si no la tenían), la elegida queda en curso y las posteriores se dejan como estaban.
+ * Así la «etapa actual» (la primera sin completar) coincide con la que se eligió.
+ */
+export function setCurrentStage(stages: LawsuitStage[], key: string, today = toDateStringMX()): LawsuitStage[] {
+  const idx = stages.findIndex((s) => s.key === key);
+  if (idx === -1) return stages;
+  return stages.map((s, i) => {
+    if (i < idx) return s.completed ? s : { ...s, completed: true, completed_at: today };
+    if (i === idx) return { ...s, completed: false, completed_at: null };
+    return s;
+  });
+}

@@ -54,6 +54,7 @@ import PipelinePartners from "./pages/pipeline/PipelinePartners";
 import PipelineActivities from "./pages/pipeline/PipelineActivities";
 import EmailTemplatesContabilidad from "./pages/contabilidad/EmailTemplatesContabilidad";
 import ContratoPublico from "./pages/ContratoPublico";
+import PortalCliente from "./pages/PortalCliente";
 
 const queryClient = new QueryClient();
 
@@ -80,6 +81,7 @@ const App = () => (
               <Route path="/postular/:token" element={<PostularVacante />} />
               <Route path="/contrato/:token" element={<ContratoPublico />} />
               <Route path="/firmar/:token" element={<FirmarPublico />} />
+              <Route path="/portal/:token" element={<PortalCliente />} />
               <Route path="/firmas" element={<ProtectedRoute><Firmas /></ProtectedRoute>} />
               <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
               <Route path="/dashboard" element={<ProtectedRoute><Navigate to="/" replace /></ProtectedRoute>} />

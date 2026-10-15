@@ -17,6 +17,7 @@ import {
   mergeSuggestedStages,
   type SuggestedStage,
   parseLawsuitStages,
+  setCurrentStage,
   type LawsuitStage,
 } from "@/lib/lawsuits";
 import { useProfiles } from "@/hooks/useTasks";
@@ -28,8 +29,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LawsuitCommentsPanel } from "@/components/projects/LawsuitCommentsPanel";
 import { LawsuitDocumentsPanel } from "@/components/projects/LawsuitDocumentsPanel";
+import { LawsuitClientPortalPanel } from "@/components/projects/LawsuitClientPortalPanel";
 import { TaskFormDialog } from "@/components/tasks/TaskFormDialog";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -72,12 +75,13 @@ export function LawsuitWorkspaceSheet({ lawsuit, clientId, dropboxPath, lockDrop
             </SheetHeader>
 
             <Tabs defaultValue="etapas" className="mt-4">
-              <TabsList className="grid grid-cols-5 w-full">
+              <TabsList className="grid grid-cols-6 w-full">
                 <TabsTrigger value="etapas" className="px-1 text-xs sm:text-sm">Etapas</TabsTrigger>
                 <TabsTrigger value="actuaciones" className="px-1 text-xs sm:text-sm">Actuaciones</TabsTrigger>
                 <TabsTrigger value="tareas" className="px-1 text-xs sm:text-sm">Tareas</TabsTrigger>
                 <TabsTrigger value="comentarios" className="px-1 text-xs sm:text-sm">Comentarios</TabsTrigger>
                 <TabsTrigger value="documentos" className="px-1 text-xs sm:text-sm">Documentos</TabsTrigger>
+                <TabsTrigger value="cliente" className="px-1 text-xs sm:text-sm">Cliente</TabsTrigger>
               </TabsList>
               <TabsContent value="etapas" className="mt-4">
                 <StagesPanel lawsuit={lawsuit} />
@@ -108,6 +112,9 @@ export function LawsuitWorkspaceSheet({ lawsuit, clientId, dropboxPath, lockDrop
                 />
                 </div>
               </TabsContent>
+              <TabsContent value="cliente" className="mt-4">
+                <LawsuitClientPortalPanel lawsuit={lawsuit} />
+              </TabsContent>
             </Tabs>
           </>
         )}
@@ -117,6 +124,7 @@ export function LawsuitWorkspaceSheet({ lawsuit, clientId, dropboxPath, lockDrop
 }
 
 function StagesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [newStage, setNewStage] = useState("");
   const stages = parseLawsuitStages(lawsuit.stages);
@@ -124,6 +132,7 @@ function StagesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
 
   const saveStages = useMutation({
     mutationFn: async (next: LawsuitStage[]) => {
+      const before = currentStageLabel(stages);
       const update: Database["public"]["Tables"]["project_lawsuits"]["Update"] = {
         stages: next as unknown as Database["public"]["Tables"]["project_lawsuits"]["Update"]["stages"],
       };
@@ -132,9 +141,24 @@ function StagesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
       if (current) update.current_stage = current;
       const { error } = await supabase.from("project_lawsuits").update(update).eq("id", lawsuit.id);
       if (error) throw error;
+      // Cada avance de etapa queda en la bitácora de actuaciones (y alimenta a la IA).
+      if (stages.length > 0 && current !== before) {
+        const text = current
+          ? `Avance de etapa: ${before ? `de «${before}» a ` : "ahora en "}«${current}»`
+          : "Todas las etapas quedaron completadas";
+        await supabase.from("project_lawsuit_entries").insert({
+          lawsuit_id: lawsuit.id,
+          organization_id: lawsuit.organization_id,
+          content: text,
+          entry_date: toDateStringMX(),
+          created_by: user?.id ?? null,
+        });
+        queryClient.invalidateQueries({ queryKey: ["lawsuit-entries", lawsuit.id] });
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["project-lawsuits", lawsuit.project_id] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-lawsuits"] });
     },
     onError: (e: Error) => toast.error("No se pudo guardar las etapas: " + e.message),
   });
@@ -148,6 +172,8 @@ function StagesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
       ),
     );
 
+  const chooseCurrent = (key: string) => saveStages.mutate(setCurrentStage(stages, key));
+
   const addStage = () => {
     const label = newStage.trim();
     if (!label) return;
@@ -156,6 +182,7 @@ function StagesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
   };
 
   const done = stages.filter((s) => s.completed).length;
+  const currentKey = stages.find((s) => !s.completed)?.key ?? null;
 
   const [aiOpen, setAiOpen] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
@@ -287,6 +314,28 @@ function StagesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
           </p>
           {aiButton}
           </div>
+          <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
+            <span className="text-xs font-medium whitespace-nowrap">Vamos en:</span>
+            <Select
+              value={currentKey ?? ""}
+              onValueChange={chooseCurrent}
+              disabled={saveStages.isPending}
+            >
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue placeholder={closed ? "Todas las etapas completas" : "Elige la etapa"} />
+              </SelectTrigger>
+              <SelectContent>
+                {stages.map((s) => (
+                  <SelectItem key={s.key} value={s.key}>
+                    {s.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <p className="text-[11px] text-muted-foreground -mt-1">
+            Al elegir una etapa, las anteriores se marcan como completadas.
+          </p>
           <ul className="divide-y divide-border/50 rounded-lg border">
             {stages.map((s) => (
               <li key={s.key} className="flex items-center gap-3 px-3 py-2">
@@ -294,6 +343,11 @@ function StagesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
                 <span className={`text-sm flex-1 ${s.completed ? "line-through text-muted-foreground" : ""}`}>
                   {s.label}
                 </span>
+                {s.key === currentKey && (
+                  <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-700 border-blue-500/30">
+                    Etapa actual
+                  </Badge>
+                )}
                 {s.completed_at && (
                   <span className="text-[11px] text-muted-foreground">{formatDateMX(s.completed_at)}</span>
                 )}
@@ -393,6 +447,7 @@ function EntriesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
   const { data: profiles } = useProfiles();
   const [content, setContent] = useState("");
   const [entryDate, setEntryDate] = useState(toDateStringMX());
+  const [clientVisible, setClientVisible] = useState(false);
   const queryKey = ["lawsuit-entries", lawsuit.id];
 
   const { data: entries = [], isLoading } = useQuery({
@@ -416,6 +471,7 @@ function EntriesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
         organization_id: lawsuit.organization_id,
         content: content.trim(),
         entry_date: entryDate,
+        client_visible: clientVisible,
         created_by: user?.id ?? null,
       });
       if (error) throw error;
@@ -423,9 +479,22 @@ function EntriesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey });
       setContent("");
+      setClientVisible(false);
       setEntryDate(toDateStringMX());
     },
     onError: (e: Error) => toast.error("No se pudo guardar la actuación: " + e.message),
+  });
+
+  const setVisible = useMutation({
+    mutationFn: async (v: { id: string; visible: boolean }) => {
+      const { error } = await supabase
+        .from("project_lawsuit_entries")
+        .update({ client_visible: v.visible })
+        .eq("id", v.id);
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey }),
+    onError: (e: Error) => toast.error("No se pudo actualizar: " + e.message),
   });
 
   const remove = useMutation({
@@ -452,6 +521,10 @@ function EntriesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
         />
         <div className="flex items-center gap-2">
           <Input type="date" className="w-40" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} />
+          <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Checkbox checked={clientVisible} onCheckedChange={(v) => setClientVisible(v === true)} />
+            Visible para el cliente
+          </label>
           <Button
             size="sm"
             className="ml-auto"
@@ -474,6 +547,18 @@ function EntriesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
               <div className="flex items-center gap-2 text-[11px] text-muted-foreground mb-1">
                 <span className="font-medium text-foreground">{formatDateMX(e.entry_date)}</span>
                 {nameOf(e.created_by) && <span>· {nameOf(e.created_by)}</span>}
+                <button
+                  type="button"
+                  className={`rounded border px-1.5 py-0.5 text-[10px] ${
+                    e.client_visible
+                      ? "bg-blue-500/10 text-blue-700 border-blue-500/30"
+                      : "text-muted-foreground hover:bg-secondary/40"
+                  }`}
+                  title={e.client_visible ? "Quitar de lo que ve el cliente" : "Mostrar al cliente"}
+                  onClick={() => setVisible.mutate({ id: e.id, visible: !e.client_visible })}
+                >
+                  {e.client_visible ? "Visible para el cliente" : "Interna"}
+                </button>
                 {e.created_by === user?.id && (
                   <Button
                     variant="ghost"
