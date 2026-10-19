@@ -13,6 +13,7 @@ import { Loader2, History } from "lucide-react";
 import { WORK_MODE_EMOJI, WORK_MODE_LABEL, workedDuration } from "@/lib/rh";
 import { useOrgAttendanceRange } from "@/hooks/useRh";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
+import { AttendanceLocationButton } from "./AttendanceLocationButton";
 
 const ymd = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 const todayKey = () => ymd(new Date());
@@ -140,6 +141,7 @@ export function TeamJornadaHistory() {
                           {a.auto_closed ? " · cierre auto" : ""}
                         </div>
                       </div>
+                      <AttendanceLocationButton attendance={a} personName={nameByUser.get(a.user_id) ?? "—"} />
                     </li>
                   ))}
                 </ul>

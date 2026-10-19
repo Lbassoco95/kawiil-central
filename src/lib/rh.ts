@@ -220,6 +220,30 @@ export function distanceMeters(
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
+/** Convierte lat/lng de la BD (numeric puede llegar como string) a número válido. */
+export function toCoord(v: number | string | null | undefined): number | null {
+  if (v === null || v === undefined || v === "") return null;
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Enlace a Google Maps con un pin en la coordenada. */
+export function googleMapsUrl(lat: number, lng: number): string {
+  return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+}
+
+/** Mapa embebible de OpenStreetMap centrado en la coordenada, con marcador. */
+export function osmEmbedUrl(lat: number, lng: number, delta = 0.004): string {
+  const bbox = [lng - delta, lat - delta, lng + delta, lat + delta].map((n) => n.toFixed(6)).join(",");
+  return `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat},${lng}`;
+}
+
+/** Distancia legible: "85 m" / "1.2 km". */
+export function formatDistance(meters: number): string {
+  if (meters < 1000) return `${Math.round(meters)} m`;
+  return `${(meters / 1000).toFixed(meters < 10_000 ? 1 : 0)} km`;
+}
+
 export interface GeoFix {
   lat: number;
   lng: number;
