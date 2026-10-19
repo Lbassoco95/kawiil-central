@@ -11,6 +11,7 @@ import {
 } from "@/lib/rh";
 import { useOrgAttendance } from "@/hooks/useRh";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
+import { AttendanceLocationButton } from "./AttendanceLocationButton";
 
 const COMPLIANCE_VARIANT: Record<string, string> = {
   compliant: "border-emerald-300 text-emerald-700 dark:text-emerald-400",
@@ -98,6 +99,7 @@ export function TeamAttendanceBoard() {
                   <Badge variant="outline" className={COMPLIANCE_VARIANT[c.status]}>
                     {c.label}
                   </Badge>
+                  <AttendanceLocationButton attendance={a} personName={nameByUser.get(a.user_id) ?? "—"} />
                 </li>
               );
             })}

@@ -13,6 +13,7 @@ import {
 } from "@/lib/rh";
 import { useOrgAttendance, useOrgEventsToday, useOfficeLocations } from "@/hooks/useRh";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
+import { AttendanceLocationButton } from "./AttendanceLocationButton";
 
 const STATE_STYLE: Record<RhJornadaState, string> = {
   working: "border-emerald-300 text-emerald-700 dark:text-emerald-400",
@@ -103,6 +104,7 @@ export function TeamLivePresence() {
                 <Badge variant="outline" className={cn(STATE_STYLE[summary.state])}>
                   {JORNADA_STATE_LABEL[summary.state]}
                 </Badge>
+                <AttendanceLocationButton attendance={session} personName={nameByUser.get(session.user_id) ?? "—"} />
               </li>
             ))}
           </ul>
