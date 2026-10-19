@@ -2968,6 +2968,62 @@ export type Database = {
           },
         ]
       }
+      gather_smart_object_bindings: {
+        Row: {
+          created_at: string
+          enabled: boolean
+          id: string
+          label: string | null
+          last_error: string | null
+          last_ping_at: string | null
+          last_snapshot: Json | null
+          last_sync_at: string | null
+          organization_id: string
+          purpose: string
+          updated_at: string
+          user_id: string
+          webhook_host: string | null
+        }
+        Insert: {
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          label?: string | null
+          last_error?: string | null
+          last_ping_at?: string | null
+          last_snapshot?: Json | null
+          last_sync_at?: string | null
+          organization_id: string
+          purpose: string
+          updated_at?: string
+          user_id: string
+          webhook_host?: string | null
+        }
+        Update: {
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          label?: string | null
+          last_error?: string | null
+          last_ping_at?: string | null
+          last_snapshot?: Json | null
+          last_sync_at?: string | null
+          organization_id?: string
+          purpose?: string
+          updated_at?: string
+          user_id?: string
+          webhook_host?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gather_smart_object_bindings_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       improvement_suggestions: {
         Row: {
           category: string

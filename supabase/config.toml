@@ -79,6 +79,9 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = false
   [functions.notification-digest]
     verify_jwt = false
+  [functions.gather-sync]
+    # Auth en código: JWT de usuario (list/save/ping/sync_me) o x-cron-secret (sync_all)
+    verify_jwt = false
   [functions.reminder-hourly-digest]
     verify_jwt = false
   [functions.ai-email-draft]
