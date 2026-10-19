@@ -1,6 +1,14 @@
 project_id = "qppfampapbxdgednkofc"
 
 [functions]
+  [functions.notify]
+    verify_jwt = false
+  [functions.savio-sync]
+    verify_jwt = false
+  [functions.reminder-cron]
+    verify_jwt = false
+  [functions.reconcile-payments]
+    verify_jwt = false
   [functions.recruit-apply]
     verify_jwt = false
   [functions.auth-email-hook]

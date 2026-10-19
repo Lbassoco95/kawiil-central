@@ -75,6 +75,27 @@ async function fetchAllPages(
 }
 
 /**
+ * Trae TODOS los registros de un recurso Savio paginando por cursor y devuelve
+ * un resultado compatible con `fetchSavioResource` (mismo shape de meta), con las
+ * filas agregadas en `data` y una bandera `truncated` si se alcanzó el techo de
+ * páginas (para no ocultar registros de forma silenciosa).
+ */
+export async function fetchSavioResourceAllPages(
+  action: SavioFinanceApiAction,
+  baseQuery: Record<string, string> = {},
+  maxPages?: number,
+): Promise<Awaited<ReturnType<typeof fetchSavioResource>> & { truncated: boolean; fetched: number }> {
+  const { rows, truncated, lastResult } = await fetchAllPages(
+    action,
+    baseQuery,
+    maxPages ?? getSavioFinancePagedMaxPages(),
+  );
+  // Conserva el meta de la última respuesta (ok, status, error, message…) y
+  // reemplaza `data` por el arreglo agregado (extractSavioList acepta arrays).
+  return { ...lastResult, data: rows, truncated, fetched: rows.length };
+}
+
+/**
  * Rango ISO para la query Savio. En OpenAPI suele filtrar por **actualización** del registro,
  * no por `payment_date` / `invoice_date`; el dashboard aplica esas fechas en cliente.
  */

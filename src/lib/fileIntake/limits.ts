@@ -90,6 +90,18 @@ export const expensesLimits: FileIntakeLimits = {
   deferLargeZipToServer: true,
 };
 
+/** Preset para estados de cuenta / movimientos bancarios (PDF, Excel/CSV o foto). */
+export const bankStatementLimits: FileIntakeLimits = {
+  maxFiles: 5,
+  maxBytesPerFile: 25 * MB,
+  maxBatchBytes: 80 * MB,
+  accept: ".pdf,.csv,.xlsx,.xls,.png,.jpg,.jpeg,.webp",
+  zipMode: "keep",
+  clientUnzipMaxBytes: 25 * MB,
+  maxZipEntriesForClientExpand: 150,
+  deferLargeZipToServer: false,
+};
+
 /** Preset generico (tareas, comentarios, hub, etc.). */
 export const genericLimits: FileIntakeLimits = {
   maxFiles: STANDARD_BATCH_MAX_FILES,

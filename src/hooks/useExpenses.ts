@@ -57,16 +57,21 @@ export interface Expense {
   payment_task_id: string | null;
   reimbursement_type: ReimbursementType | null;
   reimbursement_status: "pendiente" | "completado" | null;
+  group_company_id: string | null;
   created_at: string;
   updated_at: string;
 }
 
 /** Naturaleza del reembolso de un gasto. */
-export type ReimbursementType = "cobrar_cliente" | "reembolsar_trabajador";
+export type ReimbursementType =
+  | "cobrar_cliente"
+  | "reembolsar_trabajador"
+  | "cobrar_empresa_grupo";
 
 export const REIMBURSEMENT_LABELS: Record<ReimbursementType, string> = {
   cobrar_cliente: "Cobrar al cliente",
   reembolsar_trabajador: "Reembolsar al trabajador",
+  cobrar_empresa_grupo: "Cobrar a empresa del grupo",
 };
 
 export function useExpenses() {
@@ -97,6 +102,8 @@ export interface CreateExpenseParams {
   notes?: string | null;
   /** Si el gasto es reembolsable y de qué tipo (indicado por quien solicita). */
   reimbursement_type?: ReimbursementType | null;
+  /** Empresa del grupo a cuenta de la cual se hizo el gasto (nos debe). */
+  group_company_id?: string | null;
   files?: File[];
 }
 
@@ -106,7 +113,7 @@ export function useCreateExpense() {
 
   return useMutation({
     mutationFn: async (params: CreateExpenseParams) => {
-      const { files = [], reimbursement_type = null, ...row } = params;
+      const { files = [], reimbursement_type = null, group_company_id = null, ...row } = params;
       const { data: profile } = await supabase
         .from("profiles")
         .select("organization_id")
@@ -142,6 +149,7 @@ export function useCreateExpense() {
           requested_by: user!.id,
           reimbursement_type,
           reimbursement_status: reimbursement_type ? "pendiente" : null,
+          group_company_id,
         } as any)
         .select()
         .single();
@@ -189,6 +197,7 @@ function buildPaymentTaskTitle(
   const money = `$${Number(amount).toLocaleString("es-MX", { minimumFractionDigits: 2 })} ${currency}`;
   const desc = (description || "gasto").trim().slice(0, 80);
   if (reimbursementType === "cobrar_cliente") return `Cobrar al cliente: ${desc} — ${money}`;
+  if (reimbursementType === "cobrar_empresa_grupo") return `Cobrar a empresa del grupo: ${desc} — ${money}`;
   if (reimbursementType === "reembolsar_trabajador") return `Reembolso a trabajador: ${desc} — ${money}`;
   return `Pago: ${desc} — ${money}`;
 }
@@ -286,9 +295,11 @@ export function useUpdateExpenseStatus() {
           `Gasto aprobado (${(expense as any).category}).`,
           reimbursementType === "cobrar_cliente"
             ? "El cliente debe reembolsar este monto al despacho."
-            : reimbursementType === "reembolsar_trabajador"
-              ? "El despacho debe reembolsar este monto al trabajador."
-              : null,
+            : reimbursementType === "cobrar_empresa_grupo"
+              ? "La empresa del grupo debe reembolsar este monto al despacho."
+              : reimbursementType === "reembolsar_trabajador"
+                ? "El despacho debe reembolsar este monto al trabajador."
+                : null,
         ].filter(Boolean);
 
         const { data: task, error: taskErr } = await supabase
@@ -335,10 +346,11 @@ export function useUpdateExpenseStatus() {
           );
         }
       } else if (status === "pagado" && existingTaskId) {
-        // El pago se realizó: cierra la tarea vinculada, salvo en "cobrar al
-        // cliente", cuya tarea es de cobro y sigue abierta hasta que el cliente
-        // reembolse (se cierra con "marcar reembolso cobrado").
-        if ((expense as any)?.reimbursement_type !== "cobrar_cliente") {
+        // El pago se realizó: cierra la tarea vinculada, salvo en cobros al
+        // cliente o a empresa del grupo, cuya tarea es de cobro y sigue abierta
+        // hasta que reembolsen (se cierra con "marcar reembolso cobrado").
+        const keepOpen = ["cobrar_cliente", "cobrar_empresa_grupo"];
+        if (!keepOpen.includes((expense as any)?.reimbursement_type)) {
           await supabase
             .from("tasks")
             .update({ status: "completada", completed_at: now } as any)
@@ -434,7 +446,9 @@ export function useMarkReimbursementDone() {
       const done =
         (expense as any)?.reimbursement_type === "cobrar_cliente"
           ? "Cobro al cliente registrado"
-          : "Reembolso marcado como completado";
+          : (expense as any)?.reimbursement_type === "cobrar_empresa_grupo"
+            ? "Cobro a empresa del grupo registrado"
+            : "Reembolso marcado como completado";
       toast.success(done);
 
       try {
@@ -445,7 +459,9 @@ export function useMarkReimbursementDone() {
             title:
               (expense as any).reimbursement_type === "cobrar_cliente"
                 ? "El cobro al cliente de tu gasto se completó"
-                : "Tu reembolso fue completado",
+                : (expense as any).reimbursement_type === "cobrar_empresa_grupo"
+                  ? "El cobro a la empresa del grupo se completó"
+                  : "Tu reembolso fue completado",
             body: (expense as any).description?.substring(0, 200) || undefined,
             entity_type: "expense",
             entity_id: vars.id,
