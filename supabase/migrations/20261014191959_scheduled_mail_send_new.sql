@@ -1,4 +1,5 @@
--- Sin cambios: esta versión ya está en el historial remoto (se aplicó a mano junto con
--- 20261014190000_scheduled_mail_send_new.sql). El archivo existe solo para que
--- `supabase db push` encuentre localmente todas las versiones remotas y no se detenga.
+-- Marcador: esta versión quedó registrada en remoto (aplicada fuera del repo, duplicando
+-- 20261014190000_scheduled_mail_send_new). Sin este archivo `supabase db push` aborta con
+-- "Remote migration versions not found in local migrations directory".
+-- No hace nada a propósito.
 SELECT 1;
