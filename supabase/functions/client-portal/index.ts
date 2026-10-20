@@ -241,7 +241,7 @@ serve(async (req) => {
         const [{ data: entries }, { data: docRows }, { data: messages }] = await Promise.all([
           sb
             .from("project_lawsuit_entries")
-            .select("entry_date, content")
+            .select("entry_date, content, entry_type, scheduled_date, scheduled_time, location, completed_at")
             .eq("lawsuit_id", lawsuit.id)
             .eq("client_visible", true)
             .order("entry_date", { ascending: false })

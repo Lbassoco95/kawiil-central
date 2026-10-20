@@ -3,6 +3,9 @@ import {
   collectLawsuitDeadlines,
   currentStageLabel,
   defaultStagesForType,
+  entryTypeLabel,
+  formatScheduledAt,
+  mapsSearchUrl,
   formatHearingTime,
   isLegalProcedure,
   mergeSuggestedStages,
@@ -202,5 +205,21 @@ describe("setCurrentStage", () => {
 
   it("una clave inexistente no cambia nada", () => {
     expect(setCurrentStage(st, "zzz")).toBe(st);
+  });
+});
+
+describe("actuaciones", () => {
+  it("formatea cuándo se lleva a cabo con hora opcional", () => {
+    expect(formatScheduledAt("2026-10-23", "10:30:00")).toBe("23/10/2026, 10:30 h");
+    expect(formatScheduledAt("2026-10-23", null)).toBe("23/10/2026");
+    expect(formatScheduledAt(null, "10:30")).toBeNull();
+  });
+
+  it("traduce el tipo y arma la liga de mapas", () => {
+    expect(entryTypeLabel("audiencia")).toBe("Audiencia");
+    expect(entryTypeLabel("desconocido")).toBeNull();
+    expect(mapsSearchUrl(" Av. Juárez 8, CDMX ")).toBe(
+      "https://www.google.com/maps/search/?api=1&query=Av.%20Ju%C3%A1rez%208%2C%20CDMX",
+    );
   });
 });

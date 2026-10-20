@@ -1,7 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { collectLawsuitDeadlines, lawsuitsForUser } from "@/lib/lawsuits";
+import {
+  CLOSED_LAWSUIT_STATUSES,
+  collectLawsuitDeadlines,
+  entryTypeLabel,
+  formatHearingTime,
+  lawsuitsForUser,
+} from "@/lib/lawsuits";
 
 export interface AssignedStep {
   id: string;
@@ -152,6 +158,36 @@ export function useAssignedSteps() {
           clientName: l.projects?.clients?.name ?? null,
           isCollaborator: l.responsible_user_id !== userId,
           lawsuitId: d.lawsuitId,
+        });
+      }
+
+      // Actuaciones programadas de juicios asignadas a ti y aún sin realizar
+      const { data: myEntries } = await supabase
+        .from("project_lawsuit_entries")
+        .select(
+          "id, content, entry_type, scheduled_date, scheduled_time, lawsuit_id, project_lawsuits(name, project_id, status, projects(name, clients(name)))",
+        )
+        .eq("assigned_to", userId)
+        .is("completed_at", null)
+        .not("scheduled_date", "is", null);
+      for (const e of myEntries ?? []) {
+        const l = e.project_lawsuits;
+        if (!l || CLOSED_LAWSUIT_STATUSES.includes(l.status)) continue;
+        const time = formatHearingTime(e.scheduled_time);
+        const what = entryTypeLabel(e.entry_type) ?? "Actuación";
+        const summary = e.content.length > 60 ? `${e.content.slice(0, 60)}…` : e.content;
+        steps.push({
+          id: `lwe_${e.id}`,
+          stepKey: "actuacion",
+          stepLabel: `${what}${time ? ` ${time}` : ""}: ${summary} (${l.name})`,
+          status: "pendiente",
+          dueDate: e.scheduled_date,
+          sourceType: "juicio_plazo",
+          sourceLabel: "Actuación",
+          projectId: l.project_id,
+          projectName: l.projects?.name ?? "Proyecto",
+          clientName: l.projects?.clients?.name ?? null,
+          lawsuitId: e.lawsuit_id,
         });
       }
 

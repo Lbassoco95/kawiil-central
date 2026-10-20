@@ -4,7 +4,14 @@ import { CalendarDays, CheckCircle2, ChevronDown, Circle, Download, Eye, FileTex
 import { supabase } from "@/integrations/supabase/client";
 import { FunctionsHttpError } from "@supabase/functions-js";
 import { formatDateMX } from "@/lib/dateUtils";
-import { LAWSUIT_TYPE_OPTIONS, formatHearingTime, statusMeta } from "@/lib/lawsuits";
+import {
+  LAWSUIT_TYPE_OPTIONS,
+  entryTypeLabel,
+  formatHearingTime,
+  formatScheduledAt,
+  mapsSearchUrl,
+  statusMeta,
+} from "@/lib/lawsuits";
 import { inferMimeFromFileName } from "@/lib/outlookEmailMedia";
 import { PREFETCH_MAX_BYTES, createBlobCache, preloadViewerFor } from "@/lib/blobPrefetch";
 import { Badge } from "@/components/ui/badge";
@@ -28,7 +35,15 @@ interface PortalLawsuit {
   next_deadline_date: string | null;
   next_deadline_note: string | null;
   stages: { label: string; completed: boolean; completed_at: string | null }[];
-  entries: { entry_date: string; content: string }[];
+  entries: {
+    entry_date: string;
+    content: string;
+    entry_type?: string | null;
+    scheduled_date?: string | null;
+    scheduled_time?: string | null;
+    location?: string | null;
+    completed_at?: string | null;
+  }[];
   documents: {
     id: string;
     name: string;
@@ -395,8 +410,32 @@ function LawsuitSection({
                 <ul className="space-y-2">
                   {lawsuit.entries.map((e, i) => (
                     <li key={i} className="rounded-lg border p-3">
-                      <p className="mb-1 text-[11px] font-medium text-muted-foreground">{formatDateMX(e.entry_date)}</p>
+                      <p className="mb-1 text-[11px] font-medium text-muted-foreground">
+                        {formatDateMX(e.entry_date)}
+                        {entryTypeLabel(e.entry_type) ? ` · ${entryTypeLabel(e.entry_type)}` : ""}
+                      </p>
                       <p className="whitespace-pre-wrap text-sm">{e.content}</p>
+                      {formatScheduledAt(e.scheduled_date, e.scheduled_time) && (
+                        <p className="mt-1.5 text-xs text-muted-foreground">
+                          {e.completed_at ? "Se llevó a cabo" : "Se llevará a cabo"}:{" "}
+                          <span className="font-medium text-foreground">
+                            {formatScheduledAt(e.scheduled_date, e.scheduled_time)}
+                          </span>
+                        </p>
+                      )}
+                      {e.location?.trim() && (
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          Lugar:{" "}
+                          <a
+                            href={mapsSearchUrl(e.location)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary underline-offset-2 hover:underline"
+                          >
+                            {e.location}
+                          </a>
+                        </p>
+                      )}
                     </li>
                   ))}
                 </ul>
