@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ListChecks, NotebookPen, Plus, Trash2, Pencil, CheckSquare, Sparkles, Loader2, Send } from "lucide-react";
+import { ListChecks, NotebookPen, Plus, Trash2, Pencil, CheckSquare, Sparkles, Loader2, Send, Brain } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -219,8 +219,32 @@ function StagesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
   const [replacePending, setReplacePending] = useState(true);
   const [conversation, setConversation] = useState<AiTurn[]>([]);
   const [feedback, setFeedback] = useState("");
+  const [memory, setMemory] = useState(lawsuit.ai_memory ?? "");
+  const [memoryDraft, setMemoryDraft] = useState<string | null>(null);
 
-  const runAi = async (history: AiTurn[]) => {
+  const saveMemory = useMutation({
+    mutationFn: async (next: string) => {
+      const value = next.trim() || null;
+      const { error } = await supabase
+        .from("project_lawsuits")
+        .update({
+          ai_memory: value,
+          ai_memory_updated_at: new Date().toISOString(),
+          ai_memory_updated_by: user?.id ?? null,
+        })
+        .eq("id", lawsuit.id);
+      if (error) throw error;
+      return value ?? "";
+    },
+    onSuccess: (value) => {
+      setMemory(value);
+      setMemoryDraft(null);
+      queryClient.invalidateQueries({ queryKey: ["project-lawsuits", lawsuit.project_id] });
+    },
+    onError: (e: Error) => toast.error("No se pudo guardar la memoria de la IA: " + e.message),
+  });
+
+  const runAi = async (history: AiTurn[], mem = memory) => {
     setAiOpen(true);
     setAiBusy(true);
     setAiError(null);
@@ -272,6 +296,7 @@ function StagesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
       const { data, error } = await supabase.functions.invoke<{
         stages?: SuggestedStage[];
         reply?: string;
+        memory?: string;
         error?: string;
         message?: string;
       }>("lawsuit-ai-stages", {
@@ -295,6 +320,7 @@ function StagesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
           documents: Array.from(new Set(documents)),
           documentSummaries: summaries,
           conversation: history,
+          memory: mem || null,
         },
       });
       if (error) throw new Error(error.message || "Error invocando IA");
@@ -303,6 +329,7 @@ function StagesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
       setSuggestions(list);
       setPicked(new Set(list.map((_, i) => i)));
       setConversation([...history, { role: "assistant", stages: list, reply: data?.reply || undefined }]);
+      if (typeof data?.memory === "string" && data.memory.trim() !== mem.trim()) saveMemory.mutate(data.memory);
     } catch (e) {
       setAiError(e instanceof Error ? e.message : "Error desconocido");
     } finally {
@@ -311,9 +338,12 @@ function StagesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
   };
 
   const suggestWithAi = () => {
+    const mem = lawsuit.ai_memory ?? "";
     setConversation([]);
     setFeedback("");
-    void runAi([]);
+    setMemory(mem);
+    setMemoryDraft(null);
+    void runAi([], mem);
   };
 
   const sendFeedback = () => {
@@ -432,6 +462,61 @@ function StagesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
               del expediente que ya fueron leídos. Revísalas antes de aplicarlas.
             </DialogDescription>
           </DialogHeader>
+          {(memory || memoryDraft !== null) && (
+            <div className="space-y-1.5 rounded-lg border border-violet-500/30 bg-violet-500/5 p-2.5">
+              <div className="flex items-center gap-1.5">
+                <Brain className="h-3.5 w-3.5 text-violet-600" />
+                <span className="text-xs font-medium flex-1">Lo que la IA recuerda de este asunto</span>
+                {memoryDraft === null && (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs"
+                      onClick={() => setMemoryDraft(memory)}
+                      disabled={aiBusy || saveMemory.isPending}
+                    >
+                      Editar
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs text-muted-foreground"
+                      onClick={() => saveMemory.mutate("")}
+                      disabled={aiBusy || saveMemory.isPending}
+                    >
+                      Borrar
+                    </Button>
+                  </>
+                )}
+              </div>
+              {memoryDraft === null ? (
+                <p className="text-xs whitespace-pre-wrap text-muted-foreground">{memory}</p>
+              ) : (
+                <div className="space-y-1.5">
+                  <Textarea
+                    rows={4}
+                    className="text-xs"
+                    value={memoryDraft}
+                    onChange={(e) => setMemoryDraft(e.target.value)}
+                  />
+                  <div className="flex justify-end gap-2">
+                    <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setMemoryDraft(null)}>
+                      Cancelar
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => saveMemory.mutate(memoryDraft)}
+                      disabled={saveMemory.isPending}
+                    >
+                      Guardar
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           {conversation.some((t) => t.role === "user") && (
             <div className="space-y-2 rounded-lg border bg-muted/30 p-2">
               {conversation.map((t, i) =>
@@ -491,6 +576,9 @@ function StagesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
               <label htmlFor="ai-stages-feedback" className="text-xs font-medium">
                 ¿Algo que corregir? Coméntaselo a la IA
               </label>
+              <p className="text-[11px] text-muted-foreground -mt-1">
+                Lo que le aclares se guarda en la memoria de este juicio y la IA lo toma en cuenta las siguientes veces.
+              </p>
               <div className="flex items-end gap-2">
                 <Textarea
                   id="ai-stages-feedback"
