@@ -4321,34 +4321,55 @@ export type Database = {
       }
       project_lawsuit_entries: {
         Row: {
+          assigned_to: string | null
           client_visible: boolean
+          completed_at: string | null
           content: string
           created_at: string
           created_by: string | null
           entry_date: string
+          entry_type: string | null
           id: string
           lawsuit_id: string
+          location: string | null
+          notes: string | null
           organization_id: string
+          scheduled_date: string | null
+          scheduled_time: string | null
         }
         Insert: {
+          assigned_to?: string | null
           client_visible?: boolean
+          completed_at?: string | null
           content: string
           created_at?: string
           created_by?: string | null
           entry_date?: string
+          entry_type?: string | null
           id?: string
           lawsuit_id: string
+          location?: string | null
+          notes?: string | null
           organization_id: string
+          scheduled_date?: string | null
+          scheduled_time?: string | null
         }
         Update: {
+          assigned_to?: string | null
           client_visible?: boolean
+          completed_at?: string | null
           content?: string
           created_at?: string
           created_by?: string | null
           entry_date?: string
+          entry_type?: string | null
           id?: string
           lawsuit_id?: string
+          location?: string | null
+          notes?: string | null
           organization_id?: string
+          scheduled_date?: string | null
+          scheduled_time?: string | null
         }
         Relationships: [
           {

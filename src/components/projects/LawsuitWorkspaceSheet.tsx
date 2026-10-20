@@ -1,7 +1,22 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ListChecks, NotebookPen, Plus, Trash2, Pencil, CheckSquare, Sparkles, Loader2, Send, Brain } from "lucide-react";
+import {
+  Brain,
+  CalendarClock,
+  Check,
+  CheckSquare,
+  ListChecks,
+  Loader2,
+  MapPin,
+  NotebookPen,
+  Pencil,
+  Plus,
+  Send,
+  Sparkles,
+  Trash2,
+  UserRound,
+} from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -13,6 +28,10 @@ import {
   isLegalProcedure,
   statusMeta,
   LAWSUIT_TYPE_OPTIONS,
+  LAWSUIT_ENTRY_TYPE_OPTIONS,
+  entryTypeLabel,
+  formatScheduledAt,
+  mapsSearchUrl,
   currentStageLabel,
   mergeSuggestedStages,
   type SuggestedStage,
@@ -28,6 +47,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LawsuitCommentsPanel } from "@/components/projects/LawsuitCommentsPanel";
@@ -624,13 +644,172 @@ function StagesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
   );
 }
 
+interface EntryForm {
+  entry_type: string;
+  content: string;
+  entry_date: string;
+  scheduled_date: string;
+  scheduled_time: string;
+  assigned_to: string;
+  location: string;
+  notes: string;
+  client_visible: boolean;
+}
+
+const NO_ASSIGNEE = "__none";
+
+const emptyEntryForm = (): EntryForm => ({
+  entry_type: "",
+  content: "",
+  entry_date: toDateStringMX(),
+  scheduled_date: "",
+  scheduled_time: "",
+  assigned_to: "",
+  location: "",
+  notes: "",
+  client_visible: false,
+});
+
+const entryToForm = (e: EntryRow): EntryForm => ({
+  entry_type: e.entry_type ?? "",
+  content: e.content,
+  entry_date: e.entry_date,
+  scheduled_date: e.scheduled_date ?? "",
+  scheduled_time: e.scheduled_time?.slice(0, 5) ?? "",
+  assigned_to: e.assigned_to ?? "",
+  location: e.location ?? "",
+  notes: e.notes ?? "",
+  client_visible: e.client_visible,
+});
+
+const formToRow = (f: EntryForm) => ({
+  entry_type: f.entry_type || null,
+  content: f.content.trim(),
+  entry_date: f.entry_date,
+  scheduled_date: f.scheduled_date || null,
+  scheduled_time: f.scheduled_date && f.scheduled_time ? f.scheduled_time : null,
+  assigned_to: f.assigned_to || null,
+  location: f.location.trim() || null,
+  notes: f.notes.trim() || null,
+  client_visible: f.client_visible,
+});
+
+type ProfileOption = { user_id: string; full_name: string | null; email?: string | null };
+
+function EntryFormFields({
+  form,
+  onChange,
+  profiles,
+}: {
+  form: EntryForm;
+  onChange: (patch: Partial<EntryForm>) => void;
+  profiles: ProfileOption[];
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label className="text-xs">Tipo de actuación</Label>
+          <Select value={form.entry_type || undefined} onValueChange={(v) => onChange({ entry_type: v })}>
+            <SelectTrigger>
+              <SelectValue placeholder="Selecciona…" />
+            </SelectTrigger>
+            <SelectContent>
+              {LAWSUIT_ENTRY_TYPE_OPTIONS.map((t) => (
+                <SelectItem key={t.value} value={t.value}>
+                  {t.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Fecha de registro</Label>
+          <Input type="date" value={form.entry_date} onChange={(e) => onChange({ entry_date: e.target.value })} />
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label className="text-xs">Descripción</Label>
+        <Textarea
+          rows={3}
+          value={form.content}
+          onChange={(e) => onChange({ content: e.target.value })}
+          placeholder="Ej. Ir a revisar el expediente, presentar escrito de autorizados…"
+        />
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label className="text-xs">Se llevará a cabo</Label>
+          <div className="flex flex-wrap gap-2">
+            <Input
+              type="date"
+              aria-label="Fecha en que se llevará a cabo"
+              className="min-w-[9rem] flex-1"
+              value={form.scheduled_date}
+              onChange={(e) => onChange({ scheduled_date: e.target.value })}
+            />
+            <Input
+              type="time"
+              aria-label="Hora en que se llevará a cabo"
+              className="w-[7.5rem] shrink-0"
+              value={form.scheduled_time}
+              disabled={!form.scheduled_date}
+              onChange={(e) => onChange({ scheduled_time: e.target.value })}
+            />
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Asignada a</Label>
+          <Select
+            value={form.assigned_to || NO_ASSIGNEE}
+            onValueChange={(v) => onChange({ assigned_to: v === NO_ASSIGNEE ? "" : v })}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Sin asignar" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NO_ASSIGNEE}>Sin asignar</SelectItem>
+              {profiles.map((p) => (
+                <SelectItem key={p.user_id} value={p.user_id}>
+                  {p.full_name || p.email || "Usuario"}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label className="text-xs">Dirección / lugar</Label>
+        <Input
+          value={form.location}
+          onChange={(e) => onChange({ location: e.target.value })}
+          placeholder="Ej. Quinto Tribunal Laboral, Av. … (opcional)"
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label className="text-xs">Notas internas</Label>
+        <Textarea
+          rows={2}
+          value={form.notes}
+          onChange={(e) => onChange({ notes: e.target.value })}
+          placeholder="Qué llevar, con quién hablar, pendientes… (el cliente no las ve)"
+        />
+      </div>
+    </div>
+  );
+}
+
 function EntriesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { data: profiles } = useProfiles();
-  const [content, setContent] = useState("");
-  const [entryDate, setEntryDate] = useState(toDateStringMX());
-  const [clientVisible, setClientVisible] = useState(false);
+  const profileList = (profiles ?? []) as ProfileOption[];
+  const [form, setForm] = useState<EntryForm>(emptyEntryForm);
+  const [editing, setEditing] = useState<{ id: string; form: EntryForm } | null>(null);
   const queryKey = ["lawsuit-entries", lawsuit.id];
 
   const { data: entries = [], isLoading } = useQuery({
@@ -647,36 +826,34 @@ function EntriesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
     },
   });
 
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey });
+    queryClient.invalidateQueries({ queryKey: ["assigned-steps"] });
+  };
+
   const add = useMutation({
     mutationFn: async () => {
       const { error } = await supabase.from("project_lawsuit_entries").insert({
+        ...formToRow(form),
         lawsuit_id: lawsuit.id,
         organization_id: lawsuit.organization_id,
-        content: content.trim(),
-        entry_date: entryDate,
-        client_visible: clientVisible,
         created_by: user?.id ?? null,
       });
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey });
-      setContent("");
-      setClientVisible(false);
-      setEntryDate(toDateStringMX());
+      refresh();
+      setForm(emptyEntryForm());
     },
     onError: (e: Error) => toast.error("No se pudo guardar la actuación: " + e.message),
   });
 
-  const setVisible = useMutation({
-    mutationFn: async (v: { id: string; visible: boolean }) => {
-      const { error } = await supabase
-        .from("project_lawsuit_entries")
-        .update({ client_visible: v.visible })
-        .eq("id", v.id);
+  const update = useMutation({
+    mutationFn: async (v: { id: string; patch: Database["public"]["Tables"]["project_lawsuit_entries"]["Update"] }) => {
+      const { error } = await supabase.from("project_lawsuit_entries").update(v.patch).eq("id", v.id);
       if (error) throw error;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey }),
+    onSuccess: refresh,
     onError: (e: Error) => toast.error("No se pudo actualizar: " + e.message),
   });
 
@@ -685,34 +862,35 @@ function EntriesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
       const { error } = await supabase.from("project_lawsuit_entries").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey }),
+    onSuccess: refresh,
     onError: (e: Error) => toast.error("No se pudo eliminar: " + e.message),
   });
 
-  const nameOf = (uid: string | null) =>
-    (profiles as { user_id: string; full_name: string | null }[] | undefined)?.find((p) => p.user_id === uid)
-      ?.full_name ?? null;
+  const nameOf = (uid: string | null) => profileList.find((p) => p.user_id === uid)?.full_name ?? null;
+  const canSubmit = (f: EntryForm) => !!f.content.trim() && !!f.entry_date;
+
+  const saveEdit = () => {
+    if (!editing) return;
+    update.mutate({ id: editing.id, patch: formToRow(editing.form) }, { onSuccess: () => setEditing(null) });
+  };
 
   return (
     <div className="space-y-4">
-      <div className="space-y-2 rounded-lg border p-3">
-        <Textarea
-          rows={3}
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          placeholder="Registra una actuación: acuerdo, promoción, visita al juzgado, llamada…"
-        />
+      <div className="space-y-3 rounded-lg border p-3">
+        <EntryFormFields form={form} onChange={(p) => setForm((f) => ({ ...f, ...p }))} profiles={profileList} />
         <div className="flex items-center gap-2">
-          <Input type="date" className="w-40" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} />
           <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Checkbox checked={clientVisible} onCheckedChange={(v) => setClientVisible(v === true)} />
+            <Checkbox
+              checked={form.client_visible}
+              onCheckedChange={(v) => setForm((f) => ({ ...f, client_visible: v === true }))}
+            />
             Visible para el cliente
           </label>
           <Button
             size="sm"
             className="ml-auto"
             onClick={() => add.mutate()}
-            disabled={!content.trim() || !entryDate || add.isPending}
+            disabled={!canSubmit(form) || add.isPending}
           >
             <NotebookPen className="h-4 w-4 mr-1" /> Registrar
           </Button>
@@ -725,39 +903,168 @@ function EntriesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
         <p className="text-sm text-muted-foreground text-center py-4">Aún no hay actuaciones registradas.</p>
       ) : (
         <ul className="space-y-2">
-          {entries.map((e) => (
-            <li key={e.id} className="rounded-lg border p-3">
-              <div className="flex items-center gap-2 text-[11px] text-muted-foreground mb-1">
-                <span className="font-medium text-foreground">{formatDateMX(e.entry_date)}</span>
-                {nameOf(e.created_by) && <span>· {nameOf(e.created_by)}</span>}
-                <button
-                  type="button"
-                  className={`rounded border px-1.5 py-0.5 text-[10px] ${
-                    e.client_visible
-                      ? "bg-blue-500/10 text-blue-700 border-blue-500/30"
-                      : "text-muted-foreground hover:bg-secondary/40"
-                  }`}
-                  title={e.client_visible ? "Quitar de lo que ve el cliente" : "Mostrar al cliente"}
-                  onClick={() => setVisible.mutate({ id: e.id, visible: !e.client_visible })}
-                >
-                  {e.client_visible ? "Visible para el cliente" : "Interna"}
-                </button>
-                {e.created_by === user?.id && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-5 w-5 ml-auto text-muted-foreground"
-                    onClick={() => remove.mutate(e.id)}
+          {entries.map((e) => {
+            const scheduled = formatScheduledAt(e.scheduled_date, e.scheduled_time);
+            const overdue = !!e.scheduled_date && !e.completed_at && e.scheduled_date < toDateStringMX();
+            const typeName = entryTypeLabel(e.entry_type);
+            return (
+              <li key={e.id} className="rounded-lg border p-3">
+                <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground mb-1">
+                  <span className="font-medium text-foreground">{formatDateMX(e.entry_date)}</span>
+                  {typeName && (
+                    <Badge variant="outline" className="h-5 px-1.5 text-[10px] font-normal">
+                      {typeName}
+                    </Badge>
+                  )}
+                  {nameOf(e.created_by) && <span>· {nameOf(e.created_by)}</span>}
+                  <button
+                    type="button"
+                    className={`rounded border px-1.5 py-0.5 text-[10px] ${
+                      e.client_visible
+                        ? "bg-blue-500/10 text-blue-700 border-blue-500/30"
+                        : "text-muted-foreground hover:bg-secondary/40"
+                    }`}
+                    title={e.client_visible ? "Quitar de lo que ve el cliente" : "Mostrar al cliente"}
+                    onClick={() => update.mutate({ id: e.id, patch: { client_visible: !e.client_visible } })}
                   >
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
+                    {e.client_visible ? "Visible para el cliente" : "Interna"}
+                  </button>
+                  <div className="ml-auto flex items-center gap-0.5">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-5 w-5 text-muted-foreground"
+                      title="Editar actuación"
+                      onClick={() => setEditing({ id: e.id, form: entryToForm(e) })}
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </Button>
+                    {e.created_by === user?.id && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-5 w-5 text-muted-foreground"
+                        title="Eliminar actuación"
+                        onClick={() => remove.mutate(e.id)}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                <p className="text-sm whitespace-pre-wrap">{e.content}</p>
+
+                {(scheduled || e.assigned_to || e.location) && (
+                  <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                    {scheduled && (
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <CalendarClock className="h-3.5 w-3.5 shrink-0" />
+                        <span>
+                          {e.completed_at ? "Se llevó a cabo" : "Se llevará a cabo"}:{" "}
+                          <span className={`font-medium ${overdue ? "text-destructive" : "text-foreground"}`}>
+                            {scheduled}
+                          </span>
+                        </span>
+                        <button
+                          type="button"
+                          className={`rounded border px-1.5 py-0.5 text-[10px] ${
+                            e.completed_at
+                              ? "bg-green-500/10 text-green-700 border-green-500/30"
+                              : overdue
+                                ? "bg-destructive/10 text-destructive border-destructive/30"
+                                : "bg-amber-500/10 text-amber-700 border-amber-500/30"
+                          }`}
+                          title={e.completed_at ? "Marcar como pendiente" : "Marcar como realizada"}
+                          onClick={() =>
+                            update.mutate({
+                              id: e.id,
+                              patch: { completed_at: e.completed_at ? null : new Date().toISOString() },
+                            })
+                          }
+                        >
+                          {e.completed_at ? (
+                            <span className="inline-flex items-center gap-0.5">
+                              <Check className="h-2.5 w-2.5" /> Realizada
+                            </span>
+                          ) : overdue ? (
+                            "Vencida · marcar realizada"
+                          ) : (
+                            "Pendiente · marcar realizada"
+                          )}
+                        </button>
+                      </div>
+                    )}
+                    {e.assigned_to && (
+                      <div className="flex items-center gap-1.5">
+                        <UserRound className="h-3.5 w-3.5 shrink-0" />
+                        <span>
+                          Asignada a{" "}
+                          <span className="font-medium text-foreground">{nameOf(e.assigned_to) ?? "usuario"}</span>
+                        </span>
+                      </div>
+                    )}
+                    {e.location?.trim() && (
+                      <div className="flex items-start gap-1.5">
+                        <MapPin className="h-3.5 w-3.5 shrink-0 mt-px" />
+                        <a
+                          href={mapsSearchUrl(e.location)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-foreground underline-offset-2 hover:underline whitespace-pre-wrap"
+                        >
+                          {e.location}
+                        </a>
+                      </div>
+                    )}
+                  </div>
                 )}
-              </div>
-              <p className="text-sm whitespace-pre-wrap">{e.content}</p>
-            </li>
-          ))}
+
+                {e.notes?.trim() && (
+                  <div className="mt-2 rounded-md bg-muted/50 px-2.5 py-1.5 text-xs">
+                    <span className="font-medium text-muted-foreground">Notas: </span>
+                    <span className="whitespace-pre-wrap">{e.notes}</span>
+                  </div>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
+
+      <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar actuación</DialogTitle>
+            <DialogDescription>Actualiza cuándo se lleva a cabo, a quién se asigna, el lugar o las notas.</DialogDescription>
+          </DialogHeader>
+          {editing && (
+            <>
+              <EntryFormFields
+                form={editing.form}
+                onChange={(p) => setEditing((ed) => (ed ? { ...ed, form: { ...ed.form, ...p } } : ed))}
+                profiles={profileList}
+              />
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Checkbox
+                  checked={editing.form.client_visible}
+                  onCheckedChange={(v) =>
+                    setEditing((ed) => (ed ? { ...ed, form: { ...ed.form, client_visible: v === true } } : ed))
+                  }
+                />
+                Visible para el cliente
+              </label>
+            </>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditing(null)} disabled={update.isPending}>
+              Cancelar
+            </Button>
+            <Button onClick={saveEdit} disabled={!editing || !canSubmit(editing.form) || update.isPending}>
+              Guardar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
