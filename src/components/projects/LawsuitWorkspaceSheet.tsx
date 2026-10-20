@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ListChecks, NotebookPen, Plus, Trash2, Pencil, CheckSquare, Sparkles, Loader2 } from "lucide-react";
+import { ListChecks, NotebookPen, Plus, Trash2, Pencil, CheckSquare, Sparkles, Loader2, Send } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -146,6 +146,10 @@ export function LawsuitWorkspaceSheet({ lawsuit, clientId, dropboxPath, lockDrop
   );
 }
 
+type AiTurn =
+  | { role: "assistant"; stages: SuggestedStage[]; reply?: string }
+  | { role: "user"; text: string };
+
 function StagesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -213,8 +217,10 @@ function StagesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
   const [suggestions, setSuggestions] = useState<SuggestedStage[]>([]);
   const [picked, setPicked] = useState<Set<number>>(new Set());
   const [replacePending, setReplacePending] = useState(true);
+  const [conversation, setConversation] = useState<AiTurn[]>([]);
+  const [feedback, setFeedback] = useState("");
 
-  const suggestWithAi = async () => {
+  const runAi = async (history: AiTurn[]) => {
     setAiOpen(true);
     setAiBusy(true);
     setAiError(null);
@@ -265,6 +271,7 @@ function StagesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
       });
       const { data, error } = await supabase.functions.invoke<{
         stages?: SuggestedStage[];
+        reply?: string;
         error?: string;
         message?: string;
       }>("lawsuit-ai-stages", {
@@ -287,6 +294,7 @@ function StagesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
           comments,
           documents: Array.from(new Set(documents)),
           documentSummaries: summaries,
+          conversation: history,
         },
       });
       if (error) throw new Error(error.message || "Error invocando IA");
@@ -294,11 +302,27 @@ function StagesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
       if (list.length === 0) throw new Error(data?.message || "La IA no devolvió etapas");
       setSuggestions(list);
       setPicked(new Set(list.map((_, i) => i)));
+      setConversation([...history, { role: "assistant", stages: list, reply: data?.reply || undefined }]);
     } catch (e) {
       setAiError(e instanceof Error ? e.message : "Error desconocido");
     } finally {
       setAiBusy(false);
     }
+  };
+
+  const suggestWithAi = () => {
+    setConversation([]);
+    setFeedback("");
+    void runAi([]);
+  };
+
+  const sendFeedback = () => {
+    const text = feedback.trim();
+    if (!text || aiBusy) return;
+    const history: AiTurn[] = [...conversation, { role: "user", text }];
+    setConversation(history);
+    setFeedback("");
+    void runAi(history);
   };
 
   const applySuggestions = () => {
@@ -408,6 +432,22 @@ function StagesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
               del expediente que ya fueron leídos. Revísalas antes de aplicarlas.
             </DialogDescription>
           </DialogHeader>
+          {conversation.some((t) => t.role === "user") && (
+            <div className="space-y-2 rounded-lg border bg-muted/30 p-2">
+              {conversation.map((t, i) =>
+                t.role === "user" ? (
+                  <div key={i} className="ml-8 rounded-md bg-primary/10 px-2.5 py-1.5 text-xs">
+                    {t.text}
+                  </div>
+                ) : t.reply && i > 0 ? (
+                  <div key={i} className="mr-8 flex gap-1.5 rounded-md bg-background px-2.5 py-1.5 text-xs text-muted-foreground">
+                    <Sparkles className="h-3 w-3 mt-0.5 shrink-0" />
+                    <span>{t.reply}</span>
+                  </div>
+                ) : null,
+              )}
+            </div>
+          )}
           {aiBusy ? (
             <div className="flex items-center gap-2 py-6 justify-center text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" /> Analizando la información del asunto…
@@ -446,12 +486,39 @@ function StagesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
               )}
             </div>
           )}
+          {!aiError && (suggestions.length > 0 || conversation.length > 0) && (
+            <div className="space-y-1.5">
+              <label htmlFor="ai-stages-feedback" className="text-xs font-medium">
+                ¿Algo que corregir? Coméntaselo a la IA
+              </label>
+              <div className="flex items-end gap-2">
+                <Textarea
+                  id="ai-stages-feedback"
+                  rows={2}
+                  className="min-h-0 text-sm"
+                  value={feedback}
+                  onChange={(e) => setFeedback(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      sendFeedback();
+                    }
+                  }}
+                  placeholder="Ej. Es un procedimiento paraprocesal, no una demanda laboral"
+                  disabled={aiBusy}
+                />
+                <Button size="sm" onClick={sendFeedback} disabled={aiBusy || !feedback.trim()}>
+                  <Send className="h-3.5 w-3.5 mr-1" /> Ajustar
+                </Button>
+              </div>
+            </div>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setAiOpen(false)} disabled={aiBusy}>
               Cancelar
             </Button>
             {!aiBusy && aiError ? (
-              <Button onClick={suggestWithAi}>Reintentar</Button>
+              <Button onClick={() => void runAi(conversation)}>Reintentar</Button>
             ) : (
               <Button onClick={applySuggestions} disabled={aiBusy || picked.size === 0}>
                 Aplicar {picked.size > 0 ? `(${picked.size})` : ""}
