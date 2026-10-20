@@ -121,7 +121,7 @@ export function useAssignedSteps() {
         supabase
           .from("project_lawsuits")
           .select(
-            "id, name, project_id, status, next_hearing_date, next_deadline_date, next_deadline_note, projects(name, responsible_user_id, clients(name))",
+            "id, name, project_id, status, next_hearing_date, next_hearing_time, next_deadline_date, next_deadline_note, projects(name, responsible_user_id, clients(name))",
           )
           .not("status", "in", "(concluido,archivado)"),
         supabase.from("project_team").select("project_id").eq("user_id", userId),
@@ -142,7 +142,7 @@ export function useAssignedSteps() {
         steps.push({
           id: `lw_${d.lawsuitId}_${d.kind}`,
           stepKey: d.kind,
-          stepLabel: `${d.label}: ${d.lawsuitName}`,
+          stepLabel: `${d.label}${d.time ? ` ${d.time}` : ""}: ${d.lawsuitName}`,
           status: "pendiente",
           dueDate: d.date,
           sourceType: "juicio_plazo",

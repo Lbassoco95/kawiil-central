@@ -76,7 +76,7 @@ export function TeamDashboard() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("project_lawsuits")
-        .select("id, name, project_id, status, next_hearing_date, next_deadline_date, next_deadline_note, projects(name)")
+        .select("id, name, project_id, status, next_hearing_date, next_hearing_time, next_deadline_date, next_deadline_note, projects(name)")
         .not("status", "in", "(concluido,archivado)");
       if (error) throw error;
       return data;
@@ -352,7 +352,7 @@ export function TeamDashboard() {
     }) ?? [];
 
     const lawsuitLines = lawsuitDeadlines.slice(0, 10).map(
-      (d) => `  - ${d.lawsuitName} — ${d.label} (${d.date})${d.overdue ? " ⚠️ vencido" : ""}`,
+      (d) => `  - ${d.lawsuitName} — ${d.label} (${d.date}${d.time ? ` ${d.time}` : ""})${d.overdue ? " ⚠️ vencido" : ""}`,
     );
 
     return `Genera un resumen ejecutivo breve del estado del equipo Kawiil para el dashboard. Usa español mexicano, tono profesional y cercano con emojis.
@@ -498,6 +498,7 @@ INSTRUCCIONES:
                     </Badge>
                     <span className={`text-[11px] shrink-0 ${d.overdue ? "text-destructive font-medium" : "text-muted-foreground"}`}>
                       {formatDateMX(d.date)}
+                      {d.time ? ` · ${d.time}` : ""}
                     </span>
                   </button>
                 ))}

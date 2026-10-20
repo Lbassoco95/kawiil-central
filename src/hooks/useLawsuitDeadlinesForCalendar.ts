@@ -17,7 +17,7 @@ export function useLawsuitDeadlinesForCalendar(startDate?: string, endDate?: str
       const { data, error } = await supabase
         .from("project_lawsuits")
         .select(
-          "id, name, project_id, status, next_hearing_date, next_deadline_date, next_deadline_note, projects(name, clients(name))",
+          "id, name, project_id, status, next_hearing_date, next_hearing_time, next_deadline_date, next_deadline_note, projects(name, clients(name))",
         )
         .not("status", "in", "(concluido,archivado)");
       if (error) throw error;
