@@ -1,4 +1,4 @@
-import { toDateStringMX } from "@/lib/dateUtils";
+import { formatDateMX, toDateStringMX } from "@/lib/dateUtils";
 
 export const LAWSUIT_STATUS_OPTIONS = [
   { value: "en_tramite", label: "En trámite", className: "bg-blue-500/10 text-blue-700 border-blue-500/30" },
@@ -181,6 +181,36 @@ export interface LawsuitDateSource {
 export function formatHearingTime(time: string | null | undefined): string | null {
   const m = time?.match(/^(\d{1,2}):(\d{2})/);
   return m ? `${m[1].padStart(2, "0")}:${m[2]} h` : null;
+}
+
+/** Tipos de actuación para clasificar la bitácora del expediente. */
+export const LAWSUIT_ENTRY_TYPE_OPTIONS = [
+  { value: "acuerdo", label: "Acuerdo" },
+  { value: "promocion", label: "Promoción / escrito" },
+  { value: "audiencia", label: "Audiencia" },
+  { value: "diligencia", label: "Diligencia" },
+  { value: "notificacion", label: "Notificación" },
+  { value: "visita_juzgado", label: "Visita al juzgado" },
+  { value: "reunion", label: "Reunión" },
+  { value: "llamada", label: "Llamada" },
+  { value: "otro", label: "Otro" },
+];
+
+export function entryTypeLabel(type: string | null | undefined): string | null {
+  if (!type) return null;
+  return LAWSUIT_ENTRY_TYPE_OPTIONS.find((t) => t.value === type)?.label ?? null;
+}
+
+/** "23/10/2026, 10:30 h" (la hora es opcional); null si no hay fecha. */
+export function formatScheduledAt(date: string | null | undefined, time: string | null | undefined): string | null {
+  if (!date) return null;
+  const t = formatHearingTime(time);
+  return `${formatDateMX(date)}${t ? `, ${t}` : ""}`;
+}
+
+/** Liga de Google Maps para una dirección escrita a mano. */
+export function mapsSearchUrl(address: string): string {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address.trim())}`;
 }
 
 export interface LawsuitDeadline {
