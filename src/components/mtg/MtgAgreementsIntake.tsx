@@ -14,14 +14,15 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { useClients } from "@/hooks/useClients";
-import { CLIENTS_SECTION, useClientSections } from "@/hooks/useClientSelectOptions";
+import { useAllClientGroupMembers, useClientGroups } from "@/hooks/useClientGroups";
+import { assignMeetingClients } from "@/lib/mtg/assignMeetingClients";
 import { useProfiles } from "@/hooks/useTasks";
 import { supabase } from "@/integrations/supabase/client";
 import type { MtgAgreementRow, MtgMeetingRow, MtgSeriesRow } from "@/lib/mtg/db";
 import { addProposedAgreements, matchProfileByName, parseCommitments } from "@/lib/mtg/commitments";
 import { captureAgreement } from "@/lib/mtg/captureAgreement";
 
-type Row = { text: string; owner: string | null; ownerUserId: string; dueDate: string; dueHint: string | null; ref: string | null; selected: boolean; projectId: string };
+type Row = { text: string; owner: string | null; ownerUserId: string; dueDate: string; dueHint: string | null; ref: string | null; selected: boolean; projectId: string; clientId: string };
 type ProjectOpt = { id: string; name: string; client_id: string };
 
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
@@ -37,32 +38,71 @@ export function MtgAgreementsIntake(props: {
 }) {
   const { data: clients = [] } = useClients();
   const { data: profiles = [] } = useProfiles();
-  const groupSections = useClientSections().filter((x) => x.group !== CLIENTS_SECTION);
+  const { data: groups = [] } = useClientGroups();
+  const { data: members = [] } = useAllClientGroupMembers();
+  const [scope, setScope] = useState("");
+  const [scopeClients, setScopeClients] = useState<string[]>([]);
+  const [savedEntities, setSavedEntities] = useState<MtgSeriesRow["entities"] | null>(null);
   const [text, setText] = useState("");
   const [owner, setOwner] = useState("");
   const [due, setDue] = useState("");
   const [entityKey, setEntityKey] = useState("");
-  const [pickedClient, setPickedClient] = useState("");
   const [projectId, setProjectId] = useState("");
   const [rows, setRows] = useState<Row[]>([]);
   const [busy, setBusy] = useState(false);
   const [showMissing, setShowMissing] = useState(false);
 
-  const entities = props.series?.entities ?? [];
+  useEffect(() => {
+    setSavedEntities(null);
+    setScope("");
+    setScopeClients([]);
+    setEntityKey("");
+    setProjectId("");
+  }, [props.meeting.id]);
+
+  const entities = savedEntities ?? props.series?.entities ?? [];
+  const chooseScope = (value: string) => {
+    setScope(value);
+    const ids = value.startsWith("group:")
+      ? members.filter((m) => m.group_id === value.slice(6) && clients.some((c) => c.id === m.client_id)).map((m) => m.client_id)
+      : value ? [value.slice(7)] : [];
+    setScopeClients([...new Set(ids)]);
+    setEntityKey("");
+    setProjectId("");
+    setRows((rs) => rs.map((r) => ({ ...r, projectId: "", clientId: "" })));
+  };
+  const saveScope = async () => {
+    setBusy(true);
+    try {
+      const result = await assignMeetingClients({
+        organizationId: props.organizationId,
+        actorUserId: props.actorUserId,
+        meetingId: props.meeting.id,
+        clientIds: scopeClients,
+      });
+      setSavedEntities(result.entities);
+      setScope("");
+      setScopeClients([]);
+      props.onChanged();
+      toast.success("Clientes vinculados a la junta");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudieron vincular los clientes");
+    } finally {
+      setBusy(false);
+    }
+  };
   const clientForEntity = (key: string) => entities.find((e) => e.key === key)?.client_id ?? null;
   // Sin cliente en la junta ni en la serie: se elige aquí (sin cliente no hay tarea).
   const needsClientPick = !props.meeting.client_id && entities.length === 0;
   const clientId =
     (entityKey ? clientForEntity(entityKey) : null) ??
-    props.meeting.client_id ??
-    entities[0]?.client_id ??
-    (pickedClient || null);
+    (entities.length > 1 ? null : entities[0]?.client_id ?? props.meeting.client_id ?? null);
   const clientName = clients.find((c) => c.id === clientId)?.name;
 
   // Proyectos de todas las empresas de la junta: cada compromiso puede ir a uno distinto.
   const clientIds = [
     ...new Set(
-      [props.meeting.client_id, ...entities.map((e) => e.client_id), pickedClient].filter(Boolean) as string[],
+      (entities.length ? entities.map((e) => e.client_id) : [props.meeting.client_id]).filter(Boolean) as string[],
     ),
   ];
   const { data: projects = [] } = useQuery({
@@ -82,7 +122,7 @@ export function MtgAgreementsIntake(props: {
     clientIds.length > 1 ? `${clients.find((c) => c.id === p.client_id)?.name ?? "—"} · ${p.name}` : p.name;
   const applyProjectToAll = (id: string) => {
     setProjectId(id);
-    if (id) setRows((rs) => rs.map((r) => (r.selected ? { ...r, projectId: id } : r)));
+    if (id) setRows((rs) => rs.map((r) => (r.selected ? { ...r, projectId: id, clientId: projects.find((p) => p.id === id)?.client_id ?? "" } : r)));
   };
 
   // Compromisos del resumen que aún no son acuerdos.
@@ -103,16 +143,21 @@ export function MtgAgreementsIntake(props: {
         ref: c.ref,
         selected: true,
         projectId: "",
+        clientId: "",
       })),
     );
     // se rehace solo cuando cambian los compromisos o llegan los perfiles
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingKey, profiles.length]);
+  }, [pendingKey, profiles.length, props.meeting.id]);
 
   const patch = (i: number, p: Partial<Row>) => setRows((rs) => rs.map((r, k) => (k === i ? { ...r, ...p } : r)));
   const selected = rows.filter((r) => r.selected);
 
   const guard = () => {
+    if (scope) {
+      toast.error("Guarda primero los clientes de la junta");
+      return false;
+    }
     if (!clientId) {
       toast.error("Elige el cliente de la junta", {
         description: "Sin cliente el acuerdo no se puede confirmar ni convertir en tarea.",
@@ -156,9 +201,13 @@ export function MtgAgreementsIntake(props: {
   };
 
   const asTasks = async () => {
+    if (scope) {
+      toast.error("Guarda primero los clientes de la junta");
+      return;
+    }
     if (selected.length === 0) return;
     const lacks = (r: Row) =>
-      [!r.projectId && "proyecto", !r.dueDate && "fecha", !r.ownerUserId && !r.owner?.trim() && "responsable"].filter(Boolean);
+      [!projects.some((p) => p.id === r.projectId && clientIds.includes(p.client_id)) && "proyecto", !r.dueDate && "fecha", !r.ownerUserId && !r.owner?.trim() && "responsable"].filter(Boolean);
     const missing = selected.filter((r) => lacks(r).length > 0);
     if (missing.length > 0) {
       setShowMissing(true);
@@ -234,36 +283,42 @@ export function MtgAgreementsIntake(props: {
         {clientName && <span className="text-[11px] text-muted-foreground">Cliente: {clientName}</span>}
       </div>
 
-      {needsClientPick && (
-        <div className="space-y-1">
-          <p className="text-xs text-amber-700 dark:text-amber-400">
-            Esta junta no tiene cliente: elige uno para poder crear tareas desde los acuerdos.
-          </p>
+      <div className="space-y-2">
+        <p className="text-xs text-muted-foreground">
+          {needsClientPick ? "Vincula un cliente o grupo para crear tareas." : "Puedes vincular un cliente o elegir las empresas de un grupo."}
+        </p>
+        <label className="block space-y-1 text-xs">
+          <span>Cliente o grupo de la junta</span>
           <select
             className="h-9 w-full rounded-md border bg-background px-2 text-sm"
-            value={pickedClient}
-            onChange={(e) => setPickedClient(e.target.value)}
+            value={scope}
+            disabled={busy}
+            onChange={(e) => chooseScope(e.target.value)}
           >
-            <option value="">Cliente o grupo…</option>
-            {groupSections.map((g) => (
-              <optgroup key={g.group} label={g.group}>
-                {g.items.map((c) => (
-                  <option key={`${g.group}-${c.id}`} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
+            <option value="">Seleccionar cliente o grupo…</option>
+            <optgroup label="Grupos">
+              {groups.map((g) => <option key={g.id} value={`group:${g.id}`}>{g.name}</option>)}
+            </optgroup>
             <optgroup label="Clientes">
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
+              {clients.map((c) => <option key={c.id} value={`client:${c.id}`}>{c.name}</option>)}
             </optgroup>
           </select>
-        </div>
-      )}
+        </label>
+        {scope.startsWith("group:") && (
+          <fieldset className="max-h-44 overflow-y-auto rounded-md border p-2 space-y-2" disabled={busy}>
+            <legend className="px-1 text-xs">Clientes del grupo que participan en la junta</legend>
+            {clients.filter((c) => members.some((m) => m.group_id === scope.slice(6) && m.client_id === c.id)).map((c) => (
+              <label key={c.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                <Checkbox checked={scopeClients.includes(c.id)} onCheckedChange={(checked) => setScopeClients((ids) => checked ? [...ids, c.id] : ids.filter((id) => id !== c.id))} />
+                {c.name}
+              </label>
+            ))}
+            {!members.some((m) => m.group_id === scope.slice(6) && clients.some((c) => c.id === m.client_id)) && <p className="text-xs text-muted-foreground">Este grupo no tiene clientes disponibles.</p>}
+          </fieldset>
+        )}
+        {scope && <Button type="button" size="sm" disabled={busy || !scopeClients.length} onClick={() => void saveScope()}>Guardar clientes de la junta</Button>}
+        {entities.length > 1 && <p className="text-xs text-muted-foreground">Clientes vinculados: {entities.map((e) => e.label).join(", ")}. El proyecto de cada tarea determina su cliente.</p>}
+      </div>
 
       {rows.length > 0 && (
         <div className="rounded-md border border-primary/30 bg-primary/5 p-2 space-y-2">
@@ -309,18 +364,29 @@ export function MtgAgreementsIntake(props: {
                     title={r.dueHint ? `Plazo dicho: ${r.dueHint}` : "Fecha límite"}
                   />
                 </div>
-                <div className="pl-6">
+                <div className="pl-6 space-y-1.5">
+                  {clientIds.length > 1 && (
+                    <select
+                      className="h-8 w-full rounded-md border bg-background px-2 text-xs"
+                      aria-label="Cliente de esta tarea"
+                      value={r.clientId}
+                      onChange={(e) => patch(i, { clientId: e.target.value, projectId: "" })}
+                    >
+                      <option value="">Todos los clientes de la junta</option>
+                      {clients.filter((c) => clientIds.includes(c.id)).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  )}
                   <select
                     className={`h-8 w-full rounded-md border bg-background px-2 text-xs ${showMissing && r.selected && !r.projectId ? "border-red-500" : ""}`}
                     value={r.projectId}
-                    onChange={(e) => patch(i, { projectId: e.target.value })}
+                    onChange={(e) => patch(i, { projectId: e.target.value, clientId: projects.find((p) => p.id === e.target.value)?.client_id ?? r.clientId })}
                     disabled={projects.length === 0}
                     title="Proyecto de esta tarea"
                   >
                     <option value="">
                       {projects.length ? "Proyecto de esta tarea…" : clientIds.length ? "Sin proyectos activos" : "Elige cliente primero"}
                     </option>
-                    {projects.map((p) => (
+                    {projects.filter((p) => !r.clientId || p.client_id === r.clientId).map((p) => (
                       <option key={p.id} value={p.id}>
                         {projectLabel(p)}
                       </option>
@@ -376,6 +442,7 @@ export function MtgAgreementsIntake(props: {
           <select
             className="sm:col-span-3 h-9 rounded-md border bg-background px-2 text-sm"
             value={entityKey}
+            aria-label="Cliente para acuerdos propuestos o manuales"
             onChange={(e) => setEntityKey(e.target.value)}
           >
             <option value="">Empresa…</option>
