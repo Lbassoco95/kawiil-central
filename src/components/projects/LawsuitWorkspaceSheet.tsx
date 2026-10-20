@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Brain,
   CalendarClock,
   Check,
   CheckSquare,
@@ -11,6 +12,7 @@ import {
   NotebookPen,
   Pencil,
   Plus,
+  Send,
   Sparkles,
   Trash2,
   UserRound,
@@ -164,6 +166,10 @@ export function LawsuitWorkspaceSheet({ lawsuit, clientId, dropboxPath, lockDrop
   );
 }
 
+type AiTurn =
+  | { role: "assistant"; stages: SuggestedStage[]; reply?: string }
+  | { role: "user"; text: string };
+
 function StagesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -231,8 +237,34 @@ function StagesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
   const [suggestions, setSuggestions] = useState<SuggestedStage[]>([]);
   const [picked, setPicked] = useState<Set<number>>(new Set());
   const [replacePending, setReplacePending] = useState(true);
+  const [conversation, setConversation] = useState<AiTurn[]>([]);
+  const [feedback, setFeedback] = useState("");
+  const [memory, setMemory] = useState(lawsuit.ai_memory ?? "");
+  const [memoryDraft, setMemoryDraft] = useState<string | null>(null);
 
-  const suggestWithAi = async () => {
+  const saveMemory = useMutation({
+    mutationFn: async (next: string) => {
+      const value = next.trim() || null;
+      const { error } = await supabase
+        .from("project_lawsuits")
+        .update({
+          ai_memory: value,
+          ai_memory_updated_at: new Date().toISOString(),
+          ai_memory_updated_by: user?.id ?? null,
+        })
+        .eq("id", lawsuit.id);
+      if (error) throw error;
+      return value ?? "";
+    },
+    onSuccess: (value) => {
+      setMemory(value);
+      setMemoryDraft(null);
+      queryClient.invalidateQueries({ queryKey: ["project-lawsuits", lawsuit.project_id] });
+    },
+    onError: (e: Error) => toast.error("No se pudo guardar la memoria de la IA: " + e.message),
+  });
+
+  const runAi = async (history: AiTurn[], mem = memory) => {
     setAiOpen(true);
     setAiBusy(true);
     setAiError(null);
@@ -283,6 +315,8 @@ function StagesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
       });
       const { data, error } = await supabase.functions.invoke<{
         stages?: SuggestedStage[];
+        reply?: string;
+        memory?: string;
         error?: string;
         message?: string;
       }>("lawsuit-ai-stages", {
@@ -305,6 +339,8 @@ function StagesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
           comments,
           documents: Array.from(new Set(documents)),
           documentSummaries: summaries,
+          conversation: history,
+          memory: mem || null,
         },
       });
       if (error) throw new Error(error.message || "Error invocando IA");
@@ -312,11 +348,31 @@ function StagesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
       if (list.length === 0) throw new Error(data?.message || "La IA no devolvió etapas");
       setSuggestions(list);
       setPicked(new Set(list.map((_, i) => i)));
+      setConversation([...history, { role: "assistant", stages: list, reply: data?.reply || undefined }]);
+      if (typeof data?.memory === "string" && data.memory.trim() !== mem.trim()) saveMemory.mutate(data.memory);
     } catch (e) {
       setAiError(e instanceof Error ? e.message : "Error desconocido");
     } finally {
       setAiBusy(false);
     }
+  };
+
+  const suggestWithAi = () => {
+    const mem = lawsuit.ai_memory ?? "";
+    setConversation([]);
+    setFeedback("");
+    setMemory(mem);
+    setMemoryDraft(null);
+    void runAi([], mem);
+  };
+
+  const sendFeedback = () => {
+    const text = feedback.trim();
+    if (!text || aiBusy) return;
+    const history: AiTurn[] = [...conversation, { role: "user", text }];
+    setConversation(history);
+    setFeedback("");
+    void runAi(history);
   };
 
   const applySuggestions = () => {
@@ -426,6 +482,77 @@ function StagesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
               del expediente que ya fueron leídos. Revísalas antes de aplicarlas.
             </DialogDescription>
           </DialogHeader>
+          {(memory || memoryDraft !== null) && (
+            <div className="space-y-1.5 rounded-lg border border-violet-500/30 bg-violet-500/5 p-2.5">
+              <div className="flex items-center gap-1.5">
+                <Brain className="h-3.5 w-3.5 text-violet-600" />
+                <span className="text-xs font-medium flex-1">Lo que la IA recuerda de este asunto</span>
+                {memoryDraft === null && (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs"
+                      onClick={() => setMemoryDraft(memory)}
+                      disabled={aiBusy || saveMemory.isPending}
+                    >
+                      Editar
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs text-muted-foreground"
+                      onClick={() => saveMemory.mutate("")}
+                      disabled={aiBusy || saveMemory.isPending}
+                    >
+                      Borrar
+                    </Button>
+                  </>
+                )}
+              </div>
+              {memoryDraft === null ? (
+                <p className="text-xs whitespace-pre-wrap text-muted-foreground">{memory}</p>
+              ) : (
+                <div className="space-y-1.5">
+                  <Textarea
+                    rows={4}
+                    className="text-xs"
+                    value={memoryDraft}
+                    onChange={(e) => setMemoryDraft(e.target.value)}
+                  />
+                  <div className="flex justify-end gap-2">
+                    <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setMemoryDraft(null)}>
+                      Cancelar
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => saveMemory.mutate(memoryDraft)}
+                      disabled={saveMemory.isPending}
+                    >
+                      Guardar
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          {conversation.some((t) => t.role === "user") && (
+            <div className="space-y-2 rounded-lg border bg-muted/30 p-2">
+              {conversation.map((t, i) =>
+                t.role === "user" ? (
+                  <div key={i} className="ml-8 rounded-md bg-primary/10 px-2.5 py-1.5 text-xs">
+                    {t.text}
+                  </div>
+                ) : t.reply && i > 0 ? (
+                  <div key={i} className="mr-8 flex gap-1.5 rounded-md bg-background px-2.5 py-1.5 text-xs text-muted-foreground">
+                    <Sparkles className="h-3 w-3 mt-0.5 shrink-0" />
+                    <span>{t.reply}</span>
+                  </div>
+                ) : null,
+              )}
+            </div>
+          )}
           {aiBusy ? (
             <div className="flex items-center gap-2 py-6 justify-center text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" /> Analizando la información del asunto…
@@ -464,12 +591,42 @@ function StagesPanel({ lawsuit }: { lawsuit: LawsuitRow }) {
               )}
             </div>
           )}
+          {!aiError && (suggestions.length > 0 || conversation.length > 0) && (
+            <div className="space-y-1.5">
+              <label htmlFor="ai-stages-feedback" className="text-xs font-medium">
+                ¿Algo que corregir? Coméntaselo a la IA
+              </label>
+              <p className="text-[11px] text-muted-foreground -mt-1">
+                Lo que le aclares se guarda en la memoria de este juicio y la IA lo toma en cuenta las siguientes veces.
+              </p>
+              <div className="flex items-end gap-2">
+                <Textarea
+                  id="ai-stages-feedback"
+                  rows={2}
+                  className="min-h-0 text-sm"
+                  value={feedback}
+                  onChange={(e) => setFeedback(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      sendFeedback();
+                    }
+                  }}
+                  placeholder="Ej. Es un procedimiento paraprocesal, no una demanda laboral"
+                  disabled={aiBusy}
+                />
+                <Button size="sm" onClick={sendFeedback} disabled={aiBusy || !feedback.trim()}>
+                  <Send className="h-3.5 w-3.5 mr-1" /> Ajustar
+                </Button>
+              </div>
+            </div>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setAiOpen(false)} disabled={aiBusy}>
               Cancelar
             </Button>
             {!aiBusy && aiError ? (
-              <Button onClick={suggestWithAi}>Reintentar</Button>
+              <Button onClick={() => void runAi(conversation)}>Reintentar</Button>
             ) : (
               <Button onClick={applySuggestions} disabled={aiBusy || picked.size === 0}>
                 Aplicar {picked.size > 0 ? `(${picked.size})` : ""}
