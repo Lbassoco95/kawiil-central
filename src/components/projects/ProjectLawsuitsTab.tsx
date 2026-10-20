@@ -32,6 +32,7 @@ import { LawsuitWorkspaceSheet } from "@/components/projects/LawsuitWorkspaceShe
 import { ProjectClientPortalPanel } from "@/components/projects/ProjectClientPortalPanel";
 import {
   CLOSED_LAWSUIT_STATUSES,
+  formatHearingTime,
   statusMeta,
   statusOptionsForType,
   LAWSUIT_TYPE_OPTIONS,
@@ -55,6 +56,7 @@ interface FormState {
   current_stage: string;
   filed_date: string;
   next_hearing_date: string;
+  next_hearing_time: string;
   next_deadline_date: string;
   next_deadline_note: string;
   lead_attorney: string;
@@ -74,6 +76,7 @@ const EMPTY_FORM: FormState = {
   current_stage: "",
   filed_date: "",
   next_hearing_date: "",
+  next_hearing_time: "",
   next_deadline_date: "",
   next_deadline_note: "",
   lead_attorney: "",
@@ -94,6 +97,7 @@ function toForm(l: LawsuitRow): FormState {
     current_stage: l.current_stage ?? "",
     filed_date: l.filed_date ?? "",
     next_hearing_date: l.next_hearing_date ?? "",
+    next_hearing_time: l.next_hearing_time?.slice(0, 5) ?? "",
     next_deadline_date: l.next_deadline_date ?? "",
     next_deadline_note: l.next_deadline_note ?? "",
     lead_attorney: l.lead_attorney ?? "",
@@ -106,7 +110,17 @@ function toForm(l: LawsuitRow): FormState {
 const orNull = (v: string) => (v.trim() ? v.trim() : null);
 
 /** `alertable`: solo audiencias y plazos pueden estar vencidos; una fecha de presentación pasada es normal. */
-function DateChip({ label, date, alertable = false }: { label: string; date: string | null; alertable?: boolean }) {
+function DateChip({
+  label,
+  date,
+  time,
+  alertable = false,
+}: {
+  label: string;
+  date: string | null;
+  time?: string | null;
+  alertable?: boolean;
+}) {
   if (!date) return null;
   const d = new Date(`${date}T00:00:00`);
   const overdue = alertable && isPast(d) && !isToday(d);
@@ -116,6 +130,7 @@ function DateChip({ label, date, alertable = false }: { label: string; date: str
     >
       {overdue ? <AlertTriangle className="h-3 w-3" /> : <Calendar className="h-3 w-3" />}
       {label}: {formatMX(date, "d MMM yyyy")}
+      {formatHearingTime(time) ? `, ${formatHearingTime(time)}` : ""}
     </span>
   );
 }
@@ -184,6 +199,7 @@ export function ProjectLawsuitsTab({ projectId, organizationId, clientId, dropbo
         current_stage: orNull(form.current_stage),
         filed_date: orNull(form.filed_date),
         next_hearing_date: orNull(form.next_hearing_date),
+        next_hearing_time: form.next_hearing_date.trim() ? orNull(form.next_hearing_time) : null,
         next_deadline_date: orNull(form.next_deadline_date),
         next_deadline_note: orNull(form.next_deadline_note),
         lead_attorney: orNull(form.lead_attorney),
@@ -355,7 +371,7 @@ export function ProjectLawsuitsTab({ projectId, organizationId, clientId, dropbo
 
                   <div className="flex flex-wrap gap-x-4 gap-y-1">
                     <DateChip label="Presentado" date={l.filed_date} />
-                    <DateChip label="Próxima audiencia" date={l.next_hearing_date} alertable />
+                    <DateChip label="Próxima audiencia" date={l.next_hearing_date} time={l.next_hearing_time} alertable />
                     <DateChip
                       label={l.next_deadline_note ? `Plazo (${l.next_deadline_note})` : "Próximo plazo"}
                       date={l.next_deadline_date}
@@ -464,11 +480,21 @@ export function ProjectLawsuitsTab({ projectId, organizationId, clientId, dropbo
             </div>
             <div className="space-y-1.5">
               <Label>Próxima audiencia</Label>
-              <Input
-                type="date"
-                value={form.next_hearing_date}
-                onChange={(e) => set("next_hearing_date", e.target.value)}
-              />
+              <div className="flex flex-wrap gap-2">
+                <Input
+                  type="date"
+                  className="min-w-[9rem] flex-1"
+                  value={form.next_hearing_date}
+                  onChange={(e) => set("next_hearing_date", e.target.value)}
+                />
+                <Input
+                  type="time"
+                  aria-label="Hora de la audiencia"
+                  className="w-[7.5rem] shrink-0"
+                  value={form.next_hearing_time}
+                  onChange={(e) => set("next_hearing_time", e.target.value)}
+                />
+              </div>
             </div>
             <div className="space-y-1.5">
               <Label>Próximo plazo (fecha)</Label>

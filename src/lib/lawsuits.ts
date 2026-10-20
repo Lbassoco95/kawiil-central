@@ -172,8 +172,15 @@ export interface LawsuitDateSource {
   project_id: string;
   status: string;
   next_hearing_date: string | null;
+  next_hearing_time?: string | null;
   next_deadline_date: string | null;
   next_deadline_note: string | null;
+}
+
+/** "10:30:00" → "10:30 h"; null si no hay hora. */
+export function formatHearingTime(time: string | null | undefined): string | null {
+  const m = time?.match(/^(\d{1,2}):(\d{2})/);
+  return m ? `${m[1].padStart(2, "0")}:${m[2]} h` : null;
 }
 
 export interface LawsuitDeadline {
@@ -183,6 +190,8 @@ export interface LawsuitDeadline {
   kind: "audiencia" | "plazo";
   label: string;
   date: string;
+  /** Solo audiencias: "HH:MM h" si se capturó la hora. */
+  time: string | null;
   overdue: boolean;
 }
 
@@ -196,7 +205,7 @@ export function collectLawsuitDeadlines(lawsuits: LawsuitDateSource[], today = t
     if (CLOSED_LAWSUIT_STATUSES.includes(l.status)) continue;
     const base = { lawsuitId: l.id, projectId: l.project_id, lawsuitName: l.name };
     if (l.next_hearing_date) {
-      out.push({ ...base, kind: "audiencia", label: "Audiencia", date: l.next_hearing_date, overdue: l.next_hearing_date < today });
+      out.push({ ...base, kind: "audiencia", label: "Audiencia", date: l.next_hearing_date, time: formatHearingTime(l.next_hearing_time), overdue: l.next_hearing_date < today });
     }
     if (l.next_deadline_date) {
       out.push({
@@ -204,11 +213,12 @@ export function collectLawsuitDeadlines(lawsuits: LawsuitDateSource[], today = t
         kind: "plazo",
         label: l.next_deadline_note?.trim() || "Plazo",
         date: l.next_deadline_date,
+        time: null,
         overdue: l.next_deadline_date < today,
       });
     }
   }
-  return out.sort((a, b) => a.date.localeCompare(b.date));
+  return out.sort((a, b) => a.date.localeCompare(b.date) || (a.time ?? "").localeCompare(b.time ?? ""));
 }
 
 /**
@@ -255,7 +265,7 @@ export function lawsuitDeadlinesAsCalendarTasks(
       const m = meta.get(d.lawsuitId);
       return {
         id: lawsuitCalendarId(d),
-        title: `⚖️ ${d.label}: ${d.lawsuitName}`,
+        title: `⚖️ ${d.label}${d.time ? ` ${d.time}` : ""}: ${d.lawsuitName}`,
         due_date: d.date,
         status: "pendiente",
         priority: d.overdue ? "alta" : "media",

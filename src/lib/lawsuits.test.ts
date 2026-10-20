@@ -3,6 +3,7 @@ import {
   collectLawsuitDeadlines,
   currentStageLabel,
   defaultStagesForType,
+  formatHearingTime,
   isLegalProcedure,
   mergeSuggestedStages,
   partyLabels,
@@ -22,7 +23,29 @@ const base = {
   next_deadline_note: null,
 };
 
+describe("formatHearingTime", () => {
+  it("normaliza la hora de Postgres a HH:MM h", () => {
+    expect(formatHearingTime("09:30:00")).toBe("09:30 h");
+    expect(formatHearingTime("16:05")).toBe("16:05 h");
+    expect(formatHearingTime(null)).toBeNull();
+    expect(formatHearingTime("")).toBeNull();
+  });
+});
+
 describe("collectLawsuitDeadlines", () => {
+  it("incluye la hora de la audiencia y desempata por hora el mismo día", () => {
+    const res = collectLawsuitDeadlines(
+      [
+        { ...base, id: "a", name: "A", status: "en_tramite", next_hearing_date: "2026-10-29", next_hearing_time: "12:00:00" },
+        { ...base, id: "b", name: "B", status: "en_tramite", next_hearing_date: "2026-10-29", next_hearing_time: "09:30:00" },
+      ],
+      "2026-10-20",
+    );
+    expect(res.map((d) => [d.lawsuitId, d.time])).toEqual([["b", "09:30 h"], ["a", "12:00 h"]]);
+    const [task] = lawsuitDeadlinesAsCalendarTasks(res, "2026-10-29", "2026-10-29");
+    expect(task.title).toBe("⚖️ Audiencia 09:30 h: B");
+  });
+
   it("ordena por fecha, marca vencidos e ignora juicios cerrados", () => {
     const res = collectLawsuitDeadlines(
       [

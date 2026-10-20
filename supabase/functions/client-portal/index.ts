@@ -219,7 +219,7 @@ serve(async (req) => {
     const { data: lawsuitRows } = await sb
       .from("project_lawsuits")
       .select(
-        "id, name, lawsuit_type, case_number, court, status, current_stage, stages, filed_date, next_hearing_date, next_deadline_date, next_deadline_note",
+        "id, name, lawsuit_type, case_number, court, status, current_stage, stages, filed_date, next_hearing_date, next_hearing_time, next_deadline_date, next_deadline_note",
       )
       .eq("project_id", link.project_id)
       .eq("client_visible", true)
@@ -294,6 +294,7 @@ serve(async (req) => {
           current_stage: lawsuit.current_stage,
           filed_date: lawsuit.filed_date,
           next_hearing_date: lawsuit.next_hearing_date,
+          next_hearing_time: lawsuit.next_hearing_time,
           next_deadline_date: lawsuit.next_deadline_date,
           next_deadline_note: lawsuit.next_deadline_note,
           stages,

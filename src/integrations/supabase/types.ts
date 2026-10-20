@@ -4378,6 +4378,7 @@ export type Database = {
           next_deadline_date: string | null
           next_deadline_note: string | null
           next_hearing_date: string | null
+          next_hearing_time: string | null
           notes: string | null
           organization_id: string
           plaintiff: string | null
@@ -4404,6 +4405,7 @@ export type Database = {
           next_deadline_date?: string | null
           next_deadline_note?: string | null
           next_hearing_date?: string | null
+          next_hearing_time?: string | null
           notes?: string | null
           organization_id: string
           plaintiff?: string | null
@@ -4430,6 +4432,7 @@ export type Database = {
           next_deadline_date?: string | null
           next_deadline_note?: string | null
           next_hearing_date?: string | null
+          next_hearing_time?: string | null
           notes?: string | null
           organization_id?: string
           plaintiff?: string | null

@@ -4,7 +4,7 @@ import { CalendarDays, CheckCircle2, ChevronDown, Circle, Download, Eye, FileTex
 import { supabase } from "@/integrations/supabase/client";
 import { FunctionsHttpError } from "@supabase/functions-js";
 import { formatDateMX } from "@/lib/dateUtils";
-import { LAWSUIT_TYPE_OPTIONS, statusMeta } from "@/lib/lawsuits";
+import { LAWSUIT_TYPE_OPTIONS, formatHearingTime, statusMeta } from "@/lib/lawsuits";
 import { inferMimeFromFileName } from "@/lib/outlookEmailMedia";
 import { PREFETCH_MAX_BYTES, createBlobCache, preloadViewerFor } from "@/lib/blobPrefetch";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +24,7 @@ interface PortalLawsuit {
   current_stage: string | null;
   filed_date: string | null;
   next_hearing_date: string | null;
+  next_hearing_time?: string | null;
   next_deadline_date: string | null;
   next_deadline_note: string | null;
   stages: { label: string; completed: boolean; completed_at: string | null }[];
@@ -348,6 +349,7 @@ function LawsuitSection({
                 {lawsuit.next_hearing_date && (
                   <span className="inline-flex items-center gap-1">
                     <CalendarDays className="h-3 w-3" /> Próxima audiencia: {formatDateMX(lawsuit.next_hearing_date)}
+                    {formatHearingTime(lawsuit.next_hearing_time) ? `, ${formatHearingTime(lawsuit.next_hearing_time)}` : ""}
                   </span>
                 )}
                 {lawsuit.next_deadline_date && (
