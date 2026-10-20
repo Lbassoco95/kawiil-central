@@ -4362,6 +4362,9 @@ export type Database = {
       }
       project_lawsuits: {
         Row: {
+          ai_memory: string | null
+          ai_memory_updated_at: string | null
+          ai_memory_updated_by: string | null
           authorized_persons: string[]
           case_number: string | null
           client_visible: boolean
@@ -4389,6 +4392,9 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          ai_memory?: string | null
+          ai_memory_updated_at?: string | null
+          ai_memory_updated_by?: string | null
           authorized_persons?: string[]
           case_number?: string | null
           client_visible?: boolean
@@ -4416,6 +4422,9 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          ai_memory?: string | null
+          ai_memory_updated_at?: string | null
+          ai_memory_updated_by?: string | null
           authorized_persons?: string[]
           case_number?: string | null
           client_visible?: boolean
