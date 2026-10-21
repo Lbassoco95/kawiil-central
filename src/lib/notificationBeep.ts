@@ -1,14 +1,15 @@
 /**
- * Sonido de aviso in-app (Web Audio API), modo zen: un tazón tibetano suave con dos notas
- * de la escala pentatónica (re–la), ataque lento y cola larga. Volumen bajo a propósito.
+ * Sonido de aviso in-app (Web Audio API), modo zen: un tazón grave y cálido con dos notas
+ * de la escala pentatónica (re–la, una octava abajo), ataque suave pero directo y cola corta.
+ * Solo avisa que hay algo; volumen bajo a propósito.
  * Puede fallar silenciosamente si el navegador bloquea audio hasta gesto del usuario.
  */
 
 // Parciales de un tazón/campana: [múltiplo de frecuencia, ganancia relativa, duración relativa]
 const BOWL_PARTIALS: ReadonlyArray<readonly [number, number, number]> = [
   [1, 1, 1],
-  [2.76, 0.28, 0.55],
-  [5.4, 0.1, 0.3],
+  [2.76, 0.16, 0.4],
+  [5.4, 0.04, 0.2],
 ];
 
 function scheduleBowl(
@@ -27,7 +28,7 @@ function scheduleBowl(
     osc.frequency.setValueAtTime(frequency * ratio, startTime);
     const tEnd = startTime + durationSec * life;
     gain.gain.setValueAtTime(eps, startTime);
-    gain.gain.exponentialRampToValueAtTime(Math.max(peakGain * level, eps), startTime + 0.09);
+    gain.gain.exponentialRampToValueAtTime(Math.max(peakGain * level, eps), startTime + 0.05);
     gain.gain.exponentialRampToValueAtTime(eps, tEnd);
     osc.connect(gain);
     gain.connect(dest);
@@ -44,14 +45,14 @@ export function playNotificationBeep(): void {
 
     const run = () => {
       const master = ctx.createGain();
-      master.gain.value = 0.5;
+      master.gain.value = 0.45;
       master.connect(ctx.destination);
 
       const t0 = ctx.currentTime + 0.02;
-      scheduleBowl(ctx, master, 587.33, t0, 1.6, 0.3); // Re5
-      scheduleBowl(ctx, master, 880, t0 + 0.28, 2.0, 0.26); // La5
+      scheduleBowl(ctx, master, 293.66, t0, 1.1, 0.34); // Re4
+      scheduleBowl(ctx, master, 440, t0 + 0.2, 1.3, 0.28); // La4
 
-      const closeAfter = Math.ceil((0.28 + 2.0 + 0.2) * 1000);
+      const closeAfter = Math.ceil((0.2 + 1.3 + 0.2) * 1000);
       window.setTimeout(() => {
         void ctx.close().catch(() => undefined);
       }, closeAfter);
