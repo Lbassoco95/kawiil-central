@@ -4,10 +4,11 @@
  * sin tarea, para que cierre su día aunque no tenga Kawiil abierto. Crea la notificación
  * in-app y manda web push. Sin llamadas a IA: el mensaje es determinista y calmado.
  * Auth: x-cron-secret (CRON_SECRET), igual que ai-proactive-notifications.
+ * Pruebas: cuerpo {"dry_run": true} solo reporta a quién avisaría; {"only_user_id": "<uuid>"} limita a una persona.
  */
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { sendWebPushToUsers } from "../_shared/webPush.ts";
-import { buildCierreMessage } from "../_shared/kawiilitoCierre.ts";
+import { buildCierreMessage, parseCierreOptions } from "../_shared/kawiilitoCierre.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -43,6 +44,7 @@ Deno.serve(async (req) => {
       return json({ error: "No autorizado" }, 401);
     }
 
+    const opts = parseCierreOptions(await req.json().catch(() => ({})));
     const svc = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const appOrigin =
       (Deno.env.get("SITE_URL") || Deno.env.get("PUBLIC_APP_URL") || "").replace(/\/$/, "") ||
@@ -62,7 +64,11 @@ Deno.serve(async (req) => {
     if (pe) throw pe;
 
     const people = (profiles ?? []).filter(
-      (p) => p.user_id && p.organization_id && p.proactive_ai_notifications !== false,
+      (p) =>
+        p.user_id &&
+        p.organization_id &&
+        p.proactive_ai_notifications !== false &&
+        (!opts.onlyUserId || p.user_id === opts.onlyUserId),
     );
     const ids = people.map((p) => p.user_id as string);
     if (ids.length === 0) return json({ ok: true, sent: 0, users: 0 });
@@ -105,10 +111,12 @@ Deno.serve(async (req) => {
 
     const notified = new Set((already ?? []).map((r) => r.user_id as string));
     let sent = 0;
+    const preview: { user_id: string; title: string; body: string; already_notified: boolean }[] = [];
 
     for (const p of people) {
       const uid = p.user_id as string;
-      if (notified.has(uid)) continue;
+      // En dry_run no se omite a nadie: se reporta si ya se le avisó hoy.
+      if (!opts.dryRun && notified.has(uid)) continue;
       const due = dueByUser.get(uid);
       const msg = buildCierreMessage({
         firstName: String(p.full_name ?? "").trim().split(/\s+/)[0] ?? "",
@@ -117,6 +125,11 @@ Deno.serve(async (req) => {
         agreements: agreementsByUser.get(uid) ?? 0,
       });
       if (!msg) continue;
+
+      if (opts.dryRun) {
+        preview.push({ user_id: uid, title: msg.title, body: msg.body, already_notified: notified.has(uid) });
+        continue;
+      }
 
       const { error: ie } = await svc.from("notifications").insert({
         user_id: uid,
@@ -142,6 +155,7 @@ Deno.serve(async (req) => {
       sent += 1;
     }
 
+    if (opts.dryRun) return json({ ok: true, dry_run: true, would_send: preview.length, users: people.length, preview });
     return json({ ok: true, sent, users: people.length });
   } catch (e) {
     console.error("kawiilito-cierre", e);
