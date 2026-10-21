@@ -581,14 +581,30 @@ export function MeetingMinutesDialog({
         }
       }
 
+      // Nunca dejamos tareas huérfanas: sin responsable interno, la tarea queda
+      // a nombre del líder del proyecto; último fallback: quien la crea.
+      let projectOwnerId: string | null = null;
+      if (targetProjectId) {
+        const { data: proj } = await supabase
+          .from("projects")
+          .select("responsible_user_id")
+          .eq("id", targetProjectId)
+          .maybeSingle();
+        projectOwnerId = proj?.responsible_user_id ?? null;
+      }
+
       let created = 0;
       for (const task of accepted) {
+        const externalName =
+          !task.assigned_to_id && task.assigned_to_name
+            ? ` — responsable externo: ${task.assigned_to_name}`
+            : "";
         const { error } = await supabase.from("tasks").insert({
           title: task.title,
-          description: task.description || null,
+          description: (task.description || "") + externalName || null,
           priority: task.priority || "media",
           due_date: task.due_date || null,
-          assigned_to: task.assigned_to_id || null,
+          assigned_to: task.assigned_to_id || projectOwnerId || user!.id,
           project_id: targetProjectId || null,
           client_id: clientId || null,
           area: (area as any) || null,
