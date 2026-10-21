@@ -19,6 +19,8 @@ Aplica a todo lo que se revisa desde las notificaciones y a lo que venga despué
 
 - Dashboard (`src/pages/Dashboard.tsx`): wrapper `.zen-page .zen-dash`; las reglas de `zen-glass.css` reestilizan las clases compartidas (`surface-toolbar`, `stat-card`, `page-list-card`, `Card`, `Alert`) solo dentro del wrapper. Para pasar otra página a zen basta con envolverla en `zen-page zen-dash` y poner `className="zen-hero zen-glass"` al `PageHeader`.
 
+- Tareas (`src/pages/Tareas.tsx`): wrapper `kwv24 zen-page zen-dash`. Las reglas `.zen-page .toolbar/.mtable/.pill-group/.ai-hero-card` de `zen-glass.css` reestilizan el sistema v24 (barra de filtros, tabla, píldoras, tarjetas de IA, kanban) solo en páginas con `zen-page`; Proyectos y otras páginas v24 siguen igual hasta que se envuelvan igual.
+
 ## Pendiente / siguiente
 - Extender los tokens `--zen-*` al resto de páginas (Dashboard ya hecho), diálogos y tarjetas.
 
