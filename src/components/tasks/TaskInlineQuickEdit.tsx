@@ -13,7 +13,8 @@ import { useTaskDetail, useUpdateTask, useProfiles } from "@/hooks/useTasks";
 import { useCelulaOptions } from "@/hooks/useCelulaOptions";
 import { TASK_STATUS_CONFIG } from "@/lib/statusStyles";
 import { TaskComments } from "@/components/tasks/TaskComments";
-import { CheckCircle2, XCircle, ExternalLink, Loader2 } from "lucide-react";
+import { CheckCircle2, XCircle, ExternalLink, FolderKanban, Loader2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 const STATUS_KEYS = ["pendiente", "en_progreso", "en_revision", "completada", "cancelada"] as const;
 
@@ -29,6 +30,7 @@ interface Props {
  * cancelar y comentar sin abrir el detalle completo.
  */
 export function TaskInlineQuickEdit({ taskId, onOpenFull }: Props) {
+  const navigate = useNavigate();
   const { task, isLoading } = useTaskDetail(taskId);
   const updateTask = useUpdateTask();
   const { data: profiles = [] } = useProfiles();
@@ -147,7 +149,20 @@ export function TaskInlineQuickEdit({ taskId, onOpenFull }: Props) {
       {/* Comentarios (mismo diseño y funciones que el detalle: @, archivos, links) */}
       <TaskComments taskId={taskId} />
 
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-1">
+        {task.project_id && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-1.5 text-xs"
+            onClick={() =>
+              navigate(`/proyectos/${task.project_id}?tab=tareas&taskId=${taskId}`)
+            }
+          >
+            <FolderKanban className="h-3.5 w-3.5" />
+            Ver proyecto{(task as any).projects?.name ? `: ${(task as any).projects.name}` : ""}
+          </Button>
+        )}
         <Button variant="ghost" size="sm" className="gap-1.5 text-xs" onClick={onOpenFull}>
           <ExternalLink className="h-3.5 w-3.5" /> Abrir tarea completa
         </Button>

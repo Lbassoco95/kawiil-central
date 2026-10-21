@@ -753,7 +753,7 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
                         type="button"
                         className="font-semibold text-primary hover:underline inline-flex items-center gap-1"
                         title={`Ir al proyecto: ${projectChip}`}
-                        onClick={() => { onClose(); navigate(`/proyectos/${task.project_id}`); }}
+                        onClick={() => { onClose(); navigate(`/proyectos/${task.project_id}?tab=tareas&taskId=${task.id}`); }}
                       >
                         {projectChip}
                         <ExternalLink className="h-3 w-3 opacity-70" />
