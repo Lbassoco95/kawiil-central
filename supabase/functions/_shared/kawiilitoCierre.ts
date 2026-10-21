@@ -35,3 +35,19 @@ export function buildCierreMessage(i: CierreInput): { title: string; body: strin
     body: `${i.firstName ? `${i.firstName}, ` : ""}${parts.join(" ")}`.replace(/^(\S+), (\S)/, (_m, n, c) => `${n}, ${c.toLowerCase()}`),
   };
 }
+
+export interface CierreOptions {
+  /** Solo calcula y responde a quién avisaría; no crea notificaciones ni manda push. */
+  dryRun: boolean;
+  /** Limita el envío a una sola persona (pruebas). */
+  onlyUserId: string | null;
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Lee las opciones opcionales del cuerpo de la petición; ignora lo que no entiende. */
+export function parseCierreOptions(body: unknown): CierreOptions {
+  const b = (body && typeof body === "object" ? body : {}) as { dry_run?: unknown; only_user_id?: unknown };
+  const only = typeof b.only_user_id === "string" && UUID.test(b.only_user_id.trim()) ? b.only_user_id.trim() : null;
+  return { dryRun: b.dry_run === true, onlyUserId: only };
+}

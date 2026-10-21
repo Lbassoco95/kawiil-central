@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCierreMessage } from "../../supabase/functions/_shared/kawiilitoCierre";
+import { buildCierreMessage, parseCierreOptions } from "../../supabase/functions/_shared/kawiilitoCierre";
 
 describe("buildCierreMessage", () => {
   it("no molesta si no hay nada que cerrar", () => {
@@ -21,5 +21,19 @@ describe("buildCierreMessage", () => {
     expect(buildCierreMessage({ firstName: "", dueNow: 1, overdue: 0, agreements: 1 })!.body).toContain(
       "1 compromiso de juntas sigue sin tarea.",
     );
+  });
+});
+
+describe("parseCierreOptions", () => {
+  const ID = "123e4567-e89b-12d3-a456-426614174000";
+  it("por defecto envía a todos", () => {
+    expect(parseCierreOptions({})).toEqual({ dryRun: false, onlyUserId: null });
+    expect(parseCierreOptions(null)).toEqual({ dryRun: false, onlyUserId: null });
+  });
+  it("lee dry_run y only_user_id válidos", () => {
+    expect(parseCierreOptions({ dry_run: true, only_user_id: ID })).toEqual({ dryRun: true, onlyUserId: ID });
+  });
+  it("ignora valores que no entiende", () => {
+    expect(parseCierreOptions({ dry_run: "true", only_user_id: "todos" })).toEqual({ dryRun: false, onlyUserId: null });
   });
 });
