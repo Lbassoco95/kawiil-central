@@ -79,3 +79,56 @@
 @media (prefers-reduced-motion: reduce) {
   .zen-item, .zen-calm .zen-calm-orb { animation: none; transition: none; }
 }
+
+/* ---------- Encabezado (hero) en vidrio cálido ---------- */
+.zen-page .zen-hero {
+  border-radius: 1.75rem;
+  background: linear-gradient(135deg, hsl(38 90% 94% / 0.75), hsl(var(--zen-bg) / 0.55) 55%, hsl(160 45% 93% / 0.6)) !important;
+}
+[data-theme="dark"] .zen-page .zen-hero {
+  background: linear-gradient(135deg, hsl(32 30% 22% / 0.7), hsl(var(--zen-bg) / 0.55) 60%, hsl(160 20% 20% / 0.6)) !important;
+}
+.zen-page .zen-hero > div[aria-hidden] { display: none; }
+.zen-page .zen-hero h1 { font-weight: 600; letter-spacing: -0.01em; }
+
+/* ---------- Tarjeta resumen de Kawiil ---------- */
+.zen-page .zen-card {
+  border-radius: 1.75rem;
+  border-color: hsl(0 0% 100% / 0.65);
+}
+.zen-page .zen-card > div:first-child {
+  background: transparent !important;
+  border-bottom-color: hsl(var(--zen-fg) / 0.08);
+}
+.zen-page .zen-card > div:last-child {
+  background: transparent !important;
+}
+.zen-page .zen-card button[class*="rounded-xl"] {
+  border-radius: 1.1rem;
+  background: hsl(var(--zen-bg) / 0.55);
+  backdrop-filter: blur(8px);
+  border-color: hsl(var(--zen-fg) / 0.1);
+  transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.5s ease;
+}
+.zen-page .zen-card button[class*="rounded-xl"]:hover { transform: translateY(-2px); box-shadow: 0 12px 30px -16px hsl(30 40% 30% / 0.3); }
+
+/* ---------- Recordatorios ---------- */
+.zen-reminders { border-radius: 1.75rem; padding: 1.25rem; }
+.zen-reminders [role="alert"] {
+  border-radius: 1.25rem;
+  background: hsl(var(--zen-info-bg) / 0.6);
+  border-color: hsl(var(--zen-info) / 0.2);
+}
+.zen-reminders .row-hover {
+  border-radius: 1rem;
+  border-bottom-color: transparent;
+  transition: background 0.4s ease, transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.zen-reminders .row-hover:hover { background: hsl(var(--zen-bg) / 0.8); transform: translateX(2px); }
+.zen-reminders button[class*="rounded-md"] { border-radius: 9999px; }
+
+/* Tarjeta resumen: colores de estado suaves en lugar de rojo/ámbar/azul saturados */
+.zen-page .zen-card [class*="text-rose-"] { color: hsl(var(--zen-error)) !important; }
+.zen-page .zen-card [class*="text-amber-"] { color: hsl(var(--zen-warning)) !important; }
+.zen-page .zen-card [class*="text-sky-"],
+.zen-page .zen-card [class*="text-blue-"] { color: hsl(var(--zen-info)) !important; }
