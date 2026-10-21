@@ -841,6 +841,7 @@ export default function Notificaciones() {
       <div className="zen-page space-y-6 animate-fade-in">
         <PageHeader
           variant="hero"
+          className="zen-hero zen-glass"
           breadcrumb={["Kawiil OS", "Avisos", "Notificaciones"]}
           icon={<Bell />}
           iconAccent={KAWIIL_AI_GRADIENT}
@@ -1072,7 +1073,9 @@ export default function Notificaciones() {
 
             {tab === "recordatorios" && (
               <div className="space-y-4 animate-fade-in">
-                <PersonalRemindersPanel showConfigureNotificationsButton={false} />
+                <div className="zen-reminders zen-glass">
+                  <PersonalRemindersPanel showConfigureNotificationsButton={false} />
+                </div>
               </div>
             )}
 

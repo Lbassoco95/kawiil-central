@@ -125,7 +125,7 @@ export function NotificationsKawiilCard({
 
   return (
     <section
-      className="overflow-hidden rounded-2xl border border-sky-200/70 shadow-sm dark:border-sky-800/40"
+      className="zen-card zen-glass overflow-hidden rounded-2xl border border-sky-200/70 dark:border-sky-800/40"
       aria-label="Resumen del día por Kawiil AI"
     >
       <div
