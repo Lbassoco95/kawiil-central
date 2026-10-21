@@ -28,6 +28,8 @@ export interface CaptureAgreementInput {
   origin?: MtgAgreementRow["origin"];
   /** Si true (default al capturar en vivo), confirma al guardar. */
   confirm?: boolean;
+  /** Crea la tarea aunque no haya proyecto («por asignar»); requiere cliente. */
+  allowTaskWithoutProject?: boolean;
 }
 
 export async function createTaskForAgreement(opts: {
@@ -35,7 +37,8 @@ export async function createTaskForAgreement(opts: {
   actorUserId: string;
   meetingId: string;
   clientId: string;
-  projectId: string;
+  /** null = «por asignar»: la tarea nace sin proyecto y se liga después. */
+  projectId: string | null;
   title: string;
   dueDate?: string | null;
   assignedTo?: string | null;
@@ -73,14 +76,15 @@ export async function captureAgreement(input: CaptureAgreementInput): Promise<Mt
       status,
       projectId: input.projectId,
       clientId: input.clientId,
-    })
+    }) ||
+    (input.allowTaskWithoutProject && status === "confirmed" && !!input.clientId)
   ) {
     taskId = await createTaskForAgreement({
       organizationId: input.organizationId,
       actorUserId: input.actorUserId,
       meetingId: input.meetingId,
       clientId: input.clientId!,
-      projectId: input.projectId!,
+      projectId: input.projectId ?? null,
       title: input.text.slice(0, 200),
       dueDate: input.dueDate,
       assignedTo: input.ownerSide === "client" ? null : input.ownerUserId ?? null,
@@ -136,20 +140,30 @@ export async function assignProjectAndCreateTask(opts: {
 }): Promise<MtgAgreementRow> {
   const a = opts.agreement;
   if (a.status !== "confirmed") throw new Error("Sólo acuerdos confirmados");
-  if (a.task_id) throw new Error("Ya tiene tarea");
+  if (a.task_id && a.project_id) throw new Error("Ya tiene tarea");
 
   if (!a.client_id) throw new Error("Asigna un cliente a la junta antes de crear la tarea");
 
-  const taskId = await createTaskForAgreement({
-    organizationId: opts.organizationId,
-    actorUserId: opts.actorUserId,
-    meetingId: a.meeting_id,
-    clientId: a.client_id,
-    projectId: opts.projectId,
-    title: a.text.slice(0, 200),
-    dueDate: a.due_date,
-    assignedTo: a.owner_user_id,
-  });
+  let taskId = a.task_id;
+  if (taskId) {
+    // Tarea «por asignar»: solo se le liga el proyecto.
+    const { error: tErr } = await supabase
+      .from("tasks")
+      .update({ project_id: opts.projectId } as never)
+      .eq("id", taskId);
+    if (tErr) throw tErr;
+  } else {
+    taskId = await createTaskForAgreement({
+      organizationId: opts.organizationId,
+      actorUserId: opts.actorUserId,
+      meetingId: a.meeting_id,
+      clientId: a.client_id,
+      projectId: opts.projectId,
+      title: a.text.slice(0, 200),
+      dueDate: a.due_date,
+      assignedTo: a.owner_user_id,
+    });
+  }
 
   const { data, error } = await mtgDb
     .from("mtg_agreements")

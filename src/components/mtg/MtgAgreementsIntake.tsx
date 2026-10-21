@@ -20,6 +20,7 @@ import { useProfiles } from "@/hooks/useTasks";
 import { supabase } from "@/integrations/supabase/client";
 import type { MtgAgreementRow, MtgMeetingRow, MtgSeriesRow } from "@/lib/mtg/db";
 import { addProposedAgreements, matchProfileByName, parseCommitments } from "@/lib/mtg/commitments";
+import { toDateStringMX, toMXDate } from "@/lib/dateUtils";
 import { captureAgreement } from "@/lib/mtg/captureAgreement";
 
 type Row = { text: string; owner: string | null; ownerUserId: string; dueDate: string; dueHint: string | null; ref: string | null; selected: boolean; projectId: string; clientId: string };
@@ -128,8 +129,10 @@ export function MtgAgreementsIntake(props: {
   // Compromisos del resumen que aún no son acuerdos.
   const pending = useMemo(() => {
     const seen = new Set(props.agreements.map((a) => norm(a.text)));
-    return parseCommitments(props.minutesMd).filter((c) => !seen.has(norm(c.text)));
-  }, [props.minutesMd, props.agreements]);
+    // Plazos relativos («el viernes») se resuelven contra la fecha de la junta.
+    const meetingYmd = props.meeting.scheduled_at ? toDateStringMX(toMXDate(props.meeting.scheduled_at)) : null;
+    return parseCommitments(props.minutesMd, meetingYmd).filter((c) => !seen.has(norm(c.text)));
+  }, [props.minutesMd, props.agreements, props.meeting.scheduled_at]);
   const pendingKey = pending.map((c) => c.text).join("|");
 
   useEffect(() => {
@@ -207,13 +210,13 @@ export function MtgAgreementsIntake(props: {
     }
     if (selected.length === 0) return;
     const lacks = (r: Row) =>
-      [!projects.some((p) => p.id === r.projectId && clientIds.includes(p.client_id)) && "proyecto", !r.dueDate && "fecha", !r.ownerUserId && !r.owner?.trim() && "responsable"].filter(Boolean);
+      [!!r.projectId && !projects.some((p) => p.id === r.projectId && clientIds.includes(p.client_id)) && "proyecto", !r.dueDate && "fecha", !r.ownerUserId && !r.owner?.trim() && "responsable"].filter(Boolean);
     const missing = selected.filter((r) => lacks(r).length > 0);
     if (missing.length > 0) {
       setShowMissing(true);
       toast.error(`Faltan datos en ${missing.length} compromiso(s)`, {
         description:
-          "Cada tarea necesita proyecto, fecha y responsable (si no, la minuta no se puede aprobar). Revisa los campos marcados.",
+          "Cada tarea necesita fecha y responsable (el proyecto puede quedar «por asignar»). Revisa los campos marcados.",
         duration: 10000,
       });
       return;
@@ -225,13 +228,16 @@ export function MtgAgreementsIntake(props: {
       try {
         const profile = profiles.find((p) => p.user_id === r.ownerUserId);
         const proj = projects.find((p) => p.id === r.projectId);
+        const rowClientId = proj?.client_id ?? (r.clientId || clientId);
+        if (!rowClientId) throw new Error("elige el cliente de esta tarea");
         await captureAgreement({
           organizationId: props.organizationId,
           actorUserId: props.actorUserId,
           meetingId: props.meeting.id,
-          clientId: proj?.client_id ?? clientId,
+          clientId: rowClientId,
+          allowTaskWithoutProject: true,
           entityKey: entities.find((e) => e.client_id === proj?.client_id)?.key ?? (entityKey || null),
-          projectId: r.projectId,
+          projectId: r.projectId || null,
           text: r.text,
           ownerSide: r.ownerUserId ? "kawiil" : "client",
           ownerUserId: r.ownerUserId || null,
@@ -246,7 +252,12 @@ export function MtgAgreementsIntake(props: {
       }
     }
     setBusy(false);
-    if (ok > 0) toast.success(`${ok} tarea(s) creada(s) en sus proyectos`);
+    const sinProyecto = selected.filter((r) => !r.projectId).length;
+    if (ok > 0) {
+      toast.success(`${ok} tarea(s) creada(s)`, {
+        description: sinProyecto > 0 ? `${sinProyecto} quedaron «por asignar» a proyecto; lígalas desde el listado de acuerdos.` : undefined,
+      });
+    }
     if (failed.length > 0) toast.error(`No se pudieron cargar ${failed.length}`, { description: failed.join("\n"), duration: 12000 });
     props.onChanged();
   };
@@ -377,14 +388,14 @@ export function MtgAgreementsIntake(props: {
                     </select>
                   )}
                   <select
-                    className={`h-8 w-full rounded-md border bg-background px-2 text-xs ${showMissing && r.selected && !r.projectId ? "border-red-500" : ""}`}
+                    className="h-8 w-full rounded-md border bg-background px-2 text-xs"
                     value={r.projectId}
                     onChange={(e) => patch(i, { projectId: e.target.value, clientId: projects.find((p) => p.id === e.target.value)?.client_id ?? r.clientId })}
                     disabled={projects.length === 0}
                     title="Proyecto de esta tarea"
                   >
                     <option value="">
-                      {projects.length ? "Proyecto de esta tarea…" : clientIds.length ? "Sin proyectos activos" : "Elige cliente primero"}
+                      {projects.length ? "Proyecto por asignar…" : clientIds.length ? "Sin proyectos activos (queda por asignar)" : "Elige cliente primero"}
                     </option>
                     {projects.filter((p) => !r.clientId || p.client_id === r.clientId).map((p) => (
                       <option key={p.id} value={p.id}>

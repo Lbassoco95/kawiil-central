@@ -856,7 +856,7 @@ export default function JuntaDetalle() {
                     "sin tarea"
                   )}
                 </div>
-                {liveEditable && a.status === "confirmed" && !a.task_id && user && (
+                {liveEditable && a.status === "confirmed" && (!a.task_id || !a.project_id) && user && (
                   <Select
                     onValueChange={(pid) =>
                       board.setProject.mutate({

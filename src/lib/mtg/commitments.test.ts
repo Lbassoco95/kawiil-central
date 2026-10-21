@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { matchProfileByName, parseCommitments } from "./commitments";
+import { matchProfileByName, parseCommitments, resolveRelativeDate } from "./commitments";
 
 const MD = `## Puntos más importantes
 - algo
@@ -36,5 +36,42 @@ describe("matchProfileByName", () => {
     expect(matchProfileByName(ps, "Carlos")).toBeUndefined();
     expect(matchProfileByName(ps, "Viridiana Garcia")).toBeUndefined();
     expect(matchProfileByName(ps, null)).toBeUndefined();
+  });
+});
+
+describe("resolveRelativeDate", () => {
+  // 2026-10-20 es martes
+  const REF = "2026-10-20";
+  it("resuelve plazos relativos contra la fecha de la junta", () => {
+    expect(resolveRelativeDate("mañana", REF)).toBe("2026-10-21");
+    expect(resolveRelativeDate("pasado mañana", REF)).toBe("2026-10-22");
+    expect(resolveRelativeDate("en 3 días", REF)).toBe("2026-10-23");
+    expect(resolveRelativeDate("la próxima semana", REF)).toBe("2026-10-27");
+    expect(resolveRelativeDate("fin de mes", REF)).toBe("2026-10-31");
+  });
+  it("días de la semana apuntan a la próxima ocurrencia", () => {
+    expect(resolveRelativeDate("el viernes", REF)).toBe("2026-10-23");
+    expect(resolveRelativeDate("este miércoles", REF)).toBe("2026-10-21");
+    expect(resolveRelativeDate("el martes", REF)).toBe("2026-10-27");
+  });
+  it("fechas con día y mes, sin acentos y rodando de año", () => {
+    expect(resolveRelativeDate("15 de noviembre", REF)).toBe("2026-11-15");
+    expect(resolveRelativeDate("el 5 de enero", REF)).toBe("2027-01-05");
+  });
+  it("devuelve null si no se entiende", () => {
+    expect(resolveRelativeDate("cuando se pueda", REF)).toBeNull();
+    expect(resolveRelativeDate(null, REF)).toBeNull();
+  });
+  it("parseCommitments usa la fecha de la junta si se le pasa", () => {
+    const c = parseCommitments(MD, REF);
+    expect(c[2]).toMatchObject({ owner: "Lupita", dueDate: "2026-10-23", dueHint: "el viernes" });
+    expect(c[0].dueDate).toBeNull();
+  });
+});
+
+describe("matchProfileByName con acentos", () => {
+  it("ignora acentos y mayúsculas", () => {
+    const ps = [{ full_name: "Carlos Hernández" }, { full_name: "Lorena Sandoval" }];
+    expect(matchProfileByName(ps, "carlos hernandez")).toBe(ps[0]);
   });
 });

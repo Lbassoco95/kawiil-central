@@ -84,6 +84,9 @@ function getNotificationCtas(
   if (m.type === "ai_proactive_tip") {
     ctas.push({ key: "open_assistant", label: "Abrir asistente", primary: true });
   }
+  if (m.type === "kawiilito_cierre") {
+    ctas.push({ key: "open_dashboard", label: "Cerrar mi día", primary: true });
+  }
   if (m.type === "knowledge_sync" || m.type.startsWith("knowledge")) {
     ctas.push({ key: "open_knowledge", label: "Ver agente", primary: true });
   }
@@ -109,6 +112,7 @@ function getNotificationIcon(type: string) {
   if (type === "deadline_due_tomorrow_task") return <CalendarClock className="h-3.5 w-3.5 text-amber-600" />;
   if (type === "improvement_suggestion") return <Lightbulb className="h-3.5 w-3.5 text-amber-500" />;
   if (type === "ai_proactive_tip") return <Sparkles className="h-3.5 w-3.5 text-sky-500" />;
+  if (type === "kawiilito_cierre") return <Sparkles className="h-3.5 w-3.5 text-orange-500" />;
   if (type === "agent_task_completed" || type === "agent_task_failed")
     return <MessageSquare className="h-3.5 w-3.5 text-sky-600 dark:text-sky-300" />;
   if (type === "esign") return <PenTool className="h-3.5 w-3.5 text-primary" />;
@@ -785,7 +789,7 @@ export default function Notificaciones() {
       else navigate("/tareas");
     } else if (m.type === "improvement_suggestion") {
       navigate("/conocimiento?tab=sugerencias");
-    } else if (m.type === "ai_proactive_tip") {
+    } else if (m.type === "ai_proactive_tip" || m.type === "kawiilito_cierre") {
       navigate("/");
     } else {
       const asistenteUrl = asistenteChatDeepLinkFromNotification(m);

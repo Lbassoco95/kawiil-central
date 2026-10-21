@@ -1,9 +1,10 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { fetchAiChatSimpleContent, type AiChatSimpleMessage } from "@/lib/fetchAiChatSimple";
-import { toDateStringMX, nowMX } from "@/lib/dateUtils";
+import { toDateStringMX } from "@/lib/dateUtils";
+import { useMexicoToday } from "@/hooks/useMexicoToday";
 
 export type AiModuleBriefingModule =
   | "dashboard"
@@ -31,6 +32,16 @@ export interface UseAiModuleBriefingInput {
    * que el usuario los dispare explícitamente con un botón "Generar briefing".
    */
   autoFetch?: boolean;
+  /**
+   * Refresco automático del briefing del día (solo con `autoFetch`). Sin esta opción
+   * se mantiene el blindaje 1/día. Con ella:
+   *  - Si cambia `phase` (p. ej. mañana → cierre) respecto a la del briefing guardado, se regenera ya.
+   *  - Si cambia el `payloadHash` y el briefing guardado tiene más de `minIntervalMinutes`, se regenera.
+   */
+  refresh?: {
+    phase?: string;
+    minIntervalMinutes?: number;
+  };
 }
 
 export interface UseAiModuleBriefingResult {
@@ -72,6 +83,7 @@ type BriefingRow = {
   payload_hash: string;
   briefing_date: string;
   metadata: unknown;
+  updated_at: string;
 };
 
 type QueryData = {
@@ -79,7 +91,17 @@ type QueryData = {
   source: "cache" | "generated";
   metricInsights: Record<string, string>;
   hasCached: boolean;
+  /** Datos del briefing guardado, para decidir si hay que refrescarlo. */
+  cachedHash?: string;
+  cachedPhase?: string | null;
+  cachedAt?: number;
 } | null;
+
+function extractPhase(metadata: unknown): string | null {
+  if (!metadata || typeof metadata !== "object") return null;
+  const p = (metadata as { phase?: unknown }).phase;
+  return typeof p === "string" ? p : null;
+}
 
 function extractMetricInsights(metadata: unknown): Record<string, string> {
   if (!metadata || typeof metadata !== "object") return {};
@@ -196,11 +218,15 @@ export function useAiModuleBriefing(
     metadata,
     enabled = true,
     autoFetch = false,
+    refresh,
   } = input;
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const today = useMexicoToday();
+  const phase = refresh?.phase ?? null;
 
-  const briefingDate = useMemo(() => toDateStringMX(nowMX()), []);
+  // Reactivo al reloj CDMX: al pasar la medianoche con la pestaña abierta cambia el día.
+  const briefingDate = toDateStringMX(today);
   const queryKey = useMemo(
     () => ["ai-module-briefing", user?.id, module, briefingDate] as const,
     [user?.id, module, briefingDate],
@@ -217,7 +243,7 @@ export function useAiModuleBriefing(
 
       const { data: existing, error: selErr } = await supabase
         .from("ai_module_briefings")
-        .select("id, content, payload_hash, briefing_date, metadata")
+        .select("id, content, payload_hash, briefing_date, metadata, updated_at")
         .eq("user_id", user.id)
         .eq("module", module)
         .eq("briefing_date", briefingDate)
@@ -232,6 +258,9 @@ export function useAiModuleBriefing(
           source: "cache",
           metricInsights: extractMetricInsights(existing.metadata),
           hasCached: true,
+          cachedHash: existing.payload_hash,
+          cachedPhase: extractPhase(existing.metadata),
+          cachedAt: new Date(existing.updated_at).getTime(),
         };
       }
 
@@ -259,6 +288,7 @@ export function useAiModuleBriefing(
 
       const mergedMetadata: Record<string, unknown> = {
         ...(metadata ?? {}),
+        ...(phase ? { phase } : {}),
         ...(Object.keys(metricInsights).length > 0
           ? { metric_insights: metricInsights }
           : {}),
@@ -288,6 +318,9 @@ export function useAiModuleBriefing(
         source: "generated",
         metricInsights,
         hasCached: true,
+        cachedHash: payloadHash,
+        cachedPhase: phase,
+        cachedAt: Date.now(),
       };
     },
   });
@@ -304,6 +337,7 @@ export function useAiModuleBriefing(
 
       const mergedMetadata: Record<string, unknown> = {
         ...(metadata ?? {}),
+        ...(phase ? { phase } : {}),
         ...(Object.keys(metricInsights).length > 0
           ? { metric_insights: metricInsights }
           : {}),
@@ -324,17 +358,48 @@ export function useAiModuleBriefing(
           { onConflict: "user_id,module,briefing_date" },
         );
       if (upErr) console.warn("[useAiModuleBriefing] regenerate upsert falló:", upErr);
-      return { markdown, metricInsights };
+      return { markdown, metricInsights, hash: payloadHash };
     },
-    onSuccess: ({ markdown, metricInsights }) => {
+    onSuccess: ({ markdown, metricInsights, hash }) => {
       queryClient.setQueryData<QueryData>(queryKey, {
         content: markdown,
         source: "generated",
         metricInsights,
         hasCached: true,
+        cachedHash: hash,
+        cachedPhase: phase,
+        cachedAt: Date.now(),
       });
     },
   });
+
+  // Refresco automático (opt-in): cambio de fase o de datos con intervalo mínimo.
+  const regenerateRef = useRef(regenerateMutation.mutate);
+  regenerateRef.current = regenerateMutation.mutate;
+  const lastAutoRefreshKey = useRef<string>("");
+  const isRegenerating = regenerateMutation.isPending;
+  const cached = query.data;
+  const minIntervalMs = (refresh?.minIntervalMinutes ?? 30) * 60_000;
+  const minuteTick = Math.floor(today.getTime() / 60_000);
+  const refreshOn = !!refresh;
+  useEffect(() => {
+    if (!refreshOn || !autoFetch || !enabled || !user || !payloadHash) return;
+    if (!cached || !cached.hasCached || !cached.content || cached.cachedAt == null) return;
+    if (isRegenerating) return;
+
+    const phaseChanged = !!phase && cached.cachedPhase !== phase;
+    const dataChanged = cached.cachedHash !== payloadHash;
+    const old = Date.now() - cached.cachedAt >= minIntervalMs;
+    if (!phaseChanged && !(dataChanged && old)) return;
+
+    const key = `${briefingDate}|${phase ?? ""}|${payloadHash}`;
+    if (lastAutoRefreshKey.current === key) return;
+    lastAutoRefreshKey.current = key;
+    regenerateRef.current();
+  }, [
+    refreshOn, autoFetch, enabled, user, payloadHash, cached, isRegenerating,
+    phase, briefingDate, minIntervalMs, minuteTick,
+  ]);
 
   const regenerate = useCallback(async () => {
     await regenerateMutation.mutateAsync();

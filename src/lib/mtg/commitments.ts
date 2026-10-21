@@ -17,7 +17,63 @@ export type ParsedCommitment = {
   ref: string | null;
 };
 
-export function parseCommitments(md: string | null | undefined): ParsedCommitment[] {
+const MONTHS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+const WEEKDAYS = ["domingo", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado"];
+
+const fold = (s: string) =>
+  s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
+
+const pad = (n: number) => String(n).padStart(2, "0");
+const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+/**
+ * Plazo dicho en la junta («el viernes», «mañana», «en 3 días», «15 de noviembre»…)
+ * → YYYY-MM-DD, tomando como referencia la fecha de la junta. null si no se entiende.
+ * Los días de la semana apuntan a la próxima ocurrencia posterior a la junta.
+ */
+export function resolveRelativeDate(hint: string | null | undefined, refYmd: string): string | null {
+  const h = fold(hint ?? "");
+  const m0 = refYmd.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!h || !m0) return null;
+  const ref = new Date(Number(m0[1]), Number(m0[2]) - 1, Number(m0[3]));
+  const plus = (days: number) => {
+    const d = new Date(ref);
+    d.setDate(d.getDate() + days);
+    return ymd(d);
+  };
+
+  if (/^(hoy|el mismo dia)\b/.test(h)) return plus(0);
+  if (/^pasado manana\b/.test(h)) return plus(2);
+  if (/^manana\b/.test(h)) return plus(1);
+  const inDays = h.match(/^en (\d{1,2}) dias?\b/);
+  if (inDays) return plus(Number(inDays[1]));
+  if (/^en (una|1) semana\b/.test(h) || /^(la )?proxima semana\b|^la semana que viene\b/.test(h)) return plus(7);
+  if (/^(a )?(fin|finales) de mes\b|^(el )?ultimo dia del mes\b/.test(h)) {
+    return ymd(new Date(ref.getFullYear(), ref.getMonth() + 1, 0));
+  }
+
+  const dayMonth = h.match(/^(?:el )?(\d{1,2}) de (\w+)(?: de (\d{4}))?/);
+  if (dayMonth) {
+    const mi = MONTHS.indexOf(dayMonth[2]);
+    if (mi >= 0) {
+      let year = dayMonth[3] ? Number(dayMonth[3]) : ref.getFullYear();
+      let d = new Date(year, mi, Number(dayMonth[1]));
+      if (!dayMonth[3] && d < ref) d = new Date(++year, mi, Number(dayMonth[1]));
+      return d.getMonth() === mi ? ymd(d) : null;
+    }
+  }
+
+  const wd = h.match(/^(?:para |antes d(?:el|e) |este |el |proximo |el proximo )*(domingo|lunes|martes|miercoles|jueves|viernes|sabado)\b/);
+  if (wd) {
+    const target = WEEKDAYS.indexOf(wd[1]);
+    let delta = (target - ref.getDay() + 7) % 7;
+    if (delta === 0) delta = 7;
+    return plus(delta);
+  }
+  return null;
+}
+
+export function parseCommitments(md: string | null | undefined, refYmd?: string | null): ParsedCommitment[] {
   if (!md) return [];
   const lines = md.split("\n");
   const start = lines.findIndex((l) => HEADING.test(l.trim()));
@@ -49,7 +105,9 @@ export function parseCommitments(md: string | null | undefined): ParsedCommitmen
     }
     if (!body) continue;
     const iso = dueHint?.match(/^\d{4}-\d{2}-\d{2}$/) ? dueHint : null;
-    out.push({ text: body, owner, dueDate: iso, dueHint: iso ? null : dueHint, ref });
+    // Plazo relativo («el viernes») → fecha real contra la fecha de la junta; se conserva lo dicho.
+    const resolved = !iso && refYmd ? resolveRelativeDate(dueHint, refYmd) : null;
+    out.push({ text: body, owner, dueDate: iso ?? resolved, dueHint: iso ? null : dueHint, ref });
   }
   return out;
 }
@@ -97,12 +155,13 @@ export function matchProfileByName<T extends { full_name: string | null }>(
   profiles: T[],
   name: string | null | undefined,
 ): T | undefined {
-  const n = (name ?? "").trim().toLowerCase();
+  // Sin acentos ni mayúsculas: «Hernández» = «hernandez», «Lupita» = «lupita».
+  const n = fold(name ?? "");
   if (n.length < 3) return undefined;
-  const exact = profiles.find((p) => (p.full_name ?? "").trim().toLowerCase() === n);
+  const exact = profiles.find((p) => fold(p.full_name ?? "") === n);
   if (exact) return exact;
   const loose = profiles.filter((p) => {
-    const f = (p.full_name ?? "").trim().toLowerCase();
+    const f = fold(p.full_name ?? "");
     return f.length >= 3 && (f.includes(n) || n.includes(f) || f.split(/\s+/)[0] === n.split(/\s+/)[0]);
   });
   return loose.length === 1 ? loose[0] : undefined;
