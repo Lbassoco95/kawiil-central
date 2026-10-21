@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -59,6 +60,7 @@ export function DailyBriefing({
   hideHeader = false,
 }: DailyBriefingProps) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const updateTask = useUpdateTask();
   const [busyIds, setBusyIds] = useState<string[]>([]);
@@ -204,8 +206,7 @@ INSTRUCCIONES PARA "metric_insights":
     () =>
       (taskDetails ?? [])
         // «en_revision» espera a un tercero: no se pide cerrarla hoy.
-        .filter((t) => t.status !== "en_revision" && t.due_date && t.due_date.slice(0, 10) <= todayKey)
-        .slice(0, 5),
+        .filter((t) => t.status !== "en_revision" && t.due_date && t.due_date.slice(0, 10) <= todayKey),
     [taskDetails, todayKey],
   );
 
@@ -281,17 +282,22 @@ INSTRUCCIONES PARA "metric_insights":
               <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 {phase === "cierre" ? "Cierra tu día" : "Para hoy"}
               </p>
-              <ul className="space-y-1">
+              <ul className="max-h-36 space-y-1 overflow-y-auto pr-1">
                 {dueNow.map((t) => {
                   const busy = busyIds.includes(t.id);
                   return (
                     <li key={t.id} className="flex items-center gap-2 rounded-md border border-border/60 bg-background/60 px-2 py-1">
-                      <span className="min-w-0 flex-1 truncate text-xs" title={t.title}>
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/tareas?taskId=${t.id}`)}
+                        className="min-w-0 flex-1 truncate text-left text-xs hover:text-primary hover:underline"
+                        title={t.title}
+                      >
                         {t.title}
                         {t.due_date && t.due_date.slice(0, 10) < todayKey && (
                           <span className="ml-1 text-[10px] text-destructive">vencida</span>
                         )}
-                      </span>
+                      </button>
                       <button
                         type="button"
                         disabled={busy}
