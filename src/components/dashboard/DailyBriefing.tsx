@@ -97,6 +97,27 @@ export function DailyBriefing({
     enabled: !!user,
   });
 
+  // Lista "Para hoy": consulta dedicada porque `briefing-tasks` (limit 15 por
+  // fecha asc) se satura de vencidas antiguas y nunca trae las próximas por
+  // vencer. Aquí traemos todo lo que vence hasta +7 días (incluye vencidas).
+  const { data: dueList } = useQuery({
+    queryKey: ["briefing-due-list", user?.id, todayKey],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tasks")
+        .select("id, title, status, priority, due_date")
+        .eq("assigned_to", user!.id)
+        .in("status", ["pendiente", "en_progreso"])
+        .not("due_date", "is", null)
+        .lte("due_date", addDaysToYmd(todayKey, 7))
+        .order("due_date", { ascending: true })
+        .limit(40);
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user,
+  });
+
   // Tareas cerradas hoy: base de la retro de cierre.
   const { data: completedTitles, isLoading: completedLoading } = useQuery({
     queryKey: ["briefing-completed-today", user?.id, todayKey, completedToday],
@@ -201,14 +222,16 @@ INSTRUCCIONES PARA "metric_insights":
     },
   });
 
-  // Tareas para cerrar hoy: vencen hoy o ya vencidas (la consulta viene ordenada por fecha).
-  const dueNow = useMemo(
-    () =>
-      (taskDetails ?? [])
-        // «en_revision» espera a un tercero: no se pide cerrarla hoy.
-        .filter((t) => t.status !== "en_revision" && t.due_date && t.due_date.slice(0, 10) <= todayKey),
-    [taskDetails, todayKey],
-  );
+  // Primero lo entregable (vence hoy o en los próximos días, por fecha asc);
+  // las vencidas van al final como reporte, de la más reciente a la más antigua.
+  const dueNow = useMemo(() => {
+    const items = dueList ?? [];
+    const upcoming = items.filter((t) => t.due_date && t.due_date.slice(0, 10) >= todayKey);
+    const overdue = items
+      .filter((t) => t.due_date && t.due_date.slice(0, 10) < todayKey)
+      .sort((a, b) => (b.due_date ?? "").localeCompare(a.due_date ?? ""));
+    return [...upcoming, ...overdue];
+  }, [dueList, todayKey]);
 
   const closeTask = (id: string, title: string, action: "done" | "tomorrow") => {
     setBusyIds((ids) => [...ids, id]);
@@ -219,7 +242,7 @@ INSTRUCCIONES PARA "metric_insights":
     updateTask.mutate(updates, {
       onSuccess: () => {
         toast.success(action === "done" ? `«${title}» completada` : `«${title}» movida a mañana`);
-        for (const key of ["briefing-tasks", "briefing-completed-today", "personal-completed-today"]) {
+        for (const key of ["briefing-tasks", "briefing-due-list", "briefing-completed-today", "personal-completed-today"]) {
           void queryClient.invalidateQueries({ queryKey: [key] });
         }
       },
@@ -280,7 +303,7 @@ INSTRUCCIONES PARA "metric_insights":
           {dueNow.length > 0 && (
             <div className="mt-3 space-y-1.5">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                {phase === "cierre" ? "Cierra tu día" : "Para hoy"}
+                {phase === "cierre" ? "Cierra tu día" : "Por vencer"}
               </p>
               <ul className="max-h-36 space-y-1 overflow-y-auto pr-1">
                 {dueNow.map((t) => {
@@ -294,9 +317,13 @@ INSTRUCCIONES PARA "metric_insights":
                         title={t.title}
                       >
                         {t.title}
-                        {t.due_date && t.due_date.slice(0, 10) < todayKey && (
+                        {t.due_date && t.due_date.slice(0, 10) < todayKey ? (
                           <span className="ml-1 text-[10px] text-destructive">vencida</span>
-                        )}
+                        ) : t.due_date && t.due_date.slice(0, 10) > todayKey ? (
+                          <span className="ml-1 text-[10px] text-muted-foreground">
+                            vence {new Date(`${t.due_date.slice(0, 10)}T12:00:00`).toLocaleDateString("es-MX", { day: "numeric", month: "short" })}
+                          </span>
+                        ) : null}
                       </button>
                       <button
                         type="button"
