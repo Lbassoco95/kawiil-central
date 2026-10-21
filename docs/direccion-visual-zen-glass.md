@@ -9,12 +9,12 @@ Aplica a todo lo que se revisa desde las notificaciones y a lo que venga despué
 2. **Cálido y transparente**: fondos crema/arena (`--zen-bg`), degradados casi imperceptibles; evitar blancos duros, negros puros y rojos saturados.
 3. **Calma al informar**: poco a la vez, jerarquía clara, mucho espacio. Agrupar por momento (ahora / hoy / más adelante) en lugar de listas largas y planas. Lo urgente se distingue por tono y orden, no por alarma.
 4. **Movimiento lento**: entradas de ~0.5 s con curva `cubic-bezier(0.22, 1, 0.36, 1)`; respetar `prefers-reduced-motion`.
-5. **Sonido alegre y suave**: notas de kalimba/marimba (senoidales con caída natural y eco de sala corto), pentatónica mayor, menos de 1 s, volumen bajo. Nada de ondas cuadradas ni arpegios rápidos (suena a videojuego). Solo avisa que hay algo.
+5. **Sonido suave que no cansa** (se oye todos los días): golpe de madera hueca en registro grave-medio (~260–350 Hz), filtro pasa-bajos sin brillo, menos de 0.6 s, volumen bajo. Evitar agudos, ondas cuadradas/triangulares y arpegios (suena a videojuego y harta). Solo avisa que hay algo.
 6. **Tono de texto**: amable y breve, sin alarmismo. Ej.: "Listo, guardado con calma"; "Algo no salió como esperábamos, inténtalo de nuevo".
 
 ## Ya implementado
 - Estilo: `src/styles/zen-toast.css` (tokens `--zen-*`, claro y oscuro), `src/components/ui/sonner.tsx`, `src/components/ui/toast.tsx`.
-- Sonido: `src/lib/notificationBeep.ts`, variantes `kalimba` (por defecto: Sol4–Si4–Re5), `marimba` y `campanillas`; se elige con `playNotificationBeep(variante)`.
+- Sonido: `src/lib/notificationBeep.ts`, variantes `madera` (por defecto, Do4–Fa4), `gota` y `bruma`; se elige con `playNotificationBeep(variante)`. Lección: el kalimba (Sol4–Re5) y el pitido original (880/1320 Hz) resultaron agudos y cansados.
 - Paleta de estados: éxito = verde salvia, info = azul cielo, aviso = durazno, error = rosa suave (ícono: palomita / destello / viento / hoja).
 
 ## Pendiente / siguiente

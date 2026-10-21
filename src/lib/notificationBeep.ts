@@ -1,11 +1,11 @@
 /**
- * Sonido de aviso in-app (Web Audio API), modo zen y alegre: notas de kalimba/marimba suaves
- * con caída natural y un toque de eco de sala. Sin ondas cuadradas ni arpegios rápidos (nada de
- * "videojuego"): dos o tres notas pentatónicas mayores que suben con calma, volumen bajo.
+ * Sonido de aviso in-app (Web Audio API), modo zen: golpe suave de madera en registro grave-medio,
+ * dos notas que suben con calma, menos de un segundo, sin brillo ni agudos. Pensado para oírse
+ * todos los días sin cansar: avisa que hay algo y ya. Sin ondas cuadradas (nada de videojuego).
  * Puede fallar silenciosamente si el navegador bloquea audio hasta gesto del usuario.
  */
 
-export type NotificationSoundVariant = "kalimba" | "marimba" | "campanillas";
+export type NotificationSoundVariant = "madera" | "gota" | "bruma";
 
 type Voice = {
   /** [múltiplo de frecuencia, ganancia relativa, vida relativa] */
@@ -14,39 +14,44 @@ type Voice = {
   decay: number;
   /** Notas (Hz) y desfase entre ellas (s). */
   notes: ReadonlyArray<readonly [number, number]>;
+  /** Corte del filtro pasa-bajos: mantiene el sonido redondo, sin brillo ni agudos. */
+  cutoff: number;
 };
 
-// Pentatónica mayor de Sol: Sol4, Si4, Re5, Sol5
+// Registro grave-medio a propósito: se escucha todos los días y no debe cansar.
+const C4 = 261.63;
+const D4 = 293.66;
+const F4 = 349.23;
 const G4 = 392.0;
-const B4 = 493.88;
-const D5 = 587.33;
-const G5 = 783.99;
 
 const VOICES: Record<NotificationSoundVariant, Voice> = {
-  // Pulsada y redonda, como una caja de música de madera.
-  kalimba: {
-    partials: [[1, 1, 1], [4.0, 0.22, 0.35], [9.2, 0.05, 0.15]],
-    attack: 0.006,
-    decay: 1.1,
-    notes: [[G4, 0], [B4, 0.16], [D5, 0.32]],
+  // Golpe suave de madera hueca, dos notas que suben una cuarta (Do4–Fa4).
+  madera: {
+    partials: [[1, 1, 1], [2.0, 0.28, 0.5], [4.0, 0.05, 0.2]],
+    attack: 0.012,
+    decay: 0.55,
+    notes: [[C4, 0], [F4, 0.14]],
+    cutoff: 1600,
   },
-  // Más cálida y hueca.
-  marimba: {
-    partials: [[1, 1, 1], [3.97, 0.3, 0.3], [10.0, 0.05, 0.12]],
-    attack: 0.004,
-    decay: 0.9,
-    notes: [[B4, 0], [D5, 0.17]],
+  // Una sola nota redonda, como una gota en agua tibia.
+  gota: {
+    partials: [[1, 1, 1], [2.0, 0.1, 0.4]],
+    attack: 0.02,
+    decay: 0.6,
+    notes: [[D4, 0]],
+    cutoff: 1400,
   },
-  // Más luminosa, como campanillas de viento.
-  campanillas: {
-    partials: [[1, 1, 1], [2.76, 0.2, 0.5], [5.4, 0.08, 0.3]],
-    attack: 0.01,
-    decay: 1.6,
-    notes: [[D5, 0], [G5, 0.2]],
+  // Dos notas casi sinusoidales, muy suaves y un poco más largas.
+  bruma: {
+    partials: [[1, 1, 1], [2.0, 0.06, 0.4]],
+    attack: 0.03,
+    decay: 0.8,
+    notes: [[C4, 0], [G4, 0.18]],
+    cutoff: 1200,
   },
 };
 
-export const DEFAULT_NOTIFICATION_SOUND: NotificationSoundVariant = "kalimba";
+export const DEFAULT_NOTIFICATION_SOUND: NotificationSoundVariant = "madera";
 
 /** Eco de sala corto generado con ruido decreciente (sin archivos). */
 function makeRoom(ctx: AudioContext, seconds = 0.9): ConvolverNode {
@@ -95,18 +100,18 @@ export function playNotificationBeep(variant: NotificationSoundVariant = DEFAULT
 
     const run = () => {
       const master = ctx.createGain();
-      master.gain.value = 0.55;
+      master.gain.value = 0.5;
       master.connect(ctx.destination);
 
-      // Suaviza cualquier brillo duro.
+      // Quita el brillo: solo queda la parte redonda del sonido.
       const tone = ctx.createBiquadFilter();
       tone.type = "lowpass";
-      tone.frequency.value = 4200;
+      tone.frequency.value = voice.cutoff;
       tone.connect(master);
 
       const wet = ctx.createGain();
-      wet.gain.value = 0.22;
-      const room = makeRoom(ctx);
+      wet.gain.value = 0.15;
+      const room = makeRoom(ctx, 0.5);
       room.connect(wet);
       wet.connect(master);
 
@@ -122,7 +127,7 @@ export function playNotificationBeep(variant: NotificationSoundVariant = DEFAULT
       const last = voice.notes[voice.notes.length - 1][1];
       window.setTimeout(() => {
         void ctx.close().catch(() => undefined);
-      }, Math.ceil((last + voice.decay + 1.0) * 1000));
+      }, Math.ceil((last + voice.decay + 0.7) * 1000));
     };
 
     const p = ctx.state === "suspended" ? ctx.resume() : Promise.resolve();
