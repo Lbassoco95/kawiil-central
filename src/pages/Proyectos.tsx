@@ -336,9 +336,10 @@ const Proyectos = () => {
 
   return (
     <AppLayout>
-      <div className="kwv24 space-y-6 animate-fade-in">
+      <div className="kwv24 zen-page zen-dash space-y-6 animate-fade-in">
         <PageHeader
           variant="hero"
+          className="zen-hero zen-glass"
           icon={<FolderKanban />}
           breadcrumb={["Kawiil OS", "Trabajo", "Proyectos"]}
           iconAccent="linear-gradient(135deg, hsl(270 70% 55%), hsl(310 70% 55%))"
