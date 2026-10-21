@@ -17,8 +17,10 @@ Aplica a todo lo que se revisa desde las notificaciones y a lo que venga despué
 - Sonido: `src/lib/notificationBeep.ts`, variantes `madera` (por defecto, Do4–Fa4), `gota` y `bruma`; se elige con `playNotificationBeep(variante)`. Lección: el kalimba (Sol4–Re5) y el pitido original (880/1320 Hz) resultaron agudos y cansados.
 - Paleta de estados: éxito = verde salvia, info = azul cielo, aviso = durazno, error = rosa suave (ícono: palomita / destello / viento / hoja).
 
+- Dashboard (`src/pages/Dashboard.tsx`): wrapper `.zen-page .zen-dash`; las reglas de `zen-glass.css` reestilizan las clases compartidas (`surface-toolbar`, `stat-card`, `page-list-card`, `Card`, `Alert`) solo dentro del wrapper. Para pasar otra página a zen basta con envolverla en `zen-page zen-dash` y poner `className="zen-hero zen-glass"` al `PageHeader`.
+
 ## Pendiente / siguiente
-- Extender los tokens `--zen-*` al resto de superficies (paneles, diálogos, tarjetas).
+- Extender los tokens `--zen-*` al resto de páginas (Dashboard ya hecho), diálogos y tarjetas.
 
 ## Catálogo de frases suaves
 

@@ -13,9 +13,10 @@ const Dashboard = () => {
 
   return (
     <AppLayout>
-      <div className="space-y-6">
+      <div className="zen-page zen-dash space-y-6">
         <PageHeader
           variant="hero"
+          className="zen-hero zen-glass"
           breadcrumb={["Kawiil OS", "Inicio", view === "personal" ? "Personal" : "Equipo"]}
           icon={<LayoutDashboard />}
           iconAccent={KAWIIL_AI_GRADIENT}
@@ -34,7 +35,7 @@ const Dashboard = () => {
                 v2.4
               </Badge>
               {view === "personal" ? <RecordatoriosEntryButton /> : null}
-              <div className="flex items-center rounded-full border border-border/40 bg-background/60 p-1 backdrop-blur-sm">
+              <div className="zen-glass flex items-center rounded-full p-1">
                 <button
                   type="button"
                   onClick={() => setView("personal")}
