@@ -218,9 +218,19 @@ export function useMtgBoard(meetingId: string | undefined) {
     onSuccess: invalidate,
   });
 
+  // Los acuerdos confirmados crean filas en `tasks`; hay que refrescar las
+  // listas de tareas y el briefing del dashboard para que aparezcan al momento.
+  const invalidateTasks = () => {
+    void qc.invalidateQueries({ queryKey: ["tasks"] });
+    void qc.invalidateQueries({ queryKey: ["briefing-tasks"] });
+  };
+
   const addAgreement = useMutation({
     mutationFn: async (input: Parameters<typeof captureAgreement>[0]) => captureAgreement(input),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      invalidateTasks();
+    },
   });
 
   const setProject = useMutation({
@@ -236,7 +246,10 @@ export function useMtgBoard(meetingId: string | undefined) {
         agreement: input.agreement,
         projectId: input.projectId,
       }),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      invalidateTasks();
+    },
   });
 
   const markDecision = useMutation({

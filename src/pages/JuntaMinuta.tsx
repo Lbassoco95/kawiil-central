@@ -128,7 +128,12 @@ export default function JuntaMinuta() {
   const incomplete = agreements.filter(isIncompleteConfirmed);
   const approval = canApproveMinutes(agreements);
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ["mtg-minutes-full", meetingId] });
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["mtg-minutes-full", meetingId] });
+    // Confirmar acuerdos crea filas en `tasks` → refrescar listas y briefing.
+    qc.invalidateQueries({ queryKey: ["tasks"] });
+    qc.invalidateQueries({ queryKey: ["briefing-tasks"] });
+  };
 
   const openVttAt = async (ref: string | null) => {
     const path = q.data?.meeting.transcript_path;

@@ -39,6 +39,7 @@ export async function confirmProposedAgreement(opts: {
     title: opts.agreement.text.slice(0, 200),
     dueDate: opts.dueDate,
     assignedTo: opts.ownerUserId ?? null,
+    externalOwnerName: opts.ownerUserId ? null : opts.ownerName ?? null,
   });
 
   const { data, error } = await mtgDb
