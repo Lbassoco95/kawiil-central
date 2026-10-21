@@ -1,4 +1,5 @@
 import { useTheme } from "next-themes";
+import { CheckCircle2, Leaf, Sparkles, Wind } from "lucide-react";
 import { Toaster as Sonner, toast } from "sonner";
 
 type ToasterProps = React.ComponentProps<typeof Sonner>;
@@ -9,14 +10,20 @@ const Toaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner
       theme={theme as ToasterProps["theme"]}
-      className="toaster group"
+      className="toaster group zen-toaster"
+      position="bottom-right"
+      duration={4500}
+      gap={12}
+      icons={{
+        success: <CheckCircle2 size={16} strokeWidth={2} />,
+        info: <Sparkles size={16} strokeWidth={2} />,
+        warning: <Wind size={16} strokeWidth={2} />,
+        error: <Leaf size={16} strokeWidth={2} />,
+      }}
       toastOptions={{
         classNames: {
-          toast:
-            "group toast group-[.toaster]:bg-background group-[.toaster]:text-foreground group-[.toaster]:border-border group-[.toaster]:shadow-lg",
+          toast: "group toast",
           description: "group-[.toast]:text-muted-foreground",
-          actionButton: "group-[.toast]:bg-primary group-[.toast]:text-primary-foreground",
-          cancelButton: "group-[.toast]:bg-muted group-[.toast]:text-muted-foreground",
         },
       }}
       {...props}

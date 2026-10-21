@@ -3,6 +3,7 @@
 @import './styles/correo.css';
 @import './styles/slack.css';
 @import './styles/ai-assistant.css';
+@import './styles/zen-toast.css';
 
 /* Ocultar badge / FAB "Edit with Lovable" (preview Lovable, tagger, overlays) */
 [data-lovable-badge],
