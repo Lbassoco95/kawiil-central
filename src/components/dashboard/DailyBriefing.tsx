@@ -5,7 +5,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Sparkles, Loader2, RefreshCw, ChevronDown, ChevronRight } from "lucide-react";
 import { KawiilAiMarkdown } from "@/components/shared/KawiilAiMarkdown";
 import { useMexicoToday } from "@/hooks/useMexicoToday";
-import { toDateStringMX } from "@/lib/dateUtils";
+import { toDateStringMX, mexicoDayRangeISO } from "@/lib/dateUtils";
+import { useMeetingFollowUp } from "@/hooks/useMeetingFollowUp";
 import { useAiModuleBriefing, sha256Hex, briefingJsonInstructions } from "@/hooks/useAiModuleBriefing";
 import { MetricInsightChips } from "@/components/dashboard/MetricInsightChips";
 import { AiFeedback } from "@/components/ai/AiFeedback";
@@ -88,8 +89,31 @@ export function DailyBriefing({
     enabled: !!user,
   });
 
-  const ready = !!user && !!taskDetails;
+  // Tareas cerradas hoy: base de la retro de cierre.
+  const { data: completedTitles, isLoading: completedLoading } = useQuery({
+    queryKey: ["briefing-completed-today", user?.id, todayKey, completedToday],
+    queryFn: async () => {
+      const { start, endExclusive } = mexicoDayRangeISO(todayKey);
+      const { data, error } = await supabase
+        .from("tasks")
+        .select("title, completed_at, updated_at")
+        .eq("assigned_to", user!.id)
+        .eq("status", "completada")
+        .gte("updated_at", start)
+        .lt("updated_at", endExclusive)
+        .limit(10);
+      if (error) throw error;
+      return (data ?? []).map((t) => t.title);
+    },
+    enabled: !!user,
+  });
+
   const firstName = profile?.full_name?.split(" ")[0] || "Kawiiler";
+  const { data: meetingFollowUp, isLoading: followUpLoading } = useMeetingFollowUp(todayKey, firstName);
+
+  const ready = !!user && !!taskDetails && !completedLoading && !followUpLoading;
+  // Mañana: apertura del día. Desde las 17:00 CDMX: retro de cierre para cerrar tareas.
+  const phase: "manana" | "cierre" = today.getHours() >= 17 ? "cierre" : "manana";
   const todayStr = today.toLocaleDateString("es-MX", {
     weekday: "long",
     day: "numeric",
@@ -99,13 +123,20 @@ export function DailyBriefing({
   const payload = useMemo(() => {
     const taskIds = (taskDetails ?? []).map((t, i) => `${i}:${t.title}:${t.due_date ?? ""}:${t.status}:${t.priority}`);
     return {
-      v: 3,
+      v: 4,
       module: "dashboard",
       date: todayKey,
+      phase,
       counts: { tasksCount, completedToday, overdueCount, remindersCount },
       tasks: taskIds,
+      done: completedTitles ?? [],
+      meetings: (meetingFollowUp?.mine ?? []).map((a) => `${a.id}:${a.status}`),
+      meetingsUnowned: meetingFollowUp?.unownedCount ?? 0,
     };
-  }, [taskDetails, todayKey, tasksCount, completedToday, overdueCount, remindersCount]);
+  }, [
+    taskDetails, todayKey, phase, tasksCount, completedToday, overdueCount, remindersCount,
+    completedTitles, meetingFollowUp,
+  ]);
 
   const [payloadHash, setPayloadHash] = useState<string>("");
   useEffect(() => {
@@ -116,25 +147,42 @@ export function DailyBriefing({
   const briefing = useAiModuleBriefing({
     module: "dashboard",
     payloadHash,
-    // Hero principal: 1 briefing automático al día. El blindaje 1/día del hook
-    // garantiza que cambios de hash durante el día NO regeneran (solo regenerate()).
+    // Hero principal: 1 briefing automático al día, y se refresca solo cuando cambia la fase
+    // (mañana → cierre, 17:00 CDMX) o los datos (mín. 30 min entre regeneraciones).
     autoFetch: true,
+    refresh: { phase, minIntervalMinutes: 30 },
     enabled: ready && !!payloadHash,
     buildMessages: () => {
-      const contextPrompt = `Genera un briefing corto y motivador del día para ${firstName}. Hoy es ${todayStr}.
+      const closing = phase === "cierre";
+      const meetingsBlock =
+        (meetingFollowUp?.mine.length ?? 0) > 0 || (meetingFollowUp?.unownedCount ?? 0) > 0
+          ? `\n\nCOMPROMISOS DE JUNTAS (últimos 14 días) QUE AÚN NO SON TAREA — ${meetingFollowUp?.mine.length ?? 0} tuyos, ${meetingFollowUp?.unownedCount ?? 0} sin responsable en la organización: ${JSON.stringify((meetingFollowUp?.mine ?? []).map((a) => ({ compromiso: a.text, fecha: a.dueDate, estado: a.status === "proposed" ? "propuesto, sin confirmar" : "confirmado, sin proyecto/tarea", sinResponsable: a.unowned })))}`
+          : "";
+      const contextPrompt = `${
+        closing
+          ? `Genera la RETRO DE CIERRE del día para ${firstName}. Hoy es ${todayStr} y ya es hora de cerrar jornada.`
+          : `Genera un briefing corto y motivador del día para ${firstName}. Hoy es ${todayStr}.`
+      }
 
 DATOS (cifras oficiales — úsalas para cualquier total): ${tasksCount} tareas pendientes en total, ${completedToday} completadas hoy, ${overdueCount} vencidas, ${remindersCount} recordatorios.
 
 PRÓXIMAS TAREAS (solo una MUESTRA de las ${tasksCount} pendientes: las más próximas por vencer, asignadas a ${firstName}, ordenadas por fecha): ${JSON.stringify((taskDetails ?? []).map((t) => ({ titulo: t.title, prioridad: t.priority, vence: t.due_date, area: t.area, cliente: (t as unknown as { clients?: { name?: string } }).clients?.name ?? null, estado: t.status })))}
 
+TAREAS COMPLETADAS HOY: ${JSON.stringify(completedTitles ?? [])}${meetingsBlock}
+
 INSTRUCCIONES PARA "markdown":
-1. Resume en máximo 3 puntos clave con emojis.
-2. Al nombrar tareas, fechas o clientes usa ÚNICAMENTE los del bloque PRÓXIMAS TAREAS; NO inventes ninguno que no esté ahí.
-3. Para cualquier TOTAL de pendientes usa la cifra de DATOS (${tasksCount}); NUNCA cuentes las filas de la muestra — es solo un extracto de las más próximas, no el total.
-4. Si hay vencidas, menciona con empatía.
-5. Si completó, reconoce.
-6. Máximo 80 palabras. Sé ultra-conciso.
-7. Markdown obligatorio: línea de título con emoji (ej. 🗒️ **Briefing del …**), subtítulo **Situación actual**, viñetas con emojis (🔥 ⚠️ ✅), **negritas** en cifras y alertas. Sin saludo largo.
+${
+  closing
+    ? `1. Estructura: ✅ **Lo que cerraste hoy** (reconoce lo completado), 🔥 **Lo que queda abierto** (vencidas y las que vencían hoy: dile cuáles cerrar o mover a mañana) y 🗣️ **Juntas** (si hay compromisos de juntas sin tarea, pídele convertirlos en tarea con proyecto, fecha y responsable).
+2. Termina con UNA acción concreta para mañana.`
+    : `1. Resume en máximo 3 puntos clave con emojis.
+2. Si hay compromisos de juntas sin convertir en tarea, menciónalo como un punto clave y di cuántos son.`
+}
+3. Al nombrar tareas, fechas, clientes o compromisos usa ÚNICAMENTE los de los bloques de DATOS de arriba; NO inventes ninguno que no esté ahí.
+4. Para cualquier TOTAL de pendientes usa la cifra de DATOS (${tasksCount}); NUNCA cuentes las filas de la muestra — es solo un extracto de las más próximas, no el total.
+5. Si hay vencidas, menciona con empatía. Si completó, reconoce.
+6. Máximo ${closing ? 110 : 80} palabras. Sé ultra-conciso.
+7. Markdown obligatorio: línea de título con emoji (ej. ${closing ? "🌙 **Retro del …**" : "🗒️ **Briefing del …**"}), subtítulo **${closing ? "Cierre del día" : "Situación actual"}**, viñetas con emojis (🔥 ⚠️ ✅), **negritas** en cifras y alertas. Sin saludo largo.
 
 INSTRUCCIONES PARA "metric_insights":
 - tasks_pendientes: 1 frase sobre la carga de tareas pendientes (usa el total ${tasksCount}, no el tamaño de la muestra) y el siguiente foco.
