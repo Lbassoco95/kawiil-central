@@ -132,3 +132,52 @@
 .zen-page .zen-card [class*="text-amber-"] { color: hsl(var(--zen-warning)) !important; }
 .zen-page .zen-card [class*="text-sky-"],
 .zen-page .zen-card [class*="text-blue-"] { color: hsl(var(--zen-info)) !important; }
+
+/* ---------- Dashboard zen ----------
+   Reglas acotadas a .zen-dash: reutilizan las clases compartidas (surface-toolbar, stat-card,
+   page-list-card, Card, Alert) sin cambiar el resto de la app. */
+.zen-dash .surface-toolbar,
+.zen-dash .surface-glass-subtle,
+.zen-dash .stat-card,
+.zen-dash .page-list-card,
+.zen-dash .glass-card,
+.zen-dash [class*="rounded-xl"][class*="bg-card"] {
+  background: hsl(var(--zen-bg) / 0.6) !important;
+  border: 1px solid hsl(0 0% 100% / 0.65);
+  border-radius: 1.5rem;
+  box-shadow: 0 10px 40px -18px hsl(30 40% 30% / 0.22), inset 0 1px 0 hsl(0 0% 100% / 0.7);
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.5s ease;
+}
+[data-theme="dark"] .zen-dash .surface-toolbar,
+[data-theme="dark"] .zen-dash .surface-glass-subtle,
+[data-theme="dark"] .zen-dash .stat-card,
+[data-theme="dark"] .zen-dash .page-list-card,
+[data-theme="dark"] .zen-dash .glass-card,
+[data-theme="dark"] .zen-dash [class*="rounded-xl"][class*="bg-card"] {
+  border-color: hsl(0 0% 100% / 0.08);
+  box-shadow: 0 10px 40px -18px hsl(0 0% 0% / 0.5), inset 0 1px 0 hsl(0 0% 100% / 0.06);
+}
+.zen-dash .stat-card { border-left-width: 1px; }
+.zen-dash .stat-card:hover,
+.zen-dash .page-list-card:hover { transform: translateY(-2px); box-shadow: 0 16px 40px -18px hsl(30 40% 30% / 0.3); }
+
+.zen-dash [role="alert"] {
+  border-radius: 1.25rem;
+  background: hsl(var(--zen-info-bg) / 0.6);
+  border-color: hsl(var(--zen-info) / 0.2);
+}
+
+.zen-dash .row-hover { border-radius: 1rem; transition: background 0.4s ease, transform 0.5s cubic-bezier(0.22, 1, 0.36, 1); }
+.zen-dash .row-hover:hover { background: hsl(var(--zen-bg) / 0.8); }
+
+.zen-dash .gradient-bar {
+  background: linear-gradient(90deg, hsl(var(--zen-info)), hsl(var(--zen-success)));
+  animation: none;
+}
+
+.zen-dash .text-destructive { color: hsl(var(--zen-error)); }
+.zen-dash [role="tablist"] button[data-state="active"] { border-color: hsl(var(--zen-info)); }
+
+.zen-dash h3.uppercase { letter-spacing: 0.08em; font-weight: 500; }
