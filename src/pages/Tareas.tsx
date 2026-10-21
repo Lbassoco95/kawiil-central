@@ -167,7 +167,7 @@ const Tareas = () => {
     return "activas";
   });
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(
-    () => searchParams.get("taskId"),
+    () => searchParams.get("taskId") ?? searchParams.get("task"),
   );
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
 
@@ -187,7 +187,7 @@ const Tareas = () => {
 
   // Sync URL → estado
   useEffect(() => {
-    const urlTaskId = searchParams.get("taskId");
+    const urlTaskId = searchParams.get("taskId") ?? searchParams.get("task");
     if (urlTaskId && urlTaskId !== selectedTaskId) setSelectedTaskId(urlTaskId);
     const urlArea = searchParams.get("area");
     if (urlArea && urlArea !== celula) setCelula(urlArea);

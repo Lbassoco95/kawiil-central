@@ -1036,7 +1036,7 @@ export default function JuntaDetalle() {
               {board.data.plainTasks.slice(0, 40).map((t) => (
                 <li key={t.id}>
                   <Link
-                    to={`/tareas?task=${t.id}`}
+                    to={`/tareas?taskId=${t.id}`}
                     className="text-sky-700 dark:text-sky-400 hover:underline"
                   >
                     {t.title}

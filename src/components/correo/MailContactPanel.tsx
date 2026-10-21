@@ -380,7 +380,7 @@ export function MailContactPanel({ emailId, onAskAI, onCreateTask, onCreateRule 
               {relatedTasks.map((t) => (
                 <Link
                   key={t.id}
-                  to={`/tareas?task=${t.id}`}
+                  to={`/tareas?taskId=${t.id}`}
                   className="flex items-start gap-2 py-1 group"
                 >
                   <span className={cn(
