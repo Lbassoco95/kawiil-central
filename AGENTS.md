@@ -31,3 +31,7 @@ export NVM_DIR="/home/ubuntu/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nv
 - The dev server binds to `::` (all interfaces) on port 8080 with HMR overlay disabled.
 - Authentication requires a valid Supabase account on the `qppfampapbxdgednkofc` project. Without test credentials, you can verify the app loads the login page but cannot go further.
 - Edge Functions are deployed remotely; they don't run locally during frontend development.
+
+### Dirección visual
+
+Kawiil OS sigue la dirección **Zen + Glass** (superficies translúcidas, tonos cálidos, movimiento y sonido calmados, información organizada con poca carga). Antes de diseñar UI nueva o tocar notificaciones, lee `docs/direccion-visual-zen-glass.md`.

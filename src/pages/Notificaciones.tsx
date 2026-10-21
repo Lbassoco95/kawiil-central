@@ -16,7 +16,7 @@ import {
   AlertTriangle, CalendarClock, ArrowRight,
   AtSign, CheckCheck, MessageSquare, ClipboardList, DollarSign, Activity,
   Bot, BrainCircuit, Settings, Sparkles, Lightbulb, Bell,
-  PenTool,
+  PenTool, Leaf,
 } from "lucide-react";
 import { PageHeader, type PageHeaderStat } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -41,6 +41,7 @@ import { KAWIIL_AI_GRADIENT } from "@/lib/kawiilAi";
 import { NotificationsKawiilCard } from "@/components/notifications/NotificationsKawiilCard";
 import { PersonalRemindersPanel } from "@/components/reminders/PersonalRemindersPanel";
 import { useReminders } from "@/hooks/useReminders";
+import { groupByMoment } from "@/lib/notificationGroups";
 
 type Tab = "menciones" | "actividad" | "sistema" | "vencimientos" | "recordatorios";
 
@@ -837,7 +838,7 @@ export default function Notificaciones() {
 
   return (
     <AppLayout>
-      <div className="space-y-6 animate-fade-in">
+      <div className="zen-page space-y-6 animate-fade-in">
         <PageHeader
           variant="hero"
           breadcrumb={["Kawiil OS", "Avisos", "Notificaciones"]}
@@ -922,7 +923,7 @@ export default function Notificaciones() {
         ) : (
           <>
             {/* Tab pills */}
-            <div className="surface-toolbar -mx-1 flex flex-nowrap gap-1.5 overflow-x-auto px-3 py-2 scrollbar-hide sm:mx-0 sm:px-4">
+            <div className="surface-toolbar zen-glass zen-tabs -mx-1 flex flex-nowrap gap-1.5 overflow-x-auto px-3 py-2 scrollbar-hide sm:mx-0 sm:px-4">
               {tabs.map((t) => (
                 <button
                   key={t.key}
@@ -968,47 +969,35 @@ export default function Notificaciones() {
                       disabled={markAllAsRead.isPending}
                     >
                       <CheckCheck className="h-3.5 w-3.5" />
-                      Marcar todas como leídas
+                      Dejar todo en calma
                     </button>
                   </div>
                 )}
 
                 {currentList.length === 0 ? (
-                  <div className="text-center py-16">
-                    {tab === "menciones" ? (
-                      <>
-                        <MessageSquare className="mx-auto h-10 w-10 text-muted-foreground/40" />
-                        <p className="mt-3 text-sm text-muted-foreground">
-                          Sin menciones aún. Cuando alguien te @mencione aparecerá aquí.
-                        </p>
-                      </>
-                    ) : tab === "actividad" ? (
-                      <>
-                        <Activity className="mx-auto h-10 w-10 text-muted-foreground/40" />
-                        <p className="mt-3 text-sm text-muted-foreground">
-                          Sin actividad reciente. Asignaciones, gastos y mensajes de Slack (@mención o canal en seguimiento) aparecerán aquí.
-                        </p>
-                      </>
-                    ) : (
-                      <>
-                        <BrainCircuit className="mx-auto h-10 w-10 text-muted-foreground/40" />
-                        <p className="mt-3 text-sm text-muted-foreground">
-                          Sin notificaciones de sistema. Los agentes de conocimiento y otros procesos aparecerán aquí.
-                        </p>
-                      </>
-                    )}
+                  <div className="zen-calm zen-glass">
+                    <div className="zen-calm-orb">
+                      <Leaf className="h-7 w-7" />
+                    </div>
+                    <p className="text-sm font-medium text-foreground">Todo en calma</p>
+                    <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
+                      {tab === "menciones"
+                        ? "Cuando alguien te @mencione, lo encontrarás aquí."
+                        : tab === "actividad"
+                          ? "Asignaciones, gastos y mensajes de Slack irán apareciendo aquí con calma."
+                          : "Los agentes de conocimiento y otros procesos te avisarán aquí."}
+                    </p>
                   </div>
                 ) : (
-                  <div className="space-y-1">
-                    {currentList.map((m, i) => (
+                  <div className="space-y-2">
+                    {groupByMoment(currentList).map((group) => (
+                      <section key={group.key} className="space-y-2">
+                        <h2 className="zen-moment">{group.label.toUpperCase()}</h2>
+                    {group.items.map((m, i) => (
                       <div
                         key={m.id}
-                        className={cn(
-                          "flex cursor-pointer items-start gap-3 rounded-xl border px-3 py-3 shadow-sm transition-shadow duration-200 animate-fade-in hover:shadow-md",
-                          m.is_read
-                            ? "border-border/60 bg-card hover:border-border/80"
-                            : "border-primary/25 bg-primary/[0.05] hover:border-primary/35",
-                        )}
+                        data-unread={!m.is_read}
+                        className="zen-glass zen-item flex cursor-pointer items-start gap-3 px-4 py-3.5 animate-fade-in"
                         style={{ animationDelay: `${Math.min(i, 8) * 30}ms`, animationFillMode: "both" }}
                         onClick={() => handleNotificationClick(m)}
                       >
@@ -1074,6 +1063,8 @@ export default function Notificaciones() {
                         <ArrowRight className="h-3 w-3 text-muted-foreground/40 shrink-0 mt-2" />
                       </div>
                     ))}
+                      </section>
+                    ))}
                   </div>
                 )}
               </div>
@@ -1090,20 +1081,20 @@ export default function Notificaciones() {
               <div className="space-y-8 animate-fade-in">
                 <section>
                   <div className="flex items-center gap-2 mb-3">
-                    <AlertTriangle className="h-3.5 w-3.5 text-destructive" />
-                    <h2 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wide">Vencidas</h2>
+                    <AlertTriangle className="h-3.5 w-3.5 text-[hsl(var(--zen-error))]" />
+                    <h2 className="text-[13px] font-medium text-muted-foreground tracking-wide">Vencidas</h2>
                   </div>
                   {hasOverdue ? (
                     <div className="divide-y divide-border/40">
                       {(alerts?.overdue ?? []).map((t) => (
                         <div
                           key={t.id}
-                          className="py-3 px-2 -mx-2 cursor-pointer hover:bg-secondary/30 rounded-lg transition-colors"
+                          className="py-3 px-2 -mx-2 cursor-pointer hover:bg-white/50 rounded-2xl transition-colors"
                           onClick={() => handleTaskAlertClick(t)}
                         >
                           <div className="flex items-center justify-between gap-2">
                             <span className="text-[13px] font-medium text-foreground">{t.title}</span>
-                            <span className="text-[11px] text-destructive shrink-0">
+                            <span className="text-[11px] text-[hsl(var(--zen-error))] shrink-0">
                               Venció {formatMX(t.due_date, "dd MMM yyyy")}
                             </span>
                           </div>
@@ -1117,12 +1108,12 @@ export default function Notificaciones() {
                       {(alerts?.stepsOverdue ?? []).map((s) => (
                         <div
                           key={s.id}
-                          className="py-3 px-2 -mx-2 cursor-pointer hover:bg-secondary/30 rounded-lg transition-colors"
+                          className="py-3 px-2 -mx-2 cursor-pointer hover:bg-white/50 rounded-2xl transition-colors"
                           onClick={() => handleStepAlertClick(s)}
                         >
                           <div className="flex items-center justify-between gap-2">
                             <span className="text-[13px] font-medium text-foreground">{s.label}</span>
-                            <span className="text-[11px] text-destructive shrink-0">
+                            <span className="text-[11px] text-[hsl(var(--zen-error))] shrink-0">
                               Venció {formatMX(s.due_date, "dd MMM yyyy")}
                             </span>
                           </div>
@@ -1139,15 +1130,15 @@ export default function Notificaciones() {
 
                 <section>
                   <div className="flex items-center gap-2 mb-3">
-                    <CalendarClock className="h-3.5 w-3.5 text-warning" />
-                    <h2 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wide">Por vencer (14 días)</h2>
+                    <CalendarClock className="h-3.5 w-3.5 text-[hsl(var(--zen-warning))]" />
+                    <h2 className="text-[13px] font-medium text-muted-foreground tracking-wide">Por vencer (14 días)</h2>
                   </div>
                   {hasDueSoon ? (
                     <div className="divide-y divide-border/40">
                       {(alerts?.dueSoon ?? []).map((t) => (
                         <div
                           key={t.id}
-                          className="py-3 px-2 -mx-2 cursor-pointer hover:bg-secondary/30 rounded-lg transition-colors"
+                          className="py-3 px-2 -mx-2 cursor-pointer hover:bg-white/50 rounded-2xl transition-colors"
                           onClick={() => handleTaskAlertClick(t)}
                         >
                           <div className="flex items-center justify-between gap-2">
@@ -1159,7 +1150,7 @@ export default function Notificaciones() {
                                 </p>
                               )}
                             </div>
-                            <span className="text-[11px] text-warning shrink-0">
+                            <span className="text-[11px] text-[hsl(var(--zen-warning))] shrink-0">
                               Vence {formatMX(t.due_date, "dd MMM yyyy")}
                             </span>
                           </div>
@@ -1168,7 +1159,7 @@ export default function Notificaciones() {
                       {(alerts?.stepsDueSoon ?? []).map((s) => (
                         <div
                           key={s.id}
-                          className="py-3 px-2 -mx-2 cursor-pointer hover:bg-secondary/30 rounded-lg transition-colors"
+                          className="py-3 px-2 -mx-2 cursor-pointer hover:bg-white/50 rounded-2xl transition-colors"
                           onClick={() => handleStepAlertClick(s)}
                         >
                           <div className="flex items-center justify-between gap-2">
@@ -1176,7 +1167,7 @@ export default function Notificaciones() {
                               <p className="text-[13px] font-medium text-foreground">{s.label}</p>
                               <p className="text-[11px] text-muted-foreground">{s.project_name} — {s.period_label}</p>
                             </div>
-                            <span className="text-[11px] text-warning shrink-0">
+                            <span className="text-[11px] text-[hsl(var(--zen-warning))] shrink-0">
                               Vence {formatMX(s.due_date, "dd MMM yyyy")}
                             </span>
                           </div>
