@@ -15,24 +15,40 @@ export interface CierreInput {
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
+/** Desde este total se omite el desglose de vencidas: calma antes que alarma. */
+const MUCHAS = 10;
+
 /** null = no hay nada que cerrar: no se molesta al usuario. */
 export function buildCierreMessage(i: CierreInput): { title: string; body: string } | null {
   if (i.dueNow <= 0 && i.agreements <= 0) return null;
 
-  const parts: string[] = [];
+  const sentences: string[] = [];
   if (i.dueNow > 0) {
-    const overdue = i.overdue > 0 ? ` (${plural(i.overdue, "vencida", "vencidas")})` : "";
-    parts.push(
-      `Te ${i.dueNow === 1 ? "queda" : "quedan"} ${plural(i.dueNow, "tarea", "tareas")} del día${overdue}: ciérra${i.dueNow === 1 ? "la" : "las"} o mué${i.dueNow === 1 ? "vela" : "velas"} a mañana.`,
-    );
+    const one = i.dueNow === 1;
+    let lead: string;
+    if (i.dueNow >= MUCHAS || i.overdue <= 0) {
+      lead = i.overdue <= 0 && i.dueNow < MUCHAS
+        ? `Te ${one ? "queda" : "quedan"} ${plural(i.dueNow, "tarea", "tareas")} por cerrar hoy`
+        : `Tienes ${plural(i.dueNow, "tarea", "tareas")} por cerrar`;
+    } else if (i.overdue >= i.dueNow) {
+      lead = `Tienes ${plural(i.dueNow, "tarea vencida", "tareas vencidas")} por cerrar`;
+    } else {
+      lead = `Tienes ${plural(i.dueNow, "tarea", "tareas")} por cerrar, ${i.overdue} de ellas ${i.overdue === 1 ? "vencida" : "vencidas"}`;
+    }
+    sentences.push(`${lead}: ciérra${one ? "la" : "las"} o mué${one ? "vela" : "velas"} a mañana.`);
   }
   if (i.agreements > 0) {
-    parts.push(`${plural(i.agreements, "compromiso", "compromisos")} de juntas ${i.agreements === 1 ? "sigue" : "siguen"} sin tarea.`);
+    const one = i.agreements === 1;
+    sentences.push(
+      `${plural(i.agreements, "compromiso", "compromisos")} de juntas ${one ? "sigue" : "siguen"} sin tarea.` +
+        (i.dueNow <= 0 ? ` ${one ? "Conviértelo" : "Conviértelos"} en tarea cuando puedas.` : ""),
+    );
   }
 
+  const body = sentences.join(" ");
   return {
     title: "Kawiilito · Cierre del día",
-    body: `${i.firstName ? `${i.firstName}, ` : ""}${parts.join(" ")}`.replace(/^(\S+), (\S)/, (_m, n, c) => `${n}, ${c.toLowerCase()}`),
+    body: i.firstName ? `${i.firstName}, ${body.charAt(0).toLowerCase()}${body.slice(1)}` : body,
   };
 }
 

@@ -78,7 +78,8 @@ Deno.serve(async (req) => {
         .from("tasks")
         .select("assigned_to, due_date")
         .in("assigned_to", ids)
-        .in("status", ["pendiente", "en_progreso", "en_revision"])
+        // «en_revision» espera a un tercero: no tiene sentido pedir cerrarla hoy.
+        .in("status", ["pendiente", "en_progreso"])
         .not("due_date", "is", null)
         .lt("due_date", nextYmd(todayYmd)),
       svc

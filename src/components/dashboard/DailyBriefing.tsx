@@ -201,7 +201,11 @@ INSTRUCCIONES PARA "metric_insights":
 
   // Tareas para cerrar hoy: vencen hoy o ya vencidas (la consulta viene ordenada por fecha).
   const dueNow = useMemo(
-    () => (taskDetails ?? []).filter((t) => t.due_date && t.due_date.slice(0, 10) <= todayKey).slice(0, 5),
+    () =>
+      (taskDetails ?? [])
+        // «en_revision» espera a un tercero: no se pide cerrarla hoy.
+        .filter((t) => t.status !== "en_revision" && t.due_date && t.due_date.slice(0, 10) <= todayKey)
+        .slice(0, 5),
     [taskDetails, todayKey],
   );
 
