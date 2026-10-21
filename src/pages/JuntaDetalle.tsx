@@ -849,7 +849,14 @@ export default function JuntaDetalle() {
                     : ""}
                   {a.status} · {a.project_id ? "con proyecto" : "ámbar (sin proyecto)"} ·{" "}
                   {a.task_id ? (
-                    <Link to={`/tareas?task=${a.task_id}`} className="text-sky-700 dark:text-sky-400 hover:underline">
+                    <Link
+                      to={
+                        a.project_id
+                          ? `/proyectos/${a.project_id}?tab=tareas&taskId=${a.task_id}`
+                          : `/tareas?taskId=${a.task_id}`
+                      }
+                      className="text-sky-700 dark:text-sky-400 hover:underline"
+                    >
                       ver tarea
                     </Link>
                   ) : (
