@@ -1,6 +1,10 @@
 import { useTheme } from "next-themes";
 import { CheckCircle2, Leaf, Sparkles, Wind } from "lucide-react";
 import { Toaster as Sonner, toast } from "sonner";
+import { installZenCopy } from "@/lib/zenCopy";
+
+// Tono suave para todos los avisos de la app (ver docs/direccion-visual-zen-glass.md)
+installZenCopy(toast);
 
 type ToasterProps = React.ComponentProps<typeof Sonner>;
 
