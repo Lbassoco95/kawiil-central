@@ -1,0 +1,81 @@
+/* Zen + Glass: lienzo cálido, superficies translúcidas y jerarquía calmada */
+.zen-page {
+  position: relative;
+  isolation: isolate;
+}
+.zen-page::before {
+  content: "";
+  position: absolute;
+  inset: -1.5rem -1rem;
+  z-index: -1;
+  border-radius: 2rem;
+  background:
+    radial-gradient(60% 50% at 12% 0%, hsl(38 90% 88% / 0.55), transparent 70%),
+    radial-gradient(55% 45% at 95% 15%, hsl(160 50% 86% / 0.45), transparent 70%),
+    radial-gradient(50% 40% at 50% 100%, hsl(205 70% 90% / 0.4), transparent 70%);
+  pointer-events: none;
+}
+[data-theme="dark"] .zen-page::before {
+  background:
+    radial-gradient(60% 50% at 12% 0%, hsl(32 40% 30% / 0.3), transparent 70%),
+    radial-gradient(55% 45% at 95% 15%, hsl(160 30% 28% / 0.3), transparent 70%);
+}
+
+.zen-glass {
+  background: hsl(var(--zen-bg) / 0.6);
+  border: 1px solid hsl(0 0% 100% / 0.65);
+  box-shadow: 0 10px 40px -18px hsl(30 40% 30% / 0.25), inset 0 1px 0 hsl(0 0% 100% / 0.7);
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+}
+[data-theme="dark"] .zen-glass {
+  border-color: hsl(0 0% 100% / 0.08);
+  box-shadow: 0 10px 40px -18px hsl(0 0% 0% / 0.5), inset 0 1px 0 hsl(0 0% 100% / 0.06);
+}
+
+.zen-item {
+  border-radius: 1.25rem;
+  transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.5s ease, background 0.5s ease;
+}
+.zen-item:hover { transform: translateY(-2px); box-shadow: 0 16px 40px -18px hsl(30 40% 30% / 0.3); }
+.zen-item[data-unread="true"] {
+  background: linear-gradient(135deg, hsl(var(--zen-info-bg) / 0.85), hsl(var(--zen-bg) / 0.6));
+  border-color: hsl(var(--zen-info) / 0.3);
+}
+.zen-item[data-unread="false"] { opacity: 0.82; }
+
+.zen-moment {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 1.25rem 0 0.6rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  color: hsl(var(--zen-fg) / 0.55);
+}
+.zen-moment::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, hsl(var(--zen-fg) / 0.15), transparent);
+}
+
+.zen-calm {
+  text-align: center;
+  padding: 4rem 1.5rem;
+  border-radius: 1.75rem;
+}
+.zen-calm .zen-calm-orb {
+  width: 64px; height: 64px; margin: 0 auto 1rem; border-radius: 9999px;
+  display: grid; place-items: center;
+  color: hsl(var(--zen-success));
+  background: radial-gradient(circle at 30% 30%, hsl(var(--zen-success-bg)), hsl(var(--zen-success) / 0.18));
+  animation: zen-breathe 5s ease-in-out infinite;
+}
+
+.zen-tabs { border-radius: 9999px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .zen-item, .zen-calm .zen-calm-orb { animation: none; transition: none; }
+}
