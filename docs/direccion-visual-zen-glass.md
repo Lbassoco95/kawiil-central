@@ -47,4 +47,4 @@ Reglas para escribir avisos nuevos:
 - Sin mayúsculas sostenidas, sin signos de exclamación en errores, sin tecnicismos en el título.
 - Para frases nuevas frecuentes, agregarlas a `SUCCESS_PHRASES` en `zenCopy.ts`.
 - Los avisos con JSX o con `description` propia no se reescriben.
-- Los avisos de `useToast` (Radix, ~5 archivos) aún no pasan por el catálogo.
+- Los avisos de `useToast` (Radix) también pasan por el catálogo: `softenRadixToast` en `zenCopy.ts`, aplicado dentro de `src/hooks/use-toast.ts`. Un título "Error" a secas se vuelve "Algo no salió como esperábamos" y conserva la descripción.

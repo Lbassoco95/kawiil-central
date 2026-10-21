@@ -52,6 +52,11 @@ export function softenCopy(kind: ToastKind, message: string, description?: strin
   }
 
   if (kind === "error" || kind === "warning") {
+    // Título "Error" a secas (la descripción ya trae el detalle)
+    if (text === "Error") {
+      return { message: "Algo no salió como esperábamos", description: description ?? CALM_RETRY };
+    }
+
     // "Error: detalle" → mensaje genérico amable + detalle
     const generic = /^Error:\s*(.*)$/s.exec(text);
     if (generic) {
@@ -114,4 +119,20 @@ export function installZenCopy(toast: ToastLike): void {
       return original(soft.message, soft.description ? { ...data, description: soft.description } : data);
     };
   });
+}
+
+type RadixToastProps = { title?: unknown; description?: unknown; variant?: string };
+
+/**
+ * Versión para `useToast` (Radix): suaviza título y descripción de texto plano.
+ * Con variant "destructive" aplica el tono de error; el resto, el de éxito/información.
+ */
+export function softenRadixToast<T extends RadixToastProps>(props: T): T & RadixToastProps {
+  if (typeof props.title !== "string") return props;
+  if (props.description !== undefined && typeof props.description !== "string") return props;
+  const kind: ToastKind = props.variant === "destructive" ? "error" : "success";
+  const soft = softenCopy(kind, props.title, props.description as string | undefined);
+  return soft.description !== undefined
+    ? { ...props, title: soft.message, description: soft.description }
+    : { ...props, title: soft.message };
 }
