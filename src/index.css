@@ -4,6 +4,7 @@
 @import './styles/slack.css';
 @import './styles/ai-assistant.css';
 @import './styles/zen-toast.css';
+@import './styles/kawiilito.css';
 @import './styles/zen-glass.css';
 
 /* Ocultar badge / FAB "Edit with Lovable" (preview Lovable, tagger, overlays) */

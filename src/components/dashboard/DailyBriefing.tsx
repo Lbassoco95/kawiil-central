@@ -9,6 +9,7 @@ import { toDateStringMX, mexicoDayRangeISO, addDaysToYmd } from "@/lib/dateUtils
 import { useUpdateTask } from "@/hooks/useTasks";
 import { toast } from "sonner";
 import { useMeetingFollowUp } from "@/hooks/useMeetingFollowUp";
+import { KawiilitoCompanion } from "@/components/dashboard/KawiilitoCompanion";
 import { useAiModuleBriefing, sha256Hex, briefingJsonInstructions } from "@/hooks/useAiModuleBriefing";
 import { MetricInsightChips } from "@/components/dashboard/MetricInsightChips";
 import { AiFeedback } from "@/components/ai/AiFeedback";
@@ -319,6 +320,21 @@ INSTRUCCIONES PARA "metric_insights":
               order={[...DASHBOARD_METRIC_KEYS]}
             />
           )}
+
+          <KawiilitoCompanion
+            todayKey={todayKey}
+            firstName={firstName}
+            phase={phase}
+            tasksCount={tasksCount}
+            dueNow={dueNow.length}
+            overdueCount={overdueCount}
+            completedToday={completedToday}
+            agreementsPending={
+              (meetingFollowUp?.mine.length ?? 0) +
+              Math.max(0, (meetingFollowUp?.unownedCount ?? 0) - (meetingFollowUp?.mine.filter((a) => a.unowned).length ?? 0))
+            }
+            generating={loading && !content}
+          />
 
           {content && (
             <button
