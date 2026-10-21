@@ -2,25 +2,37 @@ import { describe, expect, it } from "vitest";
 import { buildCierreMessage, parseCierreOptions } from "../../supabase/functions/_shared/kawiilitoCierre";
 
 describe("buildCierreMessage", () => {
+  const msg = (dueNow: number, overdue: number, agreements: number, firstName = "Leo") =>
+    buildCierreMessage({ firstName, dueNow, overdue, agreements });
+
   it("no molesta si no hay nada que cerrar", () => {
-    expect(buildCierreMessage({ firstName: "Leo", dueNow: 0, overdue: 0, agreements: 0 })).toBeNull();
+    expect(msg(0, 0, 0)).toBeNull();
   });
-  it("avisa de las tareas del día, con vencidas", () => {
-    const m = buildCierreMessage({ firstName: "Leo", dueNow: 3, overdue: 1, agreements: 0 })!;
-    expect(m.title).toBe("Kawiilito · Cierre del día");
-    expect(m.body).toBe("Leo, te quedan 3 tareas del día (1 vencida): ciérralas o muévelas a mañana.");
+  it("tareas del día sin vencidas", () => {
+    expect(msg(3, 0, 0)!.title).toBe("Kawiilito · Cierre del día");
+    expect(msg(3, 0, 0)!.body).toBe("Leo, te quedan 3 tareas por cerrar hoy: ciérralas o muévelas a mañana.");
+    expect(msg(1, 0, 0)!.body).toBe("Leo, te queda 1 tarea por cerrar hoy: ciérrala o muévela a mañana.");
   });
-  it("singular", () => {
-    const m = buildCierreMessage({ firstName: "Leo", dueNow: 1, overdue: 0, agreements: 0 })!;
-    expect(m.body).toBe("Leo, te queda 1 tarea del día: ciérrala o muévela a mañana.");
+  it("mezcla de tareas de hoy y vencidas", () => {
+    expect(msg(3, 2, 0)!.body).toBe("Leo, tienes 3 tareas por cerrar, 2 de ellas vencidas: ciérralas o muévelas a mañana.");
+    expect(msg(3, 1, 0)!.body).toContain("1 de ellas vencida:");
   });
-  it("menciona compromisos de juntas, solos o junto a las tareas", () => {
-    expect(buildCierreMessage({ firstName: "Leo", dueNow: 0, overdue: 0, agreements: 2 })!.body).toBe(
-      "Leo, 2 compromisos de juntas siguen sin tarea.",
+  it("todas vencidas no se contradice con «del día»", () => {
+    expect(msg(2, 2, 0)!.body).toBe("Leo, tienes 2 tareas vencidas por cerrar: ciérralas o muévelas a mañana.");
+    expect(msg(1, 1, 0)!.body).toBe("Leo, tienes 1 tarea vencida por cerrar: ciérrala o muévela a mañana.");
+  });
+  it("con muchas pendientes omite el desglose de vencidas", () => {
+    expect(msg(12, 9, 0)!.body).toBe("Leo, tienes 12 tareas por cerrar: ciérralas o muévelas a mañana.");
+  });
+  it("compromisos de juntas: solos invitan a convertirlos; junto a tareas, no", () => {
+    expect(msg(0, 0, 4)!.body).toBe("Leo, 4 compromisos de juntas siguen sin tarea. Conviértelos en tarea cuando puedas.");
+    expect(msg(0, 0, 1)!.body).toBe("Leo, 1 compromiso de juntas sigue sin tarea. Conviértelo en tarea cuando puedas.");
+    expect(msg(1, 0, 2)!.body).toBe(
+      "Leo, te queda 1 tarea por cerrar hoy: ciérrala o muévela a mañana. 2 compromisos de juntas siguen sin tarea.",
     );
-    expect(buildCierreMessage({ firstName: "", dueNow: 1, overdue: 0, agreements: 1 })!.body).toContain(
-      "1 compromiso de juntas sigue sin tarea.",
-    );
+  });
+  it("sin nombre arranca en mayúscula", () => {
+    expect(msg(1, 0, 0, "")!.body).toBe("Te queda 1 tarea por cerrar hoy: ciérrala o muévela a mañana.");
   });
 });
 
