@@ -958,7 +958,7 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
 
   // ─── Render ──────────────────────────────────────────────
   return (
-    <div className={`slack-layout${isMobile ? " slack-layout--mobile" : ""}`}>
+    <div className={`slack-layout zen-slack${isMobile ? " slack-layout--mobile" : ""}`}>
       {/* Col 1 — Workspaces (oculto en móvil) */}
       {!isMobile && <WorkspaceSwitcher workspaces={workspaces} onSelect={() => {}} />}
 
