@@ -32,7 +32,7 @@ const DialogContent = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
 >(({ className, children, ...props }, ref) => (
   <DialogPortal>
-    <DialogOverlay />
+    <DialogOverlay className={className?.includes("zen-dialog") ? "zen-dialog-overlay" : undefined} />
     <DialogPrimitive.Content
       ref={ref}
       className={cn(

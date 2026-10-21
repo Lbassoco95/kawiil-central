@@ -241,3 +241,41 @@
   border-color: hsl(0 0% 100% / 0.6);
   backdrop-filter: blur(10px);
 }
+
+/* ---------- Diálogos zen ----------
+   Se activan con la clase "zen-dialog" en <DialogContent>; el overlay se adapta solo
+   (ver src/components/ui/dialog.tsx). Los demás diálogos de la app no cambian. */
+.zen-dialog-overlay {
+  background: hsl(30 25% 18% / 0.28) !important;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+[data-theme="dark"] .zen-dialog-overlay { background: hsl(225 20% 6% / 0.55) !important; }
+
+.zen-dialog {
+  background: linear-gradient(160deg, hsl(38 60% 96% / 0.96), hsl(var(--zen-bg) / 0.94) 55%, hsl(160 35% 96% / 0.95)) !important;
+  border: 1px solid hsl(0 0% 100% / 0.7) !important;
+  border-radius: 1.75rem !important;
+  box-shadow: 0 30px 80px -30px hsl(30 40% 25% / 0.45), inset 0 1px 0 hsl(0 0% 100% / 0.8) !important;
+  backdrop-filter: blur(20px) saturate(1.2);
+  -webkit-backdrop-filter: blur(20px) saturate(1.2);
+}
+[data-theme="dark"] .zen-dialog {
+  background: linear-gradient(160deg, hsl(32 18% 17% / 0.96), hsl(var(--zen-bg) / 0.96) 60%) !important;
+  border-color: hsl(0 0% 100% / 0.08) !important;
+  box-shadow: 0 30px 80px -30px hsl(0 0% 0% / 0.7), inset 0 1px 0 hsl(0 0% 100% / 0.06) !important;
+}
+.zen-dialog.animate-in,
+.zen-dialog[data-state="open"] { animation-duration: 0.45s; }
+.zen-dialog > button[class*="rounded-full"] {
+  background: hsl(var(--zen-fg) / 0.06);
+  transition: background 0.4s ease, transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.zen-dialog > button[class*="rounded-full"]:hover { background: hsl(var(--zen-fg) / 0.12); transform: rotate(90deg); }
+.zen-dialog input,
+.zen-dialog textarea,
+.zen-dialog [role="combobox"] { border-radius: 0.9rem; }
+.zen-dialog [role="tablist"] button[data-state="active"] { border-color: hsl(var(--zen-info)); }
+@media (prefers-reduced-motion: reduce) {
+  .zen-dialog > button[class*="rounded-full"] { transition: none; }
+}
