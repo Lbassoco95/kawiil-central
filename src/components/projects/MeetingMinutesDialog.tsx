@@ -27,7 +27,9 @@ import { KawiilAiMarkdown } from "@/components/shared/KawiilAiMarkdown";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { toast } from "sonner";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { mtgDb } from "@/lib/mtg/db";
+import { formatDateMX } from "@/lib/dateUtils";
 import { FileDropzone } from "@/components/shared/FileDropzone";
 import { documentsLimits, withLimits, STANDARD_BATCH_MAX_FILES } from "@/lib/fileIntake/limits";
 import {
@@ -86,6 +88,8 @@ interface MeetingMinutesDialogProps {
   clientId?: string | null;
   area?: string | null;
   projectName?: string;
+  /** Junta de origen (si se abre desde una junta): las tareas quedan ligadas a ella. */
+  meetingId?: string | null;
 }
 
 export function MeetingMinutesDialog({
@@ -95,6 +99,7 @@ export function MeetingMinutesDialog({
   clientId,
   area,
   projectName,
+  meetingId: meetingIdProp,
 }: MeetingMinutesDialogProps) {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -103,6 +108,22 @@ export function MeetingMinutesDialog({
   const meetingUploadLimits = withLimits(documentsLimits, {
     accept: ".pdf,.doc,.docx,.txt,.md,.csv,.xls,.xlsx,.xml",
     maxFiles: STANDARD_BATCH_MAX_FILES,
+  });
+
+  // Junta de origen: las tareas creadas se ligan con mtg_meeting_id (como las de acuerdos).
+  const [linkedMeetingId, setLinkedMeetingId] = useState<string>("");
+  const effectiveMeetingId = meetingIdProp || linkedMeetingId || null;
+  const { data: recentMeetings = [] } = useQuery({
+    queryKey: ["minutes-dialog-meetings", clientId ?? null],
+    enabled: open && !meetingIdProp && !!user,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      let q = mtgDb.from("mtg_meetings").select("id, title, scheduled_at, client_id").order("scheduled_at", { ascending: false }).limit(30);
+      if (clientId) q = q.eq("client_id", clientId);
+      const { data, error } = await q;
+      if (error) throw error;
+      return data ?? [];
+    },
   });
 
   const [step, setStep] = useState<"input" | "preview">("input");
@@ -575,7 +596,9 @@ export function MeetingMinutesDialog({
           created_by: user!.id,
           status: "pendiente",
           phase_key: task.phase_key || null,
-        });
+          // mtg_meeting_id existe en DB pero aún no en types.ts autogenerado.
+          ...(effectiveMeetingId ? { mtg_meeting_id: effectiveMeetingId } : {}),
+        } as never);
         if (!error) created++;
       }
 
@@ -619,6 +642,7 @@ export function MeetingMinutesDialog({
     setNewProjectName("");
     setImportMode("same");
     setNonCatalogPhaseHint(false);
+    setLinkedMeetingId("");
     onOpenChange(false);
   };
 
@@ -682,6 +706,25 @@ export function MeetingMinutesDialog({
                     subhint="El primer PDF con análisis IA; los demás se unen al texto. Pulsa Analizar para unificar."
                   />
                 </div>
+
+                {!meetingIdProp && recentMeetings.length > 0 && (
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium">Junta de origen (opcional)</label>
+                    <select
+                      className="h-9 w-full rounded-md border bg-background px-2 text-sm"
+                      value={linkedMeetingId}
+                      onChange={(e) => setLinkedMeetingId(e.target.value)}
+                    >
+                      <option value="">Sin junta</option>
+                      {recentMeetings.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.title || "Junta"} · {formatDateMX(m.scheduled_at)}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-muted-foreground">Las tareas quedan ligadas a la junta y cuentan en su seguimiento.</p>
+                  </div>
+                )}
 
                 <div className="space-y-1">
                   <label className="text-sm font-medium">O pega el contenido:</label>

@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Sparkles, Loader2, RefreshCw, ChevronDown, ChevronRight } from "lucide-react";
+import { Sparkles, Loader2, RefreshCw, ChevronDown, ChevronRight, Check, CalendarClock } from "lucide-react";
 import { KawiilAiMarkdown } from "@/components/shared/KawiilAiMarkdown";
 import { useMexicoToday } from "@/hooks/useMexicoToday";
-import { toDateStringMX, mexicoDayRangeISO } from "@/lib/dateUtils";
+import { toDateStringMX, mexicoDayRangeISO, addDaysToYmd } from "@/lib/dateUtils";
+import { useUpdateTask } from "@/hooks/useTasks";
+import { toast } from "sonner";
 import { useMeetingFollowUp } from "@/hooks/useMeetingFollowUp";
 import { useAiModuleBriefing, sha256Hex, briefingJsonInstructions } from "@/hooks/useAiModuleBriefing";
 import { MetricInsightChips } from "@/components/dashboard/MetricInsightChips";
@@ -56,6 +58,9 @@ export function DailyBriefing({
   hideHeader = false,
 }: DailyBriefingProps) {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const updateTask = useUpdateTask();
+  const [busyIds, setBusyIds] = useState<string[]>([]);
   const [expanded, setExpanded] = useState(true);
   const today = useMexicoToday();
   const todayKey = toDateStringMX(today);
@@ -65,7 +70,7 @@ export function DailyBriefing({
     queryFn: async () => {
       const { data, error } = await supabase
         .from("tasks")
-        .select("title, status, priority, due_date, area, clients(name)")
+        .select("id, title, status, priority, due_date, area, clients(name)")
         .eq("assigned_to", user!.id)
         .in("status", ["pendiente", "en_progreso", "en_revision"])
         .order("due_date", { ascending: true })
@@ -193,6 +198,29 @@ INSTRUCCIONES PARA "metric_insights":
     },
   });
 
+  // Tareas para cerrar hoy: vencen hoy o ya vencidas (la consulta viene ordenada por fecha).
+  const dueNow = useMemo(
+    () => (taskDetails ?? []).filter((t) => t.due_date && t.due_date.slice(0, 10) <= todayKey).slice(0, 5),
+    [taskDetails, todayKey],
+  );
+
+  const closeTask = (id: string, title: string, action: "done" | "tomorrow") => {
+    setBusyIds((ids) => [...ids, id]);
+    const updates =
+      action === "done"
+        ? { id, status: "completada" }
+        : { id, due_date: addDaysToYmd(todayKey, 1) };
+    updateTask.mutate(updates, {
+      onSuccess: () => {
+        toast.success(action === "done" ? `«${title}» completada` : `«${title}» movida a mañana`);
+        for (const key of ["briefing-tasks", "briefing-completed-today", "personal-completed-today"]) {
+          void queryClient.invalidateQueries({ queryKey: [key] });
+        }
+      },
+      onSettled: () => setBusyIds((ids) => ids.filter((x) => x !== id)),
+    });
+  };
+
   const isCompact = variant === "compact";
   const loading = briefing.isLoading || briefing.isRefreshing;
   const content = briefing.content;
@@ -240,6 +268,47 @@ INSTRUCCIONES PARA "metric_insights":
           {content && (
             <div className="mt-2 flex justify-end">
               <AiFeedback surface="daily_briefing" contextKey={aiFeedbackKey(content)} />
+            </div>
+          )}
+
+          {dueNow.length > 0 && (
+            <div className="mt-3 space-y-1.5">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {phase === "cierre" ? "Cierra tu día" : "Para hoy"}
+              </p>
+              <ul className="space-y-1">
+                {dueNow.map((t) => {
+                  const busy = busyIds.includes(t.id);
+                  return (
+                    <li key={t.id} className="flex items-center gap-2 rounded-md border border-border/60 bg-background/60 px-2 py-1">
+                      <span className="min-w-0 flex-1 truncate text-xs" title={t.title}>
+                        {t.title}
+                        {t.due_date && t.due_date.slice(0, 10) < todayKey && (
+                          <span className="ml-1 text-[10px] text-destructive">vencida</span>
+                        )}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => closeTask(t.id, t.title, "done")}
+                        className="inline-flex shrink-0 items-center gap-1 rounded-full border border-primary/30 px-2 py-0.5 text-[11px] font-medium text-primary hover:bg-primary/10 disabled:opacity-50"
+                      >
+                        <Check className="h-3 w-3" />
+                        Hecha
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => closeTask(t.id, t.title, "tomorrow")}
+                        className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground hover:text-foreground disabled:opacity-50"
+                      >
+                        <CalendarClock className="h-3 w-3" />
+                        Mañana
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
             </div>
           )}
 
