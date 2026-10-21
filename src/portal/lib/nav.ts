@@ -32,8 +32,9 @@ export const PRIMARY_NAV: NavItem[] = [
 ];
 
 /**
- * Una sola entrada de Facturación (CFDI de la cuenta).
- * En `/diseno` Layout remapea `/facturas` → `/facturacion` (vista de solicitudes demo).
+ * Facturación = emitir (wizard) / subir ticket para que Kawiil emita (no archivo SatGo).
+ * CFDI emitidas/recibidas + cobranza viven en Ingresos / Egresos.
+ * En `/diseno` Layout remapea `/facturas` → `/facturacion`.
  */
 export const MORE_NAV: NavItem[] = [
   { to: "/facturas", label: "Facturación", Icon: Receipt, more: true },

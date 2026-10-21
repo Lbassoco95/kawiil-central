@@ -1,10 +1,8 @@
 /**
  * Portal del cliente — contrato del emisor de CFDI (M6).
  *
- * Solo factura de INGRESO. Sin nómina, honorarios, arrendamiento, complementos
- * de pago ni notas de crédito. Tres operaciones: validar, emitir y consultar
- * estado. Implementaciones: EmisorPrueba (no timbra nada) y
- * EmisorPacPlantilla (esqueleto para el PAC real que entregará Kawiil).
+ * Factura de INGRESO (+ complemento de pago vía ops separadas Facturapi).
+ * Implementaciones: EmisorPrueba, EmisorPacPlantilla, EmisorFacturapi.
  */
 export interface ConceptoBorrador {
   claveProdServ: string;
@@ -36,6 +34,8 @@ export interface ContextoEmision {
   ahora?: Date;
   /** Solo pruebas: sustituye la matriz régimen × uso cargada del catálogo. */
   matrizUsoRegimen?: { uso: string; regimenes: string[] }[];
+  /** Facturapi gestiona CSD en su organización: omitir chequeo local. */
+  omitirCsd?: boolean;
 }
 
 export interface ErrorValidacion {
@@ -66,7 +66,7 @@ export interface ResultadoEmision {
 export type EstadoCfdi = "prueba" | "vigente" | "cancelado" | "no_encontrado" | "desconocido";
 
 export interface EmisorCfdi {
-  readonly nombre: "prueba" | "pac";
+  readonly nombre: "prueba" | "pac" | "facturapi";
   validar(b: BorradorFactura, ctx: ContextoEmision): Promise<ResultadoValidacion>;
   emitir(b: BorradorFactura, ctx: ContextoEmision): Promise<ResultadoEmision>;
   consultarEstado(uuid: string): Promise<EstadoCfdi>;

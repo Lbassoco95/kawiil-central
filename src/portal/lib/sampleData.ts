@@ -11,6 +11,8 @@ import type {
 } from "../design/types";
 
 export const SAMPLE_CLIENT = "Bassoco, Vega, Salas, Morales, Servicios Empresariales S.C.";
+/** Nombre de contacto demo Bassoco (semilla portal); no inventar Aldea/Horizonte. */
+export const SAMPLE_USER_NAME = "Contacto demo · Bassoco SC";
 export const SAMPLE_PERIOD = "Septiembre 2026";
 
 export const CASHFLOW: CashflowPoint[] = [

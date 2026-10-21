@@ -1,33 +1,32 @@
-# PAC y Facturapi — frontera del espejo (Corte 3)
+# PAC y Facturapi — frontera actualizada (Polo · Facturación)
 
-## Decisión de cumplimiento
+## Decisión
 
-En la fase **espejo del servicio** (bloque fiscal primero), Kawiil OS **no** implementa adaptadores PAC ni Facturapi. La emisión, el timbrado, la descarga masiva y la consulta al SAT con e.firma/CIEC/SatGo viven **solo en central**.
+- **Ingresos / Egresos**: archivo SatGo publicado por central (espejo). OS no llama SatGo/Moffin.
+- **Facturación**: emitir facturas nuevas, solicitar desde recibos y **generar complementos de pago** con **Facturapi** ([docs](https://docs.facturapi.io)). No es el archivo SatGo.
 
-Este documento fija el contrato para no reabrir F1/F3 en OS hasta que Polo lo decida.
+## Dónde viven las llaves (Fase 1)
 
-## Qué hace central
+| Pieza | Dónde |
+|---|---|
+| `FACTURAPI_SECRET_KEY` / org | Preferible **central** (Edge Secrets) + tabla `facturapi_client_orgs` |
+| UX guiada | Kawiil OS (`/facturas`, `/facturas/nueva`, `/facturas/complemento`) |
+| Emisor | `PORTAL_EMISOR=facturapi` → `EmisorFacturapi` en `portal-api` |
+| Host central opcional | Edge `facturapi-api` (`invoice.create`, `payment.create`, `payment.summary`) |
 
-- Descarga y procesa CFDI (incl. Moffin / proveedores internos).
-- Obtiene constancia y opinión (ruta F5 documentada en `FRONTERA-API.md`).
-- Detecta alertas (EFOS, cancelaciones, 69-B) y notificaciones del SAT.
-- Publica a Kawiil OS únicamente payloads firmados (`invoice.publish`, `fiscal_summary.publish`, `sat_document.publish`, `declaration.publish`, `alert.publish`, `sat_notification.publish`).
+No poner e.firma/CIEC/SatGo ni llaves live de Facturapi en el build del navegador.
 
-## Qué hace Kawiil OS
+## Operaciones portal-api
 
-- Recibe, almacena con idempotencia y muestra en pantallas de solo lectura.
-- Calcula o muestra el estimado de IVA/retenciones con la regla PUE/PPD (`iva_basis`) publicada por central.
-- Indica calidad de datos (`complete` vs `metadata`).
-- **No** llama a Facturapi, PAC real, Moffin, SatGo ni al SAT.
+| Op | Rol |
+|---|---|
+| `facturas.validar` / `facturas.crear` | Ingreso CFDI 4.0 |
+| `facturas.complemento_pago` | CFDI tipo P (pago) |
+| `catalogos.buscar` | Suggest `ClaveProdServ` / unidad |
+| `plantillas.*` | Facturas y conceptos frecuentes + `internal_id` |
 
-## Emisión futura (fuera de alcance)
+Con `PORTAL_EMISOR=facturapi` y key configurada, la emisión de Facturación puede operar aunque `PORTAL_MIRROR_READ_ONLY=true` (el espejo SatGo sigue bloqueado para carga XML).
 
-Si más adelante Polo autoriza emisión desde OS:
+## Catálogos
 
-1. El adaptador PAC/Facturapi se implementa detrás de `PORTAL_EMISOR` en **central** o en un servicio dedicado, no como SDK embebido en el navegador.
-2. OS solo enviaría borradores firmados hacia central; el timbrado y las llaves CSD seguirían fuera del alcance del cliente.
-3. Hasta esa decisión, `facturas.crear` / `facturas.cargar` en fase espejo responden `403 espejo_solo_lectura`.
-
-## Secretos prohibidos en Kawiil OS
-
-No configurar en el proyecto OS: `MOFFIN_*`, tokens Facturapi/PAC de producción, e.firma, CIEC, SatGo. Los secretos direccionales HMAC (`CENTRAL_TO_OS_SIGNING_SECRET` / `OS_TO_CENTRAL_SIGNING_SECRET`) no sustituyen credenciales fiscales.
+Tabla OS `sat_catalog_entries` + RPC `portal_sat_catalog_suggest`. Semilla parcial; carga completa: `tools/portal/seed-sat-catalogs.md`.

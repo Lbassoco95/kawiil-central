@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { shouldUseDemoFixtures } from "../../portal/lib/dataMode";
+import { shouldHideDidacticFixtures, shouldUseDemoFixtures } from "../../portal/lib/dataMode";
 import { isPortalDemoMode } from "../../portal/lib/demo";
 import { partyName, rankParties, type MirrorCfdi } from "../../portal/lib/mirrorInvoiceMap";
 
@@ -14,6 +14,10 @@ describe("dataMode (fase 1 espejo)", () => {
     // En vitest la env de build no activa demo; la regla de producto es: fixtures ≠ demo banner.
     expect(isPortalDemoMode()).toBe(false);
     expect(shouldUseDemoFixtures()).toBe(false);
+  });
+
+  it("oculta didácticos por defecto en sesión autenticada", () => {
+    expect(shouldHideDidacticFixtures()).toBe(true);
   });
 
   it("usa fixtures solo en /diseno", () => {
@@ -64,12 +68,12 @@ describe("mirrorInvoiceMap con metadatos $0", () => {
   ];
 
   it("nombra contraparte por UUID si no hay RFC/nombre", () => {
-    expect(partyName(rows[0], "emitida")).toMatch(/^UUID AAAAAAAA/);
+    expect(partyName(rows[0], "emitida")).toMatch(/^Folio AAAAAAAA/);
   });
 
   it("rankea por conteo cuando todos los montos son 0", () => {
     const ranked = rankParties(rows, "emitida");
-    expect(ranked[0]?.name).toMatch(/^UUID /);
+    expect(ranked[0]?.name).toMatch(/^Folio /);
     expect(ranked[0]?.meta).toMatch(/monto no publicado/);
     expect(ranked.some((r) => /Costa Maya|Aldea del Sol/i.test(r.name))).toBe(false);
   });

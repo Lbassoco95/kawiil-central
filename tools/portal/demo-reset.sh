@@ -43,8 +43,14 @@ else
   psql_args+=(-d "$PGDATABASE")
 fi
 
-echo "==> Aplicando semilla exacta del espejo demo…"
+echo "==> Aplicando semilla del espejo demo (sin CFDI inventados)…"
 psql -X -v ON_ERROR_STOP=1 "${psql_args[@]}" -f "$SEED"
-echo "==> Verificando conteos canónicos…"
-psql -X -v ON_ERROR_STOP=1 "${psql_args[@]}" -f "$VERIFY"
-echo "OK: reinicio exacto del demo espejo aplicado."
+if [[ "${PORTAL_DEMO_SEED_DIDACTIC:-}" == "1" ]]; then
+  echo "==> Opt-in: sembrando CFDI didácticos (NO usar en prod Bassoco)…"
+  psql -X -v ON_ERROR_STOP=1 "${psql_args[@]}" -f "$ROOT/kawiil-os/demo/seed-didactic.sql"
+  echo "OK: seed + didactic aplicados. verify.sql (cero is_test) no aplica con didácticos."
+else
+  echo "==> Verificando conteos canónicos (cero is_test)…"
+  psql -X -v ON_ERROR_STOP=1 "${psql_args[@]}" -f "$VERIFY"
+  echo "OK: reinicio del demo espejo aplicado (cero CFDI inventados)."
+fi

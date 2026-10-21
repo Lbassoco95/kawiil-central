@@ -18,6 +18,8 @@ import Egresos from "./pages/Egresos";
 import Buzon from "./pages/Buzon";
 import Facturas from "./pages/Facturas";
 import FacturaDetalle from "./pages/FacturaDetalle";
+import EmitirWizard from "./pages/EmitirWizard";
+import SubirTicket from "./pages/SubirTicket";
 import Documentos from "./pages/Documentos";
 import Alertas from "./pages/Alertas";
 import Mensajes from "./pages/Mensajes";
@@ -97,6 +99,11 @@ function AppRoutes() {
         <Route path="buzon" element={<Buzon />} />
         <Route path="mensajes" element={<Mensajes />} />
         <Route path="facturacion" element={<Facturacion />} />
+        <Route path="facturas/emitir" element={<EmitirWizard />} />
+        <Route path="facturas/ticket" element={<SubirTicket />} />
+        <Route path="facturas/solicitar" element={<Navigate to="/diseno/facturas/ticket" replace />} />
+        <Route path="facturas/nueva" element={<Navigate to="/diseno/facturas/emitir?tipo=I" replace />} />
+        <Route path="facturas/complemento" element={<Navigate to="/diseno/facturas/emitir?tipo=P" replace />} />
         <Route path="origen" element={<Origen />} />
         <Route path="hallazgos" element={<Hallazgos />} />
       </Route>
@@ -107,12 +114,16 @@ function AppRoutes() {
         <Route path="egresos" element={<Egresos />} />
         <Route path="buzon" element={<Buzon />} />
         <Route path="mensajes" element={<Mensajes />} />
-        {/* Solicitudes demo solo en /diseno; en sesión real Facturación = listado CFDI */}
+        {/* Facturación = emitir wizard / subir ticket (Kawiil emite); SatGo en Ingresos/Egresos */}
         <Route path="facturacion" element={<Navigate to="/facturas" replace />} />
         <Route path="origen" element={<Origen />} />
         <Route path="hallazgos" element={<Hallazgos />} />
         <Route path="facturas" element={<Facturas />} />
-        <Route path="facturas/nueva" element={<Navigate to="/facturas" replace />} />
+        <Route path="facturas/emitir" element={<EmitirWizard />} />
+        <Route path="facturas/ticket" element={<SubirTicket />} />
+        <Route path="facturas/solicitar" element={<Navigate to="/facturas/ticket" replace />} />
+        <Route path="facturas/nueva" element={<Navigate to="/facturas/emitir?tipo=I" replace />} />
+        <Route path="facturas/complemento" element={<Navigate to="/facturas/emitir?tipo=P" replace />} />
         <Route path="facturas/:id" element={<FacturaDetalle />} />
         <Route path="documentos" element={<Documentos />} />
         <Route path="alertas" element={<Alertas />} />

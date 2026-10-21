@@ -22,7 +22,8 @@ describe("demo espejo (Corte 4)", () => {
     expect(dataset.company.tickets_enabled).toBe(false);
     expect(dataset.settings.demo_mode).toBe(true);
     expect(dataset.settings.emission_enabled).toBe(false);
-    expect(dataset.invoices).toHaveLength(4);
+    expect(dataset.invoices.length).toBeGreaterThanOrEqual(4);
+    expect(dataset.invoices.some((i: { payment_method?: string }) => i.payment_method === "PPD")).toBe(true);
     expect(dataset.invoices.every((i: { is_test: boolean }) => i.is_test === true)).toBe(true);
     expect(dataset.invoices.some((i: { detail_status: string }) => i.detail_status === "metadata")).toBe(true);
     expect(dataset.invoices.some((i: { direction: string }) => i.direction === "emitida")).toBe(true);
@@ -52,6 +53,11 @@ describe("demo espejo (Corte 4)", () => {
     expect(seed).toContain("'constancia'");
     expect(seed).toContain("'opinion_cumplimiento'");
     expect(seed).toContain("'declaracion'");
+    expect(seed).toContain("satgo_facfiel");
+    expect(seed).not.toMatch(/Constructora Aldea del Sol/);
+    expect(seed).not.toMatch(/Grupo Horizonte/);
+    const didactic = readFileSync(resolve(root, "kawiil-os/demo/seed-didactic.sql"), "utf8");
+    expect(didactic).toContain("Constructora Aldea del Sol");
   });
 
   it("el árbol kawiil-os (incl. demo) no embebe ref ni JWT de central", () => {

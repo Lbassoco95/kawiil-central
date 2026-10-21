@@ -39,8 +39,30 @@ export async function createTaskForAgreement(opts: {
   title: string;
   dueDate?: string | null;
   assignedTo?: string | null;
+  /** Nombre del responsable cuando NO es usuario de Kawiil (tercero/cliente). */
+  externalOwnerName?: string | null;
   description?: string | null;
 }): Promise<string> {
+  // Nunca dejamos la tarea huérfana: si el responsable no es usuario de Kawiil
+  // (o no se capturó), la tarea queda a nombre del responsable del proyecto;
+  // último fallback: quien confirmó el acuerdo.
+  let assignedTo = opts.assignedTo ?? null;
+  if (!assignedTo) {
+    const { data: proj } = await supabase
+      .from("projects")
+      .select("responsible_user_id")
+      .eq("id", opts.projectId)
+      .maybeSingle();
+    assignedTo = proj?.responsible_user_id ?? null;
+  }
+  if (!assignedTo) assignedTo = opts.actorUserId;
+
+  const external = opts.externalOwnerName?.trim();
+  const description =
+    opts.description ??
+    `Acuerdo de junta ${opts.meetingId}` +
+      (external ? ` — responsable externo: ${external}` : "");
+
   const { data, error } = await supabase
     .from("tasks")
     .insert({
@@ -49,8 +71,8 @@ export async function createTaskForAgreement(opts: {
       project_id: opts.projectId,
       mtg_meeting_id: opts.meetingId,
       title: opts.title,
-      description: opts.description ?? `Acuerdo de junta ${opts.meetingId}`,
-      assigned_to: opts.assignedTo ?? null,
+      description,
+      assigned_to: assignedTo,
       due_date: opts.dueDate ?? null,
       status: "pendiente",
       priority: "media",
@@ -84,6 +106,7 @@ export async function captureAgreement(input: CaptureAgreementInput): Promise<Mt
       title: input.text.slice(0, 200),
       dueDate: input.dueDate,
       assignedTo: input.ownerSide === "client" ? null : input.ownerUserId ?? null,
+      externalOwnerName: input.ownerName,
     });
   }
 
@@ -149,6 +172,7 @@ export async function assignProjectAndCreateTask(opts: {
     title: a.text.slice(0, 200),
     dueDate: a.due_date,
     assignedTo: a.owner_user_id,
+    externalOwnerName: a.owner_name,
   });
 
   const { data, error } = await mtgDb

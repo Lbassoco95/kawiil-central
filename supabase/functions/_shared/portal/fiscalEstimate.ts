@@ -95,3 +95,101 @@ export function ivaBasisLabel(basis: "cash_flow" | "issuance"): string {
     ? "Flujo de efectivo (PUE en emisión; PPD al cobro/pago)"
     : "Fecha de emisión (PUE y PPD al emitir)";
 }
+
+/**
+ * Base gravable / subtotal de un cobro PPD.
+ * El complemento publica `paid_amount` sobre el total con IVA; el KPI bruto
+ * aplica la proporción subtotal/total para no mezclar IVA en el ingreso.
+ */
+function brutoFromPaidAmount(invoice: FiscalInvoice, paidAmount: number): number {
+  const total = Math.max(0, Number(invoice.total ?? 0));
+  const subtotal = Math.max(0, Number(invoice.subtotal ?? 0));
+  if (paidAmount <= 0) return 0;
+  if (total > 0 && subtotal >= 0) return paidAmount * (subtotal / total);
+  // Sin total publicado no se puede separar IVA → no inventa bruto.
+  return 0;
+}
+
+/**
+ * Ingreso bruto del periodo (base gravable / subtotal, sin IVA):
+ * - PUE → `subtotal` si la emisión cae en el periodo.
+ * - PPD → porción bruta de complementos con `paidAt` en el periodo
+ *   (`paid_amount × subtotal/total`).
+ * No suma PPD sin complemento ni CFDI sin método publicado.
+ * El IVA va al cuadro aparte (trasladado / acreditable / estimado).
+ */
+export function calculatePeriodIncome(
+  invoices: FiscalInvoice[],
+  start: string,
+  end: string,
+): {
+  ingreso_total: number;
+  ingreso_bruto: number;
+  pue_count: number;
+  ppd_complement_count: number;
+  pending_cobranza: number;
+  basis: "subtotal";
+} {
+  let ingreso = 0;
+  let pueCount = 0;
+  let ppdComplementCount = 0;
+  let pendingCobranza = 0;
+  for (const invoice of invoices) {
+    if (invoice.direction !== "emitida") continue;
+    if (invoice.paymentMethod === "PUE") {
+      if (inPeriod(invoice.issuedAt.slice(0, 10), start, end)) {
+        ingreso += Math.max(0, Number(invoice.subtotal ?? 0));
+        pueCount += 1;
+      }
+      continue;
+    }
+    if (invoice.paymentMethod === "PPD") {
+      let periodBruto = 0;
+      for (const payment of invoice.payments ?? []) {
+        if (inPeriod(payment.paidAt.slice(0, 10), start, end)) {
+          periodBruto += brutoFromPaidAmount(invoice, payment.amount);
+        }
+      }
+      if (periodBruto > 0) {
+        ingreso += periodBruto;
+        ppdComplementCount += 1;
+      }
+      const lifetime = (invoice.payments ?? []).reduce((s, p) => s + p.amount, 0);
+      if (lifetime <= 0 && inPeriod(invoice.issuedAt.slice(0, 10), start, end) && invoice.total > 0) {
+        pendingCobranza += 1;
+      }
+    }
+  }
+  const bruto = round(ingreso);
+  return {
+    ingreso_total: bruto,
+    ingreso_bruto: bruto,
+    pue_count: pueCount,
+    ppd_complement_count: ppdComplementCount,
+    pending_cobranza: pendingCobranza,
+    basis: "subtotal",
+  };
+}
+
+/**
+ * Gasto subtotal del periodo (CFDI recibidas, base gravable / sin IVA).
+ * Solo tipo ingreso (I); NC/complementos no suman al KPI de egreso.
+ */
+export function calculatePeriodExpense(
+  invoices: FiscalInvoice[],
+  start: string,
+  end: string,
+): { gasto_total: number; gasto_subtotal: number; count: number; basis: "subtotal" } {
+  let gasto = 0;
+  let count = 0;
+  for (const invoice of invoices) {
+    if (invoice.direction !== "recibida") continue;
+    if (!inPeriod(invoice.issuedAt.slice(0, 10), start, end)) continue;
+    const sub = Math.max(0, Number(invoice.subtotal ?? 0));
+    if (sub <= 0 && Number(invoice.total ?? 0) <= 0) continue;
+    gasto += sub;
+    count += 1;
+  }
+  const subtotal = round(gasto);
+  return { gasto_total: subtotal, gasto_subtotal: subtotal, count, basis: "subtotal" };
+}

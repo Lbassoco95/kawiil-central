@@ -7,6 +7,7 @@ export {
   mirrorSourceNote,
   partyName,
   rankParties,
+  sumSubtotals,
   sumTotals,
   toInvoiceRows,
 } from "./mirrorInvoiceMap";

@@ -12,3 +12,13 @@ import { isDesignPreview } from "./designPreview";
 export function shouldUseDemoFixtures(): boolean {
   return isDesignPreview();
 }
+
+/**
+ * Sesión autenticada: nunca mostrar fixtures `is_test` / «Mostrar ejemplos aparte».
+ * Default: ocultos. Opt-out solo con `VITE_PORTAL_HIDE_DIDACTIC=false`.
+ */
+export function shouldHideDidacticFixtures(): boolean {
+  const raw = String(import.meta.env.VITE_PORTAL_HIDE_DIDACTIC ?? "").trim().toLowerCase();
+  if (raw === "false" || raw === "0" || raw === "no") return false;
+  return true;
+}

@@ -6,6 +6,7 @@ import { callApi } from "../lib/api";
 import { clientFlagReason } from "../lib/clientFlags";
 import { fmtDate, fmtMoney, MONTHS, monthLabel } from "../lib/format";
 import { Empty, ManagementLegend, Notice, PageTitle, StatusPill } from "../components/ui";
+import { ivaAudienceNote, ivaEstimateExplain } from "../lib/fiscalAudienceCopy";
 
 interface Dash {
   gasto_total: number; gasto_mes_anterior: number; ingreso_total: number; ingreso_mes_anterior: number;
@@ -141,9 +142,10 @@ export default function Inicio() {
             <div aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-br from-rose-500/5 to-transparent" />
             <div className="relative">
               <h2 id="t-gasto" className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Gasto del mes
+                Gasto subtotal del mes
               </h2>
               <p className="kw-mono mt-1 text-2xl font-bold tracking-tight">{fmtMoney(d.gasto_total)}</p>
+              <p className="text-xs text-muted-foreground">Base gravable · IVA aparte</p>
               <Delta now={d.gasto_total} prev={d.gasto_mes_anterior} />
             </div>
           </section>
@@ -151,11 +153,11 @@ export default function Inicio() {
             <div aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-br from-sky-500/5 to-transparent" />
             <div className="relative">
               <h2 id="t-ingreso" className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Ingresos del mes
+                Ingreso bruto del mes
               </h2>
               <p className="kw-mono mt-1 text-2xl font-bold tracking-tight">{fmtMoney(d.ingreso_total)}</p>
               <p className="text-xs text-muted-foreground">
-                Ingresos menos gastos: <span className="kw-mono">{fmtMoney(d.ingreso_total - d.gasto_total)}</span>
+                Neto (bruto − gasto): <span className="kw-mono">{fmtMoney(d.ingreso_total - d.gasto_total)}</span>
               </p>
             </div>
           </section>
@@ -163,14 +165,16 @@ export default function Inicio() {
             <div aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-br from-amber-500/5 to-transparent" />
             <div className="relative">
               <h2 id="t-iva" className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                IVA estimado
+                {d.iva_estimado > 0 ? "IVA por pagar (est.)" : "IVA a favor (est.)"}
               </h2>
               <p className="kw-mono mt-1 text-2xl font-bold tracking-tight">{fmtMoney(Math.abs(d.iva_estimado))}</p>
-              <StatusPill tone={d.iva_estimado > 0 ? "warn" : "ok"}>{d.iva_estimado > 0 ? "a cargo" : "a favor"}</StatusPill>
+              <StatusPill tone={d.iva_estimado > 0 ? "warn" : "ok"}>{d.iva_estimado > 0 ? "por pagar" : "a favor"}</StatusPill>
               <p className="mt-1 text-xs text-muted-foreground">
-                Trasladado {fmtMoney(d.iva.trasladado)} − acreditable {fmtMoney(d.iva.acreditable)}.
+                Trasladado (cobrado) {fmtMoney(d.iva.trasladado)} − acreditable (en pagos) {fmtMoney(d.iva.acreditable)}.
                 {d.iva.facturas_sin_desglose > 0 && ` ${d.iva.facturas_sin_desglose} factura(s) sin desglose de IVA no cuentan.`}
               </p>
+              <p className="mt-1 text-xs text-muted-foreground">{ivaEstimateExplain(active?.origin)}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{ivaAudienceNote(active?.origin)}</p>
             </div>
           </section>
 

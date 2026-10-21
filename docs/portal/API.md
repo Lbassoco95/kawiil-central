@@ -19,6 +19,7 @@ Respuesta: `{ "version": "v1", "data": … }`. Error: `{ "error": "<código>", "
 | `v1/cuenta.recuperar` | portal-api (pública) | `{ email, captcha_token }` | Turnstile + límite. Respuesta genérica. |
 | `v1/cuenta.reenviar_confirmacion` | portal-api (pública) | `{ email, captcha_token }` | Turnstile + límite. Respuesta genérica. |
 | `v1/diagnostico.cerco` | portal-api (pública) | `{}` | Booleanos del cerco de rutas y si el captcha está configurado. |
+| `v1/mercado.tipo_cambio` | portal-api (pública) | `{}` | Tipo de cambio Banxico para el header. Lee `portal_market_fx` si central ya publicó (origen: Edge `banxico-fx` SF60653/SF43718). Sin fila → `{ status: "pending_publish", valor: null, fetch_path }` — **no inventa cifra**. |
 | `v1/sesion.actual` | portal-api | `{}` | Cuenta, nivel, empresas, papel, módulos y textos pendientes. |
 | `v1/legal.aceptar` | portal-api | `{ kind, client_id?, user_agent? }` | Acepta la versión vigente y deja bitácora. |
 | `v1/sesion.registrar_acceso` | portal-api | `{}` | Registra el acceso. |
@@ -30,7 +31,8 @@ Respuesta: `{ "version": "v1", "data": … }`. Error: `{ "error": "<código>", "
 ### Facturas (fase espejo)
 | Operación | Puerta | Cuerpo | Notas |
 |---|---|---|---|
-| `v1/facturas.listar` | portal-api | `{ client_id, direction, filters? }` | Espejo de emitidas/recibidas publicadas por central. |
+| `v1/facturas.listar` | portal-api | `{ client_id, direction, filters? }` | CFDI publicados (UI: Ingresos=emitidas, Egresos=recibidas). |
+| `v1/facturas.periodo` | portal-api | `{ client_id, direction, period_kind, desde, hasta, solicitar? }` | Busca CFDI del periodo en OS; si no hay y `solicitar`, persiste `portal_cfdi_period_requests`. |
 | `v1/facturas.detalle` | portal-api | `{ client_id, cfdi_id }` | Conceptos, impuestos, pagos PPD e indicador de calidad. |
 | `v1/tablero.consultar` | portal-api | `{ client_id, year, month }` | IVA, retenciones, regla PUE/PPD (`iva_basis`), calidad de datos. Prioriza `portal_fiscal_summaries` si central publicó el periodo. |
 | `v1/alertas.listar` | portal-api | `{ client_id }` | EFOS, cancelaciones, 69-B. |

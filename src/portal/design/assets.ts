@@ -9,11 +9,22 @@ export const POSE_SRC: Record<Pose, string> = {
   pendientes: "/portal/kawiilito/kawiilito-libreta.png",
 };
 
+/** Pack identidad Kawiil OS v1 → public/brand/kawiil-os/ */
+const BRAND = "/brand/kawiil-os";
+
 export const LOGO = {
-  markBlue: "/portal/logo/kawiil-logo-blue.png",
-  markWhite: "/portal/logo/kawiil-logo-white.png",
-  wordBlue: "/portal/logo/kawiil-wordmark-blue.png",
-  wordWhite: "/portal/logo/kawiil-wordmark-white.png",
+  horizontalBlue: `${BRAND}/logo-horizontal-blue.svg`,
+  horizontalWhite: `${BRAND}/logo-horizontal-white.svg`,
+  horizontalNavy: `${BRAND}/logo-horizontal-navy.svg`,
+  symbolBlue: `${BRAND}/symbol-blue.svg`,
+  symbolWhite: `${BRAND}/symbol-white.svg`,
+  symbolNavy: `${BRAND}/symbol-navy.svg`,
+  wordBlue: `${BRAND}/wordmark-blue.svg`,
+  wordWhite: `${BRAND}/wordmark-white.svg`,
+  wordNavy: `${BRAND}/wordmark-navy.svg`,
+  /** Compat: mark = isotipo */
+  markBlue: `${BRAND}/symbol-blue.svg`,
+  markWhite: `${BRAND}/symbol-white.svg`,
 } as const;
 
 export function money(n: number | null | undefined, cents = false): string {

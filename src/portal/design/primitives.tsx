@@ -526,6 +526,18 @@ export function ProposalBadge({
   note?: string;
 }) {
   if (!account && !status && !note) return <span className="kw-small">—</span>;
+  const detailPending = account === "Detalle pendiente";
+  // «Detalle pendiente» = metadatos SatGo; «Por revisar» = cobranza de negocio (no mezclar).
+  if (detailPending) {
+    return (
+      <span className="kw-prop">
+        <span className="kw-prop__acct">{account}</span>
+        <span className="kw-prop__state" style={{ color: "var(--caution-text)" }}>
+          Falta monto/método publicados
+        </span>
+      </span>
+    );
+  }
   const p = PROPOSAL[status || (note ? "cliente" : "sugerida")];
   return (
     <span className="kw-prop">
@@ -578,7 +590,9 @@ export function RankedList({
                 {it.name}
               </span>
               <span className="kw-figure" style={{ fontSize: 16 }}>
-                {money(it.amount)}
+                {Number(it.amount) <= 0.009 && it.meta?.includes("monto no publicado")
+                  ? "—"
+                  : money(it.amount)}
               </span>
             </div>
             <div className="kw-rank__bar">
@@ -638,7 +652,11 @@ export function InvoiceTable({
                   {r.rfc ? <span className="kw-inv__rfc kw-mono">{r.rfc}</span> : null}
                 </td>
                 <td className="kw-mono">{r.folio}</td>
-                <td className="kw-inv__total">{money(r.total, true)}</td>
+                <td className="kw-inv__total">
+                  {r.proposal?.account === "Detalle pendiente" && Number(r.total) <= 0.009
+                    ? "Detalle pendiente"
+                    : money(r.total, true)}
+                </td>
                 <td>
                   <span className="kw-status" style={{ color: r.status === "vigente" ? "var(--positive-text)" : "var(--ink-muted)" }}>
                     {r.status === "vigente" ? "Vigente" : "Cancelado"}
@@ -657,7 +675,11 @@ export function InvoiceTable({
               <p className="kw-caption">{r.date}</p>
               <p className="kw-title" style={{ fontSize: 16, marginTop: 4 }}>{r.party}</p>
               <p className="kw-mono kw-small" style={{ marginTop: 4 }}>{r.folio}</p>
-              <p className="kw-figure" style={{ fontSize: 22, marginTop: 8 }}>{money(r.total, true)}</p>
+              <p className="kw-figure" style={{ fontSize: 22, marginTop: 8 }}>
+                {r.proposal?.account === "Detalle pendiente" && Number(r.total) <= 0.009
+                  ? "Detalle pendiente"
+                  : money(r.total, true)}
+              </p>
               <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 8 }}>
                 <span className="kw-status" style={{ color: r.status === "vigente" ? "var(--positive-text)" : "var(--ink-muted)" }}>
                   {r.status === "vigente" ? "Vigente" : "Cancelado"}
@@ -1025,6 +1047,11 @@ export function TeamChat({
   );
 }
 
+/**
+ * Pedido manual de factura (concepto distinto a «subir ticket»).
+ * No se usa en el hub Facturación: tickets = emisión por Kawiil vía SubirTicket.
+ * Reservado si más adelante vive en otro espacio (p. ej. pedir a un proveedor).
+ */
 export function InvoiceRequestForm({
   onSubmitted,
 }: {
@@ -1115,17 +1142,17 @@ export function UploadBox({
       tone: "ok",
       text:
         source === "foto"
-          ? `Foto lista: ${next.map((f) => f.name).join(", ")}. Estatus: Solicitada → En proceso.`
-          : `Recibo(s) agregados desde ${source === "galeria" ? "galería" : "archivo"}.`,
+          ? `Foto lista: ${next.map((f) => f.name).join(", ")}. Estatus: Subido → En revisión.`
+          : `Ticket(s) agregados desde ${source === "galeria" ? "galería" : "archivo"} para que emitamos tu factura.`,
     });
   };
 
   return (
     <GlassPanel padded={false} className="kw-form" as="section">
       <div>
-        <h3 className="kw-title">Subir recibos / tickets</h3>
+        <h3 className="kw-title">Subir ticket para que emitamos tu factura</h3>
         <p className="kw-small" style={{ margin: "2px 0 0" }}>
-          Toma una foto, elige de la galería o sube un archivo. En el demo se guarda en este dispositivo.
+          Toma una foto, elige de la galería o sube un archivo. Kawiil revisa el ticket y emite tu factura. En el demo se guarda en este dispositivo.
         </p>
       </div>
       <input
@@ -1217,7 +1244,7 @@ export function RequestTracker({
   onFilterChange?: (f: RequestFilter) => void;
 }) {
   const stepsFor = (kind: RequestItem["kind"]) =>
-    kind === "recibo" ? ["Subido", "En revisión", "Registrado"] : ["Solicitada", "En proceso", "Emitida"];
+    kind === "recibo" ? ["Subido", "En revisión", "Emitida"] : ["Solicitada", "En proceso", "Emitida"];
   const counts = {
     todas: items.length,
     pendiente: items.filter((i) => filterBucket(i.step) === "pendiente").length,
