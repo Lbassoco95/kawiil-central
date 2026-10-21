@@ -530,9 +530,10 @@ const Tareas = () => {
 
   return (
     <AppLayout>
-      <div className="kwv24 space-y-6 animate-fade-in">
+      <div className="kwv24 zen-page zen-dash space-y-6 animate-fade-in">
         <PageHeader
           variant="hero"
+          className="zen-hero zen-glass"
           icon={<CheckSquare />}
           breadcrumb={["Kawiil OS", "Trabajo", "Tareas"]}
           iconAccent="linear-gradient(135deg, hsl(210 95% 55%), hsl(var(--primary)))"

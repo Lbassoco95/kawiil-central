@@ -181,3 +181,63 @@
 .zen-dash [role="tablist"] button[data-state="active"] { border-color: hsl(var(--zen-info)); }
 
 .zen-dash h3.uppercase { letter-spacing: 0.08em; font-weight: 500; }
+
+/* ---------- Páginas con el sistema v24 (Tareas, ...): toolbar, tabla, tarjetas de IA ----------
+   Acotado a .zen-page para no tocar páginas v24 que aún no pasan a zen. */
+.zen-page .toolbar,
+.zen-page .mtable,
+.zen-page .ai-hero-card {
+  background: hsl(var(--zen-bg) / 0.6);
+  border: 1px solid hsl(0 0% 100% / 0.65);
+  box-shadow: 0 10px 40px -18px hsl(30 40% 30% / 0.22), inset 0 1px 0 hsl(0 0% 100% / 0.7);
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+}
+[data-theme="dark"] .zen-page .toolbar,
+[data-theme="dark"] .zen-page .mtable,
+[data-theme="dark"] .zen-page .ai-hero-card {
+  border-color: hsl(0 0% 100% / 0.08);
+  box-shadow: 0 10px 40px -18px hsl(0 0% 0% / 0.5), inset 0 1px 0 hsl(0 0% 100% / 0.06);
+}
+.zen-page .toolbar { border-radius: 1.5rem; }
+.zen-page .mtable { border-radius: 1.5rem; }
+.zen-page .ai-hero-card { border-radius: 1.5rem; }
+
+.zen-page .mtable .thead {
+  background: hsl(var(--zen-fg) / 0.03);
+  border-bottom-color: hsl(var(--zen-fg) / 0.08);
+  font-weight: 500;
+  letter-spacing: 0.1em;
+}
+.zen-page .mtable .trow {
+  border-bottom-color: hsl(var(--zen-fg) / 0.06);
+  transition: background 0.4s ease;
+}
+.zen-page .mtable .trow:hover { background: hsl(var(--zen-info) / 0.06); }
+.zen-page .mtable .trow-group.is-open {
+  background: hsl(var(--zen-info) / 0.07);
+  box-shadow: inset 3px 0 0 hsl(var(--zen-info) / 0.45);
+}
+
+.zen-page .pill-group { border-radius: 9999px; background: hsl(var(--zen-fg) / 0.05); }
+.zen-page .pill-group button { border-radius: 9999px; transition: background 0.4s ease, color 0.4s ease; }
+.zen-page .pill-group button.active {
+  background: hsl(var(--zen-bg));
+  box-shadow: 0 4px 12px -6px hsl(30 40% 30% / 0.3);
+}
+.zen-page .toolbar .search input { border-radius: 9999px; }
+
+.zen-page .cell-date.overdue { color: hsl(var(--zen-error)); }
+.zen-page .cell-date.soon { color: hsl(var(--zen-warning)); }
+.zen-page .progress-fill { background: linear-gradient(90deg, hsl(var(--zen-info)), hsl(var(--zen-success))); }
+.zen-page .s-critico { background: hsl(var(--zen-error)); }
+.zen-page .s-pausa { background: hsl(var(--zen-warning)); }
+.zen-page .s-complet { background: hsl(var(--zen-success)); }
+
+/* Tablero kanban */
+.zen-page .grid > div[class*="rounded-xl"][class*="bg-background/40"] {
+  border-radius: 1.5rem;
+  background: hsl(var(--zen-bg) / 0.45);
+  border-color: hsl(0 0% 100% / 0.6);
+  backdrop-filter: blur(10px);
+}
