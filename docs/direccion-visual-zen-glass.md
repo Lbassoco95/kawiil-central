@@ -18,6 +18,31 @@ Aplica a todo lo que se revisa desde las notificaciones y a lo que venga despué
 - Paleta de estados: éxito = verde salvia, info = azul cielo, aviso = durazno, error = rosa suave (ícono: palomita / destello / viento / hoja).
 
 ## Pendiente / siguiente
-- Página `Notificaciones` (`src/pages/Notificaciones.tsx`) con glass y agrupación calmada.
 - Extender los tokens `--zen-*` al resto de superficies (paneles, diálogos, tarjetas).
-- Catálogo de textos suaves para los mensajes de toast más comunes.
+
+## Catálogo de frases suaves
+
+Implementado en `src/lib/zenCopy.ts` (con pruebas) e instalado una sola vez en `src/components/ui/sonner.tsx`:
+envuelve `toast.success/error/warning/info`, así que el tono aplica a toda la app sin editar cada llamada.
+El detalle técnico no se pierde: pasa a la descripción del aviso.
+
+| Original | Se muestra |
+|---|---|
+| `Error al subir archivo: <detalle>` | **No pudimos subir archivo** · `<detalle>` · Inténtalo de nuevo en un momento. |
+| `No se pudo guardar: <detalle>` | **No pudimos guardar** · `<detalle>` · Inténtalo de nuevo en un momento. |
+| `Error: <detalle>` | **Algo no salió como esperábamos** · `<detalle>` |
+| `Escribe el acuerdo` / `Selecciona un PDF` | **Cuando puedas, escribe el acuerdo** |
+| `Guardado` | Guardado con calma |
+| `Cambios guardados` | Tus cambios ya están a salvo |
+| `Copiado al portapapeles` | Copiado, listo para pegar |
+| `Tarea completada` | Tarea completada, bien hecho |
+| `Correo enviado` | Correo enviado, ya va en camino |
+
+Reglas para escribir avisos nuevos:
+- Decir qué pasó en pocas palabras y sin culpar al usuario ("No pudimos…", no "Error al…").
+- Un error siempre sugiere el siguiente paso (reintentar, revisar un dato).
+- Validaciones como petición amable ("Cuando puedas, …"), no como orden.
+- Sin mayúsculas sostenidas, sin signos de exclamación en errores, sin tecnicismos en el título.
+- Para frases nuevas frecuentes, agregarlas a `SUCCESS_PHRASES` en `zenCopy.ts`.
+- Los avisos con JSX o con `description` propia no se reescriben.
+- Los avisos de `useToast` (Radix, ~5 archivos) aún no pasan por el catálogo.
