@@ -21,6 +21,8 @@ Aplica a todo lo que se revisa desde las notificaciones y a lo que venga despué
 
 - Tareas (`src/pages/Tareas.tsx`): wrapper `kwv24 zen-page zen-dash`. Las reglas `.zen-page .toolbar/.mtable/.pill-group/.ai-hero-card` de `zen-glass.css` reestilizan el sistema v24 (barra de filtros, tabla, píldoras, tarjetas de IA, kanban) solo en páginas con `zen-page`; Proyectos (`src/pages/Proyectos.tsx`) usa el mismo wrapper; otras páginas v24 siguen igual hasta que se envuelvan igual.
 
+- Diálogos: se activan con `zen-dialog zen-dash` en `<DialogContent>` (superficie cálida translúcida, esquinas redondeadas, botón de cierre suave y overlay desenfocado automático vía `src/components/ui/dialog.tsx`). Ya aplicado a: detalle de tarea, formulario de tarea y "Desde minuta". El resto de diálogos de la app no cambia hasta que se les agregue la clase.
+
 ## Pendiente / siguiente
 - Extender los tokens `--zen-*` al resto de páginas (Dashboard ya hecho), diálogos y tarjetas.
 

@@ -720,7 +720,7 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
 
   return (
     <Dialog open={!!taskId} onOpenChange={() => onClose()}>
-      <DialogContent className="kwv24 sm:max-w-[min(1180px,96vw)] w-full h-[92vh] sm:h-[92vh] sm:max-h-[92vh] gap-0 p-0 sm:p-0 pt-0 sm:pt-0 overflow-hidden flex flex-col">
+      <DialogContent className="kwv24 zen-dialog zen-dash sm:max-w-[min(1180px,96vw)] w-full h-[92vh] sm:h-[92vh] sm:max-h-[92vh] gap-0 p-0 sm:p-0 pt-0 sm:pt-0 overflow-hidden flex flex-col">
         <DialogTitle className="sr-only">Detalle de tarea</DialogTitle>
         {isLoading ? (
           <div className="py-12 text-center text-muted-foreground">Cargando...</div>

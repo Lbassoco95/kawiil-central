@@ -263,7 +263,7 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="zen-dialog zen-dash sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Nueva tarea — formulario completo</DialogTitle>
         </DialogHeader>
