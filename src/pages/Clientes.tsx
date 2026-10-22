@@ -369,9 +369,10 @@ const Clientes = () => {
 
   return (
     <AppLayout>
-      <div className="space-y-6 animate-fade-in">
+      <div className="zen-page zen-dash space-y-6 animate-fade-in">
         <PageHeader
           variant="hero"
+          className="zen-hero zen-glass"
           breadcrumb={["Kawiil OS", "Trabajo", "Clientes"]}
           icon={<Users />}
           iconAccent="linear-gradient(135deg, hsl(340 80% 55%), hsl(15 85% 60%))"

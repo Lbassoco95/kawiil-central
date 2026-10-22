@@ -25,6 +25,8 @@ Aplica a todo lo que se revisa desde las notificaciones y a lo que venga despué
 
 - Comunicación (Slack): clase `zen-slack` en `.slack-layout` (`src/components/slack/v2/SlackView.tsx`). Los paneles laterales dejan de ser oscuros: se redefinen las variables `--sidebar-*` en claro cálido (y oscuro cálido en modo oscuro), el canal activo es una píldora azul tenue, los mensajes y el compositor van en vidrio y el panel de contexto en tarjetas de vidrio. Colores fijos en blanco corregidos en las reglas `.zen-slack`.
 
+- Clientes (`src/pages/Clientes.tsx`): wrapper `zen-page zen-dash` + `zen-hero zen-glass` en el encabezado; hereda las reglas de `surface-toolbar` y `page-list-card`.
+
 ## Pendiente / siguiente
 - Extender los tokens `--zen-*` al resto de páginas (Dashboard ya hecho), diálogos y tarjetas.
 
