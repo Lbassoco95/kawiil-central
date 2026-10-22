@@ -4381,6 +4381,59 @@ export type Database = {
           },
         ]
       }
+      project_lawsuit_date_history: {
+        Row: {
+          changed_at: string
+          changed_by: string | null
+          id: string
+          kind: string
+          lawsuit_id: string
+          new_date: string | null
+          new_note: string | null
+          new_time: string | null
+          old_date: string | null
+          old_note: string | null
+          old_time: string | null
+          organization_id: string
+        }
+        Insert: {
+          changed_at?: string
+          changed_by?: string | null
+          id?: string
+          kind: string
+          lawsuit_id: string
+          new_date?: string | null
+          new_note?: string | null
+          new_time?: string | null
+          old_date?: string | null
+          old_note?: string | null
+          old_time?: string | null
+          organization_id: string
+        }
+        Update: {
+          changed_at?: string
+          changed_by?: string | null
+          id?: string
+          kind?: string
+          lawsuit_id?: string
+          new_date?: string | null
+          new_note?: string | null
+          new_time?: string | null
+          old_date?: string | null
+          old_note?: string | null
+          old_time?: string | null
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_lawsuit_date_history_lawsuit_id_fkey"
+            columns: ["lawsuit_id"]
+            isOneToOne: false
+            referencedRelation: "project_lawsuits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_lawsuits: {
         Row: {
           ai_memory: string | null
@@ -4394,7 +4447,11 @@ export type Database = {
           created_by: string | null
           current_stage: string | null
           defendant: string | null
+          deadline_event_id: string | null
+          deadline_event_owner: string | null
           filed_date: string | null
+          hearing_event_id: string | null
+          hearing_event_owner: string | null
           id: string
           lawsuit_type: string | null
           lead_attorney: string | null
@@ -4424,7 +4481,11 @@ export type Database = {
           created_by?: string | null
           current_stage?: string | null
           defendant?: string | null
+          deadline_event_id?: string | null
+          deadline_event_owner?: string | null
           filed_date?: string | null
+          hearing_event_id?: string | null
+          hearing_event_owner?: string | null
           id?: string
           lawsuit_type?: string | null
           lead_attorney?: string | null
@@ -4454,7 +4515,11 @@ export type Database = {
           created_by?: string | null
           current_stage?: string | null
           defendant?: string | null
+          deadline_event_id?: string | null
+          deadline_event_owner?: string | null
           filed_date?: string | null
+          hearing_event_id?: string | null
+          hearing_event_owner?: string | null
           id?: string
           lawsuit_type?: string | null
           lead_attorney?: string | null
