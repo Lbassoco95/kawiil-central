@@ -23,6 +23,8 @@ Aplica a todo lo que se revisa desde las notificaciones y a lo que venga despué
 
 - Diálogos: se activan con `zen-dialog zen-dash` en `<DialogContent>` (superficie cálida translúcida, esquinas redondeadas, botón de cierre suave y overlay desenfocado automático vía `src/components/ui/dialog.tsx`). Ya aplicado a: detalle de tarea, formulario de tarea y "Desde minuta". El resto de diálogos de la app no cambia hasta que se les agregue la clase.
 
+- Comunicación (Slack): clase `zen-slack` en `.slack-layout` (`src/components/slack/v2/SlackView.tsx`). Los paneles laterales dejan de ser oscuros: se redefinen las variables `--sidebar-*` en claro cálido (y oscuro cálido en modo oscuro), el canal activo es una píldora azul tenue, los mensajes y el compositor van en vidrio y el panel de contexto en tarjetas de vidrio. Colores fijos en blanco corregidos en las reglas `.zen-slack`.
+
 ## Pendiente / siguiente
 - Extender los tokens `--zen-*` al resto de páginas (Dashboard ya hecho), diálogos y tarjetas.
 
