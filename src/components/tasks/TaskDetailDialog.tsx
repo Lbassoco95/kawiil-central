@@ -25,7 +25,7 @@ import {
   MessageSquare, Paperclip, Link, Calendar, User, Clock,
   ExternalLink, Send, Plus, X, UserPlus, FolderOpen, Pencil, Camera,
   Download, Eye, Link2, Loader2, Play, Pause, Timer, UserCheck, ChevronDown, ListChecks, Settings2, Trash2, GitBranch,
-  ChevronRight, Activity as ActivityIcon, CheckCircle2, FileText, RefreshCw,
+  ChevronRight, Activity as ActivityIcon, FileText, RefreshCw,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -455,10 +455,9 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
 
   const knownNames = (orgProfiles ?? []).map((p) => p.full_name).filter(Boolean);
 
-  // El estado se aplica de inmediato (no se difiere con "Guardar") para que el
-  // selector de estado y el botón "Completar" nunca queden en estados
-  // contradictorios. El hook `useUpdateTask` sincroniza `completed_at`/`started_at`
-  // según el estado, de modo que completar y cambiar el estado son la misma acción.
+  // El estado se aplica de inmediato (no se difiere con "Guardar"). El selector
+  // es la única vía para completar: `useUpdateTask` sincroniza `completed_at`/`started_at`
+  // según el estado.
   const handleStatusChange = (status: string) => {
     if (status === currentStatus) return;
     // Descarta cualquier cambio de estado en el buffer para que no se reaplique al Guardar.
@@ -798,17 +797,6 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
                     ))}
                   </SelectContent>
                 </Select>
-                {currentStatus !== "completada" && (
-                  <Button
-                    size="sm"
-                    className="h-8 gap-1 text-xs"
-                    onClick={() => handleStatusChange("completada")}
-                    disabled={updateTask.isPending}
-                    title="Marcar como completada"
-                  >
-                    <CheckCircle2 className="h-3.5 w-3.5" /> Completar
-                  </Button>
-                )}
                 {hasPendingChanges && (
                   <Button size="sm" onClick={handleSaveChanges} disabled={updateTask.isPending} className="h-8 text-xs gap-1">
                     {updateTask.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
