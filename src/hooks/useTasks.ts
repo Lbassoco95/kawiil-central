@@ -12,6 +12,9 @@ import { calculateNextOccurrenceDate, formatRecurrenceDate } from "@/lib/recurre
 import { assertCanRenameTask } from "@/lib/renamePermission";
 import { commentPlainText } from "@/lib/commentContent";
 
+/** Listas del briefing del día que deben reflejar cambios hechos al abrir una tarea. */
+const BRIEFING_TASK_QUERY_KEYS = ["briefing-tasks", "briefing-due-list", "briefing-completed-today", "personal-completed-today"];
+
 /** Bloquea completar una tarea padre si el checklist tiene ítems abiertos o subtareas enlazadas no cerradas. */
 async function assertCanCompleteParentTask(taskId: string) {
   const { data: row, error } = await supabase
@@ -393,6 +396,7 @@ export function useCreateTask() {
       queryClient.invalidateQueries({ queryKey: ["personal-rendimiento-task-log"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-all-tasks"] });
       queryClient.invalidateQueries({ queryKey: ["briefing-team-deadlines"] });
+      for (const key of BRIEFING_TASK_QUERY_KEYS) queryClient.invalidateQueries({ queryKey: [key] });
       if (variables.lawsuit_id) {
         queryClient.invalidateQueries({ queryKey: ["lawsuit-tasks", variables.lawsuit_id] });
       }
@@ -694,6 +698,7 @@ export function useUpdateTask() {
       queryClient.invalidateQueries({ queryKey: ["personal-rendimiento-task-log"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-all-tasks"] });
       queryClient.invalidateQueries({ queryKey: ["briefing-team-deadlines"] });
+      for (const key of BRIEFING_TASK_QUERY_KEYS) queryClient.invalidateQueries({ queryKey: [key] });
       if (vars.title) {
         queryClient.invalidateQueries({ queryKey: ["linked-task-titles"] });
         queryClient.invalidateQueries({ queryKey: ["accounting-periods"] });
@@ -763,6 +768,7 @@ export function useDeleteTask() {
       queryClient.invalidateQueries({ queryKey: ["personal-rendimiento-task-log"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-all-tasks"] });
       queryClient.invalidateQueries({ queryKey: ["briefing-team-deadlines"] });
+      for (const key of BRIEFING_TASK_QUERY_KEYS) queryClient.invalidateQueries({ queryKey: [key] });
       toast.success("Tarea eliminada");
     },
     onError: (err: Error) => toast.error("Error al eliminar tarea: " + err.message),
