@@ -100,6 +100,7 @@ export function DailyBriefing({
   // Lista "Para hoy": consulta dedicada porque `briefing-tasks` (limit 15 por
   // fecha asc) se satura de vencidas antiguas y nunca trae las próximas por
   // vencer. Aquí traemos todo lo que vence hasta +7 días (incluye vencidas).
+  // Toda tarea no terminada (incluida "en revisión") sigue visible hasta completarse.
   const { data: dueList } = useQuery({
     queryKey: ["briefing-due-list", user?.id, todayKey],
     queryFn: async () => {
@@ -107,7 +108,7 @@ export function DailyBriefing({
         .from("tasks")
         .select("id, title, status, priority, due_date")
         .eq("assigned_to", user!.id)
-        .in("status", ["pendiente", "en_progreso"])
+        .in("status", ["pendiente", "en_progreso", "en_revision"])
         .not("due_date", "is", null)
         .lte("due_date", addDaysToYmd(todayKey, 7))
         .order("due_date", { ascending: true })
@@ -317,6 +318,9 @@ INSTRUCCIONES PARA "metric_insights":
                         title={t.title}
                       >
                         {t.title}
+                        {t.status === "en_revision" && (
+                          <span className="ml-1 text-[10px] text-yellow-700 dark:text-yellow-400">en revisión</span>
+                        )}
                         {t.due_date && t.due_date.slice(0, 10) < todayKey ? (
                           <span className="ml-1 text-[10px] text-destructive">vencida</span>
                         ) : t.due_date && t.due_date.slice(0, 10) > todayKey ? (
