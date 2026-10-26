@@ -99,7 +99,8 @@ export function DailyBriefing({
 
   // Lista "Para hoy": consulta dedicada porque `briefing-tasks` (limit 15 por
   // fecha asc) se satura de vencidas antiguas y nunca trae las próximas por
-  // vencer. Aquí traemos todo lo que vence hasta +7 días (incluye vencidas).
+  // vencer. Aquí traemos todo lo que vence hasta +7 días (incluye vencidas) y las
+  // tareas sin fecha de vencimiento.
   // Toda tarea no terminada (incluida "en revisión") sigue visible hasta completarse.
   const { data: dueList } = useQuery({
     queryKey: ["briefing-due-list", user?.id, todayKey],
@@ -109,10 +110,9 @@ export function DailyBriefing({
         .select("id, title, status, priority, due_date")
         .eq("assigned_to", user!.id)
         .in("status", ["pendiente", "en_progreso", "en_revision"])
-        .not("due_date", "is", null)
-        .lte("due_date", addDaysToYmd(todayKey, 7))
-        .order("due_date", { ascending: true })
-        .limit(40);
+        .or(`due_date.is.null,due_date.lte.${addDaysToYmd(todayKey, 7)}`)
+        .order("due_date", { ascending: true, nullsFirst: false })
+        .limit(60);
       if (error) throw error;
       return data;
     },
@@ -231,7 +231,8 @@ INSTRUCCIONES PARA "metric_insights":
     const overdue = items
       .filter((t) => t.due_date && t.due_date.slice(0, 10) < todayKey)
       .sort((a, b) => (b.due_date ?? "").localeCompare(a.due_date ?? ""));
-    return [...upcoming, ...overdue];
+    const undated = items.filter((t) => !t.due_date);
+    return [...upcoming, ...overdue, ...undated];
   }, [dueList, todayKey]);
 
   const closeTask = (id: string, title: string, action: "done" | "tomorrow") => {
@@ -327,6 +328,8 @@ INSTRUCCIONES PARA "metric_insights":
                           <span className="ml-1 text-[10px] text-muted-foreground">
                             vence {new Date(`${t.due_date.slice(0, 10)}T12:00:00`).toLocaleDateString("es-MX", { day: "numeric", month: "short" })}
                           </span>
+                        ) : !t.due_date ? (
+                          <span className="ml-1 text-[10px] text-muted-foreground">sin fecha</span>
                         ) : null}
                       </button>
                       <button
