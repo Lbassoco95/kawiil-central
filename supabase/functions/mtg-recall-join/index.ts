@@ -22,16 +22,21 @@ const json = (body: unknown, status = 200) =>
     headers: { ...cors, "Content-Type": "application/json" },
   });
 
-/** Segundos que espera el bot en la sala de espera antes de salirse (mínimo de Recall: 30). */
-const WAITING_ROOM_TIMEOUT_SEC = 30;
+/**
+ * Segundos que espera el bot en la sala de espera antes de salirse (mínimo de Recall: 30).
+ * En Teams alguien debe admitirlo desde el lobby; 30 s no alcanza en la práctica.
+ */
+const WAITING_ROOM_TIMEOUT_SEC = 600;
 
-/** Estados del bot en los que no se debe enviar otro. */
+/**
+ * Estados del bot en los que no se debe enviar otro. `call_ended` NO va aquí:
+ * el bot ya salió de la llamada (solo falta procesar), y bloquearlo impedía reenviarlo.
+ */
 const ACTIVE_BOT = new Set([
   "joining_call",
   "in_waiting_room",
   "in_call_not_recording",
   "in_call_recording",
-  "call_ended",
 ]);
 
 serve(async (req) => {
