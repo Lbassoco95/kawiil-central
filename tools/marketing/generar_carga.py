@@ -68,7 +68,7 @@ DECLARE
   v_org uuid := '__ORG__';
   r jsonb; v_pid uuid; v_prid uuid; v_f date; v_ts timestamptz;
   v_caso uuid;
-  w date; red text; s record;
+  w date; v_red text; s record; v_ceros integer; v_prov boolean; v_nota text; z record; v_caso_v uuid;
 BEGIN
   PERFORM public.mk_sembrar_reglas_v1(v_org);
 
@@ -114,6 +114,12 @@ BEGIN
     (v_org, 'facebook',  '2026-10-26', 1111, 'calendario_maestro'),
     (v_org, 'linkedin',  '2026-10-26', 1295, 'calendario_maestro');
 
+  -- Cobertura de la fuente (qué periodo trae el archivo por red). Instagram: la hoja empieza el 8 sep.
+  INSERT INTO public.mk_cobertura_fuente (organization_id, red, fuente, desde, hasta, nota) VALUES
+    (v_org, 'instagram', 'calendario_maestro', '2026-09-08', '2026-10-29', 'Hoja Datos Metricool: 26 piezas; no trae 30 jul – 7 sep ni las 5 piezas con error'),
+    (v_org, 'facebook',  'calendario_maestro', '2026-07-30', '2026-10-30', 'Hoja Datos FB y LinkedIn: 47 posts'),
+    (v_org, 'linkedin',  'calendario_maestro', '2026-07-30', '2026-10-30', 'Hoja Datos FB y LinkedIn: 48 posts');
+
   -- Caso 1 (septiembre)
   INSERT INTO public.mk_caso (organization_id, tipo, red, titulo, descripcion, evidencia, estado, responsable, detectado_at)
   VALUES (v_org, 'investigacion', 'instagram',
@@ -140,29 +146,72 @@ BEGIN
     'abierto', 'revisor', '2026-10-31 12:00 America/Mexico_City')
   RETURNING id INTO v_caso;
 
+  -- Casos de verificación: pieza con 0 de alcance/impresiones y más de 48 h desde su publicación (regla dato_sospechoso).
+  -- El cero cuenta en el promedio del semáforo. «Más de 48 h» se mide contra la consulta del 31 oct 12:00 (hora estimada).
+  FOR z IN
+    SELECT p.id AS pieza_id, p.titulo, p.fecha, r.red, res.valor, r.publicada_at
+    FROM public.mk_resultado res
+    JOIN public.mk_pieza_red r ON r.id = res.pieza_red_id
+    JOIN public.mk_pieza p ON p.id = r.pieza_id
+    WHERE p.organization_id = v_org AND res.valor = 0 AND r.estado = 'publicada'
+      AND r.publicada_at < res.capturado_at - interval '48 hours'
+    ORDER BY p.fecha, r.red
+  LOOP
+    INSERT INTO public.mk_caso (organization_id, tipo, regla_codigo, red, pieza_id, titulo, descripcion, evidencia, estado, responsable, detectado_at)
+    VALUES (v_org, 'dato_sospechoso', 'dato_sospechoso', z.red, z.pieza_id,
+      'Dato sospechoso, verificar si se publicó: «' || z.titulo || '» (' || z.fecha || ') con 0 en ' || z.red,
+      'Dato sospechoso, verificar si se publicó. Cero ' || CASE WHEN z.red = 'linkedin' THEN 'impresiones' ELSE 'de alcance' END ||
+      ' con más de 48 horas desde la publicación. El cero cuenta en el promedio del semáforo. Puede ser retraso de datos o una falla de publicación; no se trata como falsa alarma hasta verificar.',
+      jsonb_build_array(
+        jsonb_build_object('tipo', 'hecho', 'dato', 'Valor 0 en ' || z.red || ' para la pieza del ' || z.fecha, 'fuente', 'Calendario Maestro · Datos FB y LinkedIn'),
+        jsonb_build_object('tipo', 'hecho', 'dato', 'El archivo pide confirmar si estos posts se publicaron o es retraso de datos', 'fuente', 'Calendario Maestro · Datos FB y LinkedIn, nota')
+      ),
+      'abierto', 'vigilante', '2026-10-31 12:00 America/Mexico_City')
+    RETURNING id INTO v_caso_v;
+    IF z.fecha = '2026-09-22' THEN
+      UPDATE public.mk_caso SET evidencia = evidencia || jsonb_build_array(jsonb_build_object('tipo', 'hecho',
+        'dato', 'El 22 de septiembre es también una de las 5 fechas en que la pieza figura «Con errores» en Instagram', 'fuente', 'Calendario Maestro · Monitoreo, sección 1'))
+      WHERE id = v_caso_v;
+    END IF;
+  END LOOP;
+
   -- Calibración del semáforo: fórmula vs cifras del archivo (solo Instagram trae cifra semanal)
   FOR w IN SELECT generate_series('2026-07-27'::date, '2026-10-26'::date, interval '7 days')::date LOOP
-    FOREACH red IN ARRAY ARRAY['instagram', 'facebook', 'linkedin'] LOOP
-      SELECT * INTO s FROM public.mk_semaforo_semana(v_org, w, red, 'calendario_maestro');
+    SELECT EXISTS (
+      SELECT 1 FROM public.mk_pieza p
+      WHERE p.organization_id = v_org AND p.primera_publicacion_at IS NOT NULL
+        AND public.mk_semana_inicio(p.primera_publicacion_at) = w
+        AND p.primera_publicacion_at + interval '7 days' > '2026-10-31 12:00 America/Mexico_City'::timestamptz
+    ) INTO v_prov;
+    FOREACH v_red IN ARRAY ARRAY['instagram', 'facebook', 'linkedin'] LOOP
+      SELECT * INTO s FROM public.mk_semaforo_semana(v_org, w, v_red, 'calendario_maestro');
+      SELECT count(*) INTO v_ceros FROM public.mk_caso c JOIN public.mk_pieza p ON p.id = c.pieza_id
+      WHERE c.organization_id = v_org AND c.tipo = 'dato_sospechoso' AND c.red = v_red
+        AND public.mk_semana_inicio(p.primera_publicacion_at) = w;
+      v_nota := concat_ws(' ',
+        CASE WHEN v_prov THEN 'Lectura provisional (hay piezas con menos de 7 días).' END,
+        CASE WHEN v_ceros > 0 THEN v_ceros || ' pieza(s) con 0: dato sospechoso, verificar si se publicó.' END,
+        CASE WHEN s.motivo_gris = 'sin_datos_fuente' THEN 'Gris: sin datos de la fuente; recalcular cuando llegue el historial de Metricool.'
+             WHEN s.motivo_gris = 'sin_piezas_publicadas' THEN 'Gris: sin piezas publicadas (si había piezas programadas, el caso lo abren las reglas 1 y 3).' END);
       INSERT INTO public.mk_calibracion
         (organization_id, semana_inicio, red, piezas_calculadas, promedio_calculado, piezas_calendario, promedio_calendario,
-         color_calculado, color_calendario, diferencia, nota)
-      SELECT v_org, w, red, s.piezas, s.promedio,
-             c.piezas, c.promedio, s.color, NULL,
+         color_calculado, color_calendario, motivo_gris, diferencia, nota)
+      SELECT v_org, w, v_red, s.piezas, s.promedio,
+             c.piezas, c.promedio, s.color, NULL, s.motivo_gris,
              CASE WHEN c.piezas IS NOT NULL THEN s.promedio - c.promedio END,
-             CASE
-               WHEN red <> 'instagram' THEN 'El archivo no trae cifra semanal de esta red; solo promedio general.'
-               WHEN c.piezas IS NULL THEN 'El archivo no trae cifra para esta semana (solo cubre 7 sep en adelante).'
-               ELSE NULL END
+             concat_ws(' ',
+               CASE WHEN v_red <> 'instagram' THEN 'El archivo no trae cifra semanal de esta red; calibrar contra la API.'
+                    WHEN c.piezas IS NULL THEN 'El archivo no trae cifra de Instagram para esta semana.' END,
+               NULLIF(v_nota, ''))
       FROM (SELECT 1) x
       LEFT JOIN (SELECT (e->>1)::int AS piezas, (e->>2)::numeric AS promedio
-                 FROM jsonb_array_elements($s$__SEM__$s$::jsonb) e WHERE (e->>0)::date = w AND red = 'instagram') c ON true;
+                 FROM jsonb_array_elements($s$__SEM__$s$::jsonb) e WHERE (e->>0)::date = w AND v_red = 'instagram') c ON true;
     END LOOP;
   END LOOP;
 
   INSERT INTO public.mk_bitacora (organization_id, agente, accion, resultado, detalle, caso_id)
   VALUES (v_org, 'sistema', 'carga_historial_calendario_maestro',
-          '48 piezas; 26+5 publicaciones IG, 47 FB, 48 LI; 121 resultados; caso 1; calibración',
+          '48 piezas; 26+5 publicaciones IG, 47 FB, 48 LI; 121 resultados; caso 1; casos de verificación de ceros; cobertura; calibración',
           jsonb_build_object('fuente', 'Calendario_Maestro_Kawiil_Nov2026_Ene2027.xlsx', 'metricool_api', 'pendiente'), v_caso);
 END
 $load$;

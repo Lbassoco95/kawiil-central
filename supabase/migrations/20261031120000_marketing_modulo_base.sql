@@ -123,6 +123,21 @@ CREATE TABLE public.mk_seguidores_semana (
   CHECK (EXTRACT(ISODOW FROM semana_inicio) = 1)
 );
 
+
+-- Qué periodo cubre cada fuente por red. Permite distinguir un gris por «sin datos de la fuente»
+-- (la semana queda fuera de lo que la fuente trae) de uno por «sin piezas publicadas».
+CREATE TABLE public.mk_cobertura_fuente (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  red text NOT NULL CHECK (red IN ('instagram', 'facebook', 'linkedin')),
+  fuente text NOT NULL CHECK (fuente IN ('metricool', 'calendario_maestro')),
+  desde date NOT NULL,
+  hasta date NOT NULL,
+  nota text,
+  UNIQUE (organization_id, red, fuente),
+  CHECK (hasta >= desde)
+);
+
 -- ---------------------------------------------------------------------------
 -- Reglas de monitoreo (versionadas) e historial de cambios
 -- ---------------------------------------------------------------------------
@@ -164,7 +179,7 @@ CREATE TABLE public.mk_caso (
   numero integer GENERATED ALWAYS AS IDENTITY,
   tipo text NOT NULL CHECK (tipo IN (
     'publicacion', 'error', 'hueco', 'conexion', 'semaforo_rojo', 'semaforo_rojo_2_semanas',
-    'falla_monitoreo', 'investigacion', 'otro')),
+    'falla_monitoreo', 'dato_sospechoso', 'investigacion', 'otro')),
   regla_codigo text,
   red text CHECK (red IN ('instagram', 'facebook', 'linkedin')),
   pieza_id uuid REFERENCES public.mk_pieza(id) ON DELETE SET NULL,
@@ -245,6 +260,7 @@ CREATE TABLE public.mk_calibracion (
   promedio_calendario numeric,
   color_calculado text,
   color_calendario text,
+  motivo_gris text,                               -- sin_piezas_publicadas | sin_datos_fuente
   diferencia numeric,
   nota text,
   calculado_at timestamptz NOT NULL DEFAULT now(),
@@ -404,7 +420,7 @@ DECLARE
 BEGIN
   FOREACH t IN ARRAY ARRAY[
     'mk_pieza', 'mk_pieza_red', 'mk_resultado', 'mk_seguidores_semana', 'mk_regla', 'mk_regla_historial',
-    'mk_caso', 'mk_propuesta', 'mk_decision', 'mk_experimento', 'mk_bitacora', 'mk_calibracion'
+    'mk_caso', 'mk_propuesta', 'mk_decision', 'mk_experimento', 'mk_bitacora', 'mk_calibracion', 'mk_cobertura_fuente'
   ] LOOP
     EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format(
@@ -442,7 +458,7 @@ CREATE OR REPLACE FUNCTION public.mk_semaforo_semana(
   p_red text,
   p_fuente text DEFAULT 'metricool'
 )
-RETURNS TABLE (piezas integer, promedio numeric, color text)
+RETURNS TABLE (piezas integer, promedio numeric, color text, motivo_gris text)
 LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public
 AS $$
 DECLARE
@@ -450,6 +466,7 @@ DECLARE
   v_amarillo numeric;
   v_n integer;
   v_prom numeric;
+  v_cubierta boolean;
 BEGIN
   SELECT (parametros->>'verde_desde')::numeric, (parametros->>'amarillo_desde')::numeric
   INTO v_verde, v_amarillo
@@ -465,6 +482,13 @@ BEGIN
     AND p.primera_publicacion_at IS NOT NULL
     AND public.mk_semana_inicio(p.primera_publicacion_at) = p_semana;
 
+  -- ¿La fuente cubre esta semana para esta red?
+  SELECT EXISTS (
+    SELECT 1 FROM public.mk_cobertura_fuente c
+    WHERE c.organization_id = p_org AND c.red = p_red AND c.fuente = p_fuente
+      AND c.desde <= p_semana + 6 AND c.hasta >= p_semana
+  ) INTO v_cubierta;
+
   RETURN QUERY SELECT
     v_n,
     v_prom,
@@ -473,6 +497,11 @@ BEGIN
       WHEN v_prom >= v_verde THEN 'verde'
       WHEN v_prom >= v_amarillo THEN 'amarillo'
       ELSE 'rojo'
+    END,
+    CASE
+      WHEN v_n > 0 AND v_prom IS NOT NULL AND v_verde IS NOT NULL THEN NULL
+      WHEN NOT v_cubierta THEN 'sin_datos_fuente'
+      ELSE 'sin_piezas_publicadas'
     END;
 END;
 $$;
@@ -506,6 +535,8 @@ BEGIN
     ('semaforo_linkedin', 'Semáforo LinkedIn (impresiones)', 'Promedio simple por pieza de la semana, a 7 días.', '{"verde_desde": 17, "amarillo_desde": 5, "medida": "impresiones"}'::jsonb),
     ('escalamiento', 'Escalamiento', 'Una semana en rojo (lectura provisional) se señala; dos lecturas definitivas seguidas en rojo abren caso para el Revisor.',
        '{"semanas_senal": 1, "semanas_caso_revisor": 2, "caso_solo_con_lectura_definitiva": true}'::jsonb),
+    ('dato_sospechoso', 'Dato sospechoso (cero)', 'Pieza con cero de alcance o impresiones y más de N horas desde su publicación: caso de verificación «dato sospechoso, verificar si se publicó». El cero cuenta en el promedio del semáforo.',
+       '{"valor": 0, "horas_minimas": 48}'::jsonb),
     ('revision_resultados', 'Revisión de resultados', 'Cortes de datos y propuesta de ajuste.', '{"fechas": ["2026-11-30", "2026-12-31", "2027-01-14"]}'::jsonb),
     ('ventana_publicacion', 'Frecuencia del Vigilante', 'Cada N minutos dentro de la ventana de publicación y cada hora fuera de ella.',
        '{"minutos_dentro": 15, "minutos_fuera": 60, "antes_primera_min": 30, "despues_ultima_min": 90}'::jsonb),

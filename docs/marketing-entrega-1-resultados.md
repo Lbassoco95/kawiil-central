@@ -60,3 +60,22 @@ Fórmula de Dirección aplicada a las cifras del archivo (acumulado a la consult
 1. Token de Metricool en los secretos del proyecto correcto y el conector de solo lectura (Entrega 2) para traer el historial real, contar las publicaciones de Instagram contra las 44 y comparar con el archivo semana por semana.
 2. Aplicar la migración y la carga en el proyecto de Kawiil Central.
 3. Dirección: decidir cuál cifra queda si la API difiere del archivo.
+
+---
+
+## Actualización (respuesta de Dirección del 31 oct)
+
+**Aplicado en la migración y la carga (probado solo en local; nada aplicado en producción hasta confirmación escrita de Dirección):**
+- **Ceros de LinkedIn.** Los ceros cuentan en el promedio. Nueva regla v1 `dato_sospechoso` (valor 0, más de 48 h). La carga abre 5 casos de verificación (casos 2 a 6): 22 sep «Enfoque basado en riesgo», 8 oct «Complemento de pago», 27 oct «Mitos de PLD», 28 oct «Reto 4 pilares» y 29 oct «NDA», con la leyenda «dato sospechoso, verificar si se publicó». El del 22 sep lleva anotado que ese día Instagram también falló. La semana del 26 oct de LinkedIn queda en rojo, provisional, con la nota de 3 piezas con 0. No se trata como falsa alarma.
+  - Supuesto: «más de 48 horas» se mide contra la consulta del 31 oct 12:00 (el archivo no trae hora de consulta). El del 29 oct cumple por poco (49 h con la hora estimada de las 11:00).
+  - Responsable de estos casos: Vigilante (quien los abre). Dirección puede reasignarlos.
+- **Dos causas de gris.** `mk_semaforo_semana` devuelve `motivo_gris`: `sin_piezas_publicadas` o `sin_datos_fuente`. Se decide con una tabla nueva `mk_cobertura_fuente` (qué periodo trae cada fuente por red). Instagram con el archivo cubre del 8 sep al 29 oct, así que las semanas del 27 jul al 31 ago salen `sin_datos_fuente`; la semana del 21 sep sale `sin_piezas_publicadas` (con la nota de que, si había piezas programadas, el caso lo abren las reglas 1 y 3). Cuando llegue el historial de Metricool se cargan filas de cobertura de esa fuente y se recalcula; el archivo no se borra.
+- **Hora, propósito y fuente:** sin cambios (11:00 estimada marcada, propósito en blanco).
+- **Aprendizaje y Resumen** del archivo de noviembre a enero: revisadas. «Aprendizaje» está vacía y «Resumen» solo cuenta lo planeado. **No hay cifras semanales de Facebook ni LinkedIn para calibrar.** Esas dos redes se calibran contra la API.
+
+**Pendiente: los calendarios «JulioAgosto_2026» y «SepOct_2026» no llegaron a la sesión.** En las cargas solo aparece el archivo de noviembre a enero. Hasta que lleguen no puedo:
+- identificar las fechas de las 18 publicaciones de Instagram que faltan ni resolver el cuadre 17 contra 18;
+- cargar lo planeado para las reglas 1 y 3.
+No supuse fechas ni cargué nada de esos dos archivos.
+
+**Cuando lleguen, el plan es:** cargar lo planeado (fecha, pilar, tema, formato) como piezas, unirlo con lo publicado por fecha y tema, y marcar con estado `sin_dato` las publicaciones de Instagram que el archivo no informa, para no generar casos falsos de «planeado sin publicar» en el historial.
