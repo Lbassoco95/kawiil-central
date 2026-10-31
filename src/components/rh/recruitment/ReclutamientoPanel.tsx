@@ -1,3 +1,5 @@
+import { TalentPoolBadge } from "./TalentPoolBadge";
+import type { CandidateConsent } from "@/lib/privacyNotice";
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import {
   DndContext,
@@ -61,6 +63,7 @@ import {
   useIsProcessOwner,
   useLastContacts,
   useCandidatePhotoUrls,
+  useCandidateConsents,
   uploadCandidateCvByIds,
 } from "@/hooks/useRecruitment";
 import { useCelulas } from "@/hooks/useCatalogs";
@@ -290,6 +293,7 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
 
   const { data: lastContacts = {} } = useLastContacts(candidates.map((c) => c.id));
   const { data: photoUrls = {} } = useCandidatePhotoUrls(candidates);
+  const { data: consents = {} } = useCandidateConsents(candidates.map((c) => c.id));
 
   const detailLive = useMemo(
     () => (detail ? candidates.find((c) => c.id === detail.id) ?? null : null),
@@ -458,6 +462,7 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
                     state={c.state_id ? stateById.get(c.state_id) : undefined}
                     lastContact={lastContacts[c.id] ?? null}
                     photoUrl={c.photo_url ? photoUrls[c.photo_url] ?? null : null}
+                    consent={consents[c.id]}
                     draggable={canManage}
                     onClick={() => setDetail(c)}
                   />
@@ -546,6 +551,7 @@ function DraggableCard({
   state,
   lastContact,
   photoUrl,
+  consent,
   draggable,
   onClick,
 }: {
@@ -553,6 +559,7 @@ function DraggableCard({
   state: RecruitmentState | undefined;
   lastContact: string | null;
   photoUrl: string | null;
+  consent: CandidateConsent | undefined;
   draggable: boolean;
   onClick: () => void;
 }) {
@@ -598,6 +605,7 @@ function DraggableCard({
             {candidate.email && <p className="min-w-0 truncate text-xs text-muted-foreground">{candidate.email}</p>}
             {candidate.resume_url && <FileText className="h-3 w-3 shrink-0 text-muted-foreground" />}
           </div>
+          <TalentPoolBadge consent={consent} compact />
           {(lastContact || candidate.source) && (
             <p className="text-[10px] text-muted-foreground">
               {candidate.source ? candidate.source : ""}

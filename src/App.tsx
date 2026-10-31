@@ -30,6 +30,7 @@ import Actividades from "./pages/Actividades";
 import ActividadDetalle from "./pages/ActividadDetalle";
 import CambiarContrasena from "./pages/CambiarContrasena";
 import PostularVacante from "./pages/PostularVacante";
+import AvisoPrivacidad from "./pages/AvisoPrivacidad";
 import Microsoft365Calendario from "./pages/Microsoft365Calendario";
 import Microsoft365Correo from "./pages/Microsoft365Correo";
 import Hub from "./pages/Hub";
@@ -79,6 +80,7 @@ const App = () => (
               <Route path="/login" element={<Login />} />
               <Route path="/cambiar-contrasena" element={<CambiarContrasena />} />
               <Route path="/postular/:token" element={<PostularVacante />} />
+              <Route path="/aviso-privacidad" element={<AvisoPrivacidad />} />
               <Route path="/contrato/:token" element={<ContratoPublico />} />
               <Route path="/firmar/:token" element={<FirmarPublico />} />
               <Route path="/portal/:token" element={<PortalCliente />} />

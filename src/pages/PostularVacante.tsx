@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
+import { Checkbox } from "@/components/ui/checkbox";
+import { PRIVACY_NOTICE_PATH } from "@/lib/privacyNotice";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -100,6 +102,8 @@ export default function PostularVacante() {
   const [notes,    setNotes]    = useState("");
   const [cv,       setCv]       = useState<File | null>(null);
   const [company,  setCompany]  = useState(""); // honeypot anti-spam
+  const [privacyOk,  setPrivacyOk]  = useState(false); // obligatorio
+  const [talentPool, setTalentPool] = useState(false); // opcional
 
   /* ── carga de datos ── */
   useEffect(() => {
@@ -125,12 +129,14 @@ export default function PostularVacante() {
   }, [token]);
 
   const emailOk   = isValidEmail(email);
-  const canSubmit = fullName.trim().length > 0 && emailOk;
+  const canSubmit = fullName.trim().length > 0 && emailOk && privacyOk;
 
   async function submit() {
     if (!fullName.trim()) return toast.error("Escribe tu nombre.");
     if (!emailOk)
       return toast.error("Escribe un correo válido para poder contactarte.");
+    if (!privacyOk)
+      return toast.error("Cuando puedas, acepta el Aviso de Privacidad para continuar.");
     setSending(true);
     try {
       let cv_base64: string | undefined;
@@ -145,6 +151,8 @@ export default function PostularVacante() {
           source,
           notes,
           company,
+          privacy_accepted: privacyOk,
+          talent_pool_accepted: talentPool,
           cv_base64,
           cv_name: cv?.name,
           cv_type: cv?.type,
@@ -627,6 +635,62 @@ export default function PostularVacante() {
               autoComplete="off"
               aria-hidden
             />
+
+            {/* Aviso de privacidad simplificado + consentimientos */}
+            <div className="space-y-3 rounded-xl border border-gray-200 bg-gray-50 p-4 text-xs leading-relaxed text-gray-600">
+              <p>
+                Los datos personales que proporciones en este formulario serán
+                tratados por Bassoco, Vega, Salas, Morales, Servicios
+                Empresariales S.C. (&ldquo;K&apos;awiil&rdquo;), con domicilio en
+                Tuxpan 63 Int. 402, Col. Roma Sur, Alcaldía Cuauhtémoc, C.P.
+                06760, Ciudad de México, como Responsable en términos de la Ley
+                Federal de Protección de Datos Personales en Posesión de los
+                Particulares.
+              </p>
+              <p>
+                Tus datos se usarán para evaluar tu candidatura al puesto al que
+                te postulas y gestionar el proceso de selección. Si así lo
+                autorizas, podrán conservarse en nuestra base de talentos para
+                futuras vacantes.
+              </p>
+              <p>
+                Consulta nuestro{" "}
+                <Link
+                  to={PRIVACY_NOTICE_PATH}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-emerald-700 underline"
+                >
+                  Aviso de Privacidad Integral
+                </Link>{" "}
+                para el detalle completo y el ejercicio de tus derechos ARCO.
+                Para ejercerlos, escríbenos a contacto@kawiil.mx.
+              </p>
+              <label className="flex cursor-pointer items-start gap-2.5 text-gray-800">
+                <Checkbox
+                  checked={privacyOk}
+                  onCheckedChange={(v) => setPrivacyOk(v === true)}
+                  className="mt-0.5"
+                />
+                <span>
+                  He leído el Aviso de Privacidad y acepto que K&apos;awiil trate
+                  mis datos personales para participar en este proceso de
+                  selección. <span className="text-red-500">*</span>
+                </span>
+              </label>
+              <label className="flex cursor-pointer items-start gap-2.5 text-gray-800">
+                <Checkbox
+                  checked={talentPool}
+                  onCheckedChange={(v) => setTalentPool(v === true)}
+                  className="mt-0.5"
+                />
+                <span>
+                  Autorizo a K&apos;awiil a conservar mis datos en su base de
+                  talentos para ser considerado/a en futuras vacantes.{" "}
+                  <span className="text-gray-500">(Opcional)</span>
+                </span>
+              </label>
+            </div>
 
             <Button
               className="w-full bg-emerald-500 text-white hover:bg-emerald-600"

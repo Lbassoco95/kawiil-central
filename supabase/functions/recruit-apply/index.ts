@@ -14,6 +14,9 @@ function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 }
 
+// Debe coincidir con PRIVACY_NOTICE_VERSION en src/lib/privacyNotice.ts
+const PRIVACY_NOTICE_VERSION = "2026-10-31";
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   try {
@@ -52,6 +55,10 @@ Deno.serve(async (req) => {
       if (body.company) return json({ ok: true });
       const fullName = String(body.full_name ?? "").trim();
       if (!fullName) return json({ error: "El nombre es obligatorio." }, 400);
+      // Consentimiento obligatorio (finalidades primarias) — LFPDPPP.
+      if (body.privacy_accepted !== true) {
+        return json({ error: "Debes aceptar el Aviso de Privacidad para postularte." }, 400);
+      }
 
       // Fase inicial y estado por defecto del proceso.
       const { data: stage } = await admin
@@ -88,6 +95,21 @@ Deno.serve(async (req) => {
         notes: String(body.notes ?? "").trim() || null,
       }).select("id").single();
       if (error) return json({ error: "No se pudo registrar la postulación." }, 500);
+
+      // Registro inmutable del consentimiento (timestamp UTC lo pone la BD).
+      const { error: consentErr } = await admin.from("rh_candidate_consents").insert({
+        organization_id: proc.organization_id,
+        candidate_id: cand.id,
+        process_id: proc.id,
+        notice_version: PRIVACY_NOTICE_VERSION,
+        primary_accepted: true,
+        talent_pool_accepted: body.talent_pool_accepted === true,
+      });
+      if (consentErr) {
+        // Sin evidencia de consentimiento no conservamos el expediente.
+        await admin.from("rh_candidates").delete().eq("id", cand.id);
+        return json({ error: "No se pudo registrar la postulación." }, 500);
+      }
 
       await admin.from("rh_candidate_activities").insert({
         organization_id: proc.organization_id,
