@@ -62,6 +62,7 @@ CREATE TABLE public.mk_pieza (
   etapa smallint NOT NULL DEFAULT 1 CHECK (etapa BETWEEN 1 AND 6),
   proposito text CHECK (proposito IN ('conectar', 'ensenar', 'vender')),
   programada_at timestamptz,                     -- fecha y hora programadas
+  fecha date,                                    -- fecha planeada o de publicación cuando la hora se desconoce (historial)
   copy_url text,
   -- Primera publicación real en cualquier red. La mantiene un trigger. Define la semana de la pieza.
   primera_publicacion_at timestamptz,
@@ -82,6 +83,7 @@ CREATE TABLE public.mk_pieza_red (
   programada_at timestamptz,
   publicada_at timestamptz,                      -- fecha y hora reales en esta red
   mensaje_error text,
+  hora_estimada boolean NOT NULL DEFAULT false,   -- true: solo se conoce la fecha; la hora guardada es un valor de relleno
   metricool_id text,                             -- id de la publicación en Metricool (solo referencia)
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
@@ -105,6 +107,7 @@ CREATE TABLE public.mk_resultado (
   clics integer,
   reacciones integer,
   comentarios integer,
+  extra jsonb,                                    -- cifras de la fuente que no tienen columna propia (p. ej. 'interacciones' de Instagram)
   capturado_at timestamptz NOT NULL DEFAULT now(),  -- cuándo se tomó la cifra (no cuándo ocurrió)
   UNIQUE (pieza_red_id, corte, fuente)
 );
