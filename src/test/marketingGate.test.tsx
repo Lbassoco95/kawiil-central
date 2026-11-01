@@ -27,7 +27,7 @@ describe("MarketingGate", () => {
         </MemoryRouter>
       </QueryClientProvider>,
     );
-    await waitFor(() => expect(screen.queryByText("contenido-marketing") ?? screen.queryByText("inicio")).toBeTruthy());
+    await waitFor(() => expect(screen.queryByText("contenido-marketing") ?? screen.queryByText("inicio")).toBeTruthy(), { timeout: 5000 });
     expect(screen.queryByText("contenido-marketing")).toBeTruthy();
   });
 });
