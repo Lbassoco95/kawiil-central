@@ -39,6 +39,7 @@ import Comunicacion from "./pages/Comunicacion";
 import AsistenteIA from "./pages/AsistenteIA";
 import BaseConocimiento from "./pages/BaseConocimiento";
 import Finanzas from "./pages/Finanzas";
+import Marketing from "./pages/Marketing";
 import NotFound from "./pages/NotFound";
 import Accesibilidad from "./pages/Accesibilidad";
 import PipelineLayout from "./pages/pipeline/PipelineLayout";
@@ -131,6 +132,7 @@ const App = () => (
               <Route path="/asistente" element={<ProtectedRoute><ModuleGate moduleKey="ai"><AsistenteIA /></ModuleGate></ProtectedRoute>} />
               <Route path="/conocimiento" element={<ProtectedRoute><ModuleGate moduleKey="conocimiento"><BaseConocimiento /></ModuleGate></ProtectedRoute>} />
               <Route path="/finanzas" element={<ProtectedRoute><ModuleGate moduleKey="finanzas"><Finanzas /></ModuleGate></ProtectedRoute>} />
+              <Route path="/marketing" element={<ProtectedRoute><ModuleGate moduleKey="marketing"><Marketing /></ModuleGate></ProtectedRoute>} />
               <Route
                 path="/pipeline"
                 element={

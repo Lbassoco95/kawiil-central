@@ -10,6 +10,7 @@ import {
   Kanban,
   LayoutDashboard,
   Mail,
+  Megaphone,
   MessageSquare,
   Bell,
   PanelLeftClose,
@@ -89,6 +90,7 @@ const NAV_GROUPS: NavGroup[] = [
       { title: "Documentos", url: "/documentos", icon: FileText, view: "documentos" },
       { title: "Firmas", url: "/firmas", icon: PenTool, view: "documentos", tooltip: "Firma electrónica simple: bandeja por firmar, enviados y mi firma" },
       { title: "Finanzas", url: "/finanzas", icon: Wallet, view: "finanzas", moduleKey: "finanzas" },
+      { title: "Marketing", url: "/marketing", icon: Megaphone, view: "marketing", moduleKey: "marketing", tooltip: "Monitoreo de campañas: panel, calendario, casos, semáforo y reglas" },
     ],
   },
   {
