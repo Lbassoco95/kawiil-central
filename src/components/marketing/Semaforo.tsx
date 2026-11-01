@@ -1,8 +1,9 @@
-import { RED_LABEL, REDES, type Calibracion } from "@/hooks/useMarketing";
+import { RED_LABEL, REDES, type Calibracion, type Regla } from "@/hooks/useMarketing";
 import { NOTA_UMBRAL_INSTAGRAM, OBSERVACION_UMBRAL_INSTAGRAM } from "./notasUmbral";
+import { UmbralesSemaforo } from "./UmbralesSemaforo";
 import { COLOR_LABEL, MOTIVO_GRIS, Pastilla, esProvisional, fechaCorta, Vacio } from "./marketingUi";
 
-export function Semaforo({ calibracion }: { calibracion: Calibracion[] }) {
+export function Semaforo({ calibracion, reglas }: { calibracion: Calibracion[]; reglas: Regla[] }) {
   const semanas = [...new Set(calibracion.map((c) => c.semana_inicio))].sort().reverse();
   if (semanas.length === 0) return <Vacio>Aún no hay lecturas semanales.</Vacio>;
   return (
@@ -11,6 +12,7 @@ export function Semaforo({ calibracion }: { calibracion: Calibracion[] }) {
         Semana de lunes a domingo, hora de Ciudad de México. Promedio simple por pieza publicada. «Provisional» significa que aún hay piezas con menos de 7 días.
         Los números son los calculados con las cifras del Calendario Maestro; «archivo» es la cifra semanal del propio archivo (solo Instagram la trae).
       </p>
+      <UmbralesSemaforo reglas={reglas} />
       <div className="zen-glass rounded-2xl p-4 text-sm text-muted-foreground">
         <p><span className="font-medium text-foreground">Instagram.</span> {NOTA_UMBRAL_INSTAGRAM}</p>
         <p className="mt-2">{OBSERVACION_UMBRAL_INSTAGRAM}</p>
