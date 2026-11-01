@@ -53,6 +53,8 @@ type NavItem = {
   /** Slot key used by .kw-sb-link[data-view-link] for color theming. */
   view: string;
   moduleKey?: string;
+  /** Falla cerrado: si la consulta de permisos falla, el elemento no se muestra. */
+  estricto?: boolean;
   tooltip?: string;
   /** Solo visible para G4 (rol transformador). */
   g4Only?: boolean;
@@ -90,7 +92,7 @@ const NAV_GROUPS: NavGroup[] = [
       { title: "Documentos", url: "/documentos", icon: FileText, view: "documentos" },
       { title: "Firmas", url: "/firmas", icon: PenTool, view: "documentos", tooltip: "Firma electrónica simple: bandeja por firmar, enviados y mi firma" },
       { title: "Finanzas", url: "/finanzas", icon: Wallet, view: "finanzas", moduleKey: "finanzas" },
-      { title: "Marketing", url: "/marketing", icon: Megaphone, view: "marketing", moduleKey: "marketing", tooltip: "Monitoreo de campañas: panel, calendario, casos, semáforo y reglas" },
+      { title: "Marketing", url: "/marketing", icon: Megaphone, view: "marketing", moduleKey: "marketing", estricto: true, tooltip: "Monitoreo de campañas: panel, calendario, casos, semáforo y reglas" },
     ],
   },
   {
@@ -231,7 +233,7 @@ function SidebarBody({
   toggle: () => void;
   onMobileNavigate?: () => void;
 }) {
-  const { hasModule, isError: modulesError, refetch: refetchModules } = useModulePermissions();
+  const { hasModule, hasModuleStrict, isError: modulesError, refetch: refetchModules } = useModulePermissions();
   const { isTransformador } = useUserRole();
   const getBadge = useNavBadges();
 
@@ -239,7 +241,7 @@ function SidebarBody({
     .map((g) => ({
       ...g,
       items: g.items.filter(
-        (i) => (!i.moduleKey || hasModule(i.moduleKey)) && (!i.g4Only || isTransformador),
+        (i) => (!i.moduleKey || (i.estricto ? hasModuleStrict(i.moduleKey) : hasModule(i.moduleKey))) && (!i.g4Only || isTransformador),
       ),
     }))
     .filter((g) => g.items.length > 0);

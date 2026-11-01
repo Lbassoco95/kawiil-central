@@ -13,8 +13,8 @@ import { Reglas } from "@/components/marketing/Reglas";
 
 // Marketing · monitoreo (primera versión, solo lectura). No escribe en la base ni llama a Metricool.
 export default function Marketing() {
-  const { hasModule } = useModulePermissions();
-  const puedeDecidir = hasModule("marketing_decidir");
+  const { hasModuleStrict } = useModulePermissions();
+  const puedeDecidir = hasModuleStrict("marketing_decidir");
   const piezas = usePiezas();
   const calibracion = useCalibracion();
   const casos = useCasos();

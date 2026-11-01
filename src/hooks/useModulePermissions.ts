@@ -68,9 +68,13 @@ export function useModulePermissions() {
     return !!map[key];
   };
 
+  // Falla cerrado: sin respuesta válida de la base, el módulo NO se muestra. Se usa en Marketing.
+  const hasModuleStrict = (key: string): boolean => isFetched && !isError && map[key] === true;
+
   return {
     permissions: map,
     hasModule,
+    hasModuleStrict,
     isLoading,
     isError,
     error,
