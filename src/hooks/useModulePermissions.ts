@@ -76,6 +76,7 @@ export function useModulePermissions() {
     hasModule,
     hasModuleStrict,
     isLoading,
+    isFetched,
     isError,
     error,
     refetch,
