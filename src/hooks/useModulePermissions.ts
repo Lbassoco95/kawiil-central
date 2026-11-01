@@ -13,6 +13,8 @@ export const MODULE_KEYS = [
   "admin",
   "pipeline",
   "reclutamiento",
+  "marketing",
+  "marketing_decidir",
 ] as const;
 
 export type ModuleKey = (typeof MODULE_KEYS)[number];
@@ -28,6 +30,8 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
   admin: "Administración",
   pipeline: "Pipeline",
   reclutamiento: "Reclutamiento",
+  marketing: "Marketing (ver)",
+  marketing_decidir: "Marketing (decidir: aprobar y cambiar reglas)",
 };
 
 export function useModulePermissions() {
@@ -64,9 +68,13 @@ export function useModulePermissions() {
     return !!map[key];
   };
 
+  // Falla cerrado: sin respuesta válida de la base, el módulo NO se muestra. Se usa en Marketing.
+  const hasModuleStrict = (key: string): boolean => isFetched && !isError && map[key] === true;
+
   return {
     permissions: map,
     hasModule,
+    hasModuleStrict,
     isLoading,
     isError,
     error,
