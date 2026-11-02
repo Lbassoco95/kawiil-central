@@ -65,6 +65,19 @@ export interface ReglaHistorial {
   parametros_anteriores: Record<string, unknown> | null; parametros_nuevos: Record<string, unknown>;
   activa: boolean; motivo: string; cambiado_at: string;
 }
+export interface ColchonLectura {
+  id: string; fecha: string; red: Red; ultima_programada: string | null; dias: number;
+  color: "verde" | "amarillo" | "rojo"; tope: boolean; programadas: number; simulada: boolean; corrida_at: string;
+}
+export interface InformeContenido {
+  fecha: string; simulada: boolean; ventana_dias: number;
+  colchon: Array<{ red: Red; dias: number; color: "verde" | "amarillo" | "rojo"; ultima: string | null; tope: boolean }>;
+  faltantes: Array<{ red: Red; fecha: string; hora: string; codigo: string; pilar: string | null; formato: string | null }>;
+  con_error: Array<{ red: Red; fecha: string; hora: string; estado: string }>;
+  desconocidos: Array<{ red: Red; fecha: string; hora: string; estado: string }>;
+  piezas_calendario_en_ventana: number; necesita_direccion: string[];
+}
+export interface InformeDiario { id: string; fecha: string; contenido: InformeContenido; simulada: boolean; created_at: string }
 export interface Cobertura { red: Red; fuente: string; desde: string; hasta: string; nota: string | null }
 
 function useTabla<T>(clave: string, consulta: () => Promise<{ data: T[] | null; error: unknown }>) {
@@ -100,3 +113,10 @@ export const useReglaHistorial = () =>
 
 export const useCobertura = () =>
   useTabla<Cobertura>("cobertura", () => mk("mk_cobertura_fuente").select("red,fuente,desde,hasta,nota"));
+
+// Colchón de programación y informe diario (los escribe el Vigilante; aquí solo se leen).
+export const useColchon = () =>
+  useTabla<ColchonLectura>("colchon", () => mk("mk_colchon").select("*").order("fecha", { ascending: false }).order("corrida_at", { ascending: false }).limit(30));
+
+export const useInformeDiario = () =>
+  useTabla<InformeDiario>("informe_diario", () => mk("mk_informe_diario").select("*").order("fecha", { ascending: false }).order("created_at", { ascending: false }).limit(1));

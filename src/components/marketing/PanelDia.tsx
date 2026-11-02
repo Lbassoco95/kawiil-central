@@ -1,16 +1,17 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { RED_LABEL, REDES, type Calibracion, type Caso, type Cobertura, type Pieza, type Red } from "@/hooks/useMarketing";
+import { RED_LABEL, REDES, type Calibracion, type Caso, type Cobertura, type ColchonLectura, type InformeDiario, type Pieza, type Red } from "@/hooks/useMarketing";
+import { ColchonPanel, InformeDia } from "./ColchonInforme";
 import { EstadoRed, MOTIVO_GRIS, Pastilla, COLOR_LABEL, esProvisional, fechaCorta, Vacio } from "./marketingUi";
 
 const TIPO_CASO: Record<string, string> = {
   investigacion: "Investigación", dato_sospechoso: "Dato sospechoso", publicacion: "Publicación", error: "Error",
   hueco: "Hueco", conexion: "Conexión", semaforo_rojo: "Semáforo rojo", semaforo_rojo_2_semanas: "Rojo 2 semanas",
-  falla_monitoreo: "Falla de monitoreo", otro: "Otro",
+  falla_monitoreo: "Falla de monitoreo", colchon: "Colchón bajo", otro: "Otro",
 };
 export const tipoCaso = (t: string) => TIPO_CASO[t] ?? t;
 
-export function PanelDia({ calibracion, piezas, casos, cobertura }: {
-  calibracion: Calibracion[]; piezas: Pieza[]; casos: Caso[]; cobertura: Cobertura[];
+export function PanelDia({ calibracion, piezas, casos, cobertura, colchon, informe }: {
+  calibracion: Calibracion[]; piezas: Pieza[]; casos: Caso[]; cobertura: Cobertura[]; colchon: ColchonLectura[]; informe: InformeDiario | null;
 }) {
   const ultima = (red: Red) => calibracion.filter((c) => c.red === red).sort((a, b) => b.semana_inicio.localeCompare(a.semana_inicio))[0];
   const abiertos = casos.filter((c) => c.estado !== "cerrado");
@@ -19,9 +20,12 @@ export function PanelDia({ calibracion, piezas, casos, cobertura }: {
   return (
     <div className="space-y-6">
       <div className="zen-glass rounded-2xl p-4 text-sm text-muted-foreground">
-        Estos datos vienen del Calendario Maestro (corte del 31 de octubre de 2026). Todavía no hay monitoreo en vivo de Metricool:
-        el estado de cada red es la última semana calculada, no el de hoy.
+        El colchón y el informe se leen de Metricool (solo lectura). El estado semanal de cada red viene del Calendario Maestro
+        (corte del 31 de octubre de 2026): es la última semana calculada, no el de hoy.
       </div>
+
+      <ColchonPanel lecturas={colchon} />
+      <InformeDia informe={informe} />
 
       <section>
         <h2 className="mb-3 text-sm font-medium text-muted-foreground">Estado de cada red · última semana calculada</h2>

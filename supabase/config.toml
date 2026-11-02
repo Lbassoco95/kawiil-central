@@ -195,3 +195,7 @@ project_id = "qppfampapbxdgednkofc"
 
   [functions.esign]
     verify_jwt = false
+
+  # Conector de lectura de Metricool: se autentica con su propio secreto (x-marketing-secret), no con JWT.
+  [functions.marketing-metricool]
+    verify_jwt = false
