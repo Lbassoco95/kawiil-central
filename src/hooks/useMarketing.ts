@@ -78,6 +78,7 @@ export interface InformeContenido {
   piezas_calendario_en_ventana: number; necesita_direccion: string[];
 }
 export interface InformeDiario { id: string; fecha: string; contenido: InformeContenido; simulada: boolean; created_at: string }
+export interface CorridaVigilante { id: string; agente: string; accion: string; resultado: string; detalle: { simulada?: boolean } | null; registrado_at: string }
 export interface Cobertura { red: Red; fuente: string; desde: string; hasta: string; nota: string | null }
 
 function useTabla<T>(clave: string, consulta: () => Promise<{ data: T[] | null; error: unknown }>) {
@@ -120,3 +121,8 @@ export const useColchon = () =>
 
 export const useInformeDiario = () =>
   useTabla<InformeDiario>("informe_diario", () => mk("mk_informe_diario").select("*").order("fecha", { ascending: false }).order("created_at", { ascending: false }).limit(1));
+
+// Última corrida del Vigilante del colchón (la fila resumen que deja cada ejecución en la bitácora de agentes).
+export const useUltimaCorrida = () =>
+  useTabla<CorridaVigilante>("ultima_corrida", () =>
+    mk("mk_bitacora").select("id, agente, accion, resultado, detalle, registrado_at").eq("agente", "vigilante").eq("accion", "colchon").order("registrado_at", { ascending: false }).limit(1));

@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { RED_LABEL, REDES, type Calibracion, type Caso, type Cobertura, type ColchonLectura, type InformeDiario, type Pieza, type Red } from "@/hooks/useMarketing";
+import { RED_LABEL, REDES, type Calibracion, type Caso, type Cobertura, type ColchonLectura, type CorridaVigilante, type InformeDiario, type Pieza, type Red } from "@/hooks/useMarketing";
 import { ColchonPanel, InformeDia } from "./ColchonInforme";
+import { EstadoMonitoreo, type EstadoBitacora } from "./EstadoMonitoreo";
 import { EstadoRed, MOTIVO_GRIS, Pastilla, COLOR_LABEL, esProvisional, fechaCorta, Vacio } from "./marketingUi";
 
 const TIPO_CASO: Record<string, string> = {
@@ -10,8 +11,9 @@ const TIPO_CASO: Record<string, string> = {
 };
 export const tipoCaso = (t: string) => TIPO_CASO[t] ?? t;
 
-export function PanelDia({ calibracion, piezas, casos, cobertura, colchon, informe }: {
+export function PanelDia({ calibracion, piezas, casos, cobertura, colchon, informe, ultimaCorrida, estadoBitacora }: {
   calibracion: Calibracion[]; piezas: Pieza[]; casos: Caso[]; cobertura: Cobertura[]; colchon: ColchonLectura[]; informe: InformeDiario | null;
+  ultimaCorrida: CorridaVigilante | null; estadoBitacora: EstadoBitacora;
 }) {
   const ultima = (red: Red) => calibracion.filter((c) => c.red === red).sort((a, b) => b.semana_inicio.localeCompare(a.semana_inicio))[0];
   const abiertos = casos.filter((c) => c.estado !== "cerrado");
@@ -19,6 +21,8 @@ export function PanelDia({ calibracion, piezas, casos, cobertura, colchon, infor
 
   return (
     <div className="space-y-6">
+      <EstadoMonitoreo lecturas={colchon} ultimaCorrida={ultimaCorrida} estadoBitacora={estadoBitacora} />
+
       <div className="zen-glass rounded-2xl p-4 text-sm text-muted-foreground">
         El colchón y el informe se leen de Metricool (solo lectura). El estado semanal de cada red viene del Calendario Maestro
         (corte del 31 de octubre de 2026): es la última semana calculada, no el de hoy.

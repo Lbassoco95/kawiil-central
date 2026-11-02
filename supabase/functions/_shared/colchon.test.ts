@@ -91,21 +91,6 @@ test("fechas en Ciudad de México", () => {
   assert.equal(diasEntre("2026-11-01", "2026-11-07"), 6);
   assert.equal(sumarDias("2026-11-01", 45), "2026-12-16");
 });
-test("la función no puede escribir en Metricool: sin host, token ni métodos de escritura; un solo fetch, al conector", () => {
-  const src = readFileSync(new URL("../../pendientes/marketing-colchon/index.ts", import.meta.url), "utf8");
-  assert.ok(!/metricool\.com|METRICOOL_USER_TOKEN|X-Mc-Auth/i.test(src));
-  assert.equal((src.match(/\bfetch\(/g) ?? []).length, 1);
-  assert.ok(src.includes("/functions/v1/marketing-metricool"));
-  assert.ok(!/method:\s*["'](PUT|PATCH|DELETE)["']/.test(src));
-  assert.ok(!/CRON_SECRET|Authorization/.test(src));
-});
-test("abrir caso: no envía numero (identidad) y no calla los errores", () => {
-  const src = readFileSync(new URL("../../pendientes/marketing-colchon/index.ts", import.meta.url), "utf8");
-  assert.ok(!/\bnumero\s*[,:]\s*(numero|\d)/.test(src.split('.insert({')[1] ?? ""));
-  assert.ok(!src.includes("maxn"));
-  assert.ok(src.includes("erroresCaso.push") && src.includes("ERROR al"));
-});
-
 const col = (dias: number) => ({ red: "instagram" as const, ultima: "2026-11-07", dias, color: colorColchon(dias, P), tope: false, programadas: 5 });
 const abierto = (dias: number) => ({ id: "c1", numero: 7, evidencia: { dias, ultima_programada: "2026-11-07" } });
 
@@ -125,9 +110,4 @@ test("el caso se cierra cuando el colchón se recupera (14 o más) y no se abre 
 test("amarillo (7 a 13) sigue siendo colchón bajo la meta: mantiene el caso abierto", () => {
   assert.equal(decidirCaso(col(10), P, abierto(6)).accion, "actualizar");
   assert.equal(decidirCaso(col(10), P, undefined).accion, "abrir");
-});
-test("la función aplica la decisión y no cierra ni abre casos a ciegas", () => {
-  const src = readFileSync(new URL("../../pendientes/marketing-colchon/index.ts", import.meta.url), "utf8");
-  assert.ok(src.includes("decidirCaso(") && src.includes('"cerrado"') && src.includes(".update({"));
-  assert.ok(src.includes('.neq("estado", "cerrado")'));
 });

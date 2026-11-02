@@ -137,7 +137,7 @@ export function armarInforme(i: InformeEntrada) {
 
 // Un solo caso abierto por red mientras el colchón siga bajo la meta: se abre si no hay, se actualiza si ya existe
 // y se cierra cuando el colchón se recupera (14 días o más). Nunca se abre un segundo caso.
-export interface CasoAbierto { id: string; numero: number; evidencia?: { dias?: number; ultima_programada?: string | null } | null }
+export interface CasoAbierto { id: string; numero: number; evidencia?: { dias?: number; ultima_programada?: string | null; fallas?: string[] } | null }
 export type AccionCaso =
   | { accion: "abrir" }
   | { accion: "actualizar"; id: string; numero: number; dias_anterior: number | null; cambio: boolean }
