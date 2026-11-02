@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  armarInforme, calcularColchon, calcularFaltantes, clasificarEstado, colorColchon, diasEntre, extraerPublicaciones,
+  decidirCaso, armarInforme, calcularColchon, calcularFaltantes, clasificarEstado, colorColchon, diasEntre, extraerPublicaciones,
   fechaHoraCDMX, hoyCDMX, PARAMS_INICIALES as P, sumarDias, type Publicacion,
 } from "./colchon.ts";
 
@@ -88,5 +88,31 @@ test("abrir caso: no envía numero (identidad) y no calla los errores", () => {
   const src = readFileSync(new URL("../../pendientes/marketing-colchon/index.ts", import.meta.url), "utf8");
   assert.ok(!/\bnumero\s*[,:]\s*(numero|\d)/.test(src.split('.insert({')[1] ?? ""));
   assert.ok(!src.includes("maxn"));
-  assert.ok(src.includes("erroresCaso.push") && src.includes("ERROR al abrir caso"));
+  assert.ok(src.includes("erroresCaso.push") && src.includes("ERROR al"));
+});
+
+const col = (dias: number) => ({ red: "instagram" as const, ultima: "2026-11-07", dias, color: colorColchon(dias, P), tope: false, programadas: 5 });
+const abierto = (dias: number) => ({ id: "c1", numero: 7, evidencia: { dias, ultima_programada: "2026-11-07" } });
+
+test("un solo caso por red: sin caso y colchón bajo → abrir; con caso → actualizar, nunca abrir otro", () => {
+  assert.deepEqual(decidirCaso(col(6), P, undefined), { accion: "abrir" });
+  for (const d of [0, 5, 6, 13]) assert.equal(decidirCaso(col(d), P, abierto(6)).accion, "actualizar");
+});
+test("actualizar marca si cambió algo (para no llenar la bitácora de ruido)", () => {
+  assert.equal((decidirCaso(col(6), P, abierto(6)) as { cambio: boolean }).cambio, false);
+  assert.equal((decidirCaso(col(5), P, abierto(6)) as { cambio: boolean }).cambio, true);
+});
+test("el caso se cierra cuando el colchón se recupera (14 o más) y no se abre si ya está sano", () => {
+  assert.deepEqual(decidirCaso(col(14), P, abierto(6)), { accion: "cerrar", id: "c1", numero: 7, dias_anterior: 6 });
+  assert.equal(decidirCaso(col(20), P, abierto(6)).accion, "cerrar");
+  assert.deepEqual(decidirCaso(col(14), P, undefined), { accion: "nada" });
+});
+test("amarillo (7 a 13) sigue siendo colchón bajo la meta: mantiene el caso abierto", () => {
+  assert.equal(decidirCaso(col(10), P, abierto(6)).accion, "actualizar");
+  assert.equal(decidirCaso(col(10), P, undefined).accion, "abrir");
+});
+test("la función aplica la decisión y no cierra ni abre casos a ciegas", () => {
+  const src = readFileSync(new URL("../../pendientes/marketing-colchon/index.ts", import.meta.url), "utf8");
+  assert.ok(src.includes("decidirCaso(") && src.includes('"cerrado"') && src.includes(".update({"));
+  assert.ok(src.includes('.neq("estado", "cerrado")'));
 });

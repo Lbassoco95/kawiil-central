@@ -6,8 +6,8 @@
 // - Escribe en mk_colchon, mk_caso (tipo colchon), mk_informe_diario y mk_bitacora.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import {
-  armarInforme, calcularColchon, extraerPublicaciones, fechaHoraCDMX, hoyCDMX, PARAMS_INICIALES, REDES, sumarDias,
-  type Params, type PiezaEsperada, type Red,
+  armarInforme, calcularColchon, decidirCaso, extraerPublicaciones, fechaHoraCDMX, hoyCDMX, PARAMS_INICIALES, REDES, sumarDias,
+  type CasoAbierto, type Params, type PiezaEsperada, type Red,
 } from "../../functions/_shared/colchon.ts";
 
 function igual(a: string, b: string): boolean {
@@ -63,29 +63,49 @@ Deno.serve(async (req) => {
     organization_id, fecha: hoy, red: c.red, ultima_programada: c.ultima, dias: c.dias, color: c.color, tope: c.tope, programadas: c.programadas, simulada,
   })));
 
-  // 3) Caso por cada red por debajo de la meta, sin duplicar casos abiertos.
+  // 3) Un solo caso abierto por red mientras el colchón siga bajo la meta: se abre, se actualiza o se cierra al recuperarse.
   const casosNuevos: Array<{ red: Red; numero: number }> = [];
+  const casosActualizados: Array<{ red: Red; numero: number; dias: number }> = [];
+  const casosCerrados: Array<{ red: Red; numero: number; dias: number }> = [];
   const erroresCaso: string[] = [];
-  for (const c of colchon.filter((x) => x.dias < p.verde_desde)) {
-    const { data: abierto } = await db.from("mk_caso").select("id").eq("organization_id", organization_id)
-      .eq("tipo", "colchon").eq("red", c.red).neq("estado", "cerrado").limit(1);
-    if (abierto && abierto.length > 0) continue;
-    // numero es una columna de identidad: no se envía, la base lo asigna.
-    const { data: caso, error } = await db.from("mk_caso").insert({
-      organization_id, tipo: "colchon", regla_codigo: "colchon", red: c.red,
-      titulo: `Colchón de programación bajo en ${c.red}: ${c.dias} días`,
-      descripcion: `La última pieza programada en ${c.red} es ${c.ultima ?? "ninguna"}; el colchón es de ${c.dias} días y la meta es ${p.verde_desde}. Programar piezas en Metricool hasta cubrir la meta.`,
-      evidencia: { fecha: hoy, simulada, dias: c.dias, ultima_programada: c.ultima, programadas: c.programadas, meta: p.verde_desde },
-      responsable: "vigilante",
-    }).select("id, numero").single();
-    if (error) {
-      // Un fallo al abrir el caso nunca se calla: queda en la bitácora y en la respuesta.
-      erroresCaso.push(`${c.red}: ${error.message}`);
-      await bitacora("vigilante", "caso_colchon", `ERROR al abrir caso en ${c.red}: ${error.message}`, { fecha: hoy, dias: c.dias });
-    }
-    if (!error && caso) {
+  const fallo = async (red: Red, que: string, mensaje: string, dias: number) => {
+    // Un fallo con un caso nunca se calla: queda en la bitácora y en la respuesta.
+    erroresCaso.push(`${red}: ${que}: ${mensaje}`);
+    await bitacora("vigilante", "caso_colchon", `ERROR al ${que} caso en ${red}: ${mensaje}`, { fecha: hoy, dias });
+  };
+  for (const c of colchon) {
+    const { data: abiertos, error: errLeer } = await db.from("mk_caso").select("id, numero, evidencia").eq("organization_id", organization_id)
+      .eq("tipo", "colchon").eq("red", c.red).neq("estado", "cerrado").order("numero", { ascending: true }).limit(1);
+    if (errLeer) { await fallo(c.red, "leer", errLeer.message, c.dias); continue; }
+    const decision = decidirCaso(c, p, abiertos?.[0] as CasoAbierto | undefined);
+    const evidencia = { fecha: hoy, simulada, dias: c.dias, ultima_programada: c.ultima, programadas: c.programadas, meta: p.verde_desde };
+    const titulo = `Colchón de programación bajo en ${c.red}: ${c.dias} días`;
+    const descripcion = `La última pieza programada en ${c.red} es ${c.ultima ?? "ninguna"}; el colchón es de ${c.dias} días y la meta es ${p.verde_desde}. Programar piezas en Metricool hasta cubrir la meta.`;
+
+    if (decision.accion === "abrir") {
+      // numero es una columna de identidad: no se envía, la base lo asigna.
+      const { data: caso, error } = await db.from("mk_caso").insert({
+        organization_id, tipo: "colchon", regla_codigo: "colchon", red: c.red, titulo, descripcion, evidencia, responsable: "vigilante",
+      }).select("id, numero").single();
+      if (error || !caso) { await fallo(c.red, "abrir", error?.message ?? "sin respuesta", c.dias); continue; }
       casosNuevos.push({ red: c.red, numero: caso.numero });
       await bitacora("vigilante", "caso_colchon", `caso #${caso.numero} abierto en ${c.red}`, { fecha: hoy, dias: c.dias }, caso.id);
+    } else if (decision.accion === "actualizar") {
+      // Se conserva el estado del caso (abierto, en investigación o en decisión); solo se refrescan los datos.
+      const { error } = await db.from("mk_caso").update({ titulo, descripcion, evidencia }).eq("id", decision.id);
+      if (error) { await fallo(c.red, "actualizar", error.message, c.dias); continue; }
+      casosActualizados.push({ red: c.red, numero: decision.numero, dias: c.dias });
+      if (decision.cambio) {
+        await bitacora("vigilante", "caso_colchon", `caso #${decision.numero} actualizado en ${c.red}: ${decision.dias_anterior ?? "?"} → ${c.dias} días`, { fecha: hoy, dias: c.dias }, decision.id);
+      }
+    } else if (decision.accion === "cerrar") {
+      const { error } = await db.from("mk_caso").update({
+        estado: "cerrado", cerrado_at: new Date().toISOString(),
+        evidencia: { fecha: hoy, simulada, dias: c.dias, ultima_programada: c.ultima, programadas: c.programadas, meta: p.verde_desde, cierre: "colchón recuperado" },
+      }).eq("id", decision.id);
+      if (error) { await fallo(c.red, "cerrar", error.message, c.dias); continue; }
+      casosCerrados.push({ red: c.red, numero: decision.numero, dias: c.dias });
+      await bitacora("vigilante", "caso_colchon", `caso #${decision.numero} cerrado en ${c.red}: colchón recuperado a ${c.dias} días`, { fecha: hoy, dias: c.dias }, decision.id);
     }
   }
 
@@ -110,6 +130,6 @@ Deno.serve(async (req) => {
 
   const resumen = colchon.map((c) => `${c.red} ${c.dias}${c.tope ? "+" : ""} ${c.color}`).join("; ");
   await bitacora("informe_diario", "informe", `informe del ${hoy}: ${informe.faltantes.length} faltantes, ${informe.con_error.length} con error, ${informe.desconocidos.length} con estado desconocido`, { informe_id: inf?.id ?? null, simulada });
-  await bitacora("vigilante", "colchon", `${resumen}; ${casosNuevos.length} casos nuevos${erroresCaso.length ? `; ${erroresCaso.length} errores al abrir caso` : ""}`, { fecha: hoy, simulada, publicaciones_leidas: pubs.length, casos: casosNuevos, errores: erroresCaso });
-  return json({ ok: erroresCaso.length === 0, fecha: hoy, simulada, colchon, casos_nuevos: casosNuevos, errores: erroresCaso, informe_id: inf?.id ?? null });
+  await bitacora("vigilante", "colchon", `${resumen}; ${casosNuevos.length} casos nuevos, ${casosActualizados.length} actualizados, ${casosCerrados.length} cerrados${erroresCaso.length ? `; ${erroresCaso.length} errores con casos` : ""}`, { fecha: hoy, simulada, publicaciones_leidas: pubs.length, casos: casosNuevos, actualizados: casosActualizados, cerrados: casosCerrados, errores: erroresCaso });
+  return json({ ok: erroresCaso.length === 0, fecha: hoy, simulada, colchon, casos_nuevos: casosNuevos, casos_actualizados: casosActualizados, casos_cerrados: casosCerrados, errores: erroresCaso, informe_id: inf?.id ?? null });
 });

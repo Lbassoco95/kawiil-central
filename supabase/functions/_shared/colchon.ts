@@ -118,3 +118,21 @@ export function armarInforme(i: InformeEntrada) {
     faltantes, con_error, desconocidos, piezas_calendario_en_ventana: i.piezasEnVentana, necesita_direccion: necesita,
   };
 }
+
+// Un solo caso abierto por red mientras el colchón siga bajo la meta: se abre si no hay, se actualiza si ya existe
+// y se cierra cuando el colchón se recupera (14 días o más). Nunca se abre un segundo caso.
+export interface CasoAbierto { id: string; numero: number; evidencia?: { dias?: number; ultima_programada?: string | null } | null }
+export type AccionCaso =
+  | { accion: "abrir" }
+  | { accion: "actualizar"; id: string; numero: number; dias_anterior: number | null; cambio: boolean }
+  | { accion: "cerrar"; id: string; numero: number; dias_anterior: number | null }
+  | { accion: "nada" };
+
+export function decidirCaso(c: ColchonRed, p: Params, abierto: CasoAbierto | undefined): AccionCaso {
+  const bajo = c.dias < p.verde_desde;
+  if (!abierto) return bajo ? { accion: "abrir" } : { accion: "nada" };
+  const dias_anterior = typeof abierto.evidencia?.dias === "number" ? abierto.evidencia.dias : null;
+  if (!bajo) return { accion: "cerrar", id: abierto.id, numero: abierto.numero, dias_anterior };
+  const cambio = dias_anterior !== c.dias || (abierto.evidencia?.ultima_programada ?? null) !== c.ultima;
+  return { accion: "actualizar", id: abierto.id, numero: abierto.numero, dias_anterior, cambio };
+}
