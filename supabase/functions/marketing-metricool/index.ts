@@ -5,7 +5,7 @@
 //   No acepta cron_secret ni la llave de servicio como credencial.
 // - Cada llamada (también las rechazadas) queda en mk_api_log. Nunca devuelve ni registra el token.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
-import { construirPeticion, ErrorLista } from "../../functions/_shared/metricoolAllowlist.ts";
+import { construirPeticion, ErrorLista } from "../_shared/metricoolAllowlist.ts";
 
 const MAX_BYTES = 5_000_000;
 const TIMEOUT_MS = 20_000;

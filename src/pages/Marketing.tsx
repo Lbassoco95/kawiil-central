@@ -4,7 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Megaphone } from "lucide-react";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
-import { useCalibracion, useCasos, useCobertura, usePiezas, useReglaHistorial, useReglas } from "@/hooks/useMarketing";
+import { useCalibracion, useCasos, useColchon, useCobertura, useInformeDiario, usePiezas, useUltimaCorrida, useReglaHistorial, useReglas } from "@/hooks/useMarketing";
 import { PanelDia } from "@/components/marketing/PanelDia";
 import { Calendario } from "@/components/marketing/Calendario";
 import { Casos } from "@/components/marketing/Casos";
@@ -21,9 +21,12 @@ export default function Marketing() {
   const reglas = useReglas();
   const historial = useReglaHistorial();
   const cobertura = useCobertura();
+  const colchon = useColchon();
+  const informe = useInformeDiario();
+  const ultimaCorrida = useUltimaCorrida(); // no bloquea la pantalla: si falla, el aviso lo dice
 
-  const cargando = [piezas, calibracion, casos, reglas, historial, cobertura].some((q) => q.isLoading);
-  const error = [piezas, calibracion, casos, reglas, historial, cobertura].find((q) => q.isError);
+  const cargando = [piezas, calibracion, casos, reglas, historial, cobertura, colchon, informe].some((q) => q.isLoading);
+  const error = [piezas, calibracion, casos, reglas, historial, cobertura, colchon, informe].find((q) => q.isError);
 
   return (
     <AppLayout>
@@ -48,7 +51,8 @@ export default function Marketing() {
               <TabsTrigger value="reglas">Reglas</TabsTrigger>
             </TabsList>
             <TabsContent value="panel" className="mt-4">
-              <PanelDia calibracion={calibracion.data!} piezas={piezas.data!} casos={casos.data!} cobertura={cobertura.data!} />
+              <PanelDia calibracion={calibracion.data!} piezas={piezas.data!} casos={casos.data!} cobertura={cobertura.data!} colchon={colchon.data!} informe={informe.data![0] ?? null}
+                ultimaCorrida={ultimaCorrida.data?.[0] ?? null} estadoBitacora={ultimaCorrida.isError ? "error" : ultimaCorrida.isLoading ? "cargando" : "ok"} />
             </TabsContent>
             <TabsContent value="calendario" className="mt-4"><Calendario piezas={piezas.data!} /></TabsContent>
             <TabsContent value="casos" className="mt-4"><Casos casos={casos.data!} puedeDecidir={puedeDecidir} /></TabsContent>
