@@ -52,7 +52,7 @@ export default function Marketing() {
             </TabsContent>
             <TabsContent value="calendario" className="mt-4"><Calendario piezas={piezas.data!} /></TabsContent>
             <TabsContent value="casos" className="mt-4"><Casos casos={casos.data!} puedeDecidir={puedeDecidir} /></TabsContent>
-            <TabsContent value="semaforo" className="mt-4"><Semaforo calibracion={calibracion.data!} /></TabsContent>
+            <TabsContent value="semaforo" className="mt-4"><Semaforo calibracion={calibracion.data!} reglas={reglas.data!} /></TabsContent>
             <TabsContent value="reglas" className="mt-4"><Reglas reglas={reglas.data!} historial={historial.data!} puedeDecidir={puedeDecidir} /></TabsContent>
           </Tabs>
         )}
