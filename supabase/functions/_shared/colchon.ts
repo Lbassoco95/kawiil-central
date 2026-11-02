@@ -90,10 +90,26 @@ export function calcularColchon(pubs: Publicacion[], hoy: string, p: Params): Co
 export interface PiezaEsperada { red: Red; fecha: string; hora: string; codigo: string; pilar: string | null; formato: string | null }
 const minutos = (h: string) => +h.slice(0, 2) * 60 + +h.slice(3, 5);
 
-// Piezas del calendario en la ventana que no tienen una programada en esa red (misma fecha, hora dentro de la tolerancia).
+// Una pieza del calendario está cubierta en una red si Metricool la tiene programada o ya publicada
+// (misma fecha, hora dentro de la tolerancia). La fuente de verdad de lo programado es Metricool.
 export function calcularFaltantes(esperadas: PiezaEsperada[], pubs: Publicacion[], tolMin: number): PiezaEsperada[] {
   return esperadas.filter((e) =>
-    !pubs.some((x) => x.red === e.red && x.estado === "programada" && x.fecha === e.fecha && Math.abs(minutos(x.hora) - minutos(e.hora)) <= tolMin));
+    !pubs.some((x) => x.red === e.red && (x.estado === "programada" || x.estado === "publicada") && x.fecha === e.fecha
+      && Math.abs(minutos(x.hora) - minutos(e.hora)) <= tolMin));
+}
+
+export interface FaltantePieza { fecha: string; hora: string; codigo: string; pilar: string | null; formato: string | null; redes: Red[] }
+
+// Una línea por pieza (no una por pieza y red): la pieza lista las redes en las que falta.
+export function agruparFaltantes(faltantes: PiezaEsperada[]): FaltantePieza[] {
+  const por = new Map<string, FaltantePieza>();
+  for (const f of faltantes) {
+    const k = `${f.codigo}|${f.fecha}|${f.hora}`;
+    const g = por.get(k) ?? { fecha: f.fecha, hora: f.hora, codigo: f.codigo, pilar: f.pilar, formato: f.formato, redes: [] };
+    if (!g.redes.includes(f.red)) g.redes.push(f.red);
+    por.set(k, g);
+  }
+  return [...por.values()].sort((a, b) => (a.fecha + a.hora).localeCompare(b.fecha + b.hora));
 }
 
 export interface InformeEntrada {
@@ -101,7 +117,7 @@ export interface InformeEntrada {
 }
 
 export function armarInforme(i: InformeEntrada) {
-  const faltantes = calcularFaltantes(i.esperadas, i.pubs, i.p.tolerancia_min);
+  const faltantes = agruparFaltantes(calcularFaltantes(i.esperadas, i.pubs, i.p.tolerancia_min));
   const con_error = i.pubs.filter((x) => x.estado === "con_error").map(({ red, fecha, hora, estado_original }) => ({ red, fecha, hora, estado: estado_original }));
   const desconocidos = i.pubs.filter((x) => x.estado === "desconocido").map(({ red, fecha, hora, estado_original }) => ({ red, fecha, hora, estado: estado_original }));
   const necesita: string[] = [];
@@ -109,7 +125,7 @@ export function armarInforme(i: InformeEntrada) {
   for (const c of i.colchon) {
     if (c.color !== "verde") necesita.push(`${c.red}: el colchón es de ${c.dias} días (${c.color}); programar piezas hasta cubrir ${i.p.verde_desde} días. Tener imagen y texto listos y revisados.`);
   }
-  for (const f of faltantes) necesita.push(`${f.red}: programar la pieza ${f.codigo} del ${f.fecha} a las ${f.hora}${f.pilar ? `, pilar ${f.pilar}` : ""}${f.formato ? `, formato ${f.formato}` : ""}. Confirmar imagen y texto listos.`);
+  for (const f of faltantes) necesita.push(`Programar la pieza ${f.codigo} del ${f.fecha} a las ${f.hora}${f.pilar ? `, pilar ${f.pilar}` : ""}${f.formato ? `, formato ${f.formato}` : ""}, en ${f.redes.join(", ")}. Confirmar imagen y texto listos.`);
   for (const e of con_error) necesita.push(`${e.red}: la pieza del ${e.fecha} a las ${e.hora} tiene error en Metricool; revisar el motivo y reprogramar desde Metricool (el módulo no edita).`);
   for (const d of desconocidos) necesita.push(`${d.red}: la pieza del ${d.fecha} a las ${d.hora} tiene un estado que el módulo no reconoce (${d.estado}); revisarla en Metricool.`);
   return {

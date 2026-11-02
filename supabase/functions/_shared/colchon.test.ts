@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  decidirCaso, armarInforme, calcularColchon, calcularFaltantes, clasificarEstado, colorColchon, diasEntre, extraerPublicaciones,
+  decidirCaso, armarInforme, calcularColchon, agruparFaltantes, calcularFaltantes, clasificarEstado, colorColchon, diasEntre, extraerPublicaciones,
   fechaHoraCDMX, hoyCDMX, PARAMS_INICIALES as P, sumarDias, type Publicacion,
 } from "./colchon.ts";
 
@@ -63,6 +63,21 @@ test("faltantes: pieza esperada sin programar en esa red (tolerancia 30 min)", (
   const f = calcularFaltantes(esperadas, pubs, 30);
   assert.deepEqual(f.map((x) => x.red), ["linkedin"]);
   assert.equal(calcularFaltantes([{ ...esperadas[0], hora: "12:00" }], pubs, 30).length, 1); // 60 min de diferencia: no cruza
+});
+test("una pieza ya publicada cuenta como cubierta, no como faltante", () => {
+  const pubs = extraerPublicaciones({ data: [post("2026-11-02", "12:00", "PUBLISHED")] });
+  const e = (["instagram", "facebook", "linkedin"] as const).map((red) => ({ red, fecha: "2026-11-02", hora: "12:00", codigo: "C-1", pilar: "X", formato: "Y" }));
+  assert.equal(calcularFaltantes(e, pubs, 30).length, 0);
+});
+test("el informe agrupa por pieza: una línea por pieza con las redes que faltan", () => {
+  const e = (["instagram", "facebook", "linkedin"] as const).flatMap((red) => [
+    { red, fecha: "2026-11-10", hora: "17:30", codigo: "C-20261110", pilar: "PLD", formato: "Imagen única" },
+    { red, fecha: "2026-11-11", hora: "20:00", codigo: "C-20261111", pilar: "Innovación", formato: "Carrusel 4" },
+  ]);
+  const g = agruparFaltantes(e);
+  assert.equal(g.length, 2);
+  assert.deepEqual(g[0].redes, ["instagram", "facebook", "linkedin"]);
+  assert.deepEqual(g.map((x) => x.fecha), ["2026-11-10", "2026-11-11"]);
 });
 test("informe: dice qué necesita Dirección y avisa si el calendario no está cargado", () => {
   const pubs = extraerPublicaciones(REAL);

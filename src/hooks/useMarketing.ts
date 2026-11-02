@@ -72,7 +72,7 @@ export interface ColchonLectura {
 export interface InformeContenido {
   fecha: string; simulada: boolean; ventana_dias: number;
   colchon: Array<{ red: Red; dias: number; color: "verde" | "amarillo" | "rojo"; ultima: string | null; tope: boolean }>;
-  faltantes: Array<{ red: Red; fecha: string; hora: string; codigo: string; pilar: string | null; formato: string | null }>;
+  faltantes: Array<{ fecha: string; hora: string; codigo: string; pilar: string | null; formato: string | null; redes: Red[] }>;
   con_error: Array<{ red: Red; fecha: string; hora: string; estado: string }>;
   desconocidos: Array<{ red: Red; fecha: string; hora: string; estado: string }>;
   piezas_calendario_en_ventana: number; necesita_direccion: string[];

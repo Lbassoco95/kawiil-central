@@ -45,10 +45,10 @@ describe("informe de faltantes", () => {
     expect(screen.getByText("El calendario no tiene piezas cargadas en esos días.")).toBeTruthy();
   });
   it("lista los faltantes con fecha, hora, pilar y formato", () => {
-    const con = { ...informe, contenido: { ...informe.contenido, piezas_calendario_en_ventana: 3, faltantes: [{ red: "linkedin" as const, fecha: "2026-11-04", hora: "11:00", codigo: "K-30", pilar: "PLD", formato: "carrusel" }] } };
+    const con = { ...informe, contenido: { ...informe.contenido, piezas_calendario_en_ventana: 3, faltantes: [{ fecha: "2026-11-04", hora: "11:00", codigo: "K-30", pilar: "PLD", formato: "carrusel", redes: ["facebook" as const, "linkedin" as const] }] } };
     render(<InformeDia informe={con} />);
     const t = screen.getByTestId("informe-faltantes").textContent ?? "";
-    expect(t).toContain("LinkedIn"); expect(t).toContain("11:00"); expect(t).toContain("PLD"); expect(t).toContain("carrusel");
+    expect(t).toContain("Facebook, LinkedIn"); expect(t).toContain("11:00"); expect(t).toContain("PLD"); expect(t).toContain("carrusel");
   });
   it("sin informe: lo dice", () => {
     render(<InformeDia informe={null} />);

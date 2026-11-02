@@ -72,7 +72,7 @@ export function InformeDia({ informe }: { informe: InformeDiario | null }) {
           {c.piezas_calendario_en_ventana === 0
             ? <p className="text-muted-foreground">El calendario no tiene piezas cargadas en esos días.</p>
             : c.faltantes.length === 0 ? <p className="text-muted-foreground">Todas las piezas del calendario están programadas.</p>
-            : <ul className="space-y-1" data-testid="informe-faltantes">{c.faltantes.map((f, i) => <li key={i}>{fila(f)} · {f.pilar ?? "sin pilar"} · {f.formato ?? "sin formato"}</li>)}</ul>}
+            : <ul className="space-y-1" data-testid="informe-faltantes">{c.faltantes.map((f, i) => <li key={i}>{fechaCorta(f.fecha)} {f.hora} · {f.pilar ?? "sin pilar"} · {f.formato ?? "sin formato"} · falta en {f.redes.map((r) => RED_LABEL[r]).join(", ")}</li>)}</ul>}
         </div>
         <div>
           <p className="mb-1 font-medium">Piezas programadas con error ({c.con_error.length})</p>
