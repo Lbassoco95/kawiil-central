@@ -9,6 +9,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { BOT_AVATAR_JPEG_B64 } from "./avatar.ts";
+import { sendWebPushToUsers } from "../_shared/webPush.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -38,6 +39,73 @@ const ACTIVE_BOT = new Set([
   "in_call_not_recording",
   "in_call_recording",
 ]);
+
+/** Recall responde sin créditos con 402 (o un 4xx cuyo texto habla de créditos/facturación). */
+function looksLikeNoCredits(status: number, body: string): boolean {
+  if (status === 402) return true;
+  return status >= 400 && status < 500 && /credit|billing|payment|insufficient|balance|quota/i.test(body);
+}
+
+/** Avisa en la app (y por push) a administradores y gerentes para que recarguen antes de la próxima junta. */
+async function notifyRecallNoCredits(
+  admin: ReturnType<typeof createClient>,
+  meeting: { id: string; organization_id: string },
+) {
+  try {
+    const { data: profiles } = await admin
+      .from("profiles")
+      .select("user_id")
+      .eq("organization_id", meeting.organization_id);
+    const ids = (profiles ?? []).map((p: { user_id: string }) => p.user_id);
+    if (ids.length === 0) return;
+    const { data: roles } = await admin
+      .from("user_roles")
+      .select("user_id, role")
+      .in("user_id", ids)
+      .in("role", ["admin", "gerente"]);
+    const targets = [...new Set((roles ?? []).map((r: { user_id: string }) => r.user_id))];
+    if (targets.length === 0) return;
+
+    // Una alerta por día y por usuario: evita spamear si varios intentan enviar el bot.
+    const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+    const { data: recent } = await admin
+      .from("notifications")
+      .select("user_id")
+      .eq("type", "recall_sin_creditos")
+      .in("user_id", targets)
+      .gte("created_at", since);
+    const already = new Set((recent ?? []).map((n: { user_id: string }) => n.user_id));
+    const pending = targets.filter((uid) => !already.has(uid));
+    if (pending.length === 0) return;
+
+    const appOrigin =
+      (Deno.env.get("SITE_URL") || Deno.env.get("PUBLIC_APP_URL") || "").replace(/\/$/, "") ||
+      "https://app.kawiil.com";
+    const title = "Kawiilito sin créditos en Recall";
+    const body = "No se pudo enviar a Kawiilito a una junta. Recarga créditos en Recall para que vuelva a grabar.";
+    await admin.from("notifications").insert(
+      pending.map((uid) => ({
+        user_id: uid,
+        organization_id: meeting.organization_id,
+        type: "recall_sin_creditos",
+        title,
+        body,
+        entity_type: "meeting",
+        entity_id: meeting.id,
+        is_read: false,
+      })),
+    );
+    await sendWebPushToUsers(admin as never, {
+      userIds: pending,
+      title,
+      body,
+      url: `${appOrigin}/juntas/${meeting.id}`,
+      tag: "recall-sin-creditos",
+    });
+  } catch (e) {
+    console.warn("[mtg-recall-join] no se pudo avisar de créditos:", e);
+  }
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
@@ -120,7 +188,22 @@ serve(async (req) => {
     const text = await resp.text();
     if (!resp.ok) {
       console.error("recall create bot", resp.status, text.slice(0, 400));
-      return json({ error: "Recall rechazó la creación del bot", status: resp.status, details: text.slice(0, 400) }, 502);
+      const noCredits = looksLikeNoCredits(resp.status, text);
+      if (noCredits) {
+        await notifyRecallNoCredits(admin, meeting);
+      }
+      return json(
+        noCredits
+          ? {
+              error:
+                "Kawiilito no puede entrar: la cuenta de Recall se quedó sin créditos. Graba con «Audio de llamada» o en Teams y avisa a un administrador para recargar.",
+              code: "recall_no_credits",
+              status: resp.status,
+              details: text.slice(0, 400),
+            }
+          : { error: "Recall rechazó la creación del bot", status: resp.status, details: text.slice(0, 400) },
+        noCredits ? 402 : 502,
+      );
     }
     const bot = JSON.parse(text);
 
