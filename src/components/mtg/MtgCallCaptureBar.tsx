@@ -41,7 +41,10 @@ export function MtgCallCaptureBar(props: {
       if (error) {
         const ctx = (error as { context?: Response }).context;
         const detail = ctx ? await ctx.json().catch(() => null) : null;
-        throw new Error(detail?.error ?? error.message);
+        const extra = [detail?.status, detail?.details].filter(Boolean).join(" · ");
+        throw new Error(
+          extra ? `${detail?.error ?? error.message} (${String(extra).slice(0, 300)})` : (detail?.error ?? error.message),
+        );
       }
       if (data?.error) throw new Error(data.error);
       setMedia({ video_url: data.video_url ?? null, audio_url: data.audio_url ?? null });
@@ -72,7 +75,10 @@ export function MtgCallCaptureBar(props: {
       if (error) {
         const ctx = (error as { context?: Response }).context;
         const detail = ctx ? await ctx.json().catch(() => null) : null;
-        throw new Error(detail?.error ?? error.message);
+        const extra = [detail?.status, detail?.details].filter(Boolean).join(" · ");
+        throw new Error(
+          extra ? `${detail?.error ?? error.message} (${String(extra).slice(0, 300)})` : (detail?.error ?? error.message),
+        );
       }
       if (data?.error) throw new Error(data.error);
       toast.success("Kawiilito va en camino: admítelo en la sala de espera de Teams");
