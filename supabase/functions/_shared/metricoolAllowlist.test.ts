@@ -99,7 +99,7 @@ test("la lista de rutas permitidas es exactamente la documentada", () => {
 
 import { readFileSync } from "node:fs";
 test("el conector tiene un único fetch, pasa por construirPeticion y no usa cron_secret ni llave de servicio como credencial", () => {
-  const src = readFileSync(new URL("../../pendientes/marketing-metricool/index.ts", import.meta.url), "utf8");
+  const src = readFileSync(new URL("../marketing-metricool/index.ts", import.meta.url), "utf8");
   assert.equal((src.match(/\bfetch\(/g) ?? []).length, 1);
   assert.ok(src.includes("construirPeticion("));
   assert.ok(!/CRON_SECRET/.test(src.replace(/\/\/.*$/gm, "")));

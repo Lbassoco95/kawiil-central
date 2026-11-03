@@ -195,3 +195,11 @@ project_id = "qppfampapbxdgednkofc"
 
   [functions.esign]
     verify_jwt = false
+
+  # Conector de lectura de Metricool: se autentica con su propio secreto (x-marketing-secret), no con JWT.
+  [functions.marketing-metricool]
+    verify_jwt = false
+
+  # Vigilante del colchón: se autentica con su propio secreto (x-marketing-secret) y lo invoca pg_cron/pg_net sin JWT.
+  [functions.marketing-colchon]
+    verify_jwt = false

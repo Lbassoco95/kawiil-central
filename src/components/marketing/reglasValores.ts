@@ -51,6 +51,8 @@ export const ETIQUETA_PARAMETRO: Record<string, string> = {
   minutos_fuera: "Frecuencia fuera de la ventana (minutos)",
   antes_primera_min: "Ventana: minutos antes de la primera publicación",
   despues_ultima_min: "Ventana: minutos después de la última",
+  ventana_dias: "Ventana de consulta (días)",
+  tolerancia_min: "Tolerancia de cruce con el calendario (minutos)",
   medida: "Medida",
   verde_desde: "Verde desde",
   amarillo_desde: "Amarillo desde",

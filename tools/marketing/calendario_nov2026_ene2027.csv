@@ -1,0 +1,47 @@
+num,fecha,hora,pilar,formato,estado_archivo,tema
+1,2026-11-02,12:00,FECHA ESPECIAL,Imagen única,Imagen lista,Recordar también es cuidar
+2,2026-11-03,13:00,PLD,Carrusel 5,Imagen lista,Las reglas antilavado entran en vigor el 30 de noviembre
+3,2026-11-04,11:00,INNOVACIÓN,Carrusel 4,"Agendado, imágenes listas",Un solo hub vs. tres proveedores
+4,2026-11-05,20:00,CONTABLE,Carrusel 6,Imagen lista,Contabilidad para entender (1/4): ¿para qué sirve llevarla?
+5,2026-11-07,11:00,COMUNIDAD,Carrusel 5,"Agendado, imágenes listas",Los 4 pendientes que no deben llegar a diciembre
+6,2026-11-10,17:30,PLD,Imagen única,Imagen lista,Los avisos del mes: la fecha es el 17
+7,2026-11-11,20:00,INNOVACIÓN,Carrusel 4,Imagen lista,Qué automatizar antes del cierre: 3 tareas
+8,2026-11-12,08:30,LEGAL,Carrusel 4,Imagen lista,Buen Fin: lo que anuncias te obliga
+9,2026-11-14,17:30,FRASE,Imagen única,Imagen lista,Frase: el orden es tranquilidad
+10,2026-11-17,20:00,PLD,Carrusel 5,Imagen lista,Tu matriz de riesgo en 3 pasos
+11,2026-11-18,08:30,INNOVACIÓN,Imagen única,Imagen lista,5 procesos que debes documentar antes de diciembre
+12,2026-11-19,13:00,CONTABLE,Carrusel 6,Imagen lista,"Contabilidad para entender (2/4): cómo se registra, del comprobante al reporte"
+13,2026-11-20,09:00,FECHA ESPECIAL,Imagen única,Imagen lista,"20 de noviembre: lo que se conquista, se cuida"
+14,2026-11-21,20:00,TIP KAWIIL,Imagen única,Imagen lista,Tu presupuesto 2027 en una hoja
+15,2026-11-24,08:30,PLD,Imagen única,Imagen lista,Faltan 6 días: lo que debes tener listo
+16,2026-11-25,13:00,INNOVACIÓN,Carrusel 4,Imagen lista,IA en el cierre: 3 tareas donde sí ayuda
+17,2026-11-26,17:30,LEGAL,Carrusel 4,Por generar,Contratos que se renuevan solos: revisa antes de que pase
+18,2026-11-28,08:30,COMUNIDAD,Imagen única,Por generar,Lo que dejaste para diciembre
+19,2026-12-01,13:00,PLD,Carrusel 4,Por generar,Ya entró en vigor: lo que sigue
+20,2026-12-02,17:30,INNOVACIÓN,Imagen única,Por generar,Calendario de cierre de diciembre
+21,2026-12-03,20:00,CONTABLE,Carrusel 5,Por generar,"Aguinaldo: cómo se calcula, con un ejemplo"
+22,2026-12-05,13:00,TIP KAWIIL,Imagen única,Por generar,Qué guardar y por cuánto tiempo
+23,2026-12-08,17:30,PLD,Imagen única,Por generar,La capacitación anual de PLD arranca el 1 de enero
+24,2026-12-09,20:00,INNOVACIÓN,Carrusel 4,Por generar,Prueba de una semana sin ti
+25,2026-12-10,08:30,LEGAL,Carrusel 4,Por generar,Asamblea y libros corporativos al día
+26,2026-12-12,09:00,FECHA ESPECIAL,Imagen única,Por generar,Con constancia y con cariño
+27,2026-12-15,20:00,PLD,Imagen única,Por generar,Cierra el año sin avisos pendientes
+28,2026-12-16,08:30,INNOVACIÓN,Imagen única,Por generar,Qué sí y qué no automatizar en 2027
+29,2026-12-17,13:00,CONTABLE,Carrusel 6,Por generar,Contabilidad para entender (3/4): ganar no es lo mismo que tener dinero
+30,2026-12-19,20:00,FRASE,Imagen única,Por generar,Frase: cuidar el detalle es respeto
+31,2026-12-22,08:30,PLD,Imagen única,Por generar,Mitos de la reforma antilavado
+32,2026-12-23,13:00,INNOVACIÓN,Imagen única,Por generar,Tus 4 propósitos de orden para 2027
+33,2026-12-24,18:00,FECHA ESPECIAL,Imagen única,Por generar,Gracias por dejarnos cuidar lo que construyes
+34,2026-12-26,08:30,COMUNIDAD,Imagen única,Por generar,Lo que valoramos de este año
+35,2026-12-29,13:00,PLD,Imagen única,Por generar,Checklist PLD de cierre de año
+36,2026-12-30,17:30,INNOVACIÓN,Imagen única,Por generar,Tu balance del año en 3 preguntas
+37,2026-12-31,19:00,FECHA ESPECIAL,Imagen única,Por generar,Cerramos el año cuidando lo que importa
+38,2027-01-01,10:00,FECHA ESPECIAL,Imagen única,Por generar,Feliz 2027: empezamos con orden
+39,2027-01-02,13:00,KAWIIL,Carrusel 4,Por generar,Por qué hacemos lo que hacemos
+40,2027-01-05,17:30,PLD,Carrusel 4,Por generar,Primer mes con reglas nuevas: qué sigue
+41,2027-01-06,09:00,FECHA ESPECIAL,Imagen única,Por generar,Que tu rosca tenga muchos Reyes
+42,2027-01-07,08:30,LEGAL,Carrusel 4,Por generar,Contratos que vencen en enero: revisa vigencias hoy
+43,2027-01-09,17:30,COMUNIDAD,Imagen única,Por generar,Tu meta de orden 2027
+44,2027-01-12,20:00,PLD,Imagen única,Por generar,Capacitación PLD: cómo documentarla
+45,2027-01-13,08:30,INNOVACIÓN,Imagen única,Por generar,Documentar un proceso en 30 minutos
+46,2027-01-14,13:00,CONTABLE,Carrusel 7,Por generar,Contabilidad para entender (4/4): qué debe enseñarte y entregarte tu contador
