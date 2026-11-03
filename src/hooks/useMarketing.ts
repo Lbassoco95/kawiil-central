@@ -79,6 +79,8 @@ export interface InformeContenido {
 }
 export interface InformeDiario { id: string; fecha: string; contenido: InformeContenido; simulada: boolean; created_at: string }
 export interface CorridaVigilante { id: string; agente: string; accion: string; resultado: string; detalle: { simulada?: boolean } | null; registrado_at: string }
+export interface FilaBitacora { id: string; agente: string; accion: string; resultado: string; caso_id: string | null; detalle: { simulada?: boolean } | null; registrado_at: string }
+export interface TrabajoCron { trabajo: string; horario: string; activo: boolean; ultima_ejecucion: string | null; ultima_estado: string | null }
 export interface Cobertura { red: Red; fuente: string; desde: string; hasta: string; nota: string | null }
 
 function useTabla<T>(clave: string, consulta: () => Promise<{ data: T[] | null; error: unknown }>) {
@@ -126,3 +128,24 @@ export const useInformeDiario = () =>
 export const useUltimaCorrida = () =>
   useTabla<CorridaVigilante>("ultima_corrida", () =>
     mk("mk_bitacora").select("id, agente, accion, resultado, detalle, registrado_at").eq("agente", "vigilante").eq("accion", "colchon").order("registrado_at", { ascending: false }).limit(1));
+
+// Vista «Agentes»: todo de solo lectura. La bitácora crece unas 5 filas al día: 500 filas cubren meses.
+export const useBitacora = () =>
+  useTabla<FilaBitacora>("bitacora", () =>
+    mk("mk_bitacora").select("id, agente, accion, resultado, caso_id, detalle, registrado_at").order("registrado_at", { ascending: false }).limit(500));
+export const usePropuestas = () => useTabla<{ id: string; estado: string }>("propuestas", () => mk("mk_propuesta").select("id, estado"));
+export const useDecisiones = () => useTabla<{ id: string; decision: string }>("decisiones", () => mk("mk_decision").select("id, decision"));
+
+// Estado de los trabajos programados vía mk_agentes_estado(). Si la función aún no está aplicada (o falla), la vista sigue con su
+// catálogo fijo y lo dice: nunca se rompe la pestaña por esto.
+export const useEstadoTrabajos = () =>
+  useQuery({
+    queryKey: ["marketing", "trabajos"],
+    queryFn: async (): Promise<{ disponible: boolean; trabajos: TrabajoCron[] }> => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any).rpc("mk_agentes_estado");
+      if (error) return { disponible: false, trabajos: [] };
+      return { disponible: true, trabajos: (data ?? []) as TrabajoCron[] };
+    },
+    staleTime: 60_000,
+  });

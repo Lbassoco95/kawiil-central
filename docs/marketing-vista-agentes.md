@@ -1,4 +1,4 @@
-# Marketing · Vista «Agentes» (diseño, 3 nov 2026) — solo lectura, nada construido
+# Marketing · Vista «Agentes» (3 nov 2026) — solo lectura. **Construida en el repo**; falta aplicar la función `mk_agentes_estado` (migración en `supabase/pendientes/`)
 
 Objetivo: dentro de `/marketing`, una pestaña **Agentes** que muestre, por agente, su última corrida, resultado, próxima ejecución y si falló; una línea de tiempo con lo que hizo y el caso al que se refiere; y el flujo caso → Revisor → propuesta → decisión de Dirección, mostrando solo los agentes que existen. Todo sale de la bitácora y los casos que ya existen; la vista no escribe ni llama a Metricool.
 

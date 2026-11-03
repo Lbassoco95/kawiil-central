@@ -4,12 +4,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Megaphone } from "lucide-react";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
-import { useCalibracion, useCasos, useColchon, useCobertura, useInformeDiario, usePiezas, useUltimaCorrida, useReglaHistorial, useReglas } from "@/hooks/useMarketing";
+import { useCalibracion, useCasos, useColchon, useCobertura, useInformeDiario, usePiezas, useUltimaCorrida, useReglaHistorial, useReglas, useBitacora, usePropuestas, useDecisiones, useEstadoTrabajos } from "@/hooks/useMarketing";
 import { PanelDia } from "@/components/marketing/PanelDia";
 import { Calendario } from "@/components/marketing/Calendario";
 import { Casos } from "@/components/marketing/Casos";
 import { Semaforo } from "@/components/marketing/Semaforo";
 import { Reglas } from "@/components/marketing/Reglas";
+import { Agentes } from "@/components/marketing/Agentes";
 
 // Marketing · monitoreo (primera versión, solo lectura). No escribe en la base ni llama a Metricool.
 export default function Marketing() {
@@ -24,6 +25,11 @@ export default function Marketing() {
   const colchon = useColchon();
   const informe = useInformeDiario();
   const ultimaCorrida = useUltimaCorrida(); // no bloquea la pantalla: si falla, el aviso lo dice
+  // Vista «Agentes»: solo lectura; ninguna de estas consultas bloquea el resto del módulo.
+  const bitacora = useBitacora();
+  const propuestas = usePropuestas();
+  const decisiones = useDecisiones();
+  const trabajos = useEstadoTrabajos();
 
   const cargando = [piezas, calibracion, casos, reglas, historial, cobertura, colchon, informe].some((q) => q.isLoading);
   const error = [piezas, calibracion, casos, reglas, historial, cobertura, colchon, informe].find((q) => q.isError);
@@ -49,6 +55,7 @@ export default function Marketing() {
               <TabsTrigger value="casos">Casos</TabsTrigger>
               <TabsTrigger value="semaforo">Semáforo</TabsTrigger>
               <TabsTrigger value="reglas">Reglas</TabsTrigger>
+              <TabsTrigger value="agentes">Agentes</TabsTrigger>
             </TabsList>
             <TabsContent value="panel" className="mt-4">
               <PanelDia calibracion={calibracion.data!} piezas={piezas.data!} casos={casos.data!} cobertura={cobertura.data!} colchon={colchon.data!} informe={informe.data![0] ?? null}
@@ -58,6 +65,10 @@ export default function Marketing() {
             <TabsContent value="casos" className="mt-4"><Casos casos={casos.data!} puedeDecidir={puedeDecidir} /></TabsContent>
             <TabsContent value="semaforo" className="mt-4"><Semaforo calibracion={calibracion.data!} reglas={reglas.data!} /></TabsContent>
             <TabsContent value="reglas" className="mt-4"><Reglas reglas={reglas.data!} historial={historial.data!} puedeDecidir={puedeDecidir} /></TabsContent>
+            <TabsContent value="agentes" className="mt-4">
+              <Agentes filas={bitacora.data ?? []} casos={casos.data!} propuestas={propuestas.data ?? []} decisiones={decisiones.data ?? []} trabajos={trabajos.data}
+                estadoBitacora={bitacora.isError ? "error" : bitacora.isLoading ? "cargando" : "ok"} />
+            </TabsContent>
           </Tabs>
         )}
       </div>

@@ -32,6 +32,13 @@ Pruebas: `node --experimental-strip-types --test supabase/functions/_shared/*.te
   pieza, corte `7d` si existe y si no `acumulado`. Hoy no cambia ningún promedio ni color. Prueba: `tools/marketing/prueba_semaforo_pglite.mjs`.
 - Pruebas del modo forma: `supabase/functions/_shared/metricoolForma.test.ts` (incluye una prueba aleatoria con 400 documentos hostiles).
 
+## Vista «Agentes» (construida en el repo; falta aplicar la función de lectura)
+- **Migración** `20261103120000_marketing_agentes_estado.sql`: función de solo lectura `mk_agentes_estado()` (nombre, horario, activo y última ejecución
+  de los trabajos de Marketing; sin el texto de los comandos). Cerrada a `anon`, abierta a `authenticated` (comprueba `mk_can_view()`) y `service_role`.
+  Prueba contra Postgres real: `tools/marketing/prueba_agentes_pglite.mjs`. Se aplica con confirmación de Dirección; al aplicarla se le asigna la versión real.
+- **La pantalla** (pestaña «Agentes» de `/marketing`) funciona con o sin la función: sin ella usa el horario previsto (catálogo fijo), lo avisa en pantalla
+  y no puede detectar un trabajo pausado ni mostrar al Vigía (que no deja fila cuando todo está bien).
+
 ## Sigue aquí
 - `20261101130000_marketing_nota_umbral_instagram.sql`: nota de la regla v1 de Instagram. Dirección pidió registrarla con la
   función de cambio de regla, con motivo; este SQL se descartará por ese camino. Queda para después.
