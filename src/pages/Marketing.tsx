@@ -4,13 +4,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Megaphone } from "lucide-react";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
-import { useCalibracion, useCasos, useColchon, useCobertura, useInformeDiario, usePiezas, useUltimaCorrida, useReglaHistorial, useReglas, useBitacora, usePropuestas, useDecisiones, useEstadoTrabajos } from "@/hooks/useMarketing";
+import { useCalibracion, useCasos, useColchon, useCobertura, useInformeDiario, usePiezas, useUltimaCorrida, useReglaHistorial, useReglas, useBitacora, usePropuestas, useDecisiones, useEstadoTrabajos, useAgentesRegistro, useTareasAgentes } from "@/hooks/useMarketing";
 import { PanelDia } from "@/components/marketing/PanelDia";
 import { Calendario } from "@/components/marketing/Calendario";
 import { Casos } from "@/components/marketing/Casos";
 import { Semaforo } from "@/components/marketing/Semaforo";
 import { Reglas } from "@/components/marketing/Reglas";
 import { Agentes } from "@/components/marketing/Agentes";
+import { AgentesRegistro } from "@/components/marketing/AgentesRegistro";
 
 // Marketing · monitoreo (primera versión, solo lectura). No escribe en la base ni llama a Metricool.
 export default function Marketing() {
@@ -30,6 +31,8 @@ export default function Marketing() {
   const propuestas = usePropuestas();
   const decisiones = useDecisiones();
   const trabajos = useEstadoTrabajos();
+  const agentesReg = useAgentesRegistro();
+  const tareasReg = useTareasAgentes();
 
   const cargando = [piezas, calibracion, casos, reglas, historial, cobertura, colchon, informe].some((q) => q.isLoading);
   const error = [piezas, calibracion, casos, reglas, historial, cobertura, colchon, informe].find((q) => q.isError);
@@ -68,6 +71,10 @@ export default function Marketing() {
             <TabsContent value="agentes" className="mt-4">
               <Agentes filas={bitacora.data ?? []} casos={casos.data!} propuestas={propuestas.data ?? []} decisiones={decisiones.data ?? []} trabajos={trabajos.data}
                 estadoBitacora={bitacora.isError ? "error" : bitacora.isLoading ? "cargando" : "ok"} />
+              <h2 className="mb-3 mt-8 text-base font-medium">Agentes de kawiil-central</h2>
+              <AgentesRegistro agentes={agentesReg.data ?? []} tareas={tareasReg.data ?? []}
+                estadoAgentes={agentesReg.isError ? "error" : agentesReg.isLoading ? "cargando" : "ok"}
+                estadoTareas={tareasReg.isError ? "error" : tareasReg.isLoading ? "cargando" : "ok"} />
             </TabsContent>
           </Tabs>
         )}
