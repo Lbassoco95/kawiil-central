@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
 import { useUserRole } from "@/hooks/useUserRole";
+import type { CandidateConsent } from "@/lib/privacyNotice";
 import { functionInvokeUserMessageAsync } from "@/lib/supabaseInvoke";
 import {
   DEFAULT_CRITERIA,
@@ -1116,6 +1117,26 @@ export function useExtractCvPhoto() {
 }
 
 /** URLs firmadas (temporales) para mostrar las fotos de un conjunto de candidatos. */
+/** Último consentimiento registrado por candidato (solo lectura, RF-03/RF-04). */
+export function useCandidateConsents(candidateIds: string[]) {
+  const key = candidateIds.slice().sort().join(",");
+  return useQuery({
+    queryKey: ["rh-candidate-consents", key],
+    enabled: candidateIds.length > 0,
+    queryFn: async (): Promise<Record<string, CandidateConsent>> => {
+      const { data, error } = await db
+        .from("rh_candidate_consents")
+        .select("id,candidate_id,notice_version,primary_accepted,talent_pool_accepted,consented_at")
+        .in("candidate_id", candidateIds)
+        .order("consented_at", { ascending: true });
+      if (error) throw error;
+      const map: Record<string, CandidateConsent> = {};
+      for (const r of (data as CandidateConsent[]) ?? []) map[r.candidate_id] = r; // el más reciente gana
+      return map;
+    },
+  });
+}
+
 export function useCandidatePhotoUrls(candidates: { photo_url: string | null }[]) {
   const paths = candidates.map((c) => c.photo_url).filter((p): p is string => !!p);
   const key = paths.slice().sort().join(",");

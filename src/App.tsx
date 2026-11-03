@@ -30,6 +30,7 @@ import Actividades from "./pages/Actividades";
 import ActividadDetalle from "./pages/ActividadDetalle";
 import CambiarContrasena from "./pages/CambiarContrasena";
 import PostularVacante from "./pages/PostularVacante";
+import AvisoPrivacidad from "./pages/AvisoPrivacidad";
 import Microsoft365Calendario from "./pages/Microsoft365Calendario";
 import Microsoft365Correo from "./pages/Microsoft365Correo";
 import Hub from "./pages/Hub";
@@ -39,6 +40,8 @@ import Comunicacion from "./pages/Comunicacion";
 import AsistenteIA from "./pages/AsistenteIA";
 import BaseConocimiento from "./pages/BaseConocimiento";
 import Finanzas from "./pages/Finanzas";
+import Marketing from "./pages/Marketing";
+import { MarketingGate } from "@/components/marketing/MarketingGate";
 import NotFound from "./pages/NotFound";
 import Accesibilidad from "./pages/Accesibilidad";
 import PipelineLayout from "./pages/pipeline/PipelineLayout";
@@ -79,6 +82,7 @@ const App = () => (
               <Route path="/login" element={<Login />} />
               <Route path="/cambiar-contrasena" element={<CambiarContrasena />} />
               <Route path="/postular/:token" element={<PostularVacante />} />
+              <Route path="/aviso-privacidad" element={<AvisoPrivacidad />} />
               <Route path="/contrato/:token" element={<ContratoPublico />} />
               <Route path="/firmar/:token" element={<FirmarPublico />} />
               <Route path="/portal/:token" element={<PortalCliente />} />
@@ -131,6 +135,7 @@ const App = () => (
               <Route path="/asistente" element={<ProtectedRoute><ModuleGate moduleKey="ai"><AsistenteIA /></ModuleGate></ProtectedRoute>} />
               <Route path="/conocimiento" element={<ProtectedRoute><ModuleGate moduleKey="conocimiento"><BaseConocimiento /></ModuleGate></ProtectedRoute>} />
               <Route path="/finanzas" element={<ProtectedRoute><ModuleGate moduleKey="finanzas"><Finanzas /></ModuleGate></ProtectedRoute>} />
+              <Route path="/marketing" element={<ProtectedRoute><MarketingGate><Marketing /></MarketingGate></ProtectedRoute>} />
               <Route
                 path="/pipeline"
                 element={

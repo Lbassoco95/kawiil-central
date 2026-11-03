@@ -1,3 +1,4 @@
+import { TalentPoolBadge } from "./TalentPoolBadge";
 import { useRef, useState } from "react";
 import {
   Dialog,
@@ -64,6 +65,7 @@ import {
   useUploadCandidatePhoto,
   useExtractCvPhoto,
   useCandidatePhotoUrls,
+  useCandidateConsents,
 } from "@/hooks/useRecruitment";
 import { renderCvFirstPageToBase64, extractCvContent } from "@/lib/cvImage";
 import { UserAvatar } from "@/components/shared/UserAvatar";
@@ -144,6 +146,7 @@ function CandidateDetailInner({
   const uploadPhoto = useUploadCandidatePhoto();
   const extractPhoto = useExtractCvPhoto();
   const { data: photoMap = {} } = useCandidatePhotoUrls([candidate]);
+  const { data: consentMap = {} } = useCandidateConsents([candidate.id]);
   const photoUrl = candidate.photo_url ? photoMap[candidate.photo_url] ?? null : null;
   const sendEmail = useSendCandidateEmail();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -336,6 +339,7 @@ function CandidateDetailInner({
             {candidate.email && <div className="text-muted-foreground">📧 {candidate.email}</div>}
             {candidate.phone && <div className="text-muted-foreground">📞 {candidate.phone}</div>}
             {candidate.source && <div className="text-muted-foreground">🔗 {candidate.source}</div>}
+            <div className="col-span-2"><TalentPoolBadge consent={consentMap[candidate.id]} /></div>
           </div>
 
           {/* Contratación / onboarding (solo G4) */}
