@@ -102,3 +102,13 @@ Criterio para cargar: todas las piezas del archivo emparejadas o explicadas, y l
 - LinkedIn: las métricas por publicación de perfiles personales solo existen para lo publicado desde Metricool; si la cuenta es una página de empresa no aplica. Por confirmar.
 - Alcance de Facebook: Metricool lo reporta distinto de la plataforma con el tiempo; se valida contra el archivo antes de fijarlo como medida.
 - Límites de la API sin documentar: se miden antes de subir la frecuencia.
+
+## 12. Hallazgos del sondeo (3 nov 2026, modo «forma»; solo estructura y números)
+Conector v6 desplegado; 5 invocaciones (scheduler, Instagram, Facebook, LinkedIn y reintento de LinkedIn), todas GET, estado 200, ninguna con cuerpo completo.
+| Ruta | Resultado |
+|---|---|
+| `scheduler_posts` (30 jul–31 oct) | 54 publicaciones; 144 entradas de red (48 por Facebook, Instagram y LinkedIn): 139 `PUBLISHED`, 5 `ERROR`. 6 publicaciones no traen ninguna de las tres redes (por aclarar). Fechas en America/Mexico_City |
+| `instagram_posts` (30 jul–30 oct) | **44 publicaciones** (esperadas 44). 17 antes del 8 sep y 27 desde el 7 sep. Tipos: 22 `FEED_IMAGE`, 22 `FEED_CAROUSEL_ALBUM`. **Las horas llegan en Europe/Madrid** aunque se pidió Ciudad de México: hay que convertir. `reach` media 45.05, mediana 24 (mín 7, máx 167); `saved`: 2 de 44 distintos de cero; `shares` media 1.39; `follows` siempre 0 |
+| `facebook_posts` | **47 publicaciones** (como el archivo). La respuesta es una lista (`$[]`), no `{data:[]}`; la fecha viene como número (`created`/`timestamp`, época). Tipos: 24 `album`, 23 `photo`. `impressionsUnique` media 18.72, mediana 12 (consistente con el umbral actual de Facebook); `impressions` = `impressionsOrganic` (sin pauta); comentarios y videoViews todos 0; no existe `saved` |
+| `linkedin_posts` | **0 elementos, con las dos formas de fecha** (`yyyyMMdd` e ISO). Pendiente de resolver |
+Consecuencias para el diseño: convertir horas de Instagram de Madrid a Ciudad de México; leer fechas de Facebook como época; Facebook usa `impressionsUnique` como alcance (a validar contra el archivo); LinkedIn requiere otra vía (ver abajo).
