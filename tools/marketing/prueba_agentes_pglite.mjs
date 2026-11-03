@@ -4,7 +4,7 @@
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 const { PGlite } = await import(process.env.PGLITE_PATH ? "file://" + process.env.PGLITE_PATH : "@electric-sql/pglite");
-const sql = readFileSync(new URL("../../supabase/pendientes/20261103120000_marketing_agentes_estado.sql", import.meta.url), "utf8");
+const sql = readFileSync(new URL("../../supabase/migrations/20261103203209_marketing_agentes_estado.sql", import.meta.url), "utf8");
 
 async function nueva() {
   const db = new PGlite();

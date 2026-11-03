@@ -1,4 +1,4 @@
--- Trabajo programado de las 7:00 de Ciudad de México (13:00 UTC; México no tiene horario de verano). NO SE EJECUTA sin confirmación.
+-- Trabajo programado de las 7:00 de Ciudad de México (13:00 UTC; México no tiene horario de verano). YA PROGRAMADO en producción el 2 nov 2026 (confirmado por Dirección); este archivo es solo el registro.
 -- Invoca marketing-colchon con cuerpo vacío (fecha real). El secreto se lee de Vault en cada ejecución, por nombre exacto;
 -- el texto guardado en cron.job contiene solo la subconsulta, nunca el valor.
 select cron.schedule(

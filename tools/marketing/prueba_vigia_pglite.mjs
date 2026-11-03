@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 const { PGlite } = await import(process.env.PGLITE_PATH ? "file://" + process.env.PGLITE_PATH : "@electric-sql/pglite");
 
 const ORG = "a0000000-0000-0000-0000-000000000001";
-const sqlVigia = readFileSync(new URL("../../supabase/pendientes/20261102130000_marketing_vigia_colchon.sql", import.meta.url), "utf8");
+const sqlVigia = readFileSync(new URL("../../supabase/migrations/20261102033958_marketing_vigia_colchon.sql", import.meta.url), "utf8");
 let fallos = 0; const ok = (n) => console.log("  ok  ", n);
 
 async function nuevaBase() {

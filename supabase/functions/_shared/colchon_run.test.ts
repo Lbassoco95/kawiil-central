@@ -135,7 +135,7 @@ test("recuperación: tras fallar la lectura, el colchón y los casos del colchó
 test("colchon_run.ts no hace peticiones ni conoce Metricool; index.ts hace una sola, al conector", () => {
   const run = readFileSync(new URL("./colchon_run.ts", import.meta.url), "utf8");
   assert.ok(!/\bfetch\(|metricool\.com|X-Mc-Auth|METRICOOL_USER_TOKEN/i.test(run));
-  const idx = readFileSync(new URL("../../pendientes/marketing-colchon/index.ts", import.meta.url), "utf8");
+  const idx = readFileSync(new URL("../marketing-colchon/index.ts", import.meta.url), "utf8");
   assert.equal((idx.match(/\bfetch\(/g) ?? []).length, 1);
   assert.ok(idx.includes("/functions/v1/marketing-metricool") && !/metricool\.com|METRICOOL_USER_TOKEN|X-Mc-Auth/i.test(idx));
   assert.ok(!/method:\s*["'](PUT|PATCH|DELETE)["']/.test(idx) && !/CRON_SECRET|Authorization/.test(idx));

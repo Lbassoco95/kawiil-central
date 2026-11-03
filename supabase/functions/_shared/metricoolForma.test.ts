@@ -143,7 +143,7 @@ test("una operación «forma:...» en un conector sin este modo se rechaza (no d
   assert.throws(() => construirPeticion("forma:scheduler_posts", {}, { userId: "4220058", blogId: "5431581" }), ErrorLista);
 });
 test("conector con modo forma: una sola petición, la lista cerrada sigue mandando y el cuerpo solo pasa por armarSalida", () => {
-  const src = readFileSync(new URL("../../pendientes/marketing-metricool-forma/index.ts", import.meta.url), "utf8");
+  const src = readFileSync(new URL("../marketing-metricool/index.ts", import.meta.url), "utf8");
   assert.equal((src.match(/\bfetch\(/g) ?? []).length, 1);
   assert.ok(src.includes("construirPeticion(operacion,") && src.includes("armarSalida({ forma,"));
   assert.ok(!/\bdatos\b/.test(src.replace(/^\s*\/\/.*$/gm, "")), "el conector no debe manejar el cuerpo parseado fuera de armarSalida");

@@ -5,8 +5,8 @@
 // - Guarda solo red, fecha, hora y estado de cada publicación; nunca textos, correos ni enlaces.
 // - La lógica vive en _shared/colchon_run.ts (con la base inyectada y probada); aquí solo se conecta con Supabase.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
-import { hoyCDMX } from "../../functions/_shared/colchon.ts";
-import { correrColchon, type Almacen, type LecturaMetricool } from "../../functions/_shared/colchon_run.ts";
+import { hoyCDMX } from "../_shared/colchon.ts";
+import { correrColchon, type Almacen, type LecturaMetricool } from "../_shared/colchon_run.ts";
 
 function igual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
