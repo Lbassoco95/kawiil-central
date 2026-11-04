@@ -15,3 +15,11 @@ explícita de Dirección, escritura por escritura.
 - `20261103000000_marketing_semaforo_corregido.sql`: una fila por pieza (corte `7d` si existe, si no `acumulado`). Corrección preventiva;
   hoy no cambia ningún promedio ni color. Prueba: `tools/marketing/prueba_semaforo_pglite.mjs`.
 - `20261101130000_marketing_nota_umbral_instagram.sql`: se descartará; Dirección pidió registrar la nota con `mk_cambiar_regla`, con motivo.
+
+## Agentes de Marketing que dejan tarea y latido (preparado, sin aplicar; ver `docs/marketing-agentes-registro-diseno.md`)
+Orden, cada paso con confirmación de Dirección:
+1. `20261104120000_marketing_registrar_corrida.sql`: funciones `mk_registrar_corrida` y `mk_latido_agente` (solo `service_role`). Reversa: `tools/marketing/rollback_registrar_corrida.sql`.
+2. `20261104120100_marketing_vigia_registra.sql`: el vigía actualiza su latido (todo bien) o deja una tarea con error (no corrió). Requiere el paso 1. Reversa: `tools/marketing/rollback_vigia_registra.sql`.
+3. Despliegue de `marketing-colchon` (código ya en `supabase/functions/`; **al fusionar a main el flujo lo desplegaría solo**, por eso el PR con ese código no debe fusionarse antes de aplicar los pasos 1 y 2).
+4. Una corrida manual del colchón para comprobar que deja las dos tareas.
+Prueba: `tools/marketing/prueba_registrar_corrida_pglite.mjs`.

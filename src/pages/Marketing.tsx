@@ -4,7 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Megaphone } from "lucide-react";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
-import { useCalibracion, useCasos, useColchon, useCobertura, useInformeDiario, usePiezas, useUltimaCorrida, useReglaHistorial, useReglas, useBitacora, usePropuestas, useDecisiones, useEstadoTrabajos, useAgentesRegistro, useTareasAgentes } from "@/hooks/useMarketing";
+import { useCalibracion, useCasos, useColchon, useCobertura, useInformeDiario, usePiezas, useUltimaCorrida, useReglaHistorial, useReglas, useBitacora, usePropuestas, useDecisiones, useEstadoTrabajos, useAgentesRegistro, useTareasAgentes, useTareasMarketingAgentes } from "@/hooks/useMarketing";
 import { PanelDia } from "@/components/marketing/PanelDia";
 import { Calendario } from "@/components/marketing/Calendario";
 import { Casos } from "@/components/marketing/Casos";
@@ -33,6 +33,7 @@ export default function Marketing() {
   const trabajos = useEstadoTrabajos();
   const agentesReg = useAgentesRegistro();
   const tareasReg = useTareasAgentes();
+  const tareasMk = useTareasMarketingAgentes();
 
   const cargando = [piezas, calibracion, casos, reglas, historial, cobertura, colchon, informe].some((q) => q.isLoading);
   const error = [piezas, calibracion, casos, reglas, historial, cobertura, colchon, informe].find((q) => q.isError);
@@ -72,7 +73,7 @@ export default function Marketing() {
               <Agentes filas={bitacora.data ?? []} casos={casos.data!} propuestas={propuestas.data ?? []} decisiones={decisiones.data ?? []} trabajos={trabajos.data}
                 estadoBitacora={bitacora.isError ? "error" : bitacora.isLoading ? "cargando" : "ok"} />
               <h2 className="mb-3 mt-8 text-base font-medium">Agentes de kawiil-central</h2>
-              <AgentesRegistro agentes={agentesReg.data ?? []} tareas={tareasReg.data ?? []}
+              <AgentesRegistro agentes={agentesReg.data ?? []} tareas={tareasReg.data ?? []} tareasMarketing={tareasMk.data ?? []}
                 estadoAgentes={agentesReg.isError ? "error" : agentesReg.isLoading ? "cargando" : "ok"}
                 estadoTareas={tareasReg.isError ? "error" : tareasReg.isLoading ? "cargando" : "ok"} />
             </TabsContent>

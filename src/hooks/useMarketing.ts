@@ -159,7 +159,7 @@ export const useAgentesRegistro = () =>
     queryFn: async (): Promise<import("@/components/marketing/agentesRegistro").AgenteRegistro[]> => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any).from("agent_registry")
-        .select("id, name, display_name, description, role, status, kind, last_heartbeat, last_task_at, tasks_completed, tasks_failed").order("name");
+        .select("id, name, display_name, description, role, status, kind, last_heartbeat, last_task_at, tasks_completed, tasks_failed, config").order("name");
       if (error) throw error;
       return data ?? [];
     },
@@ -173,6 +173,20 @@ export const useTareasAgentes = () =>
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any).from("agent_tasks")
         .select("id, agent_id, task_type, status, created_at, started_at, completed_at").order("created_at", { ascending: false }).limit(300);
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 60_000,
+  });
+
+// Tareas de los agentes de Marketing (origen «marketing»): solo números y códigos. El filtro por origen evita traer resultados de otros agentes.
+export const useTareasMarketingAgentes = () =>
+  useQuery({
+    queryKey: ["agentes-registro", "tareas-marketing"],
+    queryFn: async (): Promise<import("@/components/marketing/agentesRegistro").TareaMarketing[]> => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any).from("agent_tasks")
+        .select("id, agent_id, status, completed_at, result_summary, result").eq("input_context->>origen", "marketing").order("completed_at", { ascending: false }).limit(60);
       if (error) throw error;
       return data ?? [];
     },

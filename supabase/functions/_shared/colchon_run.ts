@@ -11,6 +11,13 @@ export interface CasoNuevo { tipo: string; regla_codigo: string; red: Red | null
 export interface PiezaDb { id: string; codigo: string; pilar: string | null; formato: string | null; programada_at: string | null }
 export interface PiezaRedDb { pieza_id: string; red: string; programada_at: string | null }
 
+// Qué deja cada corrida en el registro de agentes de kawiil-central (agent_tasks + latido en agent_registry).
+// Solo números y códigos: nunca textos de Metricool ni datos de clientes.
+export interface CorridaRegistrada {
+  agente: "marketing_vigilante" | "marketing_informe_diario";
+  estado: "completed" | "error"; titulo: string; resumen: string; resultado: unknown; inicio: string;
+}
+
 export interface Almacen {
   leerRegla(): Promise<Partial<Params> | null>;
   insertarColchon(filas: Array<Record<string, unknown>>): Promise<void>;
@@ -20,6 +27,7 @@ export interface Almacen {
   piezasVentana(desde: string, hasta: string): Promise<{ piezas: PiezaDb[]; porRed: PiezaRedDb[] }>;
   insertarInforme(fecha: string, contenido: unknown, simulada: boolean): Promise<string | null>;
   bitacora(agente: string, accion: string, resultado: string, detalle: unknown, casoId?: string | null): Promise<void>;
+  registrarCorrida(c: CorridaRegistrada): Promise<void>;
 }
 export type LecturaMetricool = { ok: true; datos: unknown } | { ok: false; motivo: string };
 
@@ -40,12 +48,16 @@ export async function correrColchon(
   d: { hoy: string; simulada: boolean; almacen: Almacen; leerMetricool: (inicio: string, fin: string, p: Params) => Promise<LecturaMetricool> },
 ): Promise<Resultado> {
   const { hoy, simulada, almacen: a } = d;
+  const inicio = new Date().toISOString();
   const fallas: string[] = [];
   const paso = async <T>(nombre: string, fn: () => Promise<T>): Promise<T | undefined> => {
     try { return await fn(); } catch (e) { fallas.push(`${nombre}: ${mensaje(e)}`); return undefined; }
   };
   const bit = (agente: string, accion: string, resultado: string, detalle: unknown, casoId: string | null = null) =>
     paso("bitácora", () => a.bitacora(agente, accion, resultado, detalle, casoId));
+
+  // Las corridas simuladas (pruebas con fecha inventada) no se registran: inflarían los contadores del agente.
+  const registrar = (c: Omit<CorridaRegistrada, "inicio">) => simulada ? Promise.resolve() : paso(`registrar la corrida de ${c.agente}`, () => a.registrarCorrida({ ...c, inicio }));
 
   const res: Resultado = {
     ok: true, estado: 200, fecha: hoy, simulada, lectura_ok: true, colchon: [], casos_nuevos: [], casos_actualizados: [], casos_cerrados: [],
@@ -62,6 +74,8 @@ export async function correrColchon(
     res.lectura_ok = false;
     fallas.unshift(`lectura de Metricool: ${lectura.motivo}`);
     await bit("vigilante", "colchon", `falla de lectura: ${lectura.motivo}`, { fecha: hoy, simulada });
+    await registrar({ agente: "marketing_vigilante", estado: "error", titulo: `Colchón ${hoy}`, resumen: `falla de lectura: ${lectura.motivo}`, resultado: { fecha: hoy, lectura_ok: false } });
+    await registrar({ agente: "marketing_informe_diario", estado: "error", titulo: `Informe ${hoy}`, resumen: "sin informe: falla de lectura de Metricool", resultado: { fecha: hoy, lectura_ok: false } });
     res.falla_monitoreo = await gestionarFalla(a, hoy, simulada, fallas, paso, bit);
     res.ok = false; res.estado = 502;
     return res;
@@ -102,9 +116,14 @@ export async function correrColchon(
     }
   }
 
+  const fallasAntesDelInforme = fallas.length;
+
   // 4) Informe: piezas del calendario en los próximos 14 días contra lo programado. Sin calendario legible no hay informe (no se inventa "0 faltantes").
   const hasta = sumarDias(hoy, 13);
   const cal = await paso("leer el Calendario Maestro", () => a.piezasVentana(hoy, hasta));
+  let informeGuardado = false;
+  let resumenInforme = "sin informe: no se pudo leer el Calendario Maestro";
+  let resultadoInforme: Record<string, unknown> = { fecha: hoy };
   if (cal) {
     const esperadas: PiezaEsperada[] = [];
     for (const pz of cal.piezas) {
@@ -121,17 +140,31 @@ export async function correrColchon(
     const informe = armarInforme({ hoy, simulada, colchon: res.colchon, pubs, esperadas, p, piezasEnVentana: cal.piezas.length });
     const id = await paso("guardar el informe", () => a.insertarInforme(hoy, informe, simulada));
     res.informe_id = id ?? null;
+    informeGuardado = id !== undefined;
+    resumenInforme = informeGuardado ? `${informe.faltantes.length} faltantes, ${informe.con_error.length} con error, ${informe.desconocidos.length} con estado desconocido` : "sin informe: no se pudo guardar";
+    resultadoInforme = { fecha: hoy, faltantes: informe.faltantes.length, con_error: informe.con_error.length, desconocidos: informe.desconocidos.length, piezas_en_ventana: cal.piezas.length };
     if (id !== undefined) {
       await bit("informe_diario", "informe", `informe del ${hoy}: ${informe.faltantes.length} faltantes, ${informe.con_error.length} con error, ${informe.desconocidos.length} con estado desconocido`, { informe_id: id, simulada });
     }
   }
 
-  // 5) Caso único de falla: se abre/actualiza si hubo errores y se cierra solo cuando la corrida sale limpia.
+  // 5) Registro en el registro de agentes. Un fallo al registrar NO rompe la corrida: se suma a `fallas` (no se calla) y entra al caso de falla.
+  const resumenColchon = res.colchon.map((c) => `${c.red} ${c.dias}${c.tope ? "+" : ""} ${c.color}`).join("; ");
+  await registrar({
+    agente: "marketing_vigilante", estado: fallasAntesDelInforme === 0 ? "completed" : "error", titulo: `Colchón ${hoy}`,
+    resumen: fallasAntesDelInforme === 0 ? resumenColchon : `${resumenColchon}; ${fallasAntesDelInforme} errores`,
+    resultado: {
+      fecha: hoy, colchon: res.colchon.map((c) => ({ red: c.red, dias: c.dias, color: c.color, ultima_programada: c.ultima })),
+      casos: { nuevos: res.casos_nuevos.length, actualizados: res.casos_actualizados.length, cerrados: res.casos_cerrados.length }, publicaciones_leidas: pubs.length,
+    },
+  });
+  await registrar({ agente: "marketing_informe_diario", estado: informeGuardado ? "completed" : "error", titulo: `Informe ${hoy}`, resumen: resumenInforme, resultado: resultadoInforme });
+
+  // 6) Caso único de falla: se abre/actualiza si hubo errores y se cierra solo cuando la corrida sale limpia.
   res.falla_monitoreo = await gestionarFalla(a, hoy, simulada, fallas, paso, bit);
 
-  const resumen = res.colchon.map((c) => `${c.red} ${c.dias}${c.tope ? "+" : ""} ${c.color}`).join("; ");
   await bit("vigilante", "colchon",
-    `${resumen}; ${res.casos_nuevos.length} casos nuevos, ${res.casos_actualizados.length} actualizados, ${res.casos_cerrados.length} cerrados${fallas.length ? `; ${fallas.length} errores` : ""}`,
+    `${resumenColchon}; ${res.casos_nuevos.length} casos nuevos, ${res.casos_actualizados.length} actualizados, ${res.casos_cerrados.length} cerrados${fallas.length ? `; ${fallas.length} errores` : ""}`,
     { fecha: hoy, simulada, publicaciones_leidas: pubs.length, casos: res.casos_nuevos, actualizados: res.casos_actualizados, cerrados: res.casos_cerrados, errores: fallas });
   res.ok = fallas.length === 0; res.estado = res.ok ? 200 : 500;
   return res;

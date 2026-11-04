@@ -3,7 +3,7 @@ import { render, screen, within, fireEvent } from "@testing-library/react";
 import { AgentesRegistro } from "@/components/marketing/AgentesRegistro";
 import {
   cuandoRelativo, duracionLegible, ordenarAgentes, resumenServicio, senalAgente, tareasRecientes, tasaExito,
-  type AgenteRegistro, type TareaAgente,
+  cumplimiento, ultimaTareaDe, type AgenteRegistro, type TareaAgente, type TareaMarketing,
 } from "@/components/marketing/agentesRegistro";
 
 const AHORA = new Date("2026-11-03T16:00:00Z");
@@ -129,5 +129,67 @@ describe("vista AgentesRegistro", () => {
     vista({ agentes: [], tareas: [] });
     expect(screen.getByText("No hay agentes en el registro.")).toBeTruthy();
     expect(screen.getByTestId("registro-servicio").textContent).toContain("Sin datos del servicio");
+  });
+});
+
+// ── Agentes de sistema (Marketing): señal por cadencia, servicio y cumplimiento del objetivo ─────────────────────────
+
+const sis = (name: string, o: Partial<AgenteRegistro> = {}): AgenteRegistro =>
+  ag({ id: name, name, kind: "system", display_name: name, config: { objetivo: `Objetivo de ${name}`, metas: { colchon_verde_dias: 14, informe_diario_antes_de: "07:30" } }, ...o });
+const tm = (id: string, agent_id: string, status: string, completed_at: string, result_summary: string | null = null, result: TareaMarketing["result"] = null): TareaMarketing =>
+  ({ id, agent_id, status, completed_at, result_summary, result });
+
+describe("agentes de sistema (Marketing)", () => {
+  it("señal por cadencia: corrió hace 9 h = al día; hace 2 días = atrasado; en error = con error; sin latido", () => {
+    expect(senalAgente(sis("marketing_vigilante", { last_heartbeat: "2026-11-03T07:00:00Z" }), AHORA)).toBe("al_dia");
+    expect(senalAgente(sis("marketing_vigilante", { last_heartbeat: "2026-11-01T07:00:00Z" }), AHORA)).toBe("atrasado");
+    expect(senalAgente(sis("marketing_vigilante", { last_heartbeat: "2026-11-03T07:00:00Z", status: "error" }), AHORA)).toBe("con_error");
+    expect(senalAgente(sis("marketing_vigilante"), AHORA)).toBe("sin_latido");
+  });
+  it("los agentes de sistema NO cuentan para el servicio kawiil-agents (su latido viene de Supabase, no de la VM)", () => {
+    const r = resumenServicio([...AGENTES, sis("marketing_vigilante", { last_heartbeat: "2026-11-03T15:59:00Z" })], AHORA);
+    expect(r.estado).toBe("sin_senal"); expect(r.ultimoLatido).toBe("2026-06-07T14:02:54Z"); expect(r.activos).toBe(4);
+  });
+  it("Vigilante: cumple con 3 redes en 14+; no cumple con una baja; error; sin datos", () => {
+    const a = sis("marketing_vigilante", { last_heartbeat: "2026-11-03T13:00:00Z" });
+    const col = (d: number) => ({ colchon: [{ red: "instagram", dias: 22, color: "verde" }, { red: "facebook", dias: d, color: "x" }, { red: "linkedin", dias: 22, color: "verde" }] });
+    expect(cumplimiento(a, tm("1", a.id, "completed", "2026-11-03T13:00:05Z", "r", col(22)), AHORA).estado).toBe("cumple");
+    const mal = cumplimiento(a, tm("2", a.id, "completed", "2026-11-03T13:00:05Z", "r", col(4)), AHORA);
+    expect(mal.estado).toBe("no_cumple"); expect(mal.texto).toContain("facebook (4)");
+    expect(cumplimiento(a, tm("3", a.id, "error", "2026-11-03T13:00:05Z", "falla de lectura: HTTP 502"), AHORA)).toMatchObject({ estado: "no_cumple" });
+    expect(cumplimiento(a, undefined, AHORA).estado).toBe("sin_datos");
+    expect(cumplimiento(a, tm("4", a.id, "completed", "2026-11-03T13:00:05Z", "r", null), AHORA).estado).toBe("sin_datos");
+  });
+  it("Informe diario: cumple si salió antes de las 7:30 CDMX (13:30 UTC); no cumple si salió después o con error", () => {
+    const a = sis("marketing_informe_diario");
+    expect(cumplimiento(a, tm("1", a.id, "completed", "2026-11-03T13:00:05Z"), AHORA).estado).toBe("cumple");
+    const tarde = cumplimiento(a, tm("2", a.id, "completed", "2026-11-03T14:10:00Z"), AHORA);
+    expect(tarde.estado).toBe("no_cumple"); expect(tarde.texto).toContain("08:10");
+    expect(cumplimiento(a, tm("3", a.id, "error", "2026-11-03T13:00:05Z"), AHORA).estado).toBe("no_cumple");
+  });
+  it("Vigía: al día sin tareas = cumple; tarea con error = no encontró la corrida; sin latido = sin datos", () => {
+    const a = sis("marketing_vigia", { last_heartbeat: "2026-11-03T13:30:00Z" });
+    expect(cumplimiento(a, undefined, AHORA).estado).toBe("cumple");
+    expect(cumplimiento(a, tm("1", a.id, "error", "2026-11-03T13:30:00Z", "sin registro de la corrida"), AHORA).estado).toBe("no_cumple");
+    expect(cumplimiento(sis("marketing_vigia"), undefined, AHORA).estado).toBe("sin_datos");
+  });
+  it("ultimaTareaDe toma la más reciente del agente", () => {
+    const a = sis("marketing_vigilante");
+    expect(ultimaTareaDe(a, [tm("1", a.id, "completed", "2026-11-01T13:00:00Z"), tm("2", a.id, "completed", "2026-11-03T13:00:00Z"), tm("3", "otro", "completed", "2026-11-04T13:00:00Z")])!.id).toBe("2");
+  });
+  it("la tarjeta de un agente de sistema muestra objetivo y 'Cumple'; la de un consultable no muestra objetivo", () => {
+    const v = sis("marketing_vigilante", { last_heartbeat: "2026-11-03T13:00:00Z", display_name: "Vigilante del colchón" });
+    render(<AgentesRegistro agentes={[v, ...AGENTES]} tareas={[]} estadoAgentes="ok" estadoTareas="ok" ahora={AHORA}
+      tareasMarketing={[tm("1", v.id, "completed", "2026-11-03T13:00:05Z", "r", { colchon: [{ red: "instagram", dias: 22, color: "verde" }] })]} />);
+    const o = screen.getByTestId("objetivo-marketing_vigilante").textContent ?? "";
+    expect(o).toContain("Objetivo de marketing_vigilante"); expect(o).toContain("Cumple");
+    expect(screen.getByTestId("registro-marketing_vigilante").textContent).toContain("Al día");
+    expect(screen.queryByTestId("objetivo-nelli")).toBeNull();
+  });
+  it("sin tareas registradas: dice que todavía no hay corridas (no inventa 'cumple')", () => {
+    const v = sis("marketing_vigilante");
+    render(<AgentesRegistro agentes={[v]} tareas={[]} estadoAgentes="ok" estadoTareas="ok" ahora={AHORA} />);
+    expect(screen.getByTestId("objetivo-marketing_vigilante").textContent).toContain("Todavía no hay corridas registradas");
+    expect(screen.getByTestId("objetivo-marketing_vigilante").textContent).not.toContain("Cumple");
   });
 });

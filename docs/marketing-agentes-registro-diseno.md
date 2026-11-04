@@ -1,6 +1,15 @@
 # Marketing · Que los agentes de Marketing dejen tarea y latido (diseño, sin implementar)
 
-Estado: **solo diseño** (4 nov 2026). Nada de esto está aplicado ni desplegado. Cada escritura en producción se pide por separado.
+Estado (4 nov 2026): **construido en el repo y probado; nada aplicado ni desplegado en producción**. Cada escritura en producción se pide por separado.
+Se construyó con las opciones recomendadas de la sección 4 (**A1, B1, C1**), porque Dirección pidió subirlo «conforme corresponda» sin elegir otras.
+
+Archivos:
+- `supabase/pendientes/20261104120000_marketing_registrar_corrida.sql` (`mk_registrar_corrida` y `mk_latido_agente`) y su reversa `tools/marketing/rollback_registrar_corrida.sql`.
+- `supabase/pendientes/20261104120100_marketing_vigia_registra.sql` (vigía que registra) y su reversa `tools/marketing/rollback_vigia_registra.sql`.
+- `supabase/functions/_shared/colchon_run.ts` y `supabase/functions/marketing-colchon/index.ts` (v6 del handler): llaman a `mk_registrar_corrida` al terminar cada corrida real (las simuladas no se registran). 7 pruebas nuevas en `colchon_run.test.ts`.
+- Pantalla: `agentesRegistro.ts` / `AgentesRegistro.tsx` (señal por cadencia, objetivo y cumplimiento) + hook `useTareasMarketingAgentes`. 8 pruebas nuevas.
+- Prueba contra Postgres real: `tools/marketing/prueba_registrar_corrida_pglite.mjs` (13 pruebas).
+- Banda del servicio: los agentes de sistema ya **no cuentan** para «kawiil-agents» (su latido viene de Supabase, no de la VM).
 
 ## 1. Objetivo
 Los 3 agentes de Marketing ya están en `agent_registry` (`marketing_vigilante`, `marketing_informe_diario`, `marketing_vigia`, `kind = 'system'`) pero aparecen «sin latido»: ninguna corrida deja rastro ahí. Se busca que cada corrida deje **una tarea en `agent_tasks`** y **actualice el latido y los contadores en `agent_registry`**, para verlos en la pestaña Agentes junto a los demás y medir si cumplen su objetivo. Sin avisos nuevos (solo panel).

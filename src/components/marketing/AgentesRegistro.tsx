@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { Pastilla, Vacio } from "./marketingUi";
 import {
-  cuandoRelativo, nombreAgente, ordenarAgentes, resumenServicio, senalAgente, SENAL_ETIQUETA, tareasRecientes, tasaExito,
-  type AgenteRegistro, type TareaAgente,
+  cuandoRelativo, cumplimiento, esSistema, nombreAgente, ordenarAgentes, resumenServicio, senalAgente, SENAL_ETIQUETA, tareasRecientes, tasaExito, ultimaTareaDe,
+  type AgenteRegistro, type TareaAgente, type TareaMarketing,
 } from "./agentesRegistro";
 
 export type EstadoCarga = "cargando" | "error" | "ok";
 
 // Agentes del registro de kawiil-central (solo lectura): estado, latido, tareas y quién los opera. No ejecuta ni despacha nada.
-export function AgentesRegistro({ agentes, tareas, estadoAgentes, estadoTareas, ahora }: {
-  agentes: AgenteRegistro[]; tareas: TareaAgente[]; estadoAgentes: EstadoCarga; estadoTareas: EstadoCarga; ahora?: Date;
+export function AgentesRegistro({ agentes, tareas, estadoAgentes, estadoTareas, ahora, tareasMarketing = [] }: {
+  agentes: AgenteRegistro[]; tareas: TareaAgente[]; estadoAgentes: EstadoCarga; estadoTareas: EstadoCarga; ahora?: Date; tareasMarketing?: TareaMarketing[];
 }) {
   const [reloj, setReloj] = useState(() => new Date());
   useEffect(() => { const t = setInterval(() => setReloj(new Date()), 60_000); return () => clearInterval(t); }, []);
@@ -49,6 +49,8 @@ export function AgentesRegistro({ agentes, tareas, estadoAgentes, estadoTareas, 
           <div className="grid gap-4 md:grid-cols-3">
             {visibles.map((a) => {
               const s = SENAL_ETIQUETA[senalAgente(a, now)], tasa = tasaExito(a);
+              const cum = esSistema(a) ? cumplimiento(a, ultimaTareaDe(a, tareasMarketing), now) : null;
+              const objetivo = esSistema(a) && typeof a.config?.objetivo === "string" ? (a.config.objetivo as string) : null;
               return (
                 <div key={a.id} className="zen-glass space-y-2 rounded-2xl p-4" data-testid={`registro-${a.name}`}>
                   <div className="flex items-start justify-between gap-2">
@@ -62,6 +64,15 @@ export function AgentesRegistro({ agentes, tareas, estadoAgentes, estadoTareas, 
                     <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Última tarea</dt><dd>{cuandoRelativo(a.last_task_at, now)}</dd></div>
                     <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Tareas</dt><dd data-testid="registro-tareas">{a.tasks_completed ?? 0} bien · {a.tasks_failed ?? 0} con error{tasa !== null && ` (${tasa} %)`}</dd></div>
                   </dl>
+                  {objetivo && (
+                    <div className="space-y-1 border-t border-border/40 pt-2 text-xs" data-testid={`objetivo-${a.name}`}>
+                      <p><span className="text-muted-foreground">Objetivo: </span>{objetivo}</p>
+                      {cum && cum.estado !== "sin_datos" && (
+                        <p className="flex items-start gap-2"><Pastilla color={cum.estado === "cumple" ? "verde" : "rojo"}>{cum.estado === "cumple" ? "Cumple" : "No cumple"}</Pastilla><span>{cum.texto}</span></p>
+                      )}
+                      {cum && cum.estado === "sin_datos" && <p className="text-muted-foreground">{cum.texto}</p>}
+                    </div>
+                  )}
                 </div>
               );
             })}
