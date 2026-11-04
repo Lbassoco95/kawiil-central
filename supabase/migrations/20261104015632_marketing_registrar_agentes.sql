@@ -1,4 +1,4 @@
--- Marketing: registrar los agentes de Marketing en agent_registry (kind = 'system'). NO SE APLICA sin confirmación de Dirección.
+-- Marketing: registrar los agentes de Marketing en agent_registry (kind = 'system'). APLICADA en producción el 4 nov 2026 (confirmada por Dirección) como 20261104015632.
 --
 -- Qué hace: inserta 3 filas (Vigilante del colchón, Informe diario, Vigía del colchón) en la organización global de agentes
 -- (00000000-0000-0000-0000-000000000001, la misma de los demás agentes del registro). Idempotente: si ya existen, no cambia nada.
@@ -7,7 +7,7 @@
 -- Sin modelo de IA (model = NULL): son trabajos programados, no agentes conversacionales. kind = 'system' los deja fuera de
 -- list-agents (que solo ofrece los «consultable»), así que no salen en el selector de agentes del chat ni se instancian por cliente.
 -- El Revisor no se registra: todavía no existe.
--- Reversa: supabase/pendientes/20261104000000_marketing_registrar_agentes.rollback.sql
+-- Reversa: tools/marketing/rollback_registrar_agentes.sql
 
 INSERT INTO public.agent_registry (organization_id, name, display_name, description, role, status, kind, model, capabilities, config)
 VALUES

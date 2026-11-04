@@ -6,7 +6,7 @@ explícita de Dirección, escritura por escritura.
 
 ## Ya aplicado en producción (y en sus rutas definitivas)
 - Migraciones: `mk_api_log` (20261102022104), `marketing_colchon` (20261102023909), `marketing_vigia_colchon` (20261102033958),
-  `marketing_agentes_estado` (20261103203209).
+  `marketing_agentes_estado` (20261103203209), `marketing_registrar_agentes` (20261104015632; reversa en `tools/marketing/rollback_registrar_agentes.sql`).
 - Funciones: `marketing-metricool` (v6, con modo «forma») y `marketing-colchon` (v5), ambas con `verify_jwt = false` en `supabase/config.toml`.
 - Trabajos programados 7:00 y 7:30 (registro en `tools/marketing/cron_colchon_0700.sql` y `cron_vigia_0730.sql`).
 - Carga del Calendario Maestro nov–ene: `tools/marketing/carga_calendario_nov2026_ene2027.sql`.
@@ -15,4 +15,3 @@ explícita de Dirección, escritura por escritura.
 - `20261103000000_marketing_semaforo_corregido.sql`: una fila por pieza (corte `7d` si existe, si no `acumulado`). Corrección preventiva;
   hoy no cambia ningún promedio ni color. Prueba: `tools/marketing/prueba_semaforo_pglite.mjs`.
 - `20261101130000_marketing_nota_umbral_instagram.sql`: se descartará; Dirección pidió registrar la nota con `mk_cambiar_regla`, con motivo.
-- `20261104000000_marketing_registrar_agentes.sql` (+ `.rollback.sql`): registra el Vigilante del colchón, el Informe diario y el Vigía en `agent_registry` (`kind = 'system'`, sin modelo, organización global de agentes). Idempotente. Prueba: `tools/marketing/prueba_registrar_agentes_pglite.mjs`. Se aplica con confirmación de Dirección; al aplicarla se mueve a `supabase/migrations/` con la versión real.

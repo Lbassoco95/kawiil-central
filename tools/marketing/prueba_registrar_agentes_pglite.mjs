@@ -15,8 +15,8 @@ CREATE TABLE public.agent_registry (
 CREATE TABLE public.agent_tasks (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), agent_id uuid);
 INSERT INTO public.agent_registry (organization_id, name, display_name, role, kind) VALUES ('00000000-0000-0000-0000-000000000001','coyolli','Coyolli','coyolli','consultable');
 `);
-const sql = readFileSync(new URL("../../supabase/pendientes/20261104000000_marketing_registrar_agentes.sql", import.meta.url), "utf8");
-const rollback = readFileSync(new URL("../../supabase/pendientes/20261104000000_marketing_registrar_agentes.rollback.sql", import.meta.url), "utf8");
+const sql = readFileSync(new URL("../../supabase/migrations/20261104015632_marketing_registrar_agentes.sql", import.meta.url), "utf8");
+const rollback = readFileSync(new URL("../../tools/marketing/rollback_registrar_agentes.sql", import.meta.url), "utf8");
 const filas = async () => (await db.query(`select name, kind, status, model, tasks_completed, tasks_failed, last_heartbeat, config from public.agent_registry where kind='system' order by name`)).rows;
 
 await db.exec(sql);
