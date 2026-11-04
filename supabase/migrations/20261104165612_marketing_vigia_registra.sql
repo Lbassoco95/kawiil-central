@@ -1,5 +1,5 @@
--- Marketing: el vigía deja rastro en el registro de agentes. NO SE APLICA sin confirmación de Dirección (requiere antes
--- 20261104120000_marketing_registrar_corrida.sql).
+-- Marketing: el vigía deja rastro en el registro de agentes. APLICADA en producción el 4 nov 2026 (confirmada por Dirección) como 20261104165612
+-- (requiere antes 20261104165545_marketing_registrar_corrida.sql).
 -- Igual que antes (mismo criterio de "corrió / no corrió", mismos casos y bitácora), y además:
 --   · todo bien  → actualiza SOLO el latido del vigía (mk_latido_agente); no escribe tarea ni bitácora;
 --   · no corrió  → además de la bitácora y el caso, deja una tarea con error del agente marketing_vigia.

@@ -1,11 +1,11 @@
 # Marketing · Que los agentes de Marketing dejen tarea y latido (diseño, sin implementar)
 
-Estado (4 nov 2026): **construido en el repo y probado; nada aplicado ni desplegado en producción**. Cada escritura en producción se pide por separado.
+Estado (4 nov 2026): **aplicado en producción** los pasos 1 (`mk_registrar_corrida` y `mk_latido_agente`, versión 20261104165545), 2 (vigía que registra, 20261104165612) y 3 (despliegue de `marketing-colchon` v11, handler v6). **Pendiente el paso 4**: una corrida manual para comprobar que deja las dos tareas; mientras tanto, la primera corrida real con registro será la de las 7:00 CDMX del 5 nov.
 Se construyó con las opciones recomendadas de la sección 4 (**A1, B1, C1**), porque Dirección pidió subirlo «conforme corresponda» sin elegir otras.
 
 Archivos:
-- `supabase/pendientes/20261104120000_marketing_registrar_corrida.sql` (`mk_registrar_corrida` y `mk_latido_agente`) y su reversa `tools/marketing/rollback_registrar_corrida.sql`.
-- `supabase/pendientes/20261104120100_marketing_vigia_registra.sql` (vigía que registra) y su reversa `tools/marketing/rollback_vigia_registra.sql`.
+- `supabase/migrations/20261104165545_marketing_registrar_corrida.sql` (`mk_registrar_corrida` y `mk_latido_agente`) y su reversa `tools/marketing/rollback_registrar_corrida.sql`.
+- `supabase/migrations/20261104165612_marketing_vigia_registra.sql` (vigía que registra) y su reversa `tools/marketing/rollback_vigia_registra.sql`.
 - `supabase/functions/_shared/colchon_run.ts` y `supabase/functions/marketing-colchon/index.ts` (v6 del handler): llaman a `mk_registrar_corrida` al terminar cada corrida real (las simuladas no se registran). 7 pruebas nuevas en `colchon_run.test.ts`.
 - Pantalla: `agentesRegistro.ts` / `AgentesRegistro.tsx` (señal por cadencia, objetivo y cumplimiento) + hook `useTareasMarketingAgentes`. 8 pruebas nuevas.
 - Prueba contra Postgres real: `tools/marketing/prueba_registrar_corrida_pglite.mjs` (13 pruebas).

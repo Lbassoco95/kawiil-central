@@ -1,5 +1,5 @@
 -- Marketing: función única que registra cada corrida de un agente de Marketing en el registro de agentes de kawiil-central
--- (agent_tasks + latido y contadores en agent_registry). NO SE APLICA sin confirmación de Dirección.
+-- (agent_tasks + latido y contadores en agent_registry). APLICADA en producción el 4 nov 2026 (confirmada por Dirección) como 20261104165545.
 --
 -- mk_registrar_corrida: valida que el agente sea uno de los 3 de Marketing, inserta UNA tarea (task_type 'scheduled', sin conversation_id:
 --   el disparador de notificaciones sale sin avisar) y actualiza last_heartbeat, last_task_at y los contadores, en una sola transacción.

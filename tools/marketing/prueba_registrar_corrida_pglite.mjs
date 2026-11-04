@@ -7,8 +7,8 @@ const { PGlite } = await import(process.env.PGLITE_PATH ? "file://" + process.en
 const ORG = "a0000000-0000-0000-0000-000000000001", GLOBAL = "00000000-0000-0000-0000-000000000001";
 const leer = (r) => readFileSync(new URL("../../" + r, import.meta.url), "utf8");
 const sqlViejoVigia = leer("supabase/migrations/20261102033958_marketing_vigia_colchon.sql");
-const sqlRegistrar = leer("supabase/pendientes/20261104120000_marketing_registrar_corrida.sql");
-const sqlVigiaNuevo = leer("supabase/pendientes/20261104120100_marketing_vigia_registra.sql");
+const sqlRegistrar = leer("supabase/migrations/20261104165545_marketing_registrar_corrida.sql");
+const sqlVigiaNuevo = leer("supabase/migrations/20261104165612_marketing_vigia_registra.sql");
 const sqlRollback1 = leer("tools/marketing/rollback_registrar_corrida.sql");
 let fallos = 0; const ok = (n) => console.log("  ok  ", n);
 const prueba = async (nombre, fn) => { try { await fn(); ok(nombre); } catch (e) { fallos++; console.log("  FALLA", nombre, "\n       ", e.message); } };

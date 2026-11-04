@@ -1,6 +1,6 @@
 # Marketing · Estado en producción (proyecto `qppfampapbxdgednkofc`)
 
-Actualizado: 4 nov 2026 (después de registrar los agentes de Marketing en `agent_registry`; el 3 nov se fusionaron #469, #471, #473 y #474 y se redesplegaron las funciones desde el repo).
+Actualizado: 4 nov 2026 (agentes de Marketing registrados en `agent_registry`, y funciones de registro de corridas aplicadas y `marketing-colchon` v11 desplegada; el 3 nov se fusionaron #469, #471, #473 y #474).
 
 ## Migraciones aplicadas (versión real del registro de Supabase)
 El repo ya usa estas mismas versiones como nombre de archivo en `supabase/migrations/`.
@@ -15,6 +15,8 @@ El repo ya usa estas mismas versiones como nombre de archivo en `supabase/migrat
 | `20261102033958` | `marketing_vigia_colchon` | Función `mk_vigia_colchon` (vigía de las 7:30) |
 | `20261103203209` | `marketing_agentes_estado` | Función de lectura `mk_agentes_estado()` para la vista Agentes |
 | `20261104015632` | `marketing_registrar_agentes` | Registra 3 agentes de Marketing en `agent_registry` (ver abajo) |
+| `20261104165545` | `marketing_registrar_corrida` | Funciones `mk_registrar_corrida` y `mk_latido_agente` (solo `service_role`) |
+| `20261104165612` | `marketing_vigia_registra` | El vigía actualiza su latido (todo bien) o deja una tarea con error (no corrió); auxiliar `mk_vigia_registra_falla` |
 
 `20261103045435_fix_scheduled_recurring_tasks_no_cascade` está en el registro pero **no es de Marketing**: se aplicó fuera del repo y en `supabase/migrations/` hay un archivo marcador sin efecto para que `supabase db push` no aborte. Si el SQL real llega en otro PR, reemplazar el marcador (misma versión).
 
@@ -22,7 +24,7 @@ El repo ya usa estas mismas versiones como nombre de archivo en `supabase/migrat
 | Pieza | Estado en producción | Notas |
 |---|---|---|
 | `marketing-metricool` | v7, `verify_jwt = false` | Conector de solo lectura con marca fija y lista cerrada. Incluye el modo «forma» (`operacion: "forma:<op>"`: solo campos, tipos y números permitidos; falla cerrado en un conector sin ese modo). El repo contiene exactamente este código (v7 = redespliegue desde el flujo, mismo código que v6). |
-| `marketing-colchon` | v10 (código de la versión 5), `verify_jwt = false` | Se autentica con `x-marketing-secret`, lee Metricool solo por el conector. Un caso abierto por red mientras el colchón < 14 días; un único caso `falla_monitoreo` ante fallas. El repo contiene este código (v10 = redespliegue desde el flujo). |
+| `marketing-colchon` | v11 (handler v6), `verify_jwt = false` | Se autentica con `x-marketing-secret`, lee Metricool solo por el conector. Un caso abierto por red mientras el colchón < 14 días; un único caso `falla_monitoreo` ante fallas. **Al terminar cada corrida real deja una tarea del Vigilante y otra del Informe diario en `agent_tasks` y actualiza latido y contadores** vía `mk_registrar_corrida` (las simuladas no se registran; un fallo al registrar no rompe la corrida y entra al caso de falla). Desplegada desde el flujo con la rama de trabajo (corrida 205) y igual al repo. |
 | `marketing-metricool-perfiles` | v10, `verify_jwt = true`, desactivada (410) | Función temporal ya sin uso. |
 | Trabajo `marketing-colchon-diario-0700-cdmx` | activo, `0 13 * * *` (7:00 CDMX) | Última corrida correcta: 3 nov 13:00 UTC. Registro en `tools/marketing/cron_colchon_0700.sql`. |
 | Trabajo `marketing-colchon-vigia-0730-cdmx` | activo, `30 13 * * *` (7:30 CDMX) | Solo escribe si no hay corrida registrada. Última corrida correcta: 3 nov 13:30 UTC. Registro en `tools/marketing/cron_vigia_0730.sql`. |
@@ -45,7 +47,8 @@ Migración `20261104015632_marketing_registrar_agentes` (aplicada con confirmaci
 | `marketing_informe_diario` | Informe diario | todos los días 7:00 CDMX (`marketing-colchon`) | informe de faltantes cada día antes de las 7:30 |
 | `marketing_vigia` | Vigía del colchón | todos los días 7:30 CDMX (`mk_vigia_colchon`) | ninguna corrida diaria falta sin un caso de falla abierto |
 
-- Solo registro: **no escriben latidos ni tareas todavía**. En la pestaña Agentes aparecen «sin latido» hasta que `marketing-colchon` y el vigía dejen una tarea en `agent_tasks` y eventos en `ai_task_events` (siguiente paso, con confirmación aparte).
+- **Registro de corridas (4 nov 2026):** `marketing-colchon` v11 deja una tarea del Vigilante y otra del Informe diario por corrida real, y el vigía actualiza su latido (todo bien) o deja una tarea con error (no corrió). Sin eventos en `ai_task_events` (nadie los vería por la política de lectura). Las tareas quedan en la organización global de los agentes y no llevan `conversation_id`, así que no generan notificaciones. Hasta la corrida de las 7:00 CDMX del 5 nov (o una corrida manual) los 3 agentes siguen «sin latido» y con 0 tareas.
+- En la pantalla, los agentes de sistema se juzgan por su cadencia diaria (al día si corrieron en las últimas 26 h) y muestran su objetivo con «Cumple / No cumple»; ya no cuentan para la banda del servicio `kawiil-agents`.
 - `kind = 'system'` los deja fuera de `list-agents` (solo ofrece los consultables): no salen en el selector del chat ni se instancian por cliente. `dispatch-to-agent` solo valida que el agente exista, así que una llamada directa a la API podría despachar una tarea a uno de ellos, que la VM no sabría atender; ninguna pantalla lo ofrece.
 - El Revisor no se registra: todavía no existe.
 - Reversa: `tools/marketing/rollback_registrar_agentes.sql` (borra solo esas 3 filas y se salta las que ya tengan tareas). Prueba: `tools/marketing/prueba_registrar_agentes_pglite.mjs`.
@@ -91,7 +94,7 @@ Entrega 2, cada escritura con su confirmación:
 - `supabase/pendientes/20261103000000_marketing_semaforo_corregido.sql`: una fila por pieza (corte `7d` si existe, si no `acumulado`) para no contar doble. Hoy no cambia ningún promedio ni color.
 - Función de lectura de resultados (simulacro), carga histórica de Instagram (44 publicaciones), recálculo de semáforo y cobertura, Vigilante de publicación con su trabajo programado, umbrales de Instagram con `mk_cambiar_regla` y su nota (`supabase/pendientes/20261101130000_marketing_nota_umbral_instagram.sql` se descartará).
 - LinkedIn: la ruta de analíticas devolvió 0 elementos dos veces. Decidir entre aprobar la ruta CSV `/v2/analytics/posts/linkedin` o revisar el tipo de cuenta.
-- Que cada corrida de los agentes de Marketing (ya registrados) deje una tarea en `agent_tasks` y eventos en `ai_task_events`, y actualice latido y contadores en `agent_registry`, para medir su objetivo (colchón ≥ 14 días, informe cada día antes de las 7:30, cero corridas faltantes) en la pestaña Agentes. Requiere cambios en `marketing-colchon` y en `mk_vigia_colchon`; cada escritura con su confirmación. El disparador de notificaciones existente solo avisa si la tarea trae `conversation_id`, así que no habría avisos nuevos.
+- Comprobar el registro de corridas con una corrida manual del colchón (escribe una lectura de colchón, un informe y 2 tareas, y repite la fecha) o esperar a la de las 7:00 CDMX del 5 nov. Falta fusionar el PR con el código (pantalla de cumplimiento y handler v6) para que `main` coincida con producción. El disparador de notificaciones existente solo avisa si la tarea trae `conversation_id`, así que no habría avisos nuevos.
 - Resumen semanal a Cerebro como entregable de «Kawiil MX»: falta confirmar cómo se autentica una función de Supabase contra Cerebro.
 - Servicio `kawiil-agents`: sin latidos desde el 7 jun 2026. Confirmar con Dirección si la VM está encendida; la vista solo mostrará historial hasta que se reactive.
 - Rama `claude/marketing-reglas-detalle`: no se toca hasta que Dirección indique borrarla.
