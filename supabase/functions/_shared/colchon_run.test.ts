@@ -1,13 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { correrColchon, type Almacen, type CasoNuevo, type LecturaMetricool } from "./colchon_run.ts";
+import { correrColchon, type Almacen, type CasoNuevo, type CorridaRegistrada, type LecturaMetricool } from "./colchon_run.ts";
 import type { CasoAbierto } from "./colchon.ts";
 
 // ── Base de datos simulada en memoria ─────────────────────────────────────────────────────────
 interface Caso extends CasoNuevo { id: string; numero: number; estado: string; cerrado_at?: string }
 function crearAlmacen(fallos: Partial<Record<string, string>> = {}, calendario = true) {
-  const st = { colchon: [] as Array<Record<string, unknown>>, casos: [] as Caso[], informes: [] as unknown[], bitacora: [] as Array<{ agente: string; accion: string; resultado: string }>, n: 6 };
+  const st = { colchon: [] as Array<Record<string, unknown>>, casos: [] as Caso[], informes: [] as unknown[], bitacora: [] as Array<{ agente: string; accion: string; resultado: string }>, tareas: [] as CorridaRegistrada[], n: 6 };
   const f = (nombre: string) => { if (fallos[nombre]) throw new Error(fallos[nombre]); };
   const almacen: Almacen = {
     async leerRegla() { f("regla"); return null; },
@@ -22,6 +22,7 @@ function crearAlmacen(fallos: Partial<Record<string, string>> = {}, calendario =
     async piezasVentana() { f("calendario"); return calendario ? { piezas: [{ id: "p1", codigo: "C-20261110", pilar: "PLD", formato: "Imagen única", programada_at: "2026-11-10T23:30:00Z" }], porRed: [] } : { piezas: [], porRed: [] }; },
     async insertarInforme(_f, contenido) { f("informe"); st.informes.push(contenido); return `i${st.informes.length}`; },
     async bitacora(agente, accion, resultado) { f("bitacora"); st.bitacora.push({ agente, accion, resultado }); },
+    async registrarCorrida(c) { f("registrar"); st.tareas.push(c); },
   };
   return { st, almacen };
 }
@@ -140,4 +141,52 @@ test("colchon_run.ts no hace peticiones ni conoce Metricool; index.ts hace una s
   assert.ok(idx.includes("/functions/v1/marketing-metricool") && !/metricool\.com|METRICOOL_USER_TOKEN|X-Mc-Auth/i.test(idx));
   assert.ok(!/method:\s*["'](PUT|PATCH|DELETE)["']/.test(idx) && !/CRON_SECRET|Authorization/.test(idx));
   assert.ok(!/\bnumero\s*:\s*(numero|\d)/.test(run.split("crearCaso")[1] ?? ""));
+});
+
+// ── Registro de agentes (agent_tasks + latido) ────────────────────────────────────────────────
+test("corrida buena: deja DOS tareas completadas (Vigilante e Informe diario) con solo números y códigos", async () => {
+  const { st, almacen } = crearAlmacen();
+  const r = await correr(almacen, BIEN);
+  assert.equal(r.ok, true);
+  assert.deepEqual(st.tareas.map((t) => [t.agente, t.estado, t.titulo]), [["marketing_vigilante", "completed", "Colchón 2026-11-01"], ["marketing_informe_diario", "completed", "Informe 2026-11-01"]]);
+  assert.equal(st.tareas[0].resumen, "instagram 6 rojo; facebook 6 rojo; linkedin 6 rojo");
+  assert.deepEqual((st.tareas[0].resultado as { casos: unknown }).casos, { nuevos: 3, actualizados: 0, cerrados: 0 });
+  assert.match(st.tareas[1].resumen, /^\d+ faltantes, 0 con error, 0 con estado desconocido$/);
+  assert.ok(!JSON.stringify(st.tareas).includes("PLD"), "ningún texto del calendario viaja al registro");
+  assert.ok(st.tareas.every((t) => !Number.isNaN(Date.parse(t.inicio))));
+});
+test("lectura fallida: las DOS tareas quedan con error y el motivo", async () => {
+  const { st, almacen } = crearAlmacen();
+  await correr(almacen, MAL);
+  assert.deepEqual(st.tareas.map((t) => [t.agente, t.estado]), [["marketing_vigilante", "error"], ["marketing_informe_diario", "error"]]);
+  assert.equal(st.tareas[0].resumen, "falla de lectura: token rechazado o plan sin acceso");
+});
+test("el informe no se pudo guardar: el Vigilante queda bien y el Informe diario con error", async () => {
+  const { st, almacen } = crearAlmacen({ informe: "permiso denegado" });
+  await correr(almacen, BIEN);
+  assert.deepEqual(st.tareas.map((t) => [t.agente, t.estado]), [["marketing_vigilante", "completed"], ["marketing_informe_diario", "error"]]);
+  assert.equal(st.tareas[1].resumen, "sin informe: no se pudo guardar");
+});
+test("si falla guardar el colchón, el Vigilante queda con error", async () => {
+  const { st, almacen } = crearAlmacen({ colchon: "permiso denegado" });
+  await correr(almacen, BIEN);
+  assert.equal(st.tareas[0].estado, "error"); assert.match(st.tareas[0].resumen, /1 errores$/);
+});
+test("si falla el registro: no se calla, no rompe la corrida y entra al caso de falla", async () => {
+  const { st, almacen } = crearAlmacen({ registrar: "función no existe" });
+  const r = await correr(almacen, BIEN);
+  assert.equal(r.ok, false); assert.equal(r.estado, 500);
+  assert.equal(r.fallas.filter((x) => x.startsWith("registrar la corrida de")).length, 2);
+  assert.equal(abiertas(st, "colchon").length, 3, "el colchón y los casos se hicieron igual");
+  assert.equal(st.informes.length, 1); assert.equal(fallas(st).length, 1); assert.equal(r.falla_monitoreo, "abierta");
+});
+test("corrida simulada: no se registra en el registro de agentes", async () => {
+  const { st, almacen } = crearAlmacen();
+  await correrColchon({ hoy: "2026-11-01", simulada: true, almacen, leerMetricool: async () => BIEN });
+  assert.equal(st.tareas.length, 0);
+});
+test("registrar no cambia el resultado de una corrida buena respecto de antes (mismos casos y bitácora)", async () => {
+  const { st, almacen } = crearAlmacen();
+  const r = await correr(almacen, BIEN);
+  assert.equal(r.falla_monitoreo, "ninguna"); assert.equal(st.bitacora.filter((b) => b.accion === "colchon").length, 1);
 });

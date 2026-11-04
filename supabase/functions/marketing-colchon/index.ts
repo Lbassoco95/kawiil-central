@@ -1,4 +1,4 @@
-// Vigilante del colchón de programación + informe diario de faltantes (Marketing, solo lectura). Versión 5.
+// Vigilante del colchón de programación + informe diario de faltantes (Marketing, solo lectura). Versión 6.
 // - Lee Metricool únicamente a través del conector marketing-metricool (lista cerrada, marca fija).
 // - Esta función NO habla con Metricool ni conoce el token: no puede crear, editar ni borrar nada allá.
 // - Autenticación propia: cabecera x-marketing-secret = MARKETING_CONNECTOR_SECRET (no acepta cron_secret ni la llave de servicio).
@@ -60,6 +60,10 @@ Deno.serve(async (req) => {
     },
     async bitacora(agente, accion, resultado, detalle, casoId = null) {
       ok(await db.from("mk_bitacora").insert({ organization_id: org, agente, accion, resultado, detalle, caso_id: casoId }));
+    },
+    // Deja la tarea y el latido en el registro de agentes de kawiil-central (función solo para service_role).
+    async registrarCorrida(c) {
+      ok(await db.rpc("mk_registrar_corrida", { p_agente: c.agente, p_estado: c.estado, p_titulo: c.titulo, p_resumen: c.resumen, p_resultado: c.resultado, p_inicio: c.inicio }));
     },
   };
 

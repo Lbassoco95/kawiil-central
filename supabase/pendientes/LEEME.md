@@ -6,8 +6,9 @@ explícita de Dirección, escritura por escritura.
 
 ## Ya aplicado en producción (y en sus rutas definitivas)
 - Migraciones: `mk_api_log` (20261102022104), `marketing_colchon` (20261102023909), `marketing_vigia_colchon` (20261102033958),
-  `marketing_agentes_estado` (20261103203209), `marketing_registrar_agentes` (20261104015632; reversa en `tools/marketing/rollback_registrar_agentes.sql`).
-- Funciones: `marketing-metricool` (v6, con modo «forma») y `marketing-colchon` (v5), ambas con `verify_jwt = false` en `supabase/config.toml`.
+  `marketing_agentes_estado` (20261103203209), `marketing_registrar_agentes` (20261104015632; reversa en `tools/marketing/rollback_registrar_agentes.sql`),
+  `marketing_registrar_corrida` (20261104165545) y `marketing_vigia_registra` (20261104165612) (reversas en `tools/marketing/rollback_registrar_corrida.sql` y `rollback_vigia_registra.sql`).
+- Funciones: `marketing-metricool` (v7, con modo «forma») y `marketing-colchon` (v11, handler v6: registra tarea y latido), ambas con `verify_jwt = false` en `supabase/config.toml`.
 - Trabajos programados 7:00 y 7:30 (registro en `tools/marketing/cron_colchon_0700.sql` y `cron_vigia_0730.sql`).
 - Carga del Calendario Maestro nov–ene: `tools/marketing/carga_calendario_nov2026_ene2027.sql`.
 
