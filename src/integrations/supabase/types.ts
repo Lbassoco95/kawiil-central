@@ -154,10 +154,14 @@ export type Database = {
           created_at: string
           created_by: string
           dietary_restriction: string | null
+          has_plus_one: boolean
           id: string
           name: string
           notes: string | null
           organization_id: string
+          plus_one_confirmed: string
+          plus_one_dietary: string | null
+          plus_one_name: string | null
           updated_at: string
           user_id: string | null
         }
@@ -167,6 +171,7 @@ export type Database = {
           created_at?: string
           created_by: string
           dietary_restriction?: string | null
+          has_plus_one?: boolean
           id?: string
           name: string
           notes?: string | null
@@ -180,10 +185,14 @@ export type Database = {
           created_at?: string
           created_by?: string
           dietary_restriction?: string | null
+          has_plus_one?: boolean
           id?: string
           name?: string
           notes?: string | null
           organization_id?: string
+          plus_one_confirmed?: string
+          plus_one_dietary?: string | null
+          plus_one_name?: string | null
           updated_at?: string
           user_id?: string | null
         }
@@ -5410,7 +5419,10 @@ export type Database = {
       }
       tasks: {
         Row: {
+          activity_attendee_id: string | null
+          activity_category: string | null
           activity_id: string | null
+          activity_provider_id: string | null
           area: string | null
           assigned_to: string | null
           checklist: Json | null
@@ -5448,7 +5460,10 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          activity_attendee_id?: string | null
+          activity_category?: string | null
           activity_id?: string | null
+          activity_provider_id?: string | null
           area?: string | null
           assigned_to?: string | null
           checklist?: Json | null
@@ -5486,7 +5501,10 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          activity_attendee_id?: string | null
+          activity_category?: string | null
           activity_id?: string | null
+          activity_provider_id?: string | null
           area?: string | null
           assigned_to?: string | null
           checklist?: Json | null
