@@ -3,7 +3,7 @@ import { Pastilla, Vacio } from "./marketingUi";
 import {
   cuandoRelativo, cumplimiento, esAgenteDeMarketing, esSistema, nombreAgente, ordenarAgentes, resumenServicio, senalAgente, SENAL_ETIQUETA, tareasRecientes, tasaExito, ultimaTareaDe,
   type AgenteRegistro, type TareaAgente, type TareaMarketing,
-} from "./agentesRegistro";
+} from "./agentesRegistroLogica";
 
 export type EstadoCarga = "cargando" | "error" | "ok";
 

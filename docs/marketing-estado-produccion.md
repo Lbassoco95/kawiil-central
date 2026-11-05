@@ -56,7 +56,8 @@ Migración `20261104015632_marketing_registrar_agentes` (aplicada con confirmaci
 ## Interfaz (`/marketing`)
 Panel con colchón e informe de faltantes, calendario, casos, semáforo, reglas (valores vigentes e historial), estado de monitoreo y la pestaña **Agentes**. Acceso con permiso que falla cerrado. Todo de solo lectura.
 
-La pestaña **Agentes** tiene dos partes:
+La pestaña **Agentes** (en el repo; la oficina aún sin desplegar) tiene tres partes:
+- **Oficina de agentes** (fase 1, solo lectura): lienzo en pixel art propio con un personaje por agente de Marketing. Estado real: trabaja si corrió en los últimos 30 min, descansa («z») entre corridas, «!» si hay error, atraso (más de 26 h sin correr) o meta sin cumplir, gris si no tiene corridas. Al elegir un agente: objetivo, cumplimiento y últimas corridas. No permite preguntar ni dejar tareas todavía (fases siguientes, ver `docs/marketing-equipo-agentes-diseno.md`).
 - **Agentes de Marketing** (Vigilante, Informe diario, Vigía): tarjetas, línea de tiempo y flujo de un caso; usa `mk_agentes_estado()` y, sin ella, el horario previsto.
 - **Agentes de kawiil-central** (#473, 3 nov 2026): lee `agent_registry` y `agent_tasks` con la sesión del usuario (RLS de lectura de autenticados ya existente; sin migración).
   - Banda del servicio `kawiil-agents` (la VM que corre en la Mac de Leo y escribe esas tablas): en línea si algún agente activo dio latido en las últimas 2 h; si no, «sin señal».
@@ -64,7 +65,7 @@ La pestaña **Agentes** tiene dos partes:
   - Tareas recientes (30 días, con «Ver todo el historial»), con filtros por agente y «solo con error».
   - Privacidad: de `agent_tasks` solo se piden `id, agent_id, task_type, status` y fechas; no se piden título, instrucciones, resultado ni mensaje de error. Una prueba lo comprueba.
   - No despacha tareas ni toca la VM. Quien opera esos agentes (no Marketing) es `kawiil-agents`; los trabajos de Marketing corren con `pg_cron` y todavía no están registrados en `agent_registry` (propuesta pendiente, ver abajo).
-  - Código: `src/components/marketing/agentesRegistro.ts`, `AgentesRegistro.tsx`, hooks `useAgentesRegistro` y `useTareasAgentes`; pruebas en `src/test/marketingAgentesRegistro.test.tsx`.
+  - Código: `src/components/marketing/agentesRegistroLogica.ts`, `AgentesRegistro.tsx`, hooks `useAgentesRegistro` y `useTareasAgentes`; pruebas en `src/test/marketingAgentesRegistro.test.tsx`.
 
 ## Despliegue
 - Frontend: Vercel (producción en cada fusión a `main`).

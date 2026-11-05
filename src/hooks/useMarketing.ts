@@ -156,7 +156,7 @@ export const useEstadoTrabajos = () =>
 export const useAgentesRegistro = () =>
   useQuery({
     queryKey: ["agentes-registro", "agentes"],
-    queryFn: async (): Promise<import("@/components/marketing/agentesRegistro").AgenteRegistro[]> => {
+    queryFn: async (): Promise<import("@/components/marketing/agentesRegistroLogica").AgenteRegistro[]> => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any).from("agent_registry")
         .select("id, name, display_name, description, role, status, kind, last_heartbeat, last_task_at, tasks_completed, tasks_failed, config").order("name");
@@ -169,7 +169,7 @@ export const useAgentesRegistro = () =>
 export const useTareasAgentes = () =>
   useQuery({
     queryKey: ["agentes-registro", "tareas"],
-    queryFn: async (): Promise<import("@/components/marketing/agentesRegistro").TareaAgente[]> => {
+    queryFn: async (): Promise<import("@/components/marketing/agentesRegistroLogica").TareaAgente[]> => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any).from("agent_tasks")
         .select("id, agent_id, task_type, status, created_at, started_at, completed_at").order("created_at", { ascending: false }).limit(300);
@@ -183,7 +183,7 @@ export const useTareasAgentes = () =>
 export const useTareasMarketingAgentes = () =>
   useQuery({
     queryKey: ["agentes-registro", "tareas-marketing"],
-    queryFn: async (): Promise<import("@/components/marketing/agentesRegistro").TareaMarketing[]> => {
+    queryFn: async (): Promise<import("@/components/marketing/agentesRegistroLogica").TareaMarketing[]> => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any).from("agent_tasks")
         .select("id, agent_id, status, completed_at, result_summary, result").eq("input_context->>origen", "marketing").order("completed_at", { ascending: false }).limit(60);
