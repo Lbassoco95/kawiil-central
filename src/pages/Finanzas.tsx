@@ -8,7 +8,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Wallet, DollarSign, Clock, CheckCircle, XCircle, Landmark, LayoutDashboard, BarChart3, HandCoins, RefreshCcw } from "lucide-react";
+import { Plus, Wallet, DollarSign, Clock, CheckCircle, XCircle, Landmark, LayoutDashboard, BarChart3, HandCoins, RefreshCcw, Banknote, Target } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useExpenses, Expense } from "@/hooks/useExpenses";
 import { useFinanceAccess } from "@/hooks/useFinanceAccess";
@@ -25,6 +25,8 @@ import { KpiTile } from "@/components/finanzas/KpiTile";
 import { PageHeader, type PageHeaderStat } from "@/components/shared/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { KAWIIL_AI_GRADIENT } from "@/lib/kawiilAi";
+import { BankTab } from "@/components/finanzas/BankTab";
+import { PlanningTab } from "@/components/finanzas/PlanningTab";
 import { FinanceKawiilCard } from "@/components/finanzas/FinanceKawiilCard";
 import { useClients } from "@/hooks/useClients";
 import { useFinanceDashboardData } from "@/hooks/useFinanceDashboardData";
@@ -47,7 +49,7 @@ const CATEGORY_FILTERS = [
   { value: "contratacion_externa", label: "Contratación ext." },
 ];
 
-type FinanceTab = "resumen" | "gastos" | "savio" | "tableros";
+type FinanceTab = "resumen" | "gastos" | "bancos" | "savio" | "tableros" | "planeacion";
 
 export default function Finanzas() {
   const { user } = useAuth();
@@ -439,11 +441,17 @@ export default function Finanzas() {
                 <TabsTrigger value="gastos" className="text-xs gap-1.5">
                   <Wallet className="h-3.5 w-3.5" /> Gastos internos
                 </TabsTrigger>
+                <TabsTrigger value="bancos" className="text-xs gap-1.5">
+                  <Banknote className="h-3.5 w-3.5" /> Bancos y caja
+                </TabsTrigger>
                 <TabsTrigger value="savio" className="text-xs gap-1.5">
                   <Landmark className="h-3.5 w-3.5" /> Ingresos facturados
                 </TabsTrigger>
                 <TabsTrigger value="tableros" className="text-xs gap-1.5">
                   <BarChart3 className="h-3.5 w-3.5" /> Tableros
+                </TabsTrigger>
+                <TabsTrigger value="planeacion" className="text-xs gap-1.5">
+                  <Target className="h-3.5 w-3.5" /> Planeación
                 </TabsTrigger>
               </TabsList>
               </div>
@@ -468,12 +476,20 @@ export default function Finanzas() {
                 {gastosSection}
               </TabsContent>
 
+              <TabsContent value="bancos" className="mt-0">
+                <BankTab />
+              </TabsContent>
+
               <TabsContent value="savio" className="mt-0">
                 <SavioFinanceDashboard />
               </TabsContent>
 
               <TabsContent value="tableros" className="mt-0">
                 <FinanceIntelligenceBoards expenses={expenses} clients={clients} savioEnabled />
+              </TabsContent>
+
+              <TabsContent value="planeacion" className="mt-0">
+                <PlanningTab />
               </TabsContent>
             </Tabs>
           ) : (
@@ -485,6 +501,12 @@ export default function Finanzas() {
                 </TabsTrigger>
                 <TabsTrigger value="gastos" className="text-xs gap-1.5">
                   <Wallet className="h-3.5 w-3.5" /> Gastos internos
+                </TabsTrigger>
+                <TabsTrigger value="bancos" className="text-xs gap-1.5">
+                  <Banknote className="h-3.5 w-3.5" /> Bancos y caja
+                </TabsTrigger>
+                <TabsTrigger value="planeacion" className="text-xs gap-1.5">
+                  <Target className="h-3.5 w-3.5" /> Planeación
                 </TabsTrigger>
               </TabsList>
               </div>
@@ -500,6 +522,14 @@ export default function Finanzas() {
 
               <TabsContent value="gastos" className="mt-0">
                 {gastosSection}
+              </TabsContent>
+
+              <TabsContent value="bancos" className="mt-0">
+                <BankTab />
+              </TabsContent>
+
+              <TabsContent value="planeacion" className="mt-0">
+                <PlanningTab />
               </TabsContent>
             </Tabs>
           )
