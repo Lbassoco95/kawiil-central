@@ -10,7 +10,9 @@ import { formatMX } from "@/lib/dateUtils";
 import { useActivity } from "@/hooks/useActivities";
 
 /** Mensaje base para los invitados con los datos reales de la actividad. */
-function buildInviteMessage(a: { name: string; event_date: string | null; location: string | null }): string {
+function buildInviteMessage(a: {
+  name: string; event_date: string | null; event_time: string | null; location: string | null;
+}): string {
   const fecha = a.event_date ? formatMX(a.event_date, "EEEE d 'de' MMMM 'de' yyyy") : "";
   const lines = [
     "¡Hola! 👋",
@@ -18,6 +20,7 @@ function buildInviteMessage(a: { name: string; event_date: string | null; locati
     `Te esperamos en ${a.name}.`,
     "",
     `📅 Fecha: ${fecha || "por confirmar"}`,
+    `🕒 Hora: ${a.event_time ? `${a.event_time.slice(0, 5)} h` : "por confirmar"}`,
     `📍 Lugar: ${a.location?.trim() || "por confirmar"}`,
     "",
     "El evento es +1: puedes venir con un acompañante.",
@@ -61,7 +64,11 @@ export function InviteMessageDialog({ activityId }: { activityId: string }) {
   }, [open, activity]);
 
   const missingVenue = !activity?.location?.trim();
-  const missingDate = !activity?.event_date;
+  const faltantes = [
+    missingVenue && "la sede",
+    !activity?.event_date && "la fecha",
+    !activity?.event_time && "la hora",
+  ].filter((x): x is string => !!x);
 
   const handleCopy = async () => {
     const ok = await copyText(text);
@@ -88,13 +95,11 @@ export function InviteMessageDialog({ activityId }: { activityId: string }) {
             Toma la fecha y la sede de la actividad. Puedes editarlo antes de copiarlo.
           </DialogDescription>
         </DialogHeader>
-        {(missingVenue || missingDate) && (
+        {faltantes.length > 0 && (
           <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-            {missingVenue && missingDate
-              ? "Aún no hay fecha ni sede definidas: el mensaje dirá “por confirmar”."
-              : missingVenue
-                ? "Aún no hay sede confirmada: el mensaje dirá “por confirmar”. Confírmala en Pendientes → Casas / Sede."
-                : "Aún no hay fecha definida: el mensaje dirá “por confirmar”."}
+            Falta definir {faltantes.join(", ").replace(/, ([^,]*)$/, " y $1")}: el mensaje dirá “por confirmar”.
+            {missingVenue && " La sede se confirma en Pendientes → Casas / Sede."}
+            {(!activity?.event_date || !activity?.event_time) && " La fecha y la hora se editan en Editar actividad."}
           </p>
         )}
         <Textarea rows={12} value={text} onChange={(e) => setText(e.target.value)} />

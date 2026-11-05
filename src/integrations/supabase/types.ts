@@ -102,6 +102,7 @@ export type Database = {
           created_by: string
           dropbox_url: string | null
           event_date: string | null
+          event_time: string | null
           id: string
           location: string | null
           name: string
@@ -119,6 +120,7 @@ export type Database = {
           created_by: string
           dropbox_url?: string | null
           event_date?: string | null
+          event_time?: string | null
           id?: string
           location?: string | null
           name: string
@@ -136,6 +138,7 @@ export type Database = {
           created_by?: string
           dropbox_url?: string | null
           event_date?: string | null
+          event_time?: string | null
           id?: string
           location?: string | null
           name?: string

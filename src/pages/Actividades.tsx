@@ -107,7 +107,7 @@ const Actividades = () => {
                         <div className="space-y-1.5 text-sm text-muted-foreground">
                           <div className="flex items-center gap-2">
                             <Calendar className="h-3.5 w-3.5" />
-                            <span>{a.event_date ? formatDateMX(a.event_date) : "Fecha por definir"}</span>
+                            <span>{a.event_date ? formatDateMX(a.event_date) : "Fecha por definir"}{a.event_date && a.event_time ? ` · ${a.event_time.slice(0, 5)} h` : ""}</span>
                           </div>
                           {a.location && (
                             <div className="flex items-center gap-2">
