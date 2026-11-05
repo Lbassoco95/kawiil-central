@@ -7,6 +7,7 @@ import {
 import { Copy, Check, MessageSquareText, Send } from "lucide-react";
 import { toast } from "sonner";
 import { formatMX } from "@/lib/dateUtils";
+import { copyText } from "@/lib/clipboard";
 import { useActivity } from "@/hooks/useActivities";
 import { useActivityAttendees } from "@/hooks/useActivityExtras";
 import { normalizeWhatsappNumber, whatsappUrl, personalizeGreeting, firstName } from "@/lib/whatsapp";
@@ -31,27 +32,6 @@ function buildInviteMessage(a: {
     "¡Gracias!",
   ];
   return lines.join("\n");
-}
-
-async function copyText(text: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    try {
-      const ta = document.createElement("textarea");
-      ta.value = text;
-      ta.style.position = "fixed";
-      ta.style.opacity = "0";
-      document.body.appendChild(ta);
-      ta.select();
-      const ok = document.execCommand("copy");
-      document.body.removeChild(ta);
-      return ok;
-    } catch {
-      return false;
-    }
-  }
 }
 
 export function InviteMessageDialog({ activityId }: { activityId: string }) {
