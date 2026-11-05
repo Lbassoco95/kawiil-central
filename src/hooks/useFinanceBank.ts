@@ -48,6 +48,12 @@ export const financeBankKeys = {
   goals: ["finance-goals"] as const,
 };
 
+/** Todas las escrituras necesitan la organización; sin ella la base rechaza la fila por seguridad. */
+function requireOrg(orgId: string | undefined): string {
+  if (!orgId) throw new Error("No se pudo identificar tu organización. Recarga la página e inténtalo de nuevo.");
+  return orgId;
+}
+
 async function fetchAll<T>(table: string, order: string, ascending = false): Promise<T[]> {
   const out: T[] = [];
   const page = 1000;
@@ -67,7 +73,7 @@ export function useOrgId() {
     enabled: !!user,
     staleTime: Infinity,
     queryFn: async () => {
-      const { data, error } = await supabase.from("profiles").select("organization_id").eq("id", user!.id).single();
+      const { data, error } = await supabase.from("profiles").select("organization_id").eq("user_id", user!.id).single();
       if (error) throw error;
       return data.organization_id as string;
     },
@@ -149,7 +155,7 @@ export function useCreateAccount() {
   return useMutation({
     mutationFn: async (a: Pick<FinanceAccount, "name" | "kind"> & Partial<FinanceAccount>) => {
       const { data, error } = await db.from("finance_accounts")
-        .upsert({ organization_id: orgId, ...a }, { onConflict: "organization_id,name" }).select().single();
+        .upsert({ organization_id: requireOrg(orgId), ...a }, { onConflict: "organization_id,name" }).select().single();
       if (error) throw error;
       return data as FinanceAccount;
     },
@@ -276,9 +282,10 @@ export function useAddManualMovement() {
   const { user } = useAuth();
   return useMutation({
     mutationFn: async (m: { account_id: string; movement_date: string; description: string; debit: number; credit: number; category?: string | null; excluded?: boolean }) => {
+      const org = requireOrg(orgId);
       const dedupe = `manual|${crypto.randomUUID()}`;
       const { error } = await db.from("finance_movements").insert({
-        organization_id: orgId, ...m, category: m.category ?? null,
+        organization_id: org, ...m, category: m.category ?? null,
         category_source: m.category ? "manual" : null, review_status: m.category ? "clasificado" : "pendiente",
         excluded_from_flow: m.excluded ?? false, dedupe_hash: dedupe, created_by: user?.id ?? null,
       });
@@ -294,7 +301,7 @@ export function useSaveGoals() {
   const { data: orgId } = useOrgId();
   return useMutation({
     mutationFn: async (goals: FinanceGoal[]) => {
-      const rows = goals.map((g) => ({ ...g, organization_id: orgId }));
+      const rows = goals.map((g) => ({ ...g, organization_id: requireOrg(orgId) }));
       const { error } = await db.from("finance_goals").upsert(rows, { onConflict: "organization_id,year,month" });
       if (error) throw error;
     },
@@ -350,7 +357,7 @@ export function useSaveCommitment() {
         const { error } = await db.from("finance_commitments").update(patch).eq("id", id);
         if (error) throw error;
       } else {
-        const { error } = await db.from("finance_commitments").insert({ organization_id: orgId, source: "manual", created_by: user?.id ?? null, ...c });
+        const { error } = await db.from("finance_commitments").insert({ organization_id: requireOrg(orgId), source: "manual", created_by: user?.id ?? null, ...c });
         if (error) throw error;
       }
     },
