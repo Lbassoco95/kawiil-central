@@ -1,4 +1,5 @@
 import { Fragment, useState, useEffect } from "react";
+import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,12 +19,13 @@ import { Plus, Pencil, Trash2, ListChecks, Images, UserCheck } from "lucide-reac
 import { formatDateMX } from "@/lib/dateUtils";
 import { TASK_STATUS_CONFIG, PRIORITY_CONFIG } from "@/lib/statusStyles";
 import { useProfiles, useCreateTask, useUpdateTask, useDeleteTask } from "@/hooks/useTasks";
-import { useActivityTasks, type ActivityTask } from "@/hooks/useActivities";
+import { useActivityTasks, useActivity, useUpdateActivity, type ActivityTask } from "@/hooks/useActivities";
 import { useActivityFileCounts } from "@/hooks/useActivityFiles";
 import { TaskFilesDialog } from "@/components/actividades/TaskFilesDialog";
 import { RubroSelect } from "@/components/actividades/RubroSelect";
 import {
   useActivityProviders, useActivityAttendees, useCreateAttendeeConfirmationTasks,
+  useCreateActivityProvider, useUpdateActivityProvider,
   type ActivityProvider, type ActivityAttendee,
 } from "@/hooks/useActivityExtras";
 import { buildRubroOptions, rubroLabel, providerStatusLabel, pendienteSuggestions } from "@/lib/activityTypes";
@@ -47,19 +49,27 @@ const SCOPE_OPTIONS: { value: TaskScope; label: string }[] = [
 const ATTENDEE_SUGGESTIONS = ["Confirmar asistencia", "Confirmar acompañante (+1)", "Pedir restricciones alimentarias"];
 
 function TaskDialog({
-  activityId, task, trigger, providers, rubros, attendees, defaultCategory = "", defaultProviderId = "", defaultAttendeeId = "", defaultScope,
+  activityId, task, trigger, providers, rubros, attendees, defaultCategory = "", defaultProviderId = "", defaultAttendeeId = "", defaultScope, activityLocation,
 }: {
   activityId: string; task?: ActivityTask; trigger: React.ReactNode;
   providers: ActivityProvider[]; rubros: { value: string; label: string }[];
   attendees: ActivityAttendee[];
   defaultCategory?: string; defaultProviderId?: string; defaultAttendeeId?: string;
-  defaultScope?: TaskScope;
+  defaultScope?: TaskScope; activityLocation?: string | null;
 }) {
   const isEdit = !!task;
   const [open, setOpen] = useState(false);
   const { data: profiles } = useProfiles();
   const createTask = useCreateTask();
   const updateTask = useUpdateTask();
+  const createProvider = useCreateActivityProvider();
+  const updateProvider = useUpdateActivityProvider();
+  const updateActivity = useUpdateActivity();
+
+  const [newProvOpen, setNewProvOpen] = useState(false);
+  const [newProvName, setNewProvName] = useState("");
+  const [newProvDesc, setNewProvDesc] = useState("");
+  const [isVenue, setIsVenue] = useState(false);
 
   const [title, setTitle] = useState("");
   const [assignedTo, setAssignedTo] = useState("");
@@ -87,6 +97,11 @@ function TaskDialog({
     } else {
       setScope(defaultScope ?? (defaultAttendeeId ? "asistentes" : "rubro"));
     }
+    setNewProvOpen(false); setNewProvName(""); setNewProvDesc("");
+    const pv = providers.find((x) => x.id === (task ? task.activity_provider_id : defaultProviderId));
+    setIsVenue(!!pv && !!activityLocation && activityLocation.startsWith(pv.name));
+    // Solo al abrir: si dependiera de `providers`, crear un proveedor aquí reiniciaría el formulario.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, task, defaultCategory, defaultProviderId, defaultAttendeeId, defaultScope]);
 
   const providerOptions = providers
@@ -103,10 +118,40 @@ function TaskDialog({
     if (p) setCategory(p.category);
   };
 
+  const isCasas = category === "casas";
+  const selectedProvider = providers.find((x) => x.id === providerId);
+  const venueText = selectedProvider
+    ? [selectedProvider.name, selectedProvider.description].filter(Boolean).join(" — ") : "";
+
+  const createInlineProvider = () => {
+    const name = newProvName.trim();
+    if (!name) return;
+    createProvider.mutate(
+      {
+        activity_id: activityId, category: category || "otro", name,
+        description: newProvDesc.trim() || null, status: "cotizacion",
+      },
+      { onSuccess: (p) => {
+        setProviderId(p.id); setCategory(p.category);
+        setNewProvOpen(false); setNewProvName(""); setNewProvDesc("");
+      } },
+    );
+  };
+
+  // Confirmar la sede: se muestra en Detalles de la actividad y el proveedor pasa a "Elegido".
+  const applyVenue = () => {
+    if (!(scope === "rubro" && isCasas && isVenue && selectedProvider)) return;
+    updateActivity.mutate({ id: activityId, location: venueText });
+    if (selectedProvider.status === "cotizacion") {
+      updateProvider.mutate({ id: selectedProvider.id, status: "elegido" });
+    }
+  };
+
   const profileOptions = (profiles || []).map((p) => ({ value: p.user_id, label: p.full_name }));
   const isPending = createTask.isPending || updateTask.isPending;
 
   const handleSubmit = () => {
+    applyVenue();
     if (isEdit) {
       updateTask.mutate(
         {
@@ -183,8 +228,48 @@ function TaskDialog({
                     options={providerOptions} value={providerId} onValueChange={changeProvider}
                     placeholder="Todo el rubro" searchPlaceholder="Buscar proveedor..."
                   />
+                  {category && (
+                    <Button type="button" variant="link" size="sm" className="h-auto p-0 text-xs"
+                      onClick={() => setNewProvOpen((v) => !v)}>
+                      ＋ {isCasas ? "Crear sede / proveedor" : "Crear proveedor"}
+                    </Button>
+                  )}
                 </div>
               </div>
+              {newProvOpen && (
+                <div className="rounded-md border p-3 space-y-2">
+                  <Input
+                    autoFocus placeholder={isCasas ? "Nombre de la sede (ej: Casa Chinaco)" : "Nombre del proveedor"}
+                    value={newProvName} onChange={(e) => setNewProvName(e.target.value)}
+                  />
+                  <Input
+                    placeholder={isCasas ? "Dirección o datos de la sede (opcional)" : "Descripción (opcional)"}
+                    value={newProvDesc} onChange={(e) => setNewProvDesc(e.target.value)}
+                  />
+                  <div className="flex justify-end gap-2">
+                    <Button type="button" size="sm" variant="ghost" onClick={() => setNewProvOpen(false)}>Cancelar</Button>
+                    <Button type="button" size="sm" onClick={createInlineProvider}
+                      disabled={!newProvName.trim() || createProvider.isPending}>
+                      Crear y usar
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Se agrega también en la pestaña Proveedores (en cotización).
+                  </p>
+                </div>
+              )}
+              {isCasas && selectedProvider && (
+                <div className="flex items-start justify-between gap-3 rounded-md border p-3">
+                  <div>
+                    <Label htmlFor="task-venue">Es la sede del evento</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Al guardar, “{venueText}” se muestra como Sede / Lugar en Detalles para confirmarla a
+                      los invitados, y el proveedor pasa a Elegido.
+                    </p>
+                  </div>
+                  <Switch id="task-venue" checked={isVenue} onCheckedChange={setIsVenue} />
+                </div>
+              )}
               {!isEdit && category && (
                 <div className="flex flex-wrap gap-1.5">
                   {pendienteSuggestions(category).map((sug) => (
@@ -288,6 +373,7 @@ export function ActivityTasksCard({ activityId }: { activityId: string }) {
   const { data: fileCounts } = useActivityFileCounts(activityId);
   const { data: providersData } = useActivityProviders(activityId);
   const providers = providersData ?? [];
+  const { data: activityData } = useActivity(activityId);
   const { data: attendeesData } = useActivityAttendees(activityId);
   const attendees = attendeesData ?? [];
   const attendeeById = new Map(attendees.map((a) => [a.id, a]));
@@ -344,7 +430,7 @@ export function ActivityTasksCard({ activityId }: { activityId: string }) {
         </CardTitle>
         <TaskDialog
           activityId={activityId}
-          providers={providers} rubros={rubros} attendees={attendees}
+          providers={providers} rubros={rubros} attendees={attendees} activityLocation={activityData?.location}
           trigger={
             <Button size="sm" variant="outline">
               <Plus className="mr-1.5 h-3.5 w-3.5" />
@@ -407,7 +493,7 @@ export function ActivityTasksCard({ activityId }: { activityId: string }) {
                           )}
                           <TaskDialog
                             activityId={activityId}
-                            providers={providers} rubros={rubros} attendees={attendees}
+                            providers={providers} rubros={rubros} attendees={attendees} activityLocation={activityData?.location}
                             defaultCategory={g.key === "__asistentes__" ? "" : g.key}
                             defaultScope={g.key === "__asistentes__" ? "asistentes" : g.key ? "rubro" : "general"}
                             trigger={
@@ -482,7 +568,7 @@ export function ActivityTasksCard({ activityId }: { activityId: string }) {
                           <TaskDialog
                             activityId={activityId}
                             task={t}
-                            providers={providers} rubros={rubros} attendees={attendees}
+                            providers={providers} rubros={rubros} attendees={attendees} activityLocation={activityData?.location}
                             trigger={
                               <Button size="icon" variant="ghost" className="h-7 w-7">
                                 <Pencil className="h-3.5 w-3.5" />
