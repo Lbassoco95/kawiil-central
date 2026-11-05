@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import type { AgenteRegistro, TareaAgente } from "@/lib/agentes/registro";
+import type { AgenteRegistro, ErrorTarea, TareaAgente } from "@/lib/agentes/registro";
 
 // ── Registro de agentes de kawiil-central (solo lectura) ────────────────────────────────────────────────────────────
 // Tablas agent_registry / agent_tasks: las escribe la VM kawiil-agents; aquí solo se leen con la sesión del usuario (RLS de lectura
@@ -31,3 +31,18 @@ export const useTareasAgentes = () =>
     staleTime: 60_000,
   });
 
+
+// Solo para los agentes legales con error: se trae el mensaje de error únicamente para clasificarlo (la pantalla muestra la categoría, no el texto).
+export const useErroresAgentes = (agenteIds: string[]) =>
+  useQuery({
+    queryKey: ["agentes-registro", "errores", agenteIds],
+    enabled: agenteIds.length > 0,
+    queryFn: async (): Promise<ErrorTarea[]> => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any).from("agent_tasks")
+        .select("agent_id, created_at, error_message").in("agent_id", agenteIds).in("status", ["error", "failed"]).order("created_at", { ascending: false }).limit(100);
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 60_000,
+  });
