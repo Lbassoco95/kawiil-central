@@ -63,9 +63,9 @@ export function datosDemo(ahora: Date): { agentes: AgenteRegistro[]; tareas: Tar
     base("d1", "Actas (ejemplo)", "Redacta actas ordinarias", { status: "working" }),
     base("d2", "Libros (ejemplo)", "Prepara libros certificados", {}),
     base("d3", "Seguimiento (ejemplo)", "Da seguimiento a pendientes", {}),
-    base("d4", "Investigación (ejemplo)", "Investiga y resume", { last_heartbeat: iso(3 * 24 * H) }),
+    base("d4", "Estudios (ejemplo)", "Investiga y resume", { last_heartbeat: iso(3 * 24 * H) }),
     base("d5", "Revisión (ejemplo)", "Revisa documentos", {}),
-    base("d6", "Vigilancia DOF (ejemplo)", "Vigila publicaciones oficiales", { status: "working", last_heartbeat: iso(5 * H) }),
+    base("d6", "DOF (ejemplo)", "Vigila publicaciones oficiales", { status: "working", last_heartbeat: iso(5 * H) }),
     base("d7", "Archivo (ejemplo)", "Ordena el archivo", { last_heartbeat: iso(40 * 24 * H) }),
   ];
   const t = (id: string, agent_id: string, status: string, creada: number, ini: number | null, fin: number | null): TareaAgente =>

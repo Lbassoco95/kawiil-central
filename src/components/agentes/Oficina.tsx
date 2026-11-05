@@ -14,6 +14,8 @@ const TONO: Record<string, { cuerpo: string; escritorio: string }> = {
 const COLS = 4, CW = 190, CH = 170;
 
 const CSS = `
+/* Solo la celda recibe clics: la figura se mueve y, si también los recibiera, el clic se perdería al cambiar el objeto bajo el cursor. */
+[data-estado]>*:not(.of-celda){pointer-events:none}
 .of-figura{transform-box:fill-box;transform-origin:center bottom}
 .of-trabajando .of-brazos{animation:of-teclea 1.2s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
 .of-celebrando .of-figura{animation:of-salta 1.8s cubic-bezier(.22,1,.36,1) infinite}
@@ -30,10 +32,12 @@ function Figura({ f, x, y, activo, onElegir }: { f: FiguraOficina; x: number; y:
   const info = ESTADO_OFICINA[f.estado], c = TONO[info.color] ?? TONO.gris;
   const apagado = f.estado === "apagado", dormido = f.estado === "descansando";
   return (
-    <g transform={`translate(${x},${y})`} className={`of-${f.estado}`} role="button" tabIndex={0} data-testid={`oficina-${f.id}`} data-estado={f.estado}
-      aria-label={`${f.nombre}: ${info.etiqueta}`} aria-pressed={activo} style={{ cursor: "pointer", outline: "none" }}
+    // La posición va en un <g> aparte: index.css aplica transform a todo [role="button"]:active y, en un SVG, eso borraría el translate.
+    <g transform={`translate(${x},${y})`}>
+    <g className={`of-${f.estado}`} role="button" tabIndex={0} data-testid={`oficina-${f.id}`} data-estado={f.estado}
+      aria-label={`${f.nombre}: ${info.etiqueta}`} aria-pressed={activo} style={{ cursor: "pointer", outline: "none", transform: "none" }}
       onClick={onElegir} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onElegir(); } }}>
-      <rect x={4} y={4} width={CW - 8} height={CH - 8} rx={22} fill="var(--of-celda, rgba(255,255,255,.45))" stroke={activo ? "#8fb4d9" : "rgba(120,100,70,.18)"} strokeWidth={activo ? 2.5 : 1} />
+      <rect className="of-celda" x={4} y={4} width={CW - 8} height={CH - 8} rx={22} style={{ fill: "var(--of-celda, rgba(255,255,255,.55))", pointerEvents: "all" }} stroke={activo ? "#8fb4d9" : "rgba(120,100,70,.18)"} strokeWidth={activo ? 2.5 : 1} />
       <g opacity={apagado ? 0.45 : 1}>
         <g className="of-figura">
           <circle cx={CW / 2} cy={52} r={16} fill="#f1dcc2" />
@@ -49,8 +53,9 @@ function Figura({ f, x, y, activo, onElegir }: { f: FiguraOficina; x: number; y:
       {(f.estado === "atascado" || f.estado === "con_error") && <circle cx={CW - 30} cy={28} r={7} fill="#e3a9b0" />}
       {f.estado === "celebrando" && <text x={CW - 36} y={34} fontSize={16} aria-hidden="true">✦</text>}
       {dormido && <text x={CW - 38} y={32} fontSize={13} fill="#8a7d68" aria-hidden="true">z z</text>}
-      <text x={CW / 2} y={140} textAnchor="middle" fontSize={13} fontWeight={600} fill="var(--of-texto, #4a4033)">{f.nombre.length > 22 ? f.nombre.slice(0, 21) + "…" : f.nombre}</text>
-      <text x={CW / 2} y={157} textAnchor="middle" fontSize={11.5} fill="var(--of-texto-suave, #7a6d58)">{info.etiqueta}</text>
+      <text x={CW / 2} y={140} textAnchor="middle" fontSize={13} fontWeight={600} style={{ fill: "var(--of-texto, #4a4033)" }}>{f.nombre.length > 22 ? f.nombre.slice(0, 21) + "…" : f.nombre}</text>
+      <text x={CW / 2} y={157} textAnchor="middle" fontSize={11.5} style={{ fill: "var(--of-texto-suave, #7a6d58)" }}>{info.etiqueta}</text>
+    </g>
     </g>
   );
 }
