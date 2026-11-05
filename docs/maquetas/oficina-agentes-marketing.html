@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Oficina de agentes de Marketing (maqueta)</title>
+<style>
+  :root { --bg:#f6efe3; --ink:#3b3226; --mut:#7b6f5d; --glass:rgba(255,252,246,.72); --line:rgba(120,100,70,.22); --ok:#6f9d7a; --warn:#d99a5b; --err:#c97b84; --info:#6d9bc3; --acc:#9b7b4f; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#241f19; --ink:#efe6d6; --mut:#b3a690; --glass:rgba(52,45,36,.72); --line:rgba(220,200,160,.18); } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  .wrap { max-width:1180px; margin:0 auto; padding:16px; }
+  .banner { background:var(--glass); border:1px dashed var(--warn); border-radius:14px; padding:10px 14px; font-size:13px; margin-bottom:14px; }
+  h1 { font-size:20px; margin:0 0 2px; font-weight:600; } .sub { color:var(--mut); margin:0 0 14px; font-size:13px; }
+  .grid { display:grid; grid-template-columns:minmax(0,1.6fr) minmax(300px,1fr); gap:16px; align-items:start; }
+  @media (max-width:900px){ .grid { grid-template-columns:1fr; } }
+  .card { background:var(--glass); border:1px solid var(--line); border-radius:18px; backdrop-filter:blur(8px); padding:12px; box-shadow:0 8px 30px rgba(90,70,40,.08); }
+  canvas { width:100%; height:auto; display:block; border-radius:12px; image-rendering:pixelated; cursor:default; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+  .chip { border:1px solid var(--line); background:transparent; color:var(--ink); padding:4px 10px; border-radius:999px; font-size:12px; cursor:pointer; }
+  .chip[aria-pressed="true"] { background:var(--acc); color:#fff; border-color:var(--acc); }
+  .chip.prop { border-style:dashed; }
+  .pill { display:inline-block; font-size:11px; padding:2px 9px; border-radius:999px; border:1px solid var(--line); }
+  .ok{ background:rgba(111,157,122,.18);} .warn{ background:rgba(217,154,91,.2);} .err{ background:rgba(201,123,132,.2);} .info{ background:rgba(109,155,195,.2);} .gris{ background:rgba(140,130,115,.18);}
+  .tabs { display:flex; gap:4px; margin:10px 0 8px; } .tab { flex:1; padding:6px 4px; border-radius:10px; border:1px solid var(--line); background:transparent; color:var(--ink); cursor:pointer; font-size:13px; }
+  .tab[aria-selected="true"] { background:var(--acc); color:#fff; border-color:var(--acc); }
+  textarea, select { width:100%; background:transparent; color:var(--ink); border:1px solid var(--line); border-radius:10px; padding:8px; font:inherit; }
+  button.go { margin-top:8px; background:var(--acc); color:#fff; border:0; border-radius:10px; padding:8px 14px; font:inherit; cursor:pointer; }
+  .msg { border:1px solid var(--line); border-radius:12px; padding:8px 10px; margin-top:8px; font-size:13px; background:rgba(255,255,255,.25); }
+  .msg small { color:var(--mut); display:block; margin-top:4px; }
+  dl { margin:6px 0; font-size:13px; } dl div { display:flex; justify-content:space-between; gap:12px; padding:2px 0; } dt { color:var(--mut); }
+  .flow { display:flex; flex-wrap:wrap; gap:6px; align-items:stretch; margin-top:16px; }
+  .step { flex:1 1 130px; border:1px solid var(--line); border-radius:12px; padding:8px 10px; font-size:12px; background:var(--glass); }
+  .step b { display:block; font-size:12px; margin-bottom:2px; } .step.hum { border-style:dashed; }
+  .arrow { align-self:center; color:var(--mut); }
+  .legend { font-size:12px; color:var(--mut); margin-top:8px; }
+  ul.q { margin:6px 0 0; padding-left:18px; font-size:13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="banner"><b>Maqueta de diseño, no es el módulo real.</b> Todo lo que ves son <b>datos de ejemplo</b> (salvo el colchón de 23 días, que es el real del 5 nov). Las respuestas y tareas son simuladas: aún no hay agentes con IA conectados. Los agentes con borde punteado son <b>propuestos</b>; los de borde sólido ya existen.</div>
+  <h1>Oficina de agentes de Marketing</h1>
+  <p class="sub">Pulsa a un agente (en el dibujo o en la lista) para ver qué hace, preguntarle cómo va o dejarle una tarea. Inspirado en la oficina de pixel art de Pixel Agents (MIT); personajes y muebles dibujados aparte.</p>
+
+  <div class="grid">
+    <div>
+      <div class="card">
+        <canvas id="c" width="640" height="372" aria-label="Oficina con los agentes de Marketing"></canvas>
+        <div class="chips" id="chips" role="group" aria-label="Agentes"></div>
+        <div class="legend">Estados: <span class="pill ok">escribiendo</span> <span class="pill info">leyendo</span> <span class="pill warn">pensando / esperando decisión</span> <span class="pill gris">descansando / sin datos</span> <span class="pill err">con error</span></div>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <b style="font-size:14px">Cómo se diseña una campaña con el equipo</b>
+        <div class="flow" id="flow"></div>
+        <div class="legend">Borde punteado = paso humano. El módulo <b>nunca publica</b>: la programación en Metricool la hace una persona.</div>
+      </div>
+    </div>
+
+    <div class="card" id="panel" aria-live="polite"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+// ── Equipo (ejemplo) ────────────────────────────────────────────────────────────────────────────
+const A = [
+  { id:"vigilante", corto:"Vigilante", n:"Vigilante del colchón", rol:"Vigila que haya piezas programadas", existe:true,  est:"escribiendo", pill:"ok",  ahora:"Calculó el colchón: Instagram, Facebook y LinkedIn en 23 días (verde).", obj:"Colchón de 14 días o más en las tres redes", cumple:"Cumple", x:70,  y:92,  hair:"#5a3b25", shirt:"#6f9d7a", zona:0, resp:"Hoy el colchón es de 23 días en las tres redes y está en verde. La última pieza programada es el 25 de noviembre." },
+  { id:"informe", corto:"Informe",   n:"Informe diario",        rol:"Compara calendario vs. Metricool",    existe:true,  est:"leyendo",     pill:"info",ahora:"Revisó los próximos 14 días: 0 faltantes.", obj:"Informe cada día antes de las 7:30", cumple:"Cumple", x:150, y:92,  hair:"#222", shirt:"#6d9bc3", zona:0, resp:"El informe de hoy salió a las 7:00: 0 faltantes, 0 con error y 0 con estado desconocido." },
+  { id:"vigia", corto:"Vigía",     n:"Vigía del colchón",    rol:"Comprueba que corrió el Vigilante",   existe:true,  est:"descansando", pill:"gris",ahora:"Todo bien a las 7:30; vuelve mañana.", obj:"Ninguna corrida diaria sin registro", cumple:"Cumple", x:230, y:92,  hair:"#b07a3a", shirt:"#b8a98a", zona:0, resp:"Hoy encontré la corrida de las 7:00. Solo escribo si no la encuentro." },
+  { id:"analista", corto:"Resultados",  n:"Analista de resultados",rol:"Explica cómo van las piezas",        existe:false, est:"pensando",    pill:"warn",ahora:"(ejemplo) Comparando alcance de las últimas 4 semanas por formato.", obj:"Responder con cifras de la base, nunca de memoria", cumple:"—", x:420, y:92,  hair:"#3a2a1a", shirt:"#9b7b4f", zona:1, resp:"(Ejemplo) En las últimas 4 semanas los carruseles superan a las imágenes únicas en guardados. Las cifras saldrían de la tabla de resultados, con su fuente y fecha de corte." },
+  { id:"anuncios", corto:"Anuncios",  n:"Analista de anuncios", rol:"Mide la mejora de los anuncios",      existe:false, est:"sin datos",   pill:"gris",ahora:"Sin fuente de datos de anuncios conectada todavía.", obj:"Medir costo por resultado antes y después de cada ajuste", cumple:"—", x:520, y:92,  hair:"#6a4a8a", shirt:"#8a8a8a", zona:1, resp:"Todavía no puedo responder: no hay una fuente de datos de anuncios conectada. Dirección debe decidir cuál (por ejemplo, la API de Metricool o la de Meta Ads)." },
+  { id:"estratega", corto:"Estratega", n:"Estratega de campañas",rol:"Propone enfoques de campaña",        existe:false, est:"escribiendo", pill:"ok",  ahora:"(ejemplo) Armando 2 enfoques para la campaña de enero.", obj:"Propuestas respaldadas por resultados históricos", cumple:"—", x:110, y:262, hair:"#7a3b3b", shirt:"#c9a25a", zona:2, resp:"(Ejemplo) Propongo dos enfoques: A) serie educativa semanal; B) casos prácticos quincenales. Cada uno con objetivo, audiencia, calendario y qué medir." },
+  { id:"creativo", corto:"Creativo",  n:"Creativo de contenido",rol:"Redacta copys y guiones",            existe:false, est:"leyendo",     pill:"info",ahora:"(ejemplo) Revisando el tono de marca del Calendario Maestro.", obj:"Piezas listas para revisión, con el tono de Kawiil", cumple:"—", x:210, y:262, hair:"#1e1e1e", shirt:"#d08a8a", zona:2, resp:"(Ejemplo) Puedo redactar copy y guion por pieza usando el Calendario Maestro. No publico: entrego a revisión." },
+  { id:"revisor", corto:"Revisor",   n:"Revisor",              rol:"Investiga casos y revisa antes de decidir", existe:false, est:"esperando", pill:"warn",ahora:"(ejemplo) 1 propuesta lista para la decisión de Dirección.", obj:"Cada propuesta con evidencia y pasos verificables", cumple:"—", x:470, y:262, hair:"#4a4a4a", shirt:"#7c8fb5", zona:3, resp:"(Ejemplo) Reviso que cada propuesta tenga evidencia, que no haga afirmaciones regulatorias sin sustento y que respete las reglas de marca." },
+];
+const ZONAS = [ {t:"Monitoreo", x:0, y:0}, {t:"Análisis", x:320, y:0}, {t:"Campañas", x:0, y:186}, {t:"Revisión", x:320, y:186} ];
+const FLUJO = [
+  ["Brief","Dirección: objetivo, audiencia, periodo, presupuesto", true],
+  ["Estrategia","Estratega propone 2–3 enfoques con evidencia", false],
+  ["Elección","Dirección elige o pide ajustes", true],
+  ["Contenido","Creativo redacta; Gamma para las imágenes", false],
+  ["Revisión","Revisor verifica marca y afirmaciones", false],
+  ["Decisión","Dirección aprueba (queda registrado)", true],
+  ["Programar","Una persona programa en Metricool", true],
+  ["Medir","Vigilante y Analistas miden y aprenden", false],
+];
+const $ = (s) => document.querySelector(s);
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+let sel = "vigilante"; let t0 = 0; const cola = []; const hilos = {};
+
+// ── Dibujo ──────────────────────────────────────────────────────────────────────────────────────
+const cv = $("#c"), g = cv.getContext("2d"); g.imageSmoothingEnabled = false;
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+function rect(x,y,w,h,c){ g.fillStyle=c; g.fillRect(Math.round(x),Math.round(y),w,h); }
+function suelo(){
+  const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+  const c1 = dark ? "#2e2820" : "#efe3cf", c2 = dark ? "#332c23" : "#e9dcc5";
+  for (let y=0;y<372;y+=16) for (let x=0;x<640;x+=16) rect(x,y,16,16,((x+y)/16)%2?c1:c2);
+  ZONAS.forEach((z,i)=>{ g.strokeStyle = dark ? "rgba(220,200,160,.25)" : "rgba(120,100,70,.35)"; g.setLineDash([4,4]); g.strokeRect(z.x+6,z.y+6,308,174); g.setLineDash([]);
+    g.fillStyle = dark ? "#cdbf9f" : "#7b6f5d"; g.font = "bold 10px monospace"; g.fillText(z.t.toUpperCase(), z.x+14, z.y+20); });
+  // plantas
+  [[300,30],[300,216],[16,340],[612,340]].forEach(([x,y])=>{ rect(x,y+8,10,8,"#a9744a"); rect(x+1,y,8,8,"#6f9d7a"); rect(x+3,y-4,4,6,"#7fb58c"); });
+}
+function escritorio(a, color){
+  rect(a.x-16,a.y+20,48,12,"#a98558"); rect(a.x-16,a.y+32,48,3,"#8a6a43"); rect(a.x-12,a.y+35,4,8,"#8a6a43"); rect(a.x+24,a.y+35,4,8,"#8a6a43");
+  rect(a.x-2,a.y+6,24,14,"#2f3a45"); rect(a.x,a.y+8,20,10,color); rect(a.x+8,a.y+20,4,3,"#555");
+}
+function persona(a, f){
+  const gris = a.est==="sin datos";
+  const piel = gris?"#b9b1a4":"#f0c9a0", pelo = gris?"#8a8478":a.hair, ropa = gris?"#9a9488":a.shirt;
+  const bob = reduce ? 0 : (a.est==="descansando" ? 0 : Math.round(Math.sin((f+a.x)/9)));
+  const x = a.x-2, y = a.y-26+bob;
+  rect(x+2,y,12,4,pelo); rect(x,y+2,2,6,pelo); rect(x+2,y+4,12,10,piel); rect(x+4,y+8,2,2,"#2a2a2a"); rect(x+10,y+8,2,2,"#2a2a2a");
+  rect(x,y+14,16,14,ropa);
+  const mov = (!reduce && a.est==="escribiendo") ? (Math.floor(f/6)%2) : 0;
+  rect(x-2,y+16+mov*2,3,8,ropa); rect(x+15,y+16+(1-mov)*2,3,8,ropa);
+  rect(x-2,y+24+mov*2,3,3,piel); rect(x+15,y+24+(1-mov)*2,3,3,piel);
+  if (a.est==="leyendo"){ rect(x+3,y+22,12,8,"#fffaf0"); rect(x+9,y+22,1,8,"#c9b99b"); }
+  if (a.est==="descansando"){ g.fillStyle=css("--mut"); g.font="bold 10px monospace"; g.fillText(reduce?"z":["z","zZ","zZz"][Math.floor(f/20)%3], x+16, y-2); }
+  if (a.est==="pensando" || a.est==="esperando") burbuja(x+14,y-14, a.est==="pensando" ? "…" : "!");
+  if (a.est==="sin datos"){ g.fillStyle="#b0a89a"; g.font="bold 10px monospace"; g.fillText("?", x+6, y-4); }
+  if (!a.existe){ g.strokeStyle="#9b7b4f"; g.setLineDash([3,3]); g.strokeRect(a.x-18,a.y-30,52,66); g.setLineDash([]); }
+  if (a.id===sel){ g.strokeStyle="#9b7b4f"; g.lineWidth=2; g.strokeRect(a.x-20,a.y-32,56,70); g.lineWidth=1; }
+  g.fillStyle=css("--ink"); g.font="9px monospace"; const w=g.measureText(a.corto).width; g.fillText(a.corto, a.x+8-w/2, a.y+52);
+}
+function burbuja(x,y,tx){ rect(x,y,16,12,"#fffaf0"); rect(x+3,y+12,4,3,"#fffaf0"); g.fillStyle="#7b6f5d"; g.font="bold 10px monospace"; g.fillText(tx, x+5, y+10); }
+function pintar(f){
+  suelo();
+  A.forEach(a=>escritorio(a, a.est==="escribiendo"?"#bfe3c8": a.est==="leyendo"?"#cfe2f3": a.est==="sin datos"?"#d9d4c9":"#f6e7c8"));
+  A.forEach(a=>persona(a,f));
+}
+function loop(t){ pintar(Math.floor(t/60)); requestAnimationFrame(loop); }
+
+// ── Interacción ─────────────────────────────────────────────────────────────────────────────────
+cv.addEventListener("click", (e)=>{ const r=cv.getBoundingClientRect(); const x=(e.clientX-r.left)*640/r.width, y=(e.clientY-r.top)*372/r.height;
+  const a = A.find(a=> x>=a.x-20 && x<=a.x+36 && y>=a.y-32 && y<=a.y+56); if (a) elegir(a.id); });
+cv.addEventListener("mousemove", (e)=>{ const r=cv.getBoundingClientRect(); const x=(e.clientX-r.left)*640/r.width, y=(e.clientY-r.top)*372/r.height;
+  cv.style.cursor = A.some(a=> x>=a.x-20 && x<=a.x+36 && y>=a.y-32 && y<=a.y+56) ? "pointer" : "default"; });
+function chips(){ $("#chips").innerHTML = A.map(a=>`<button class="chip ${a.existe?"":"prop"}" aria-pressed="${a.id===sel}" data-id="${a.id}">${a.n}${a.existe?"":" · propuesto"}</button>`).join("");
+  document.querySelectorAll(".chip").forEach(b=>b.onclick=()=>elegir(b.dataset.id)); }
+function elegir(id){ sel=id; chips(); panel("preguntar"); }
+function panel(tab){
+  const a = A.find(x=>x.id===sel);
+  const h = (hilos[a.id]||[]).map(m=>`<div class="msg"><b>${m.q}</b><br>${m.a}<small>${m.nota}</small></div>`).join("");
+  const mis = cola.filter(c=>c.id===a.id).map(c=>`<div class="msg"><b>${c.tipo}</b>: ${c.txt}<small>Pendiente · (simulado) quedaría en la cola del agente y su resultado entraría como propuesta para Dirección</small></div>`).join("");
+  $("#panel").innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:start;gap:8px"><div><b style="font-size:17px">${a.n}</b><div class="sub" style="margin:0">${a.rol}</div></div>
+      <span class="pill ${a.pill}">${a.est}</span></div>
+    ${a.existe ? "" : `<div class="msg" style="border-style:dashed">Agente <b>propuesto</b>: todavía no existe. Así se vería cuando esté construido.</div>`}
+    <dl><div><dt>Ahora</dt><dd style="text-align:right;max-width:60%">${a.ahora}</dd></div><div><dt>Objetivo</dt><dd style="text-align:right;max-width:60%">${a.obj}</dd></div><div><dt>¿Cumple?</dt><dd>${a.cumple}</dd></div></dl>
+    <div class="tabs" role="tablist"><button class="tab" role="tab" aria-selected="${tab==="preguntar"}" data-t="preguntar">Preguntar</button><button class="tab" role="tab" aria-selected="${tab==="tarea"}" data-t="tarea">Dejar tarea</button></div>
+    ${tab==="preguntar" ? `<label for="q" class="sub" style="display:block;margin:0 0 4px">¿Qué quieres saber?</label>
+        <textarea id="q" rows="2" placeholder="Ej.: ¿cómo va el análisis de esta semana?"></textarea>
+        <button class="go" id="env">Preguntar</button>${h}` :
+      `<label for="tt" class="sub" style="display:block;margin:0 0 4px">Tipo</label>
+        <select id="tt"><option>Análisis</option><option>Informe</option><option>Propuesta de campaña</option><option>Redacción de piezas</option><option>Revisión</option></select>
+        <label for="tx" class="sub" style="display:block;margin:8px 0 4px">Qué necesitas</label>
+        <textarea id="tx" rows="3" placeholder="Ej.: compara el alcance de los carruseles vs. imágenes únicas del último mes"></textarea>
+        <button class="go" id="dej">Dejar tarea</button>${mis}`}
+    <div class="legend">Reglas: los agentes <b>leen</b>; no publican ni cambian Metricool. Las cifras salen de la base, con fuente y fecha. Lo que proponen lo decide Dirección.</div>`;
+  document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>panel(b.dataset.t));
+  const env=$("#env"); if(env) env.onclick=()=>{ const q=$("#q").value.trim()||"¿Cómo vas?"; (hilos[a.id]=hilos[a.id]||[]).unshift({q, a:a.resp, nota:"Respuesta de ejemplo (simulada)."}); panel("preguntar"); };
+  const dej=$("#dej"); if(dej) dej.onclick=()=>{ const txt=$("#tx").value.trim(); if(!txt) return; cola.unshift({id:a.id,tipo:$("#tt").value,txt}); panel("tarea"); };
+}
+$("#flow").innerHTML = FLUJO.map(([t,d,h],i)=>`<div class="step ${h?"hum":""}"><b>${i+1}. ${t}</b>${d}</div>${i<FLUJO.length-1?'<span class="arrow" aria-hidden="true">→</span>':""}`).join("");
+chips(); panel("preguntar"); requestAnimationFrame(loop);
+</script>
+</body>
+</html>

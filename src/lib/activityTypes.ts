@@ -161,3 +161,39 @@ export function fileKindLabel(value?: string | null): string {
   if (!value) return "—";
   return FILE_KIND_LABELS[value as ActivityFileKind] ?? value;
 }
+
+// ─── Rubros (lista base + rubros nuevos que cree el equipo, p. ej. "Carpas") ──
+export function rubroLabel(value?: string | null): string {
+  if (!value) return "General";
+  return PROVIDER_CATEGORY_LABELS[value as ProviderCategory] ?? value;
+}
+
+/** Rubros base + los personalizados que ya existan en la actividad (sin duplicar). */
+export function buildRubroOptions(
+  used: (string | null | undefined)[],
+): { value: string; label: string }[] {
+  const base = PROVIDER_CATEGORY_OPTIONS.filter((o) => o.value !== "otro");
+  const known = new Set(base.map((o) => o.value.toLowerCase()));
+  known.add("otro");
+  const custom: { value: string; label: string }[] = [];
+  for (const raw of used) {
+    const v = raw?.trim();
+    if (!v || known.has(v.toLowerCase())) continue;
+    known.add(v.toLowerCase());
+    custom.push({ value: v, label: v });
+  }
+  custom.sort((a, b) => a.label.localeCompare(b.label, "es"));
+  return [...base, ...custom, { value: "otro", label: PROVIDER_CATEGORY_LABELS.otro }];
+}
+
+/** Pendientes típicos por rubro, para agregarlos con un clic desde el proveedor. */
+const SUGGESTIONS_GENERIC = ["Pedir cotización", "Confirmar y apartar", "Pagar anticipo", "Entrega / listo"];
+const SUGGESTIONS_BY_RUBRO: Record<string, string[]> = {
+  alimentos: ["Confirmar menú", "Pagar anticipo", "Confirmar horario de entrega", "Comida lista"],
+  souvenirs: ["Aprobar diseño", "Recibir muestra", "Pagar anticipo", "Recibir pedido"],
+  obsequios: ["Aprobar diseño", "Recibir muestra", "Pagar anticipo", "Recibir pedido"],
+  casas: ["Visitar sede", "Apartar fecha", "Pagar anticipo", "Sede confirmada"],
+};
+export function pendienteSuggestions(rubro?: string | null): string[] {
+  return SUGGESTIONS_BY_RUBRO[(rubro ?? "").toLowerCase()] ?? SUGGESTIONS_GENERIC;
+}

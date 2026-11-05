@@ -7,7 +7,7 @@ Archivos:
 - `supabase/migrations/20261104165545_marketing_registrar_corrida.sql` (`mk_registrar_corrida` y `mk_latido_agente`) y su reversa `tools/marketing/rollback_registrar_corrida.sql`.
 - `supabase/migrations/20261104165612_marketing_vigia_registra.sql` (vigía que registra) y su reversa `tools/marketing/rollback_vigia_registra.sql`.
 - `supabase/functions/_shared/colchon_run.ts` y `supabase/functions/marketing-colchon/index.ts` (v6 del handler): llaman a `mk_registrar_corrida` al terminar cada corrida real (las simuladas no se registran). 7 pruebas nuevas en `colchon_run.test.ts`.
-- Pantalla: `agentesRegistro.ts` / `AgentesRegistro.tsx` (señal por cadencia, objetivo y cumplimiento) + hook `useTareasMarketingAgentes`. 8 pruebas nuevas.
+- Pantalla: `agentesRegistroLogica.ts` / `AgentesRegistro.tsx` (señal por cadencia, objetivo y cumplimiento) + hook `useTareasMarketingAgentes`. 8 pruebas nuevas.
 - Prueba contra Postgres real: `tools/marketing/prueba_registrar_corrida_pglite.mjs` (13 pruebas).
 - Banda del servicio: los agentes de sistema ya **no cuentan** para «kawiil-agents» (su latido viene de Supabase, no de la VM).
 

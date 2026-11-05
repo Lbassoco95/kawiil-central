@@ -4,7 +4,7 @@ import { AgentesRegistro } from "@/components/marketing/AgentesRegistro";
 import {
   cuandoRelativo, duracionLegible, ordenarAgentes, resumenServicio, senalAgente, tareasRecientes, tasaExito,
   cumplimiento, ultimaTareaDe, type AgenteRegistro, type TareaAgente, type TareaMarketing,
-} from "@/components/marketing/agentesRegistro";
+} from "@/components/marketing/agentesRegistroLogica";
 
 const AHORA = new Date("2026-11-03T16:00:00Z");
 const ag = (o: Partial<AgenteRegistro> & { id: string; name: string }): AgenteRegistro => ({

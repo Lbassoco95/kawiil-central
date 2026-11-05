@@ -3,7 +3,7 @@ import { ArrowRight } from "lucide-react";
 import type { Caso, FilaBitacora, TrabajoCron } from "@/hooks/useMarketing";
 import { RED_LABEL } from "@/hooks/useMarketing";
 import { Pastilla, Vacio } from "./marketingUi";
-import { cuandoLegible, etiquetaAgente, flujo, lineaDeTiempo, tarjetas, type EstadoAgente } from "./agentes";
+import { cuandoLegible, etiquetaAgente, flujo, lineaDeTiempo, tarjetas, type EstadoAgente } from "./agentesLogica";
 import { tipoCaso } from "./PanelDia";
 
 const ESTADO: Record<EstadoAgente, { etiqueta: string; color: string }> = {

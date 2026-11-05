@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { AgentesRegistro } from "@/components/marketing/AgentesRegistro";
 import { agentesDelModulo, categoriaError, saludLegal, ultimoErrorPorAgente, type AgenteRegistro, type TareaAgente } from "@/lib/agentes/registro";
-import * as viejo from "@/components/marketing/agentesRegistro";
+import * as viejo from "@/components/marketing/agentesRegistroLogica";
 import * as nuevo from "@/lib/agentes/registro";
 
 const AHORA = new Date("2026-11-05T16:00:00Z");

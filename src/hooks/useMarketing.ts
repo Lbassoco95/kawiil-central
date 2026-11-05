@@ -157,7 +157,7 @@ export { useAgentesRegistro, useTareasAgentes } from "@/hooks/useAgentesRegistro
 export const useTareasMarketingAgentes = () =>
   useQuery({
     queryKey: ["agentes-registro", "tareas-marketing"],
-    queryFn: async (): Promise<import("@/components/marketing/agentesRegistro").TareaMarketing[]> => {
+    queryFn: async (): Promise<import("@/components/marketing/agentesRegistroLogica").TareaMarketing[]> => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any).from("agent_tasks")
         .select("id, agent_id, status, completed_at, result_summary, result").eq("input_context->>origen", "marketing").order("completed_at", { ascending: false }).limit(60);

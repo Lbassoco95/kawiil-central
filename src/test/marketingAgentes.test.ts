@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { CATALOGO, agenteExiste, cuandoLegible, ejecucionPrevia, estadoAgente, flujo, leerCron, lineaDeTiempo, proximaEjecucion, tarjetas } from "@/components/marketing/agentes";
+import { CATALOGO, agenteExiste, cuandoLegible, ejecucionPrevia, estadoAgente, flujo, leerCron, lineaDeTiempo, proximaEjecucion, tarjetas } from "@/components/marketing/agentesLogica";
 import type { FilaBitacora, TrabajoCron } from "@/hooks/useMarketing";
 
 const D = (iso: string) => new Date(iso);

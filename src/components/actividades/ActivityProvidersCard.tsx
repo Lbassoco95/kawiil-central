@@ -18,16 +18,18 @@ import { Plus, Pencil, Trash2, Store, ExternalLink, ListChecks } from "lucide-re
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { formatDateMX } from "@/lib/dateUtils";
 import { useProfiles } from "@/hooks/useTasks";
+import { RubroSelect } from "@/components/actividades/RubroSelect";
+import { useActivityTasks } from "@/hooks/useActivities";
 import { ProviderTrackingDialog } from "@/components/actividades/ProviderTrackingDialog";
 import { formatMxn } from "@/lib/pipelineFormat";
 import {
-  PROVIDER_CATEGORY_OPTIONS, providerCategoryLabel,
+  buildRubroOptions, rubroLabel,
   PROVIDER_STATUS_OPTIONS, PROVIDER_STATUS_STYLES, providerStatusLabel,
   type ProviderStatus,
 } from "@/lib/activityTypes";
 import {
   useActivityProviders, useCreateActivityProvider, useUpdateActivityProvider,
-  useDeleteActivityProvider, useActivityProviderItemCounts, type ActivityProvider,
+  useDeleteActivityProvider, type ActivityProvider,
 } from "@/hooks/useActivityExtras";
 
 const emptyNum = (s: string) => {
@@ -41,8 +43,11 @@ const providerTotal = (p: ActivityProvider) => (p.unit_price ?? 0) * (p.quantity
 const providerBalance = (p: ActivityProvider) => providerTotal(p) - (p.advance ?? 0);
 
 function ProviderDialog({
-  activityId, provider, trigger,
-}: { activityId: string; provider?: ActivityProvider; trigger: React.ReactNode }) {
+  activityId, provider, trigger, rubros,
+}: {
+  activityId: string; provider?: ActivityProvider; trigger: React.ReactNode;
+  rubros: { value: string; label: string }[];
+}) {
   const isEdit = !!provider;
   const [open, setOpen] = useState(false);
   const createProvider = useCreateActivityProvider();
@@ -111,14 +116,7 @@ function ProviderDialog({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Rubro</Label>
-              <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {PROVIDER_CATEGORY_OPTIONS.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <RubroSelect value={category} onChange={setCategory} options={rubros} />
             </div>
             <div className="space-y-2">
               <Label>Estatus</Label>
@@ -201,7 +199,15 @@ export function ActivityProvidersCard({ activityId }: { activityId: string }) {
   const [trackingId, setTrackingId] = useState<string | null>(null);
 
   const list = providers ?? [];
-  const { data: itemCounts } = useActivityProviderItemCounts(list.map((p) => p.id));
+  const { data: tasks } = useActivityTasks(activityId);
+  const rubros = buildRubroOptions([...list.map((p) => p.category), ...(tasks ?? []).map((t) => t.activity_category)]);
+  const taskCounts: Record<string, { done: number; total: number }> = {};
+  for (const t of tasks ?? []) {
+    if (!t.activity_provider_id) continue;
+    const c = (taskCounts[t.activity_provider_id] ??= { done: 0, total: 0 });
+    c.total += 1;
+    if (t.status === "completada") c.done += 1;
+  }
   const tracking = list.find((p) => p.id === trackingId) ?? null;
   const todayYmd = new Date().toISOString().slice(0, 10);
   const nameFor = (uid: string | null) =>
@@ -217,6 +223,7 @@ export function ActivityProvidersCard({ activityId }: { activityId: string }) {
         </CardTitle>
         <ProviderDialog
           activityId={activityId}
+          rubros={rubros}
           trigger={
             <Button size="sm" variant="outline">
               <Plus className="mr-1.5 h-3.5 w-3.5" />
@@ -253,7 +260,7 @@ export function ActivityProvidersCard({ activityId }: { activityId: string }) {
               <TableBody>
                 {list.map((p) => (
                   <TableRow key={p.id}>
-                    <TableCell>{providerCategoryLabel(p.category)}</TableCell>
+                    <TableCell>{rubroLabel(p.category)}</TableCell>
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-1.5">
                         {p.name}
@@ -304,7 +311,7 @@ export function ActivityProvidersCard({ activityId }: { activityId: string }) {
                         onClick={() => setTrackingId(p.id)}
                       >
                         <ListChecks className="h-3.5 w-3.5" />
-                        {itemCounts?.[p.id] ? `${itemCounts[p.id].done}/${itemCounts[p.id].total}` : "Abrir"}
+                        {taskCounts[p.id] ? `${taskCounts[p.id].done}/${taskCounts[p.id].total}` : "Abrir"}
                       </Button>
                     </TableCell>
                     <TableCell className="text-right">{formatMxn(p.unit_price, { compact: false })}</TableCell>
@@ -315,6 +322,7 @@ export function ActivityProvidersCard({ activityId }: { activityId: string }) {
                       <div className="flex items-center justify-end gap-1">
                         <ProviderDialog
                           activityId={activityId}
+                          rubros={rubros}
                           provider={p}
                           trigger={
                             <Button size="icon" variant="ghost" className="h-7 w-7">
