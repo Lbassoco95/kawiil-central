@@ -382,14 +382,104 @@ export type Database = {
           },
         ]
       }
+      activity_provider_items: {
+        Row: {
+          assigned_to: string | null
+          completed: boolean
+          completed_at: string | null
+          created_at: string
+          created_by: string
+          due_date: string | null
+          id: string
+          organization_id: string
+          provider_id: string
+          sort_order: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          completed?: boolean
+          completed_at?: string | null
+          created_at?: string
+          created_by: string
+          due_date?: string | null
+          id?: string
+          organization_id: string
+          provider_id: string
+          sort_order?: number
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_to?: string | null
+          completed?: boolean
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string
+          due_date?: string | null
+          id?: string
+          organization_id?: string
+          provider_id?: string
+          sort_order?: number
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_provider_items_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "activity_providers"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      activity_provider_comments: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          organization_id: string
+          provider_id: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          organization_id: string
+          provider_id: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          organization_id?: string
+          provider_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_provider_comments_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "activity_providers"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       activity_providers: {
         Row: {
           activity_id: string
           advance: number | null
+          assigned_to: string | null
           category: string
           created_at: string
           created_by: string
           description: string | null
+          due_date: string | null
           id: string
           link: string | null
           name: string
@@ -403,10 +493,12 @@ export type Database = {
         Insert: {
           activity_id: string
           advance?: number | null
+          assigned_to?: string | null
           category?: string
           created_at?: string
           created_by: string
           description?: string | null
+          due_date?: string | null
           id?: string
           link?: string | null
           name: string
@@ -420,10 +512,12 @@ export type Database = {
         Update: {
           activity_id?: string
           advance?: number | null
+          assigned_to?: string | null
           category?: string
           created_at?: string
           created_by?: string
           description?: string | null
+          due_date?: string | null
           id?: string
           link?: string | null
           name?: string
