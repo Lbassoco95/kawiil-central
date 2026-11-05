@@ -150,34 +150,8 @@ export const useEstadoTrabajos = () =>
     staleTime: 60_000,
   });
 
-// ── Registro de agentes de kawiil-central (solo lectura) ────────────────────────────────────────────────────────────
-// Tablas agent_registry / agent_tasks: las escribe la VM kawiil-agents; aquí solo se leen con la sesión del usuario (RLS de lectura
-// para autenticados). De agent_tasks se piden solo columnas sin texto de expediente (sin título, instrucciones, resultado ni error).
-export const useAgentesRegistro = () =>
-  useQuery({
-    queryKey: ["agentes-registro", "agentes"],
-    queryFn: async (): Promise<import("@/components/marketing/agentesRegistro").AgenteRegistro[]> => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any).from("agent_registry")
-        .select("id, name, display_name, description, role, status, kind, last_heartbeat, last_task_at, tasks_completed, tasks_failed, config").order("name");
-      if (error) throw error;
-      return data ?? [];
-    },
-    staleTime: 60_000,
-  });
-
-export const useTareasAgentes = () =>
-  useQuery({
-    queryKey: ["agentes-registro", "tareas"],
-    queryFn: async (): Promise<import("@/components/marketing/agentesRegistro").TareaAgente[]> => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any).from("agent_tasks")
-        .select("id, agent_id, task_type, status, created_at, started_at, completed_at").order("created_at", { ascending: false }).limit(300);
-      if (error) throw error;
-      return data ?? [];
-    },
-    staleTime: 60_000,
-  });
+// Las lecturas del registro de agentes viven en useAgentesRegistro.ts (compartidas con el módulo Agentes); se reexportan aquí.
+export { useAgentesRegistro, useTareasAgentes } from "@/hooks/useAgentesRegistro";
 
 // Tareas de los agentes de Marketing (origen «marketing»): solo números y códigos. El filtro por origen evita traer resultados de otros agentes.
 export const useTareasMarketingAgentes = () =>

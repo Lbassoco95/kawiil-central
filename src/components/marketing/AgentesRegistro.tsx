@@ -1,24 +1,25 @@
 import { useEffect, useMemo, useState } from "react";
 import { Pastilla, Vacio } from "./marketingUi";
 import {
-  cuandoRelativo, cumplimiento, esAgenteDeMarketing, esSistema, nombreAgente, ordenarAgentes, resumenServicio, senalAgente, SENAL_ETIQUETA, tareasRecientes, tasaExito, ultimaTareaDe,
+  cuandoRelativo, cumplimiento, agentesDelModulo, esAgenteDeMarketing, esSistema, nombreAgente, ordenarAgentes, resumenServicio, senalAgente, SENAL_ETIQUETA, tareasRecientes, tasaExito, ultimaTareaDe,
   type AgenteRegistro, type TareaAgente, type TareaMarketing,
-} from "./agentesRegistro";
+} from "@/lib/agentes/registro";
 
 export type EstadoCarga = "cargando" | "error" | "ok";
 
 // Agentes del registro de kawiil-central (solo lectura): estado, latido, tareas y quién los opera. No ejecuta ni despacha nada.
 // `soloMarketing`: la pestaña de Marketing muestra SOLO sus 3 agentes de sistema (marketing_*). Los demás agentes del registro
 // (los de Cerebro / kawiil-agents) no se mezclan aquí: tienen su propio módulo.
-export function AgentesRegistro({ agentes: todos, tareas: todasLasTareas, estadoAgentes, estadoTareas, ahora, tareasMarketing = [], soloMarketing = false }: {
-  agentes: AgenteRegistro[]; tareas: TareaAgente[]; estadoAgentes: EstadoCarga; estadoTareas: EstadoCarga; ahora?: Date; tareasMarketing?: TareaMarketing[]; soloMarketing?: boolean;
+export function AgentesRegistro({ agentes: todos, tareas: todasLasTareas, estadoAgentes, estadoTareas, ahora, tareasMarketing = [], soloMarketing = false, sinMarketing = false }: {
+  agentes: AgenteRegistro[]; tareas: TareaAgente[]; estadoAgentes: EstadoCarga; estadoTareas: EstadoCarga; ahora?: Date; tareasMarketing?: TareaMarketing[]; soloMarketing?: boolean; sinMarketing?: boolean;
 }) {
-  const agentes = useMemo(() => (soloMarketing ? todos.filter(esAgenteDeMarketing) : todos), [todos, soloMarketing]);
+  // `sinMarketing`: módulo Agentes (/agentes), que excluye a los agentes de Marketing.
+  const agentes = useMemo(() => (soloMarketing ? todos.filter(esAgenteDeMarketing) : sinMarketing ? agentesDelModulo(todos) : todos), [todos, soloMarketing, sinMarketing]);
   const tareas = useMemo(() => {
-    if (!soloMarketing) return todasLasTareas;
+    if (!soloMarketing && !sinMarketing) return todasLasTareas;
     const ids = new Set(agentes.map((a) => a.id));
     return todasLasTareas.filter((t) => t.agent_id !== null && ids.has(t.agent_id));
-  }, [todasLasTareas, agentes, soloMarketing]);
+  }, [todasLasTareas, agentes, soloMarketing, sinMarketing]);
   const [reloj, setReloj] = useState(() => new Date());
   useEffect(() => { const t = setInterval(() => setReloj(new Date()), 60_000); return () => clearInterval(t); }, []);
   const now = ahora ?? reloj;
