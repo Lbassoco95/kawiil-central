@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Plus, Pencil, Trash2, Users } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import { normalizeWhatsappNumber } from "@/lib/whatsapp";
 import { InviteMessageDialog } from "@/components/actividades/InviteMessageDialog";
 import { useActivityTasks } from "@/hooks/useActivities";
 import {
@@ -37,6 +38,7 @@ function AttendeeDialog({
   const [name, setName] = useState("");
   const [confirmed, setConfirmed] = useState<string>("pendiente");
   const [dietary, setDietary] = useState("");
+  const [phone, setPhone] = useState("");
   const [notes, setNotes] = useState("");
   const [hasPlusOne, setHasPlusOne] = useState(false);
   const [plusName, setPlusName] = useState("");
@@ -48,6 +50,7 @@ function AttendeeDialog({
     setName(attendee?.name ?? "");
     setConfirmed(attendee?.confirmed ?? "pendiente");
     setDietary(attendee?.dietary_restriction ?? "");
+    setPhone(attendee?.phone ?? "");
     setNotes(attendee?.notes ?? "");
     setHasPlusOne(attendee?.has_plus_one ?? false);
     setPlusName(attendee?.plus_one_name ?? "");
@@ -62,6 +65,7 @@ function AttendeeDialog({
       name: name.trim(),
       confirmed,
       dietary_restriction: dietary.trim() || null,
+      phone: phone.trim() || null,
       notes: notes.trim() || null,
       has_plus_one: hasPlusOne,
       plus_one_name: hasPlusOne ? plusName.trim() || null : null,
@@ -87,6 +91,19 @@ function AttendeeDialog({
             <Label htmlFor="att-name">Nombre *</Label>
             <Input id="att-name" placeholder="Ej: Viri"
               value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="att-phone">Teléfono / WhatsApp</Label>
+            <Input id="att-phone" type="tel" inputMode="tel" placeholder="Ej: 55 1234 5678"
+              value={phone} onChange={(e) => setPhone(e.target.value)} />
+            {phone.trim() && !normalizeWhatsappNumber(phone) && (
+              <p className="text-xs text-destructive">
+                No parece un número válido. Usa 10 dígitos (México) o el formato internacional con +.
+              </p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Se usa para enviarle el mensaje del evento directo por WhatsApp.
+            </p>
           </div>
           <div className="space-y-2">
             <Label>Confirmación</Label>
@@ -222,7 +239,12 @@ export function ActivityAttendeesCard({ activityId }: { activityId: string }) {
               <TableBody>
                 {list.map((a) => (
                   <TableRow key={a.id}>
-                    <TableCell className="font-medium">{a.name}</TableCell>
+                    <TableCell className="font-medium">
+                      {a.name}
+                      {a.phone && (
+                        <span className="block text-xs font-normal text-muted-foreground">{a.phone}</span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Select
                         value={a.confirmed}
