@@ -14,6 +14,7 @@ import {
 } from "@/lib/finance/bankImport";
 import { COMMITMENT_KIND_LABEL, parseCommitmentsBuffer, type CommitmentKind, type ParsedCommitment } from "@/lib/finance/commitmentImport";
 import { AccountDialog } from "./AccountDialog";
+import { StatementImportTab } from "./StatementImportTab";
 import { categoryFromReference, suggestCategory } from "@/lib/finance/classifier";
 import {
   useCreateAccount, useFinanceAccounts, useFinanceCategories, useImportCommitments, useImportMovements, useRuleIndex,
@@ -160,6 +161,7 @@ export function BankImportDialog({ open, onOpenChange }: { open: boolean; onOpen
         <Tabs defaultValue="excel">
           <TabsList>
             <TabsTrigger value="excel" className="gap-1.5 text-xs"><FileSpreadsheet className="h-3.5 w-3.5" /> Excel contable</TabsTrigger>
+            <TabsTrigger value="estado" className="gap-1.5 text-xs"><FileSpreadsheet className="h-3.5 w-3.5" /> Estado de cuenta del banco</TabsTrigger>
             <TabsTrigger value="pegar" className="gap-1.5 text-xs"><ClipboardPaste className="h-3.5 w-3.5" /> Pegar movimientos</TabsTrigger>
           </TabsList>
 
@@ -236,6 +238,8 @@ export function BankImportDialog({ open, onOpenChange }: { open: boolean; onOpen
               </div>
             )}
           </TabsContent>
+
+          <TabsContent value="estado"><StatementImportTab /></TabsContent>
 
           <TabsContent value="pegar" className="space-y-3">
             <div className="flex gap-2">

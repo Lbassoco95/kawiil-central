@@ -17,7 +17,8 @@ const db = supabase as any;
 export interface FinanceAccount {
   id: string; name: string; kind: "banco" | "efectivo" | "otro"; institution: string | null;
   opening_balance: number; counts_as_available: boolean; is_active: boolean; notes: string | null;
-  parent_account_id: string | null;
+  parent_account_id: string | null; bank_code?: string | null;
+  import_profile?: { headerRow: number; mapping: Record<string, number>; headers: string[] } | null;
 }
 export interface FinanceMovement {
   id: string; account_id: string; movement_date: string; description: string; reference: string | null;
@@ -38,6 +39,7 @@ export interface FinanceCommitment {
 }
 
 export const financeBankKeys = {
+  banks: ["finance-banks"] as const,
   commitments: ["finance-commitments"] as const,
   accounts: ["finance-accounts"] as const,
   movements: ["finance-movements"] as const,
@@ -368,5 +370,40 @@ export function useSetMovementEntity() {
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: financeBankKeys.movements }),
     onError: (e: Error) => toast.error(`No se pudo asignar la entidad: ${e.message}`),
+  });
+}
+
+export interface FinanceBank { id: string; name: string; code: string | null; source: string }
+
+export function useFinanceBanks() {
+  return useQuery({ queryKey: financeBankKeys.banks, queryFn: () => fetchAll<FinanceBank>("finance_banks", "name", true) });
+}
+
+export function useImportBanks() {
+  const qc = useQueryClient();
+  const { data: orgId } = useOrgId();
+  return useMutation({
+    mutationFn: async (p: { entries: { name: string; code: string | null }[]; source: "banxico" | "manual" }) => {
+      if (!orgId) throw new Error("Organización no disponible");
+      const rows = p.entries.map((e) => ({ organization_id: orgId, name: e.name, code: e.code, source: p.source }));
+      for (const part of chunk(rows, 300)) {
+        const { error } = await db.from("finance_banks").upsert(part, { onConflict: "organization_id,name" });
+        if (error) throw error;
+      }
+      return rows.length;
+    },
+    onSuccess: (n) => { qc.invalidateQueries({ queryKey: financeBankKeys.banks }); toast.success(`${n} instituciones guardadas`); },
+    onError: (e: Error) => toast.error(`No se pudo guardar el catálogo: ${e.message}`),
+  });
+}
+
+export function useSaveImportProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (p: { accountId: string; profile: NonNullable<FinanceAccount["import_profile"]> }) => {
+      const { error } = await db.from("finance_accounts").update({ import_profile: p.profile }).eq("id", p.accountId);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: financeBankKeys.accounts }),
   });
 }
