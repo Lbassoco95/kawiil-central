@@ -16,3 +16,12 @@ explícita de Dirección, escritura por escritura.
 - `20261103000000_marketing_semaforo_corregido.sql`: una fila por pieza (corte `7d` si existe, si no `acumulado`). Corrección preventiva;
   hoy no cambia ningún promedio ni color. Prueba: `tools/marketing/prueba_semaforo_pglite.mjs`.
 - `20261101130000_marketing_nota_umbral_instagram.sql`: se descartará; Dirección pidió registrar la nota con `mk_cambiar_regla`, con motivo.
+
+## Analista de resultados (fase 2; preparado, sin aplicar; ver `docs/marketing-equipo-agentes-diseno.md`, sección 12)
+Orden, cada paso con confirmación de Dirección:
+1. `20261105120000_marketing_analista_datos.sql`: función de lectura `mk_analista_datos` (solo `service_role`). Reversa: `tools/marketing/rollback_analista_datos.sql`.
+2. `20261105120100_marketing_analista_registro.sql`: agente `marketing_analista`, tabla `mk_consulta` (RLS, sin escritura para usuarios) y las dos funciones de registro de corridas ampliadas. Reversa: `tools/marketing/rollback_analista_registro.sql`.
+3. Fusionar a `main` **después** de los pasos 1 y 2: el flujo despliega `marketing-agente` (`supabase/functions/`) y Vercel el panel.
+4. Pregunta de prueba con la sesión de Dirección.
+Pruebas: `tools/marketing/prueba_analista_pglite.mjs`; Node `supabase/functions/_shared/analista*.test.ts`.
+

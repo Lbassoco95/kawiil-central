@@ -14,7 +14,7 @@ export interface TareaAgente {
   created_at: string; started_at: string | null; completed_at: string | null;
 }
 
-export type Senal = "en_linea" | "inactivo" | "sin_senal" | "sin_latido" | "atascado" | "archivado" | "al_dia" | "atrasado" | "con_error";
+export type Senal = "en_linea" | "inactivo" | "sin_senal" | "sin_latido" | "atascado" | "archivado" | "al_dia" | "atrasado" | "con_error" | "disponible";
 
 const H = 3_600_000, D = 86_400_000;
 export const UMBRAL_EN_LINEA_MS = 2 * H;       // latido de las últimas 2 horas
@@ -22,6 +22,8 @@ export const UMBRAL_ATASCADO_MS = 1 * H;       // "trabajando" sin latido en má
 export const UMBRAL_SIN_SENAL_MS = 7 * D;      // sin latido en más de 7 días
 export const UMBRAL_DIARIO_MS = 26 * H;        // agentes de sistema con corrida diaria: al día si corrieron en las últimas 26 h
 export const esSistema = (a: Pick<AgenteRegistro, "kind">): boolean => a.kind === "system";
+// Agentes que no corren a una hora fija sino cuando se les pregunta (el Analista): no pueden estar «atrasados» por falta de preguntas.
+export const esBajoDemanda = (a: Pick<AgenteRegistro, "config">): boolean => a.config?.cadencia === "bajo_demanda";
 // Los agentes de Marketing son los de sistema cuyo nombre empieza con marketing_ (los demás del registro son de Cerebro / kawiil-agents).
 export const esAgenteDeMarketing = (a: Pick<AgenteRegistro, "kind" | "name">): boolean => esSistema(a) && a.name.startsWith("marketing_");
 
@@ -29,6 +31,7 @@ export const nombreAgente = (a: Pick<AgenteRegistro, "name" | "display_name">): 
 
 export function senalAgente(a: AgenteRegistro, ahora: Date): Senal {
   if (a.status === "archived") return "archivado";
+  if (esSistema(a) && esBajoDemanda(a)) return a.status === "error" ? "con_error" : "disponible";
   if (!a.last_heartbeat) return "sin_latido";
   if (esSistema(a)) {
     // Trabajos programados (Marketing): su cadencia es diaria, no «en línea»; la señal es si corrieron a su hora.
@@ -49,6 +52,7 @@ export const SENAL_ETIQUETA: Record<Senal, { etiqueta: string; color: string }> 
   sin_latido: { etiqueta: "Sin latido", color: "gris" },
   atascado: { etiqueta: "Atascado", color: "rojo" },
   al_dia: { etiqueta: "Al día", color: "verde" },
+  disponible: { etiqueta: "Disponible", color: "verde" },
   atrasado: { etiqueta: "Atrasado", color: "rojo" },
   con_error: { etiqueta: "Con error", color: "rojo" },
   archivado: { etiqueta: "Archivado", color: "gris" },
@@ -136,7 +140,7 @@ export function tareasRecientes(
 }
 
 // Orden de las tarjetas: primero lo que necesita atención, luego lo activo, al final lo archivado.
-const PESO: Record<Senal, number> = { atascado: 0, con_error: 0, atrasado: 0, en_linea: 1, al_dia: 1, inactivo: 2, sin_senal: 3, sin_latido: 4, archivado: 5 };
+const PESO: Record<Senal, number> = { atascado: 0, con_error: 0, atrasado: 0, en_linea: 1, al_dia: 1, disponible: 1, inactivo: 2, sin_senal: 3, sin_latido: 4, archivado: 5 };
 export function ordenarAgentes(agentes: AgenteRegistro[], ahora: Date): AgenteRegistro[] {
   return [...agentes].sort((a, b) => PESO[senalAgente(a, ahora)] - PESO[senalAgente(b, ahora)] || nombreAgente(a).localeCompare(nombreAgente(b)));
 }
@@ -145,7 +149,7 @@ export function ordenarAgentes(agentes: AgenteRegistro[], ahora: Date): AgenteRe
 // Sale de las tareas que dejan en agent_tasks (solo las de origen «marketing»: llevan números y códigos, nunca texto de clientes).
 export interface TareaMarketing {
   id: string; agent_id: string | null; status: string; completed_at: string | null; result_summary: string | null;
-  result: { colchon?: Array<{ red: string; dias: number; color: string }> } | null;
+  result: { colchon?: Array<{ red: string; dias: number; color: string }>; verificada?: boolean | null } | null;
 }
 export interface Cumplimiento { estado: "cumple" | "no_cumple" | "sin_datos"; texto: string }
 
@@ -175,6 +179,13 @@ export function cumplimiento(a: AgenteRegistro, ultima: TareaMarketing | undefin
     const limite = typeof metas.informe_diario_antes_de === "string" ? metas.informe_diario_antes_de : "07:30", hora = horaCDMX(ultima.completed_at);
     return hora <= limite ? { estado: "cumple", texto: `Último informe entregado a las ${hora}, antes de las ${limite}.` }
       : { estado: "no_cumple", texto: `Último informe entregado a las ${hora}, después de las ${limite}.` };
+  }
+  if (a.name === "marketing_analista") {
+    if (!ultima) return { estado: "sin_datos", texto: "Todavía no ha respondido ninguna pregunta." };
+    if (ultima.status === "error") return { estado: "no_cumple", texto: "La última pregunta no se pudo responder." };
+    if (ultima.result?.verificada === true) return { estado: "cumple", texto: "Su última respuesta tuvo todas las cifras verificadas contra la base." };
+    if (ultima.result?.verificada === false) return { estado: "no_cumple", texto: "Su última respuesta tuvo cifras que no se pudieron verificar." };
+    return { estado: "sin_datos", texto: "La última respuesta no indica si se verificaron las cifras." };
   }
   if (a.name === "marketing_vigia") {
     if (ultima?.status === "error") return { estado: "no_cumple", texto: `No encontró la corrida${ultima.result_summary ? `: ${ultima.result_summary}` : ""}.` };

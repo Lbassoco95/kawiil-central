@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ConsultaAnalista, RespuestaAnalista } from "@/hooks/useMarketing";
 import { Pastilla, Vacio } from "./marketingUi";
 import { cuandoRelativo, ESTADO_TAREA, type AgenteRegistro, type TareaMarketing } from "./agentesRegistroLogica";
 import { ALTO, ANCHO, personajeEn, personajes, type Animacion, type PersonajeOficina } from "./oficinaAgentesLogica";
 
 export type EstadoCarga = "cargando" | "error" | "ok";
+
+// Lo que necesita el panel «Preguntar» del Analista. Sin esta propiedad (o sin el agente en el registro) no aparece.
+export interface AnalistaProps { consultas: ConsultaAnalista[]; estadoConsultas: EstadoCarga; preguntar: (pregunta: string) => Promise<RespuestaAnalista> }
 
 // ── Dibujo (Canvas 2D, pixel art propio) ────────────────────────────────────────────────────────────────────────────
 function rect(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, c: string) { g.fillStyle = c; g.fillRect(Math.round(x), Math.round(y), w, h); }
@@ -13,6 +17,7 @@ function pintar(g: CanvasRenderingContext2D, lista: PersonajeOficina[], elegido:
   for (let y = 0; y < ALTO; y += 16) for (let x = 0; x < ANCHO; x += 16) rect(g, x, y, 16, 16, ((x + y) / 16) % 2 ? c1 : c2);
   g.strokeStyle = oscuro ? "rgba(220,200,160,.25)" : "rgba(120,100,70,.35)"; g.setLineDash([4, 4]); g.strokeRect(6, 6, ANCHO - 12, ALTO - 12); g.setLineDash([]);
   g.fillStyle = suave; g.font = "bold 10px monospace"; g.fillText("MONITOREO", 14, 20);
+  if (lista.some((p) => p.clave === "marketing_analista")) { g.setLineDash([4, 4]); g.beginPath(); g.moveTo(436, 12); g.lineTo(436, ALTO - 12); g.stroke(); g.setLineDash([]); g.fillText("ANÁLISIS", 446, 20); }
   [[16, 176], [ANCHO - 28, 176]].forEach(([x, y]) => { rect(g, x, y + 8, 10, 8, "#a9744a"); rect(g, x + 1, y, 8, 8, "#6f9d7a"); rect(g, x + 3, y - 4, 4, 6, "#7fb58c"); });
 
   for (const p of lista) {
@@ -27,7 +32,8 @@ function pintar(g: CanvasRenderingContext2D, lista: PersonajeOficina[], elegido:
     rect(g, px, py + 14, 16, 14, ropa);
     const mov = !quieto && an === "escribiendo" ? Math.floor(cuadro / 6) % 2 : 0;
     rect(g, px - 2, py + 16 + mov * 2, 3, 8, ropa); rect(g, px + 15, py + 16 + (1 - mov) * 2, 3, 8, ropa); rect(g, px - 2, py + 24 + mov * 2, 3, 3, piel); rect(g, px + 15, py + 24 + (1 - mov) * 2, 3, 3, piel);
-    if (an === "leyendo") { rect(g, px + 3, py + 22, 12, 8, "#fffaf0"); rect(g, px + 9, py + 22, 1, 8, "#c9b99b"); }
+    if (an === "leyendo" || an === "pensando") { rect(g, px + 3, py + 22, 12, 8, "#fffaf0"); rect(g, px + 9, py + 22, 1, 8, "#c9b99b"); }
+    if (an === "pensando") { rect(g, px + 14, py - 14, 16, 12, "#fffaf0"); rect(g, px + 17, py - 2, 4, 3, "#fffaf0"); g.fillStyle = suave; g.fillText(quieto ? "…" : ["·", "··", "···"][Math.floor(cuadro / 12) % 3], px + 17, py - 4); }
     g.font = "bold 10px monospace";
     if (an === "descansando") { g.fillStyle = suave; g.fillText(quieto ? "z" : ["z", "zZ", "zZz"][Math.floor(cuadro / 20) % 3], px + 16, py - 2); }
     if (gris) { g.fillStyle = "#b0a89a"; g.fillText("?", px + 6, py - 4); }
@@ -42,13 +48,14 @@ const COLOR_TAREA = (s: string) => (ESTADO_TAREA[s]?.falla ? "rojo" : s === "com
 // ── Componente ──────────────────────────────────────────────────────────────────────────────────────────────────────
 // Fase 1: solo lectura. Muestra a los agentes de Marketing con su estado real y, al elegir uno, su objetivo, cumplimiento e historial.
 // Preguntarles y dejarles tareas llega en fases siguientes (ver docs/marketing-equipo-agentes-diseno.md).
-export function OficinaAgentes({ agentes, tareasMarketing, estadoAgentes, estadoTareas, ahora }: {
-  agentes: AgenteRegistro[]; tareasMarketing: TareaMarketing[]; estadoAgentes: EstadoCarga; estadoTareas: EstadoCarga; ahora?: Date;
+export function OficinaAgentes({ agentes, tareasMarketing, estadoAgentes, estadoTareas, ahora, analista }: {
+  agentes: AgenteRegistro[]; tareasMarketing: TareaMarketing[]; estadoAgentes: EstadoCarga; estadoTareas: EstadoCarga; ahora?: Date; analista?: AnalistaProps;
 }) {
+  const [pensandoId, setPensandoId] = useState<string | null>(null);
   const [reloj, setReloj] = useState(() => new Date());
   useEffect(() => { const t = setInterval(() => setReloj(new Date()), 60_000); return () => clearInterval(t); }, []);
   const now = ahora ?? reloj;
-  const lista = useMemo(() => personajes(agentes, tareasMarketing, now), [agentes, tareasMarketing, now]);
+  const lista = useMemo(() => personajes(agentes, tareasMarketing, now, pensandoId), [agentes, tareasMarketing, now, pensandoId]);
   const [elegidoId, setElegidoId] = useState<string | null>(null);
   const elegido = lista.find((p) => p.id === elegidoId) ?? lista[0] ?? null;
 
@@ -132,11 +139,99 @@ export function OficinaAgentes({ agentes, tareasMarketing, estadoAgentes, estado
                 </ul>
               )}
           </div>
-          <p className="border-t border-border/40 pt-2 text-xs text-muted-foreground" data-testid="oficina-proximamente">
-            Preguntarles cómo van y dejarles tareas llegará en una siguiente fase. Por ahora esta vista es solo de lectura.
-          </p>
+          {elegido.clave === "marketing_analista" && analista ? (
+            <PreguntarAnalista analista={analista} now={now} alPensar={(p) => setPensandoId(p ? elegido.id : null)} />
+          ) : (
+            <p className="border-t border-border/40 pt-2 text-xs text-muted-foreground" data-testid="oficina-proximamente">
+              Preguntarles cómo van y dejarles tareas llegará en una siguiente fase. Por ahora esta vista es solo de lectura.
+            </p>
+          )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Preguntar al Analista ───────────────────────────────────────────────────────────────────────────────────────────
+const MAX_PREGUNTA = 500;
+const ETIQUETA_CONSULTA: Record<ConsultaAnalista["estado"], { etiqueta: string; color: string }> = {
+  respondida: { etiqueta: "Respondida", color: "verde" }, error: { etiqueta: "Sin respuesta", color: "rojo" }, rechazada_limite: { etiqueta: "Tope de uso", color: "amarillo" },
+};
+
+function PreguntarAnalista({ analista, now, alPensar }: { analista: AnalistaProps; now: Date; alPensar: (pensando: boolean) => void }) {
+  const [texto, setTexto] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const [resp, setResp] = useState<RespuestaAnalista | null>(null);
+  const [abierta, setAbierta] = useState<string | null>(null);
+  const limpia = texto.replace(/\s+/g, " ").trim();
+  const puede = limpia.length >= 3 && limpia.length <= MAX_PREGUNTA && !enviando;
+
+  const enviar = async () => {
+    if (!puede) return;
+    setEnviando(true); setResp(null); alPensar(true);
+    try { const r = await analista.preguntar(limpia); setResp(r); if (r.ok) setTexto(""); /* si falló, se conserva la pregunta para reintentar */ } catch { setResp({ ok: false, error: "No pudimos hablar con el Analista. Inténtalo de nuevo." }); }
+    finally { setEnviando(false); alPensar(false); }
+  };
+
+  return (
+    <div className="space-y-3 border-t border-border/40 pt-3" data-testid="analista-preguntar">
+      <label htmlFor="pregunta-analista" className="block text-xs font-medium text-muted-foreground">Pregúntale cómo van tus resultados</label>
+      <textarea id="pregunta-analista" value={texto} onChange={(e) => setTexto(e.target.value)} rows={2} maxLength={MAX_PREGUNTA + 50} disabled={enviando}
+        placeholder="Ej.: ¿cómo va el alcance de los carruseles en Instagram este mes?" className="w-full rounded-lg border border-border bg-background p-2 text-sm"
+        onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void enviar(); } }} />
+      <div className="flex items-center justify-between gap-2">
+        <span className={`text-xs ${limpia.length > MAX_PREGUNTA ? "text-red-600" : "text-muted-foreground"}`} data-testid="analista-contador">{limpia.length}/{MAX_PREGUNTA}</span>
+        <button type="button" onClick={() => void enviar()} disabled={!puede} data-testid="analista-enviar"
+          className="rounded-full bg-[#9b7b4f] px-4 py-1.5 text-xs text-white disabled:opacity-50">{enviando ? "Pensando…" : "Preguntar"}</button>
+      </div>
+
+      {resp && !resp.ok && (
+        <div className="rounded-lg border border-border p-3 text-sm" role="alert" data-testid="analista-error">
+          <p>{resp.error ?? "No pudimos responder ahora."}</p>
+          {resp.limite && <p className="mt-1 text-xs text-muted-foreground">{resp.limite === "dia" ? "El tope se reinicia a medianoche (hora de Ciudad de México)." : "Dirección puede ampliar el tope mensual."}</p>}
+        </div>
+      )}
+      {resp?.ok && (
+        <div className="space-y-2 rounded-lg border border-border p-3" data-testid="analista-respuesta">
+          <p className="whitespace-pre-wrap text-sm">{resp.respuesta}</p>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            {resp.verificada
+              ? <Pastilla color="verde">Cifras verificadas</Pastilla>
+              : <Pastilla color="rojo">Cifras sin verificar</Pastilla>}
+            {!resp.verificada && (resp.no_verificadas?.length ?? 0) > 0 && <span className="text-muted-foreground" data-testid="analista-no-verificadas">Revisa: {resp.no_verificadas!.join(", ")}</span>}
+          </div>
+          {(resp.fuentes?.length ?? 0) > 0 && (
+            <p className="text-xs text-muted-foreground" data-testid="analista-fuentes">
+              Fuentes: {resp.fuentes!.map((f) => `${f.herramienta}${f.corte ? ` (corte ${f.corte.slice(0, 10)})` : ""}`).join(" · ")}
+            </p>
+          )}
+          {typeof resp.restantes_hoy === "number" && <p className="text-xs text-muted-foreground">Te quedan {resp.restantes_hoy} preguntas hoy.</p>}
+        </div>
+      )}
+
+      <div>
+        <p className="mb-1 text-xs font-medium text-muted-foreground">Preguntas recientes</p>
+        {analista.estadoConsultas === "error" ? <p className="text-xs text-muted-foreground" data-testid="analista-historial-error">No pudimos leer el historial de preguntas.</p>
+          : analista.estadoConsultas === "cargando" ? <p className="text-xs text-muted-foreground">Leyendo historial…</p>
+          : analista.consultas.length === 0 ? <p className="text-xs text-muted-foreground" data-testid="analista-sin-historial">Todavía no hay preguntas.</p> : (
+            <ul className="divide-y divide-border/40 text-xs" data-testid="analista-historial">
+              {analista.consultas.map((c) => (
+                <li key={c.id} className="py-1.5">
+                  <button type="button" className="flex w-full items-start justify-between gap-2 text-left" aria-expanded={abierta === c.id} onClick={() => setAbierta(abierta === c.id ? null : c.id)}>
+                    <span className="min-w-0"><span className="block">{c.pregunta}</span><span className="block text-muted-foreground">{cuandoRelativo(c.created_at, now)}</span></span>
+                    <Pastilla color={ETIQUETA_CONSULTA[c.estado].color}>{ETIQUETA_CONSULTA[c.estado].etiqueta}</Pastilla>
+                  </button>
+                  {abierta === c.id && c.respuesta && (
+                    <p className="mt-1 whitespace-pre-wrap rounded bg-background/50 p-2" data-testid={`analista-detalle-${c.id}`}>
+                      {c.respuesta}{c.verificada === false && <span className="mt-1 block text-red-600">Cifras sin verificar{c.no_verificadas.length ? `: ${c.no_verificadas.join(", ")}` : ""}.</span>}
+                    </p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+      </div>
+      <p className="text-xs text-muted-foreground">El Analista solo lee y explica: no publica ni cambia nada. Sus cifras salen de la base y se verifican antes de mostrarlas.</p>
     </div>
   );
 }

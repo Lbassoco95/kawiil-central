@@ -192,3 +192,38 @@ export const useTareasMarketingAgentes = () =>
     },
     staleTime: 60_000,
   });
+
+// ── Analista de resultados (agente con IA, solo lectura) ─────────────────────────────────────────────────────────────
+export interface ConsultaAnalista { id: string; pregunta: string; respuesta: string | null; estado: "respondida" | "error" | "rechazada_limite"; verificada: boolean | null; no_verificadas: string[]; created_at: string }
+export interface RespuestaAnalista {
+  ok: boolean; respuesta?: string; verificada?: boolean; no_verificadas?: string[]; fuentes?: Array<{ herramienta: string; filas: number | null; corte: string | null }>;
+  restantes_hoy?: number; error?: string; limite?: "dia" | "mes";
+}
+
+// Historial de preguntas (RLS: solo quien tiene el permiso de ver Marketing, de su organización). Si la tabla aún no existe, no rompe la pantalla.
+export const useConsultasAnalista = () =>
+  useQuery({
+    queryKey: ["analista", "consultas"],
+    queryFn: async (): Promise<ConsultaAnalista[]> => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any).from("mk_consulta").select("id, pregunta, respuesta, estado, verificada, no_verificadas, created_at").order("created_at", { ascending: false }).limit(10);
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 30_000,
+    retry: false,
+  });
+
+// Pregunta al Analista por la función marketing-agente. Devuelve siempre un objeto (nunca lanza): los errores llegan con un mensaje para mostrar.
+export async function preguntarAlAnalista(pregunta: string): Promise<RespuestaAnalista> {
+  try {
+    const { data, error } = await supabase.functions.invoke("marketing-agente", { body: { pregunta } });
+    if (!error) return data as RespuestaAnalista;
+    const ctx = (error as { context?: Response }).context;
+    if (ctx && typeof ctx.json === "function") { try { return (await ctx.json()) as RespuestaAnalista; } catch { /* sin cuerpo */ } }
+    return { ok: false, error: "No pudimos hablar con el Analista. Inténtalo de nuevo." };
+  } catch {
+    return { ok: false, error: "No pudimos hablar con el Analista. Inténtalo de nuevo." };
+  }
+}
+
