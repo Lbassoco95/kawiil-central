@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Plus, Pencil, Trash2, Users } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import { InviteMessageDialog } from "@/components/actividades/InviteMessageDialog";
 import { useActivityTasks } from "@/hooks/useActivities";
 import {
   ATTENDEE_CONFIRMED_OPTIONS, ATTENDEE_CONFIRMED_STYLES, ATTENDEE_CONFIRMED_LABELS,
@@ -185,15 +186,18 @@ export function ActivityAttendeesCard({ activityId }: { activityId: string }) {
             </span>
           )}
         </CardTitle>
-        <AttendeeDialog
-          activityId={activityId}
-          trigger={
-            <Button size="sm" variant="outline">
-              <Plus className="mr-1.5 h-3.5 w-3.5" />
-              Agregar
-            </Button>
-          }
-        />
+        <div className="flex items-center gap-2">
+          <InviteMessageDialog activityId={activityId} />
+          <AttendeeDialog
+            activityId={activityId}
+            trigger={
+              <Button size="sm" variant="outline">
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                Agregar
+              </Button>
+            }
+          />
+        </div>
       </CardHeader>
       <CardContent>
         {isLoading ? (
