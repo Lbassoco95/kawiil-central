@@ -14,7 +14,11 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
-import { Plus, Pencil, Trash2, Store, ExternalLink } from "lucide-react";
+import { Plus, Pencil, Trash2, Store, ExternalLink, ListChecks } from "lucide-react";
+import { SearchableSelect } from "@/components/shared/SearchableSelect";
+import { formatDateMX } from "@/lib/dateUtils";
+import { useProfiles } from "@/hooks/useTasks";
+import { ProviderTrackingDialog } from "@/components/actividades/ProviderTrackingDialog";
 import { formatMxn } from "@/lib/pipelineFormat";
 import {
   PROVIDER_CATEGORY_OPTIONS, providerCategoryLabel,
@@ -23,7 +27,7 @@ import {
 } from "@/lib/activityTypes";
 import {
   useActivityProviders, useCreateActivityProvider, useUpdateActivityProvider,
-  useDeleteActivityProvider, type ActivityProvider,
+  useDeleteActivityProvider, useActivityProviderItemCounts, type ActivityProvider,
 } from "@/hooks/useActivityExtras";
 
 const emptyNum = (s: string) => {
@@ -53,6 +57,10 @@ function ProviderDialog({
   const [status, setStatus] = useState("cotizacion");
   const [link, setLink] = useState("");
   const [notes, setNotes] = useState("");
+  const [assignedTo, setAssignedTo] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const { data: profiles } = useProfiles();
+  const profileOptions = (profiles || []).map((pr) => ({ value: pr.user_id, label: pr.full_name || pr.email }));
 
   useEffect(() => {
     if (!open) return;
@@ -65,6 +73,8 @@ function ProviderDialog({
     setStatus(provider?.status ?? "cotizacion");
     setLink(provider?.link ?? "");
     setNotes(provider?.notes ?? "");
+    setAssignedTo(provider?.assigned_to ?? "");
+    setDueDate(provider?.due_date ?? "");
   }, [open, provider]);
 
   const isPending = createProvider.isPending || updateProvider.isPending;
@@ -80,6 +90,8 @@ function ProviderDialog({
       status,
       link: link.trim() || null,
       notes: notes.trim() || null,
+      assigned_to: assignedTo || null,
+      due_date: dueDate || null,
     };
     if (isEdit) {
       updateProvider.mutate({ id: provider!.id, ...payload }, { onSuccess: () => setOpen(false) });
@@ -152,6 +164,19 @@ function ProviderDialog({
             <Input id="prov-link" placeholder="https://..."
               value={link} onChange={(e) => setLink(e.target.value)} />
           </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Responsable</Label>
+              <SearchableSelect
+                options={profileOptions} value={assignedTo} onValueChange={setAssignedTo}
+                placeholder="Sin responsable" searchPlaceholder="Buscar persona..."
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="prov-due">Fecha límite</Label>
+              <Input id="prov-due" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            </div>
+          </div>
           <div className="space-y-2">
             <Label htmlFor="prov-notes">Notas</Label>
             <Input id="prov-notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
@@ -172,8 +197,15 @@ export function ActivityProvidersCard({ activityId }: { activityId: string }) {
   const { data: providers, isLoading } = useActivityProviders(activityId);
   const updateProvider = useUpdateActivityProvider();
   const deleteProvider = useDeleteActivityProvider();
+  const { data: profiles } = useProfiles();
+  const [trackingId, setTrackingId] = useState<string | null>(null);
 
   const list = providers ?? [];
+  const { data: itemCounts } = useActivityProviderItemCounts(list.map((p) => p.id));
+  const tracking = list.find((p) => p.id === trackingId) ?? null;
+  const todayYmd = new Date().toISOString().slice(0, 10);
+  const nameFor = (uid: string | null) =>
+    uid ? (profiles || []).find((pr) => pr.user_id === uid)?.full_name || "—" : "—";
   const totalGeneral = list.reduce((s, p) => s + providerTotal(p), 0);
 
   return (
@@ -208,6 +240,9 @@ export function ActivityProvidersCard({ activityId }: { activityId: string }) {
                   <TableHead>Rubro</TableHead>
                   <TableHead>Proveedor</TableHead>
                   <TableHead>Estatus</TableHead>
+                  <TableHead>Responsable</TableHead>
+                  <TableHead>Fecha límite</TableHead>
+                  <TableHead>Seguimiento</TableHead>
                   <TableHead className="text-right">Unit.</TableHead>
                   <TableHead className="text-right">Cant.</TableHead>
                   <TableHead className="text-right">Total</TableHead>
@@ -254,6 +289,24 @@ export function ActivityProvidersCard({ activityId }: { activityId: string }) {
                         </SelectContent>
                       </Select>
                     </TableCell>
+                    <TableCell>{nameFor(p.assigned_to)}</TableCell>
+                    <TableCell
+                      className={
+                        p.due_date && p.due_date < todayYmd && p.status !== "pagado" && p.status !== "descartado"
+                          ? "text-destructive font-medium" : ""
+                      }
+                    >
+                      {p.due_date ? formatDateMX(p.due_date) : "—"}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        size="sm" variant="outline" className="h-8 gap-1.5"
+                        onClick={() => setTrackingId(p.id)}
+                      >
+                        <ListChecks className="h-3.5 w-3.5" />
+                        {itemCounts?.[p.id] ? `${itemCounts[p.id].done}/${itemCounts[p.id].total}` : "Abrir"}
+                      </Button>
+                    </TableCell>
                     <TableCell className="text-right">{formatMxn(p.unit_price, { compact: false })}</TableCell>
                     <TableCell className="text-right">{p.quantity ?? "—"}</TableCell>
                     <TableCell className="text-right">{formatMxn(providerTotal(p), { compact: false })}</TableCell>
@@ -280,7 +333,7 @@ export function ActivityProvidersCard({ activityId }: { activityId: string }) {
                   </TableRow>
                 ))}
                 <TableRow className="border-t-2">
-                  <TableCell colSpan={5} className="text-right font-semibold">Total general</TableCell>
+                  <TableCell colSpan={8} className="text-right font-semibold">Total general</TableCell>
                   <TableCell className="text-right font-semibold">{formatMxn(totalGeneral, { compact: false })}</TableCell>
                   <TableCell colSpan={2} />
                 </TableRow>
@@ -289,6 +342,12 @@ export function ActivityProvidersCard({ activityId }: { activityId: string }) {
           </div>
         )}
       </CardContent>
+      {tracking && (
+        <ProviderTrackingDialog
+          provider={tracking} open
+          onOpenChange={(o) => { if (!o) setTrackingId(null); }}
+        />
+      )}
     </Card>
   );
 }
