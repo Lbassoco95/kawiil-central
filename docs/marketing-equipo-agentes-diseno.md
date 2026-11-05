@@ -1,6 +1,6 @@
 # Marketing · Equipo de agentes: verlos, dejarles tareas, preguntarles y diseñar campañas (diseño, sin implementar)
 
-Estado (5 nov 2026): **fase 1 construida en el repo y probada, sin desplegar** (la oficina con los 3 agentes que ya existen, solo lectura). El resto es diseño. No se ha escrito nada en producción. Maqueta de todo el equipo: `docs/maquetas/oficina-agentes-marketing.html` (datos de ejemplo, claramente marcada).
+Estado (5 nov 2026): **fase 1 desplegada** (la oficina con los 3 agentes que ya existen, solo lectura) y **fase 2 construida y probada; paso 1 aplicado en producción** (`mk_analista_datos`, 20261105191631); faltan el paso 2 (registro), fusionar y la prueba (preguntarle al Analista de resultados). El resto es diseño. No se ha escrito nada en producción. Maqueta de todo el equipo: `docs/maquetas/oficina-agentes-marketing.html` (datos de ejemplo, claramente marcada).
 
 Fase 1 (código): `src/components/marketing/OficinaAgentes.tsx` (lienzo, lista accesible y panel), `oficinaAgentesLogica.ts` (qué estado se dibuja según los datos reales), integrada arriba de la pestaña Agentes de `/marketing`. Los archivos de lógica llevan el sufijo `Logica` (`agentesLogica.ts`, `agentesRegistroLogica.ts`, `oficinaAgentesLogica.ts`) para que no haya pares de nombres que solo difieran en mayúsculas con los componentes (`Agentes.tsx`, `AgentesRegistro.tsx`, `OficinaAgentes.tsx`), que pueden resolverse mal en sistemas de archivos que no distinguen mayúsculas. 17 pruebas nuevas en `src/test/marketingOficina.test.tsx`.
 
@@ -84,7 +84,7 @@ La carpeta de Cerebro ya tiene antecedentes (por ejemplo el Calendario Maestro y
 |---|---|---|
 | 0 | Maqueta y este diseño | Ninguna (hecho) |
 | 1 | **Hecha en el repo (sin desplegar):** `OficinaAgentes` con los 3 agentes existentes + el panel (estado, objetivo, cumplimiento, historial). Solo lectura. | Ninguna (solo frontend) |
-| 2 | **Preguntar** al Analista de resultados (solo lectura de datos del módulo) | Función `marketing-agente`; registrar el agente en `agent_registry`; despliegue |
+| 2 | **Preguntar** al Analista de resultados (solo lectura de datos del módulo). **Construida en el repo (sin aplicar):** ver «Fase 2» abajo. | Migración de datos (función SQL de lectura), migración de registro (agente + tabla de consultas), despliegue de `marketing-agente` |
 | 3 | **Dejar tarea** + cola + resultado como propuesta | Migración (tareas/propuestas, límites de uso) |
 | 4 | Revisor y propuestas (entrega 4 del plan) | Función, registro |
 | 5 | Estratega y Creativo: flujo de campañas con experimentos (entrega 5) | Funciones, registro, tablas de campaña |
@@ -107,3 +107,32 @@ La carpeta de Cerebro ya tiene antecedentes (por ejemplo el Calendario Maestro y
 - **Costos** → topes y registro de uso.
 - **Expectativa de «anuncios»** sin fuente de datos → se dice abiertamente que no hay datos.
 - **Mezclar módulos:** los agentes de Cerebro / `kawiil-agents` van en el otro módulo; aquí solo `marketing_*`.
+
+## 12. Fase 2 construida: el Analista de resultados (repo, sin aplicar)
+**Decisiones adoptadas** (Dirección pidió empezar sin elegir otras; se usaron las recomendadas): motor = Edge Function con Claude y el secreto `ANTHROPIC_API_KEY` que ya existe; el permiso de ver Marketing basta para preguntar; topes de uso por defecto de 30 preguntas por usuario al día y 1 500 000 tokens al mes (se cambian con los secretos `MARKETING_AGENTE_MAX_DIA` y `MARKETING_AGENTE_MAX_TOKENS_MES`, sin tocar código); el modelo por defecto es `claude-sonnet-5-5` (se cambia con `MARKETING_AGENTE_MODELO`). **Sin datos de anuncios** (el Analista lo dice cuando se le pregunta).
+
+**Cómo funciona**
+1. La pantalla (`OficinaAgentes`, panel del Analista) llama a la función `marketing-agente` con la sesión del usuario.
+2. La función (`supabase/functions/marketing-agente/index.ts`, `verify_jwt = true`) comprueba la sesión y `mk_can_view()` **con la sesión del usuario**; valida la pregunta (3–500 caracteres); aplica los topes; y corre el bucle del agente (`_shared/analista.ts`).
+3. El modelo solo puede pedir 10 herramientas de **lista cerrada**, todas servidas por **una** función SQL de solo lectura, `mk_analista_datos` (solo `service_role`): colchón actual, resultados por semana / formato / pilar (una fila por pieza y red, 7d sobre acumulado), semáforo semanal, casos abiertos, informe del día, piezas próximas, reglas vigentes y cobertura de fuentes.
+4. **Verificación de cifras:** cada número de la respuesta debe aparecer en lo que leyó de la base (se permite redondeo y porcentaje; enteros 0–10 y años 2020–2035 libres; las fechas deben estar en los datos). Si alguna no está, la respuesta se entrega **marcada «Cifras sin verificar»** con la lista de cifras a revisar.
+5. Cada pregunta queda en `mk_consulta` (pregunta, respuesta, verificación, herramientas usadas con su número de filas, tokens, duración) y deja tarea y latido en el registro de agentes (`mk_registrar_corrida`). El Analista es un agente **bajo demanda** (`config.cadencia = bajo_demanda`): se ve «Disponible», nunca «atrasado» por falta de preguntas; mientras responde se dibuja «pensando».
+
+**Archivos**
+- SQL: `supabase/migrations/20261105191631_marketing_analista_datos.sql` (**aplicada**) y, en `supabase/pendientes/` (no se aplica al fusionar), `20261105120100_marketing_analista_registro.sql`; reversas en `tools/marketing/rollback_analista_datos.sql` y `rollback_analista_registro.sql`.
+- Función: `supabase/functions/marketing-agente/index.ts` + `_shared/analista.ts` (+ entrada en `supabase/config.toml`).
+- Pantalla: `OficinaAgentes.tsx` (panel «Preguntar», historial), `oficinaAgentesLogica.ts`, `agentesRegistroLogica.ts`, hooks `useConsultasAnalista` y `preguntarAlAnalista` en `useMarketing.ts`.
+- Pruebas: `_shared/analista.test.ts` y `analista_fuente.test.ts` (Node, 28), `tools/marketing/prueba_analista_pglite.mjs` (Postgres en memoria, 11), `src/test/marketingAnalista.test.tsx` (Vitest, 16).
+
+**Salvaguardas comprobadas por pruebas:** lista cerrada de herramientas (la del modelo coincide exacta con la de SQL); nombres como `constructor` o `__proto__` no se ejecutan; el detalle de un error interno no llega al modelo; órdenes escondidas en los datos solo viajan como resultado de herramienta; el código no menciona Metricool ni su token, solo inserta en `mk_consulta` y llama únicamente a 4 funciones SQL; la respuesta se muestra como texto (sin HTML); la pregunta escrita se conserva si falla; `anon` y `authenticated` no ejecutan `mk_analista_datos` ni escriben `mk_consulta`.
+
+**Dos defectos reales que las pruebas encontraron y ya están corregidos:** un corte de 7 días **nulo** ganaba a un acumulado con dato, y las fechas dentro de marcas de tiempo (`2026-11-05T17:00:00Z`) no se reconocían, lo que habría marcado como «no verificada» una respuesta correcta que cita su corte.
+
+**Orden de puesta en producción (cada paso con la confirmación de Dirección; el orden final es: 1 → fusionar el PR → 2 → pregunta de prueba):**
+1. ~~Migración `marketing_analista_datos`~~ **aplicada el 5 nov 2026** a las 13:16 CDMX (solo crea una función de lectura; verificada: `SECURITY DEFINER`, ruta fija, `anon` y `authenticated` sin permiso, `service_role` con permiso, sus salidas con datos reales, y sin cambios en tareas, casos ni trabajos).
+2. Migración `marketing_analista_registro` (agente, tabla `mk_consulta` con permisos cerrados, y las dos funciones de registro de corridas aceptan al Analista).
+3. **Orden corregido: fusionar el PR a `main` ANTES del paso 2.** El flujo despliega `marketing-agente` (sin su tabla, pero nada la llama) y Vercel publica el panel, que no aparece mientras el agente no esté registrado. Si el paso 2 se aplicara antes, la oficina de producción (sin el código nuevo) dibujaría un personaje gris «Sin datos» encima del Informe, porque no conoce al Analista.
+4. Una pregunta de prueba con la sesión de Dirección para comprobar el modelo, la verificación y el registro. **Pendiente de verificar con una llamada real:** el nombre del modelo; no se pudo llamar a la API desde la nube.
+
+**Límites conocidos de esta versión:** no responde sobre anuncios; no recuerda la conversación (cada pregunta es independiente); el historial muestra las últimas 10; una cifra derivada que el modelo calcule por su cuenta (una suma, una diferencia) se marcará «sin verificar» aunque esté bien, por eso se le indica que cite los valores tal cual los devuelven las herramientas.
+

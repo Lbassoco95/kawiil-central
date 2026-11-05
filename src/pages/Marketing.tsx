@@ -4,7 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Megaphone } from "lucide-react";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
-import { useCalibracion, useCasos, useColchon, useCobertura, useInformeDiario, usePiezas, useUltimaCorrida, useReglaHistorial, useReglas, useBitacora, usePropuestas, useDecisiones, useEstadoTrabajos, useAgentesRegistro, useTareasAgentes, useTareasMarketingAgentes } from "@/hooks/useMarketing";
+import { useCalibracion, useCasos, useColchon, useCobertura, useInformeDiario, usePiezas, useUltimaCorrida, useReglaHistorial, useReglas, useBitacora, usePropuestas, useDecisiones, useEstadoTrabajos, useAgentesRegistro, useTareasAgentes, useTareasMarketingAgentes, useConsultasAnalista, preguntarAlAnalista } from "@/hooks/useMarketing";
 import { PanelDia } from "@/components/marketing/PanelDia";
 import { Calendario } from "@/components/marketing/Calendario";
 import { Casos } from "@/components/marketing/Casos";
@@ -12,6 +12,7 @@ import { Semaforo } from "@/components/marketing/Semaforo";
 import { Reglas } from "@/components/marketing/Reglas";
 import { Agentes } from "@/components/marketing/Agentes";
 import { AgentesRegistro } from "@/components/marketing/AgentesRegistro";
+import { useQueryClient } from "@tanstack/react-query";
 import { OficinaAgentes } from "@/components/marketing/OficinaAgentes";
 
 // Marketing · monitoreo (primera versión, solo lectura). No escribe en la base ni llama a Metricool.
@@ -35,6 +36,8 @@ export default function Marketing() {
   const agentesReg = useAgentesRegistro();
   const tareasReg = useTareasAgentes();
   const tareasMk = useTareasMarketingAgentes();
+  const consultas = useConsultasAnalista();
+  const qc = useQueryClient();
 
   const cargando = [piezas, calibracion, casos, reglas, historial, cobertura, colchon, informe].some((q) => q.isLoading);
   const error = [piezas, calibracion, casos, reglas, historial, cobertura, colchon, informe].find((q) => q.isError);
@@ -74,7 +77,11 @@ export default function Marketing() {
               <h2 className="mb-3 text-base font-medium">Oficina de agentes</h2>
               <OficinaAgentes agentes={agentesReg.data ?? []} tareasMarketing={tareasMk.data ?? []}
                 estadoAgentes={agentesReg.isError ? "error" : agentesReg.isLoading ? "cargando" : "ok"}
-                estadoTareas={tareasMk.isError ? "error" : tareasMk.isLoading ? "cargando" : "ok"} />
+                estadoTareas={tareasMk.isError ? "error" : tareasMk.isLoading ? "cargando" : "ok"}
+                analista={{
+                  consultas: consultas.data ?? [], estadoConsultas: consultas.isError ? "error" : consultas.isLoading ? "cargando" : "ok",
+                  preguntar: async (p) => { const r = await preguntarAlAnalista(p); await Promise.all([qc.invalidateQueries({ queryKey: ["analista"] }), qc.invalidateQueries({ queryKey: ["agentes-registro"] })]); return r; },
+                }} />
               <div className="mt-8" />
               <Agentes filas={bitacora.data ?? []} casos={casos.data!} propuestas={propuestas.data ?? []} decisiones={decisiones.data ?? []} trabajos={trabajos.data}
                 estadoBitacora={bitacora.isError ? "error" : bitacora.isLoading ? "cargando" : "ok"} />
