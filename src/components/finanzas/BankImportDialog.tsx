@@ -13,6 +13,7 @@ import {
   parseBankBuffer, parsePastedMovements, suggestAccountName, type ParsedSheet,
 } from "@/lib/finance/bankImport";
 import { COMMITMENT_KIND_LABEL, parseCommitmentsBuffer, type CommitmentKind, type ParsedCommitment } from "@/lib/finance/commitmentImport";
+import { AccountDialog } from "./AccountDialog";
 import { categoryFromReference, suggestCategory } from "@/lib/finance/classifier";
 import {
   useCreateAccount, useFinanceAccounts, useFinanceCategories, useImportCommitments, useImportMovements, useRuleIndex,
@@ -43,6 +44,7 @@ export function BankImportDialog({ open, onOpenChange }: { open: boolean; onOpen
   const [commitments, setCommitments] = useState<ParsedCommitment[]>([]);
   const [commitKinds, setCommitKinds] = useState<Record<string, boolean>>({});
   const fileRef = useRef<HTMLInputElement>(null);
+  const [accountOpen, setAccountOpen] = useState(false);
 
   const [choices, setChoices] = useState<SheetChoice[]>([]);
   const [filename, setFilename] = useState("");
@@ -236,12 +238,15 @@ export function BankImportDialog({ open, onOpenChange }: { open: boolean; onOpen
           </TabsContent>
 
           <TabsContent value="pegar" className="space-y-3">
-            <Select value={pasteAccountId} onValueChange={setPasteAccountId}>
-              <SelectTrigger className="h-9"><SelectValue placeholder="Cuenta destino (ej. Fondeadora)" /></SelectTrigger>
-              <SelectContent>
-                {accounts.filter((a) => a.is_active).map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <div className="flex gap-2">
+              <Select value={pasteAccountId} onValueChange={setPasteAccountId}>
+                <SelectTrigger className="h-9"><SelectValue placeholder={accounts.length ? "Cuenta destino (ej. Fondeadora)" : "Aún no hay cuentas: crea la primera →"} /></SelectTrigger>
+                <SelectContent>
+                  {accounts.filter((a) => a.is_active).map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Button type="button" variant="outline" className="h-9 shrink-0" onClick={() => setAccountOpen(true)}>+ Nueva cuenta</Button>
+            </div>
             <Textarea
               value={pasteText} onChange={(e) => setPasteText(e.target.value)} rows={8}
               placeholder={"Pega aquí desde la app del banco o desde Excel:\nFecha\tDescripción\tReferencia\tCargo\tAbono\tSaldo\n04 de nov 2026\tCompra en DLO*UBER RIDES\t\t119.91\t\t36267.60"}
@@ -256,7 +261,6 @@ export function BankImportDialog({ open, onOpenChange }: { open: boolean; onOpen
             <Button onClick={importPaste} disabled={busy || !pastePreview} className="w-full">
               {busy && <Loader2 className="h-4 w-4 animate-spin mr-2" />} Cargar movimientos pegados
             </Button>
-            {accounts.length === 0 && <p className="text-xs text-muted-foreground">Primero carga el Excel para crear tus cuentas.</p>}
           </TabsContent>
         </Tabs>
 
@@ -266,6 +270,7 @@ export function BankImportDialog({ open, onOpenChange }: { open: boolean; onOpen
           </div>
         )}
       </DialogContent>
+      <AccountDialog open={accountOpen} onOpenChange={setAccountOpen} onCreated={(a) => setPasteAccountId(a.id)} />
     </Dialog>
   );
 }

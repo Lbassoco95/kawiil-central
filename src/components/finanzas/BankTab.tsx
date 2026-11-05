@@ -10,7 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BankImportDialog } from "./BankImportDialog";
+import { AccountDialog } from "./AccountDialog";
 import { CommitmentsPanel } from "./CommitmentsPanel";
+import { MonthlyClosePanel } from "./MonthlyClosePanel";
 import { ThirdPartyPanel } from "./ThirdPartyPanel";
 import {
   useAddManualMovement, useClassifyMovements, useCreateAccount, useFinanceAccounts, useFinanceCategories,
@@ -206,6 +208,7 @@ export function BankTab() {
   const { categories } = useFinanceCategories();
   const [importOpen, setImportOpen] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
   const [accountFilter, setAccountFilter] = useState("todas");
   const [catFilter, setCatFilter] = useState("todas");
   const [search, setSearch] = useState("");
@@ -238,6 +241,7 @@ export function BankTab() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => setAccountOpen(true)}><Landmark className="h-4 w-4 mr-1.5" /> Nueva cuenta</Button>
           <Button variant="outline" size="sm" onClick={() => setManualOpen(true)}><Banknote className="h-4 w-4 mr-1.5" /> Efectivo / manual</Button>
           <Button size="sm" onClick={() => setImportOpen(true)}><Upload className="h-4 w-4 mr-1.5" /> Cargar movimientos</Button>
         </div>
@@ -271,8 +275,11 @@ export function BankTab() {
       {accounts.length === 0 ? (
         <Card variant="glass"><CardContent className="p-8 text-center space-y-3">
           <Landmark className="h-8 w-8 mx-auto text-muted-foreground" />
-          <p className="text-sm">Aún no hay cuentas cargadas. Sube el Excel de movimientos de bancos para empezar.</p>
-          <Button onClick={() => setImportOpen(true)}><Plus className="h-4 w-4 mr-1.5" /> Subir Excel</Button>
+          <p className="text-sm">Aún no hay cuentas. Sube el Excel de movimientos (crea las cuentas solo) o crea una cuenta a mano para pegar movimientos.</p>
+          <div className="flex justify-center gap-2">
+            <Button onClick={() => setImportOpen(true)}><Upload className="h-4 w-4 mr-1.5" /> Subir Excel</Button>
+            <Button variant="outline" onClick={() => setAccountOpen(true)}><Plus className="h-4 w-4 mr-1.5" /> Crear cuenta</Button>
+          </div>
         </CardContent></Card>
       ) : (
         <>
@@ -301,6 +308,7 @@ export function BankTab() {
             <TabsList className="h-9">
               <TabsTrigger value="pendientes" className="text-xs gap-1.5"><Inbox className="h-3.5 w-3.5" /> Por clasificar{pending.length > 0 && <Badge className="h-4 px-1.5 text-[10px]">{pending.length}</Badge>}</TabsTrigger>
               <TabsTrigger value="movimientos" className="text-xs">Movimientos</TabsTrigger>
+              <TabsTrigger value="cierres" className="text-xs gap-1.5"><Check className="h-3.5 w-3.5" /> Cierre mensual</TabsTrigger>
               <TabsTrigger value="compromisos" className="text-xs gap-1.5"><CalendarClock className="h-3.5 w-3.5" /> Compromisos</TabsTrigger>
               <TabsTrigger value="terceros" className="text-xs gap-1.5"><ShieldCheck className="h-3.5 w-3.5" /> Terceros (impuestos)</TabsTrigger>
               <TabsTrigger value="aprendizaje" className="text-xs gap-1.5"><Brain className="h-3.5 w-3.5" /> Aprendizaje</TabsTrigger>
@@ -337,6 +345,7 @@ export function BankTab() {
               </div>
               <p className="text-[11px] text-muted-foreground">Mostrando hasta 200 de {movements.length} movimientos.</p>
             </TabsContent>
+            <TabsContent value="cierres" className="mt-4"><MonthlyClosePanel accounts={accounts} movements={movements} /></TabsContent>
             <TabsContent value="compromisos" className="mt-4"><CommitmentsPanel /></TabsContent>
             <TabsContent value="terceros" className="mt-4"><ThirdPartyPanel accounts={accounts} movements={movements} /></TabsContent>
             <TabsContent value="aprendizaje" className="mt-4"><LearningPanel movements={movements} /></TabsContent>
@@ -346,6 +355,7 @@ export function BankTab() {
 
       <BankImportDialog open={importOpen} onOpenChange={setImportOpen} />
       <ManualMovementDialog open={manualOpen} onOpenChange={setManualOpen} />
+      <AccountDialog open={accountOpen} onOpenChange={setAccountOpen} />
     </div>
   );
 }

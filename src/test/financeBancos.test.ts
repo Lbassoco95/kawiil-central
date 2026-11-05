@@ -150,3 +150,20 @@ describe("compromisos y terceros", () => {
     expect(r[0]).toMatchObject({ entity: "Vizum", deposited: 1000, paid: 400, held: 600 });
   });
 });
+
+import { monthlyClose } from "@/lib/finance/planning";
+
+describe("cierre mensual", () => {
+  it("ubica en qué mes faltan movimientos y marca meses vacíos", () => {
+    const rows = monthlyClose(100, [
+      { account_id: "a", debit: 0, credit: 50, movement_date: "2026-01-10", row_seq: 1, reported_balance: 150 },
+      { account_id: "a", debit: 0, credit: 10, movement_date: "2026-03-05", row_seq: 2, reported_balance: 160 },
+      // en abril falta un cargo de 40 en el estado de cuenta: el banco reporta 120 y la suma da 160
+      { account_id: "a", debit: 0, credit: 0.01, movement_date: "2026-04-05", row_seq: 3, reported_balance: 120.01 },
+    ]);
+    expect(rows.map((r) => r.key)).toEqual(["2026-01", "2026-02", "2026-03", "2026-04"]);
+    expect(rows[0].monthDrift).toBe(0);
+    expect(rows[1].count).toBe(0);
+    expect(rows[3].monthDrift).toBeCloseTo(-40, 1);
+  });
+});

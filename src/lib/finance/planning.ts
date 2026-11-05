@@ -193,3 +193,35 @@ export function summarizeCommitments(items: CommitmentLike[], today: string, ava
   s.byMonth = [...months.values()].sort((a, b) => a.key.localeCompare(b.key));
   return s;
 }
+
+export interface CloseRow {
+  key: string; count: number; credit: number; debit: number;
+  endComputed: number; endReported: number | null;
+  /** Diferencia acumulada contra el saldo del banco al cierre del mes (≠ 0 ⇒ faltan movimientos). */
+  drift: number | null;
+  /** Cuánto de esa diferencia apareció en este mes. */
+  monthDrift: number | null;
+}
+
+/** Cierre mes a mes de una cuenta: saldo calculado vs. el que reporta el banco. Incluye meses sin movimientos. */
+export function monthlyClose(opening: number, movements: BalanceMovement[]): CloseRow[] {
+  const ms = [...movements].sort((a, b) => a.movement_date.localeCompare(b.movement_date) || (a.row_seq ?? 1e9) - (b.row_seq ?? 1e9));
+  if (ms.length === 0) return [];
+  const byMonth = new Map<string, BalanceMovement[]>();
+  for (const m of ms) { const k = ymKey(m.movement_date); byMonth.set(k, [...(byMonth.get(k) ?? []), m]); }
+  const first = ymKey(ms[0].movement_date); const last = ymKey(ms[ms.length - 1].movement_date);
+  const rows: CloseRow[] = [];
+  let running = opening; let prevDrift = 0;
+  for (let k = first; k <= last; k = addMonthsKey(k, 1)) {
+    const list = byMonth.get(k) ?? [];
+    let credit = 0; let debit = 0; let reported: number | null = null;
+    for (const m of list) {
+      credit += Number(m.credit); debit += Number(m.debit); running += Number(m.credit) - Number(m.debit);
+      if (m.reported_balance != null) reported = Number(m.reported_balance);
+    }
+    const drift = reported == null ? null : reported - running;
+    rows.push({ key: k, count: list.length, credit, debit, endComputed: running, endReported: reported, drift, monthDrift: drift == null ? null : drift - prevDrift });
+    if (drift != null) prevDrift = drift;
+  }
+  return rows;
+}
