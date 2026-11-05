@@ -199,3 +199,45 @@ describe("catálogo de bancos y estados de cuenta originales", () => {
     expect(sheet.movements[0]).toMatchObject({ date: "2026-11-05", debit: 250 });
   });
 });
+
+import { parseStatementItems, type PdfTextItem } from "@/lib/finance/pdfStatement";
+
+const it_ = (str: string, x: number, y: number, width = str.length * 4.5, page = 1): PdfTextItem => ({ str, x, y, width, page });
+
+describe("estado de cuenta en PDF", () => {
+  it("lee columnas de cargo/abono, separa la referencia y comprueba la cadena de saldos", () => {
+    const hdr = [it_("Fecha", 40, 700), it_("Descripción", 110, 700), it_("Referencia", 300, 700), it_("Cargo", 380, 700), it_("Abono", 450, 700), it_("Saldo", 520, 700)];
+    const items = [
+      it_("Periodo: 01 oct 2026 al 31 oct 2026", 40, 750), it_("Saldo inicial $10,000.00", 40, 735), ...hdr,
+      it_("02 oct 2026", 40, 682), it_("Compra en DLO*UBER RIDES", 110, 682), it_("Uber", 300, 682), it_("119.91", 395, 682), it_("9,880.09", 535, 682),
+      it_("03 oct 2026", 40, 664), it_("Depósito de SYLON ASESORES", 110, 664), it_("17,500.00", 455, 664), it_("27,380.09", 535, 664),
+      it_("Página 1 de 1", 250, 30),
+    ];
+    const r = parseStatementItems(items);
+    expect(r.mode).toBe("columnas");
+    expect(r.sheet?.openingBalance).toBe(10000);
+    expect(r.sheet?.movements.map((m) => [m.date, m.debit, m.credit, m.reference])).toEqual([["2026-10-02", 119.91, 0, "Uber"], ["2026-10-03", 0, 17500, null]]);
+    expect(r.checked).toBe(2); expect(r.chainOk).toBe(2); expect(r.warnings).toEqual([]);
+  });
+
+  it("deduce cargo/abono por el cambio de saldo y ordena un PDF que viene del más nuevo al más viejo", () => {
+    const items = [
+      it_("Fecha", 40, 720), it_("Concepto", 130, 720), it_("Monto", 430, 720), it_("Saldo", 520, 720),
+      it_("04/11/2026", 40, 702), it_("Devolución Uber", 130, 702), it_("299.95", 440, 702), it_("36,267.60", 530, 702),
+      it_("03/11/2026", 40, 684), it_("Mensualidad de FONDEADORA", 130, 684), it_("349.00", 440, 684), it_("35,967.65", 530, 684),
+      it_("02/11/2026", 40, 666), it_("Depósito de cliente", 130, 666), it_("1,000.00", 440, 666), it_("36,316.65", 530, 666),
+    ];
+    const r = parseStatementItems(items);
+    expect(r.mode).toBe("saldo");
+    const m = r.sheet!.movements;
+    expect(m.map((x) => x.date)).toEqual(["2026-11-02", "2026-11-03", "2026-11-04"]);
+    expect(m.map((x) => [x.debit, x.credit])).toEqual([[0, 1000], [349, 0], [0, 299.95]]);
+    expect(r.chainOk).toBe(2); // el primero cronológico no tiene saldo anterior con qué compararse
+  });
+
+  it("avisa cuando no hay movimientos legibles (PDF escaneado)", () => {
+    const r = parseStatementItems([it_("Página 1", 40, 700)]);
+    expect(r.sheet).toBeNull();
+    expect(r.warnings[0]).toMatch(/escaneado/);
+  });
+});

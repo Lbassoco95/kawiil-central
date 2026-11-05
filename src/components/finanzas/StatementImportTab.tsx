@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { AccountDialog } from "./AccountDialog";
 import { analyzeTable, parseWithMapping, readStatementRows, type ColKey, type ColumnMapping } from "@/lib/finance/bankImport";
 import { suggestCategory } from "@/lib/finance/classifier";
+import { parsePdfStatement, type PdfStatementResult } from "@/lib/finance/pdfStatement";
 import {
   useFinanceAccounts, useFinanceCategories, useImportMovements, useRuleIndex, useSaveImportProfile,
 } from "@/hooks/useFinanceBank";
@@ -40,16 +41,23 @@ export function StatementImportTab() {
   const [headerRow, setHeaderRow] = useState(0);
   const [mapping, setMapping] = useState<ColumnMapping>({});
   const [detected, setDetected] = useState(false);
+  const [pdf, setPdf] = useState<PdfStatementResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState("");
 
   const account = accounts.find((a) => a.id === accountId);
   const headers = useMemo(() => (rows[headerRow] ?? []).map((c) => String(c ?? "")), [rows, headerRow]);
-  const parsed = useMemo(() => (rows.length ? parseWithMapping(rows, mapping, headerRow) : null), [rows, mapping, headerRow]);
+  const parsed = useMemo(() => (pdf ? pdf.sheet : rows.length ? parseWithMapping(rows, mapping, headerRow) : null), [pdf, rows, mapping, headerRow]);
 
   async function onFile(file: File) {
-    setBusy(true); setResult("");
+    setBusy(true); setResult(""); setPdf(null);
     try {
+      if (/\.pdf$/i.test(file.name)) {
+        const res = await parsePdfStatement(file);
+        setRows([]); setFilename(file.name); setPdf(res);
+        if (!res.sheet) toast.error(res.warnings[0] ?? "No pude leer el PDF.");
+        return;
+      }
       const r = await readStatementRows(file);
       if (r.length < 2) { toast.error("El archivo está vacío o no tiene filas de datos."); return; }
       const saved = account?.import_profile ? { headerRow: account.import_profile.headerRow, mapping: account.import_profile.mapping as ColumnMapping } : null;
@@ -68,12 +76,12 @@ export function StatementImportTab() {
     setBusy(true);
     try {
       const res = await importMut.mutateAsync({
-        accountId: account.id, source: "excel", filename, movements: parsed.movements, knownCategories: categories,
+        accountId: account.id, source: "excel", filename, movements: parsed.movements, openingBalance: parsed.openingBalance, knownCategories: categories,
         detectEntities: !account.counts_as_available, suggest: (m) => suggestCategory(m, ruleIndex),
       });
-      await saveProfile.mutateAsync({ accountId: account.id, profile: { headerRow, mapping: mapping as Record<string, number>, headers } });
-      setResult(`${res.added} movimientos nuevos, ${res.duplicates} ya existían, ${res.pending} por clasificar. El mapeo quedó guardado para ${account.name}.`);
-      setRows([]); setFilename("");
+      if (!pdf) await saveProfile.mutateAsync({ accountId: account.id, profile: { headerRow, mapping: mapping as Record<string, number>, headers } });
+      setResult(`${res.added} movimientos nuevos, ${res.duplicates} ya existían, ${res.pending} por clasificar.${pdf ? "" : ` El mapeo quedó guardado para ${account.name}.`}`);
+      setRows([]); setFilename(""); setPdf(null);
     } finally { setBusy(false); }
   }
 
@@ -83,21 +91,58 @@ export function StatementImportTab() {
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">
         Sube el CSV o Excel que descargas del banco, tal cual. Se detectan las columnas; si no las reconoce, indícalas una vez y se recuerdan para esa cuenta.
-        El PDF todavía no se lee.
+        También acepta PDF: se reconstruyen las filas y se comprueba que los saldos cuadren; revisa siempre la vista previa.
       </p>
       <div className="flex gap-2">
-        <Select value={accountId} onValueChange={(v) => { setAccountId(v); setRows([]); setResult(""); }}>
+        <Select value={accountId} onValueChange={(v) => { setAccountId(v); setRows([]); setPdf(null); setResult(""); }}>
           <SelectTrigger className="h-9"><SelectValue placeholder={accounts.length ? "¿De qué cuenta es el estado de cuenta?" : "Aún no hay cuentas: crea la primera →"} /></SelectTrigger>
           <SelectContent>{accounts.filter((a) => a.is_active).map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}</SelectContent>
         </Select>
         <Button type="button" variant="outline" className="h-9 shrink-0" onClick={() => setAccountOpen(true)}>+ Nueva cuenta</Button>
       </div>
-      <input ref={fileRef} type="file" accept=".csv,.txt,.xlsx,.xls" className="hidden"
+      <input ref={fileRef} type="file" accept=".csv,.txt,.xlsx,.xls,.pdf" className="hidden"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) void onFile(f); e.target.value = ""; }} />
       <Button variant="outline" disabled={!account || busy} onClick={() => fileRef.current?.click()} className="w-full h-16 border-dashed">
         {busy ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <FileText className="h-4 w-4 mr-2" />}
-        {filename ? `Archivo: ${filename} (cambiar)` : account ? "Elegir estado de cuenta (.csv, .xlsx)" : "Primero elige la cuenta"}
+        {filename ? `Archivo: ${filename} (cambiar)` : account ? "Elegir estado de cuenta (.pdf, .csv, .xlsx)" : "Primero elige la cuenta"}
       </Button>
+
+      {pdf && (
+        <div className="space-y-3 rounded-xl border border-border/60 p-3">
+          {parsed ? (
+            <>
+              <p className="text-xs">
+                Leí <b>{parsed.movements.length}</b> movimientos del PDF ({parsed.movements[0].date} → {parsed.movements[parsed.movements.length - 1].date})
+                {parsed.openingBalance != null && <> · saldo inicial {money(parsed.openingBalance)}</>}
+                {pdf.finalBalance != null && <> · saldo final {money(pdf.finalBalance)}</>}.
+              </p>
+              <p className={`text-xs font-medium ${pdf.checked > 0 && pdf.chainOk === pdf.checked ? "text-green-700" : "text-amber-600"}`}>
+                {pdf.checked > 0 ? `El saldo cuadra en ${pdf.chainOk} de ${pdf.checked} renglones` : "No se pudo comprobar el saldo"}
+                {pdf.mode === "columnas" ? " · cargos y abonos por columna" : pdf.mode === "saldo" ? " · cargos y abonos por cambio de saldo" : ""}
+              </p>
+              {pdf.warnings.map((w) => <p key={w} className="text-xs text-amber-600">{w}</p>)}
+              <div className="rounded-lg border border-border/50 overflow-hidden">
+                <Table>
+                  <TableHeader><TableRow><TableHead>Fecha</TableHead><TableHead>Descripción</TableHead><TableHead className="text-right">Cargo</TableHead><TableHead className="text-right">Abono</TableHead></TableRow></TableHeader>
+                  <TableBody>
+                    {[...parsed.movements.slice(0, 5), ...(parsed.movements.length > 8 ? parsed.movements.slice(-3) : parsed.movements.slice(5))].map((m) => (
+                      <TableRow key={m.dedupeKey}>
+                        <TableCell className="text-xs">{m.date}</TableCell>
+                        <TableCell className="text-xs max-w-[260px] truncate" title={m.description}>{m.description}</TableCell>
+                        <TableCell className="text-right text-xs tabular-nums">{m.debit ? money(m.debit) : ""}</TableCell>
+                        <TableCell className="text-right text-xs tabular-nums">{m.credit ? money(m.credit) : ""}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              <Button className="w-full" disabled={busy} onClick={run}>
+                {busy && <Loader2 className="h-4 w-4 animate-spin mr-2" />} Cargar {parsed.movements.length} movimientos
+              </Button>
+            </>
+          ) : <p className="text-xs text-amber-600">{pdf.warnings[0]}</p>}
+        </div>
+      )}
 
       {rows.length > 0 && (
         <div className="space-y-3 rounded-xl border border-border/60 p-3">

@@ -290,3 +290,17 @@ export function parseWithMapping(rows: unknown[][], mapping: ColumnMapping, head
   const { movements, skipped } = first > last ? buildMovements(rows, mapping, headerRow + 1, true) : probe;
   return { sheetName, openingBalance: null, movements, skippedRows: skipped };
 }
+
+/** Movimientos ya leídos (ej. de un PDF) → ordenados cronológicamente, con seq y llave anti-duplicados. */
+export function movementsFromRaw(
+  list: { date: string; description: string; reference?: string | null; debit: number; credit: number; balance: number | null }[],
+): ParsedMovement[] {
+  const ordered = list.length > 1 && list[0].date > list[list.length - 1].date ? [...list].reverse() : list;
+  const seen = new Map<string, number>();
+  return ordered.map((m, seq) => {
+    const ref = m.reference ?? "";
+    const base = [m.date, norm(m.description).slice(0, 140), norm(ref).slice(0, 60), m.debit.toFixed(2), m.credit.toFixed(2)].join("|");
+    const n = (seen.get(base) ?? 0) + 1; seen.set(base, n);
+    return { date: m.date, description: m.description, reference: ref || null, debit: m.debit, credit: m.credit, balance: m.balance, observation: null, seq, dedupeKey: `${base}#${n}` };
+  });
+}
