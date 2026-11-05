@@ -167,3 +167,35 @@ describe("cierre mensual", () => {
     expect(rows[3].monthDrift).toBeCloseTo(-40, 1);
   });
 });
+
+import { parseBankList, mergeBanks } from "@/lib/finance/banks";
+import { analyzeTable, parseDelimitedText, parseWithMapping } from "@/lib/finance/bankImport";
+
+describe("catálogo de bancos y estados de cuenta originales", () => {
+  it("lee la lista de Banxico en varios formatos", () => {
+    const l = parseBankList("Clave\tNombre\n40012\tBBVA MEXICO\n90646\tSTP\n002 Banamex\nFondeadora");
+    expect(l).toEqual([
+      { name: "Bbva Mexico", code: "012" }, { name: "Stp", code: "646" }, { name: "Banamex", code: "002" }, { name: "Fondeadora", code: null },
+    ]);
+    expect(mergeBanks([{ name: "Banregio", code: "058" }]).find((b) => b.name === "Banregio")?.code).toBe("058");
+  });
+
+  it("lee un CSV con comillas y punto y coma, y lo ordena cronológicamente si viene al revés", () => {
+    const csv = 'Fecha;Descripción;Cargo;Abono;Saldo\n03/11/2026;"Compra, tienda";100,00;;900\n02/11/2026;Depósito;;1000;1000'.replace(/,00/g, ".00");
+    const rows = parseDelimitedText(csv);
+    expect(rows[1][1]).toBe("Compra, tienda");
+    const a = analyzeTable(rows);
+    expect(a.detected).toBe(true);
+    const sheet = parseWithMapping(rows, a.mapping, a.headerRow)!;
+    expect(sheet.movements.map((m) => m.date)).toEqual(["2026-11-02", "2026-11-03"]);
+    expect(sheet.movements[1]).toMatchObject({ debit: 100, credit: 0, seq: 1 });
+  });
+
+  it("usa un mapeo manual cuando el encabezado no se reconoce", () => {
+    const rows = [["Día", "Concepto raro", "Salida", "Entrada"], ["05/11/2026", "Pago X", "250", ""]];
+    const a = analyzeTable(rows);
+    expect(a.detected).toBe(false);
+    const sheet = parseWithMapping(rows, { date: 0, description: 1, debit: 2, credit: 3 }, 0)!;
+    expect(sheet.movements[0]).toMatchObject({ date: "2026-11-05", debit: 250 });
+  });
+});

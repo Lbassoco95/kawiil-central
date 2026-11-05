@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -6,8 +6,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { BANKS, bankSuggestion } from "@/lib/finance/banks";
-import { useCreateAccount, useFinanceAccounts, type FinanceAccount } from "@/hooks/useFinanceBank";
+import { bankSuggestion, mergeBanks } from "@/lib/finance/banks";
+import { BankCatalogDialog } from "./BankCatalogDialog";
+import { useCreateAccount, useFinanceAccounts, useFinanceBanks, type FinanceAccount } from "@/hooks/useFinanceBank";
 
 /** Alta de cuenta: banco (lista de instituciones o texto libre), saldo inicial y, si aplica, dinero de terceros. */
 export function AccountDialog({ open, onOpenChange, onCreated }: {
@@ -15,6 +16,9 @@ export function AccountDialog({ open, onOpenChange, onCreated }: {
 }) {
   const { data: accounts = [] } = useFinanceAccounts();
   const create = useCreateAccount();
+  const { data: storedBanks = [] } = useFinanceBanks();
+  const banks = useMemo(() => mergeBanks(storedBanks), [storedBanks]);
+  const [catalogOpen, setCatalogOpen] = useState(false);
   const [institution, setInstitution] = useState("");
   const [name, setName] = useState("");
   const [nameTouched, setNameTouched] = useState(false);
@@ -35,6 +39,7 @@ export function AccountDialog({ open, onOpenChange, onCreated }: {
       name: name.trim(), kind, institution: institution.trim() || null, opening_balance: Number(opening) || 0,
       counts_as_available: !third, parent_account_id: third && parentId ? parentId : null,
       notes: tail.trim() ? `Cuenta/tarjeta ${tail.trim()}` : null,
+      bank_code: banks.find((b) => b.name === institution.trim())?.code ?? null,
     });
     onCreated?.(acc);
     setInstitution(""); setName(""); setNameTouched(false); setOpening(""); setTail(""); setThird(false); setParentId("");
@@ -61,7 +66,8 @@ export function AccountDialog({ open, onOpenChange, onCreated }: {
             <div>
               <Label className="text-xs">Banco o institución</Label>
               <Input list="finance-banks" value={institution} onChange={(e) => setInstitution(e.target.value)} placeholder="Escribe para buscar: Fondeadora, Banregio, STP…" />
-              <datalist id="finance-banks">{BANKS.map((b) => <option key={b} value={b} />)}</datalist>
+              <datalist id="finance-banks">{banks.map((b) => <option key={b.name} value={b.name}>{b.code ?? ""}</option>)}</datalist>
+              <button type="button" className="mt-1 text-[11px] text-muted-foreground underline" onClick={() => setCatalogOpen(true)}>Administrar catálogo de bancos / cargar lista de Banxico</button>
             </div>
           )}
           <div>
@@ -93,6 +99,7 @@ export function AccountDialog({ open, onOpenChange, onCreated }: {
           </Button>
         </div>
       </DialogContent>
+      <BankCatalogDialog open={catalogOpen} onOpenChange={setCatalogOpen} />
     </Dialog>
   );
 }

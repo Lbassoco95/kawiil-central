@@ -62,7 +62,7 @@ export function parseMovementDate(value: unknown): string | null {
   if (m) return toIsoDate(Number(m[1]), Number(m[2]), Number(m[3]));
   m = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/.exec(s);
   if (m) return toIsoDate(Number(m[3]), Number(m[2]), Number(m[1]));
-  m = /^(\d{1,2})\s+([a-z]{3,10})\s+(\d{4})$/.exec(s);
+  m = /^(\d{1,2})[\s/-]+([a-z]{3,10})[\s/-]+(\d{4})$/.exec(s);
   if (m && MONTHS[m[2]]) return toIsoDate(Number(m[3]), MONTHS[m[2]], Number(m[1]));
   return null;
 }
@@ -85,7 +85,7 @@ export function parseMoney(value: unknown): number | null {
 export const norm = (s: unknown) =>
   String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
 
-type ColKey = "date" | "description" | "reference" | "debit" | "credit" | "balance" | "amount" | "observation";
+export type ColKey = "date" | "description" | "reference" | "debit" | "credit" | "balance" | "amount" | "observation";
 
 function detectColumns(row: unknown[]): Partial<Record<ColKey, number>> | null {
   const cols: Partial<Record<ColKey, number>> = {};
@@ -110,11 +110,15 @@ function buildMovements(
   rows: unknown[][],
   cols: Partial<Record<ColKey, number>>,
   startRow: number,
+  reverse = false,
 ): { movements: ParsedMovement[]; skipped: number } {
   const movements: ParsedMovement[] = [];
   const seen = new Map<string, number>();
   let skipped = 0;
-  for (let r = startRow; r < rows.length; r++) {
+  const total = rows.length - startRow;
+  for (let step = 0; step < total; step++) {
+    // Estados de cuenta que vienen del más nuevo al más viejo se leen al revés para conservar el orden cronológico.
+    const r = reverse ? rows.length - 1 - step : startRow + step;
     const row = rows[r] ?? [];
     const date = parseMovementDate(row[cols.date!]);
     const description = String(row[cols.description!] ?? "").replace(/\s+/g, " ").trim();
@@ -141,7 +145,7 @@ function buildMovements(
       date, description, reference: refRaw || null, debit, credit,
       balance: balance == null ? null : balance,
       observation: obs || null,
-      seq: r,
+      seq: step,
       dedupeKey: `${base}#${n}`,
     });
   }
@@ -208,4 +212,81 @@ export function parsePastedMovements(text: string): ParsedSheet | null {
 /** Nombre de cuenta sugerido a partir del nombre de la hoja ("Fondeadora", "Banregio"…). */
 export function suggestAccountName(sheetName: string): string {
   return sheetName.trim().replace(/^estado de cuenta\s*-?\s*/i, "") || sheetName;
+}
+
+// ───────── Estados de cuenta originales (CSV / Excel de cualquier banco) con mapeo de columnas ─────────
+
+export type ColumnMapping = Partial<Record<ColKey, number>>;
+
+export interface TableAnalysis {
+  rows: unknown[][];
+  headerRow: number;
+  headers: string[];
+  mapping: ColumnMapping;
+  /** ¿Se detectó el encabezado automáticamente? */
+  detected: boolean;
+}
+
+/** Separa texto delimitado (coma, punto y coma, tab o |) respetando comillas. */
+export function parseDelimitedText(text: string): string[][] {
+  const clean = text.replace(/^\uFEFF/, "");
+  const sample = clean.split(/\r?\n/).slice(0, 15).join("\n");
+  const counts: [string, number][] = [",", ";", "\t", "|"].map((d) => [d, sample.split(d).length - 1]);
+  const delim = counts.sort((a, b) => b[1] - a[1])[0][0];
+  const rows: string[][] = [];
+  let row: string[] = []; let cur = ""; let quoted = false;
+  for (let i = 0; i < clean.length; i++) {
+    const c = clean[i];
+    if (quoted) {
+      if (c === '"' && clean[i + 1] === '"') { cur += '"'; i++; }
+      else if (c === '"') quoted = false;
+      else cur += c;
+    } else if (c === '"') quoted = true;
+    else if (c === delim) { row.push(cur.trim()); cur = ""; }
+    else if (c === "\n" || c === "\r") {
+      if (c === "\r" && clean[i + 1] === "\n") i++;
+      row.push(cur.trim()); cur = "";
+      if (row.some((x) => x !== "")) rows.push(row);
+      row = [];
+    } else cur += c;
+  }
+  row.push(cur.trim());
+  if (row.some((x) => x !== "")) rows.push(row);
+  return rows;
+}
+
+/** Lee un archivo del banco (csv/txt/xlsx/xls) y devuelve las filas crudas de su primera hoja con datos. */
+export async function readStatementRows(file: File): Promise<unknown[][]> {
+  if (/\.(csv|txt|tsv)$/i.test(file.name)) {
+    let text = await file.text();
+    if (text.includes("\uFFFD")) text = new TextDecoder("latin1").decode(await file.arrayBuffer());
+    return parseDelimitedText(text);
+  }
+  const wb = XLSX.read(new Uint8Array(await file.arrayBuffer()), { type: "array", cellDates: true });
+  for (const name of wb.SheetNames) {
+    const rows = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[name], { header: 1, raw: true, defval: null, blankrows: false });
+    if (rows.length > 1) return rows;
+  }
+  return [];
+}
+
+/** Detecta encabezado y columnas; si no encuentra, deja el mapeo vacío para que el usuario lo indique. */
+export function analyzeTable(rows: unknown[][], saved?: { headerRow: number; mapping: ColumnMapping } | null): TableAnalysis {
+  for (let i = 0; i < Math.min(rows.length, 40); i++) {
+    const cols = detectColumns(rows[i] ?? []);
+    if (cols) return { rows, headerRow: i, headers: (rows[i] ?? []).map((c) => String(c ?? "")), mapping: cols, detected: true };
+  }
+  const headerRow = saved?.headerRow ?? 0;
+  return { rows, headerRow, headers: (rows[headerRow] ?? []).map((c) => String(c ?? "")), mapping: saved?.mapping ?? {}, detected: false };
+}
+
+/** Construye los movimientos con el mapeo elegido (los datos empiezan en la fila siguiente al encabezado). */
+export function parseWithMapping(rows: unknown[][], mapping: ColumnMapping, headerRow: number, sheetName = "Estado de cuenta"): ParsedSheet | null {
+  const hasMoney = mapping.debit !== undefined || mapping.credit !== undefined || mapping.amount !== undefined;
+  if (mapping.date === undefined || mapping.description === undefined || !hasMoney) return null;
+  const probe = buildMovements(rows, mapping, headerRow + 1);
+  if (probe.movements.length === 0) return null;
+  const first = probe.movements[0].date; const last = probe.movements[probe.movements.length - 1].date;
+  const { movements, skipped } = first > last ? buildMovements(rows, mapping, headerRow + 1, true) : probe;
+  return { sheetName, openingBalance: null, movements, skippedRows: skipped };
 }
