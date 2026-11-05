@@ -130,7 +130,7 @@ test("inicio del día y del mes en Ciudad de México (UTC-6)", () => {
   assert.equal(inicioMesCDMX(new Date("2026-12-01T03:00:00Z")), "2026-11-01T00:00:00-06:00");
 });
 test("las herramientas del modelo coinciden EXACTAMENTE con las de la función SQL mk_analista_datos (lista cerrada)", () => {
-  const sql = readFileSync(new URL("../../pendientes/20261105120000_marketing_analista_datos.sql", import.meta.url), "utf8");
+  const sql = readFileSync(new URL("../../migrations/20261105191631_marketing_analista_datos.sql", import.meta.url), "utf8");
   const enSql = [...sql.matchAll(/p_herramienta (?:=|IN \()\s*'([a-z_]+)'(?:, '([a-z_]+)')?/g)].flatMap((m) => [m[1], m[2]]).filter(Boolean).sort();
   assert.deepEqual(HERRAMIENTAS.map((h) => h.name).sort(), [...new Set(enSql)].sort());
   for (const h of HERRAMIENTAS) { assert.ok(h.description.length > 20); assert.equal((h.input_schema as { additionalProperties: boolean }).additionalProperties, false); }

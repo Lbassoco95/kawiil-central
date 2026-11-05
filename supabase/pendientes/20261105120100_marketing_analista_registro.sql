@@ -1,5 +1,5 @@
 -- Marketing: registrar al Analista de resultados y guardar sus consultas. NO SE APLICA sin confirmación de Dirección
--- (requiere antes 20261105120000_marketing_analista_datos.sql y las migraciones de registro de corridas ya aplicadas).
+-- (requiere antes 20261105191631_marketing_analista_datos.sql, ya aplicada y las migraciones de registro de corridas ya aplicadas).
 --
 -- 1) Agente `marketing_analista` en agent_registry (kind 'system', sin modelo declarado, solo lectura), igual que los otros tres.
 -- 2) Tabla mk_consulta: cada pregunta al Analista con su respuesta, si las cifras se verificaron, qué herramientas usó (nombre y número

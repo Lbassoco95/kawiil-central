@@ -1,4 +1,4 @@
--- Marketing: lectura de datos para el Analista de resultados (agente con IA). NO SE APLICA sin confirmación de Dirección.
+-- Marketing: lectura de datos para el Analista de resultados (agente con IA). APLICADA en producción el 5 nov 2026 (confirmada por Dirección) como 20261105191631.
 --
 -- mk_analista_datos(p_org, p_herramienta, p_entrada): ÚNICA puerta por la que el Analista lee datos. Lista cerrada de herramientas,
 -- solo lectura (STABLE), sin texto libre de terceros. Las cifras las calcula esta función; el modelo solo las cita.
