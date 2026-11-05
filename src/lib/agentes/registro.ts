@@ -240,3 +240,36 @@ export function ultimoErrorPorAgente(errores: ErrorTarea[]): Map<string, UltimoE
   }
   return salida;
 }
+
+// ── Respuestas lentas ───────────────────────────────────────────────────────────────────────────────────────────────
+// Solo usa fechas de inicio y fin de las tareas (nunca texto). Un agente es «lento» si la mediana de sus últimas tareas
+// terminadas pasa de 5 minutos, y «muy lento» si pasa de 10 (el límite de espera observado en la VM es de unos 10 minutos).
+export const UMBRAL_LENTO_MS = 5 * 60_000;
+export const UMBRAL_MUY_LENTO_MS = 10 * 60_000;
+export const TAREAS_PARA_LENTITUD = 5;
+export const MIN_TAREAS_PARA_LENTITUD = 2;
+
+export interface AgenteLento { id: string; nombre: string; tareas: number; medianaMs: number; nivel: "lento" | "muy_lento"; mediana: string }
+
+const mediana = (xs: number[]): number => {
+  const s = [...xs].sort((a, b) => a - b), m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+};
+
+export function agentesLentos(agentes: AgenteRegistro[], tareas: TareaAgente[]): AgenteLento[] {
+  const salida: AgenteLento[] = [];
+  for (const a of agentes) {
+    if (a.status === "archived") continue;
+    const duraciones = tareas
+      .filter((t) => t.agent_id === a.id && t.started_at && t.completed_at && (t.status === "completed" || esFalla(t.status)))
+      .sort((x, y) => (y.completed_at as string).localeCompare(x.completed_at as string))
+      .slice(0, TAREAS_PARA_LENTITUD)
+      .map((t) => new Date(t.completed_at as string).getTime() - new Date(t.started_at as string).getTime())
+      .filter((ms) => Number.isFinite(ms) && ms >= 0);
+    if (duraciones.length < MIN_TAREAS_PARA_LENTITUD) continue;
+    const med = mediana(duraciones);
+    if (med < UMBRAL_LENTO_MS) continue;
+    salida.push({ id: a.id, nombre: nombreAgente(a), tareas: duraciones.length, medianaMs: med, nivel: med >= UMBRAL_MUY_LENTO_MS ? "muy_lento" : "lento", mediana: duracionLegible(med) });
+  }
+  return salida.sort((x, y) => y.medianaMs - x.medianaMs);
+}

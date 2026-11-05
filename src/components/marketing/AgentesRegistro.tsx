@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Pastilla, Vacio } from "./marketingUi";
 import {
-  cuandoRelativo, cumplimiento, agentesDelModulo, esAgenteDeMarketing, esAgenteLegal, saludLegal, ultimoErrorPorAgente, esSistema, nombreAgente, ordenarAgentes, resumenServicio, senalAgente, SENAL_ETIQUETA, tareasRecientes, tasaExito, ultimaTareaDe,
+  agentesLentos, cuandoRelativo, cumplimiento, agentesDelModulo, esAgenteDeMarketing, esAgenteLegal, saludLegal, ultimoErrorPorAgente, esSistema, nombreAgente, ordenarAgentes, resumenServicio, senalAgente, SENAL_ETIQUETA, tareasRecientes, tasaExito, ultimaTareaDe,
   type AgenteRegistro, type ErrorTarea, type TareaAgente, type TareaMarketing,
 } from "@/lib/agentes/registro";
 
@@ -31,6 +31,7 @@ export function AgentesRegistro({ agentes: todos, tareas: todasLasTareas, estado
   const visibles = useMemo(() => ordenarAgentes(archivados ? agentes : agentes.filter((a) => a.status !== "archived"), now), [agentes, archivados, now]);
   const servicio = useMemo(() => resumenServicio(agentes, now), [agentes, now]);
   const salud = useMemo(() => saludLegal(agentes, now), [agentes, now]);
+  const lentos = useMemo(() => agentesLentos(agentes, tareas), [agentes, tareas]);
   const ultimosErrores = useMemo(() => ultimoErrorPorAgente(errores), [errores]);
   const lista = useMemo(() => tareasRecientes(tareas, agentes, now, { dias, agenteId: agenteId || null, soloFallas }), [tareas, agentes, now, dias, agenteId, soloFallas]);
 
@@ -46,6 +47,24 @@ export function AgentesRegistro({ agentes: todos, tareas: todasLasTareas, estado
             {salud.sinVida} de {salud.total} agentes legales sin vida: nadie está revisando el DOF ni la Suprema Corte.{" "}
             <span className="text-muted-foreground">{salud.sinVidaNombres.map((x) => `${x.nombre} (${SENAL_ETIQUETA[x.senal].etiqueta.toLowerCase()})`).join(", ")}.</span>
           </span>
+        </div>
+      )}
+      {lentos.length > 0 && (
+        <div className="flex flex-wrap items-start gap-3 rounded-2xl border border-amber-300/60 bg-amber-100/50 p-4 text-sm dark:border-amber-700/50 dark:bg-amber-900/20" data-testid="alerta-lentitud">
+          <Pastilla color="amarillo">Respuestas lentas</Pastilla>
+          <div className="min-w-0 flex-1 space-y-1">
+            <p>
+              {lentos.length === 1 ? "Un agente tarda" : `${lentos.length} agentes tardan`} mucho en contestar: lo normal son segundos y aquí pasan de minutos. Cerca de los 10 minutos la tarea se agota por tiempo.
+            </p>
+            <ul className="text-xs text-muted-foreground">
+              {lentos.map((l) => (
+                <li key={l.id} data-testid={`lento-${l.id}`}>
+                  <span className="font-medium text-foreground">{l.nombre}</span>: {l.mediana} por tarea en promedio (sus últimas {l.tareas} terminadas){l.nivel === "muy_lento" ? ", en el límite de espera" : ""}.
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-muted-foreground">Suele deberse a la conexión del servicio con el modelo, no a la tarea. Conviene revisarlo en el servicio kawiil-agents.</p>
+          </div>
         </div>
       )}
       {!soloMarketing && (

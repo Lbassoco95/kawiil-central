@@ -68,3 +68,42 @@ describe("módulo Agentes", () => {
     expect(screen.getByTestId("ultimo-error-legal_archivist").textContent).toContain("Tiempo agotado");
   });
 });
+
+describe("respuestas lentas", () => {
+  const ahora = new Date("2026-11-05T18:00:00Z");
+  const t = (id: string, agent_id: string, status: string, durSeg: number, fin = "2026-06-01T12:00:00Z"): TareaAgente => ({
+    id, agent_id, task_type: "manual", status, created_at: fin,
+    started_at: new Date(new Date(fin).getTime() - durSeg * 1000).toISOString(), completed_at: fin,
+  });
+  const A = [ag({ id: "arch", name: "legal_archivist", display_name: "Archivero" }), ag({ id: "rap", name: "coyolli" }), ag({ id: "arc", name: "x", status: "archived" })];
+  it("marca lento al Archivero (timeouts de ~10 min) y no al rápido", async () => {
+    const { agentesLentos } = await import("@/lib/agentes/registro");
+    const tareas = [t("1", "arch", "error", 603), t("2", "arch", "error", 606), t("3", "arch", "completed", 577), t("4", "rap", "completed", 13), t("5", "rap", "completed", 31)];
+    const l = agentesLentos(A, tareas);
+    expect(l.map((x) => x.nombre)).toEqual(["Archivero"]);
+    expect(l[0].nivel).toBe("muy_lento");
+  });
+  it("lento (5–10 min) vs muy lento, y ignora con una sola tarea, archivados y tareas sin fechas", async () => {
+    const { agentesLentos } = await import("@/lib/agentes/registro");
+    expect(agentesLentos(A, [t("1", "arch", "completed", 400), t("2", "arch", "completed", 420)])[0].nivel).toBe("lento");
+    expect(agentesLentos(A, [t("1", "arch", "error", 700)])).toEqual([]);
+    expect(agentesLentos(A, [t("1", "arc", "completed", 900), t("2", "arc", "completed", 900)])).toEqual([]);
+    expect(agentesLentos(A, [{ ...t("1", "arch", "error", 700), started_at: null }, { ...t("2", "arch", "error", 700), completed_at: null }])).toEqual([]);
+  });
+  it("usa solo las últimas 5 tareas: si ya se arregló, deja de avisar", async () => {
+    const { agentesLentos } = await import("@/lib/agentes/registro");
+    const viejas = [1, 2, 3].map((i) => t(`v${i}`, "arch", "error", 600, `2026-06-0${i}T12:00:00Z`));
+    const nuevas = [1, 2, 3, 4, 5].map((i) => t(`n${i}`, "arch", "completed", 8, `2026-11-0${i}T12:00:00Z`));
+    expect(agentesLentos(A, [...viejas, ...nuevas])).toEqual([]);
+  });
+  it("el aviso aparece en la pantalla sin mostrar textos de tareas", () => {
+    render(<AgentesRegistro sinMarketing agentes={A} tareas={[t("1", "arch", "error", 603), t("2", "arch", "error", 606)]} estadoAgentes="ok" estadoTareas="ok" ahora={ahora} />);
+    const a = screen.getByTestId("alerta-lentitud");
+    expect(a.textContent).toContain("Archivero");
+    expect(a.textContent).toContain("10 min");
+  });
+  it("sin lentitud no hay aviso", () => {
+    render(<AgentesRegistro sinMarketing agentes={A} tareas={[t("1", "rap", "completed", 10), t("2", "rap", "completed", 20)]} estadoAgentes="ok" estadoTareas="ok" ahora={ahora} />);
+    expect(screen.queryByTestId("alerta-lentitud")).toBeNull();
+  });
+});
