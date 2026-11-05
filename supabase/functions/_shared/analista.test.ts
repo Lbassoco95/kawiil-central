@@ -138,3 +138,12 @@ test("las herramientas del modelo coinciden EXACTAMENTE con las de la función S
 test("el prompt prohíbe escribir/publicar, exige fuente y corte, y dice que no hay datos de anuncios", () => {
   for (const frase of [/SOLO lees/, /fecha de corte/, /No tienes datos de anuncios/, /Nunca uses cifras de memoria/]) assert.match(SYSTEM, frase);
 });
+
+test("un número que el agente pidió como parámetro (ventana de 90 días) no se marca como cifra sin verificar", async () => {
+  let paso = 0;
+  const llm = async () => paso++ === 0
+    ? { stop_reason: "tool_use", uso: { entrada: 1, salida: 1 }, contenido: [{ type: "tool_use", id: "t1", name: "colchon_actual", input: { dias: 90 } }] }
+    : { stop_reason: "end_turn", uso: { entrada: 1, salida: 1 }, contenido: [{ type: "text", text: "En los últimos 90 días, Instagram tiene 23 días de colchón." }] };
+  const r = await correrConsulta({ pregunta: "¿Cómo va el colchón?", herramientas: { colchon_actual: async () => COLCHON } as never, llm: llm as never });
+  assert.deepEqual(r.no_verificadas, []); assert.equal(r.verificada, true);
+});

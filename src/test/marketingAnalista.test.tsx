@@ -131,3 +131,17 @@ describe("panel Preguntar del Analista", () => {
     vista(props(vi.fn())); elegirAnalista(); expect(screen.getByTestId("analista-preguntar").textContent).toContain("solo lee y explica");
   });
 });
+
+describe("TextoAnalista: respuesta legible, sin símbolos", () => {
+  it("convierte negritas y viñetas en elementos, sin ** ni guiones sueltos", async () => {
+    const { render, screen } = await import("@testing-library/react");
+    const { TextoAnalista } = await import("@/components/marketing/TextoAnalista");
+    const { container } = render(<TextoAnalista texto={"**Facebook** (fuente: x):\n- La semana está en *rojo*\n- Otra con `valor`\n\n---\n## Límites\nTexto <b>no html</b>"} />);
+    expect(container.textContent).not.toMatch(/\*\*|^- |`|##/m);
+    expect(container.querySelectorAll("strong").length).toBe(1);
+    expect(container.querySelectorAll("li").length).toBe(2);
+    expect(container.querySelector("em")?.textContent).toBe("rojo");
+    expect(container.querySelector("b")).toBeNull();
+    expect(screen.getByText(/no html/).textContent).toContain("<b>");
+  });
+});
