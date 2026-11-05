@@ -119,7 +119,7 @@ La carpeta de Cerebro ya tiene antecedentes (por ejemplo el Calendario Maestro y
 5. Cada pregunta queda en `mk_consulta` (pregunta, respuesta, verificación, herramientas usadas con su número de filas, tokens, duración) y deja tarea y latido en el registro de agentes (`mk_registrar_corrida`). El Analista es un agente **bajo demanda** (`config.cadencia = bajo_demanda`): se ve «Disponible», nunca «atrasado» por falta de preguntas; mientras responde se dibuja «pensando».
 
 **Archivos**
-- SQL: `supabase/migrations/20261105191631_marketing_analista_datos.sql` (**aplicada**) y, en `supabase/pendientes/` (no se aplica al fusionar), `20261105120100_marketing_analista_registro.sql`; reversas en `tools/marketing/rollback_analista_datos.sql` y `rollback_analista_registro.sql`.
+- SQL: `supabase/migrations/20261105191631_marketing_analista_datos.sql` (**aplicada**) y, `20261105194055_marketing_analista_registro.sql` (**aplicada el 5 nov 2026**); reversas en `tools/marketing/rollback_analista_datos.sql` y `rollback_analista_registro.sql`.
 - Función: `supabase/functions/marketing-agente/index.ts` + `_shared/analista.ts` (+ entrada en `supabase/config.toml`).
 - Pantalla: `OficinaAgentes.tsx` (panel «Preguntar», historial), `oficinaAgentesLogica.ts`, `agentesRegistroLogica.ts`, hooks `useConsultasAnalista` y `preguntarAlAnalista` en `useMarketing.ts`.
 - Pruebas: `_shared/analista.test.ts` y `analista_fuente.test.ts` (Node, 28), `tools/marketing/prueba_analista_pglite.mjs` (Postgres en memoria, 11), `src/test/marketingAnalista.test.tsx` (Vitest, 16).
