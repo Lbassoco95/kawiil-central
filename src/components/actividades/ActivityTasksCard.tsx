@@ -26,7 +26,7 @@ import {
   useActivityProviders, useActivityAttendees, useCreateAttendeeConfirmationTasks,
   type ActivityProvider, type ActivityAttendee,
 } from "@/hooks/useActivityExtras";
-import { buildRubroOptions, rubroLabel, providerStatusLabel } from "@/lib/activityTypes";
+import { buildRubroOptions, rubroLabel, providerStatusLabel, pendienteSuggestions } from "@/lib/activityTypes";
 
 type TaskStatus = keyof typeof TASK_STATUS_CONFIG;
 
@@ -37,13 +37,23 @@ const PRIORITY_OPTIONS = Object.entries(PRIORITY_CONFIG)
 
 const isClosed = (s: string) => s === "completada" || s === "cancelada";
 
+/** A qué se refiere el pendiente: un rubro (y su proveedor), los invitados, o nada en particular. */
+type TaskScope = "rubro" | "asistentes" | "general";
+const SCOPE_OPTIONS: { value: TaskScope; label: string }[] = [
+  { value: "rubro", label: "Rubro / proveedor" },
+  { value: "asistentes", label: "Asistentes" },
+  { value: "general", label: "General" },
+];
+const ATTENDEE_SUGGESTIONS = ["Confirmar asistencia", "Confirmar acompañante (+1)", "Pedir restricciones alimentarias"];
+
 function TaskDialog({
-  activityId, task, trigger, providers, rubros, attendees, defaultCategory = "", defaultProviderId = "", defaultAttendeeId = "",
+  activityId, task, trigger, providers, rubros, attendees, defaultCategory = "", defaultProviderId = "", defaultAttendeeId = "", defaultScope,
 }: {
   activityId: string; task?: ActivityTask; trigger: React.ReactNode;
   providers: ActivityProvider[]; rubros: { value: string; label: string }[];
   attendees: ActivityAttendee[];
   defaultCategory?: string; defaultProviderId?: string; defaultAttendeeId?: string;
+  defaultScope?: TaskScope;
 }) {
   const isEdit = !!task;
   const [open, setOpen] = useState(false);
@@ -59,6 +69,7 @@ function TaskDialog({
   const [category, setCategory] = useState("");
   const [providerId, setProviderId] = useState("");
   const [attendeeId, setAttendeeId] = useState("");
+  const [scope, setScope] = useState<TaskScope>("general");
 
   useEffect(() => {
     if (!open) return;
@@ -70,7 +81,13 @@ function TaskDialog({
     setCategory(task ? (task.activity_category ?? "") : defaultCategory);
     setProviderId(task ? (task.activity_provider_id ?? "") : defaultProviderId);
     setAttendeeId(task ? (task.activity_attendee_id ?? "") : defaultAttendeeId);
-  }, [open, task, defaultCategory, defaultProviderId, defaultAttendeeId]);
+    if (task) {
+      setScope(task.activity_attendee_id ? "asistentes"
+        : task.activity_category || task.activity_provider_id ? "rubro" : "general");
+    } else {
+      setScope(defaultScope ?? (defaultAttendeeId ? "asistentes" : "rubro"));
+    }
+  }, [open, task, defaultCategory, defaultProviderId, defaultAttendeeId, defaultScope]);
 
   const providerOptions = providers
     .filter((p) => !category || p.category === category)
@@ -99,9 +116,9 @@ function TaskDialog({
           due_date: dueDate || null,
           priority,
           status,
-          activity_category: category || null,
-          activity_provider_id: providerId || null,
-          activity_attendee_id: attendeeId || null,
+          activity_category: scope === "rubro" ? category || null : null,
+          activity_provider_id: scope === "rubro" ? providerId || null : null,
+          activity_attendee_id: scope === "asistentes" ? attendeeId || null : null,
         },
         { onSuccess: () => setOpen(false) },
       );
@@ -114,9 +131,9 @@ function TaskDialog({
           priority,
           status,
           activity_id: activityId,
-          activity_category: category || null,
-          activity_provider_id: providerId || null,
-          activity_attendee_id: attendeeId || null,
+          activity_category: scope === "rubro" ? category || null : null,
+          activity_provider_id: scope === "rubro" ? providerId || null : null,
+          activity_attendee_id: scope === "asistentes" ? attendeeId || null : null,
         },
         { onSuccess: () => setOpen(false) },
       );
@@ -133,34 +150,83 @@ function TaskDialog({
         <div className="space-y-4 py-2">
           <div className="space-y-2">
             <Label htmlFor="task-title">Pendiente *</Label>
-            <Input id="task-title" placeholder="Ej: Comida lista, Montar carpas"
+            <Input id="task-title" placeholder={
+                scope === "rubro" && category ? `Ej: ${pendienteSuggestions(category)[0]}`
+                  : scope === "asistentes" ? "Ej: Confirmar asistencia" : "Ej: Armar la agenda del evento"
+              }
               value={title} onChange={(e) => setTitle(e.target.value)} />
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Rubro</Label>
-              <RubroSelect value={category} onChange={changeCategory} options={rubros} noneLabel="General (sin rubro)" />
-            </div>
-            <div className="space-y-2">
-              <Label>Proveedor</Label>
-              <SearchableSelect
-                options={providerOptions} value={providerId} onValueChange={changeProvider}
-                placeholder="Sin proveedor" searchPlaceholder="Buscar proveedor..."
-              />
+          <div className="space-y-2">
+            <Label>Relacionado con</Label>
+            <div className="flex flex-wrap gap-1.5">
+              {SCOPE_OPTIONS.filter((o) => o.value !== "asistentes" || attendees.length > 0).map((o) => (
+                <Button
+                  key={o.value} type="button" size="sm" className="h-8"
+                  variant={scope === o.value ? "default" : "outline"}
+                  onClick={() => setScope(o.value)}
+                >
+                  {o.label}
+                </Button>
+              ))}
             </div>
           </div>
-          {attendees.length > 0 && (
-            <div className="space-y-2">
-              <Label>Asistente (opcional)</Label>
-              <SearchableSelect
-                options={attendees.map((a) => ({ value: a.id, label: a.name }))}
-                value={attendeeId} onValueChange={setAttendeeId}
-                placeholder="Sin asistente" searchPlaceholder="Buscar asistente..."
-              />
+          {scope === "rubro" && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Rubro</Label>
+                  <RubroSelect value={category} onChange={changeCategory} options={rubros} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Proveedor (opcional)</Label>
+                  <SearchableSelect
+                    options={providerOptions} value={providerId} onValueChange={changeProvider}
+                    placeholder="Todo el rubro" searchPlaceholder="Buscar proveedor..."
+                  />
+                </div>
+              </div>
+              {!isEdit && category && (
+                <div className="flex flex-wrap gap-1.5">
+                  {pendienteSuggestions(category).map((sug) => (
+                    <Button key={sug} type="button" size="sm" variant="outline" className="h-7 text-xs"
+                      onClick={() => setTitle(sug)}>
+                      {sug}
+                    </Button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {scope === "asistentes" && (
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <Label>Invitado (opcional)</Label>
+                <SearchableSelect
+                  options={attendees.map((a) => ({ value: a.id, label: a.name }))}
+                  value={attendeeId} onValueChange={setAttendeeId}
+                  placeholder="Todos los invitados" searchPlaceholder="Buscar invitado..."
+                />
+                <p className="text-xs text-muted-foreground">
+                  Los asistentes son las personas invitadas. Déjalo vacío si aplica a todos.
+                </p>
+              </div>
+              {!isEdit && (
+                <div className="flex flex-wrap gap-1.5">
+                  {ATTENDEE_SUGGESTIONS.map((sug) => {
+                    const who = attendees.find((a) => a.id === attendeeId)?.name;
+                    return (
+                      <Button key={sug} type="button" size="sm" variant="outline" className="h-7 text-xs"
+                        onClick={() => setTitle(who ? `${sug} de ${who}` : sug)}>
+                        {sug}
+                      </Button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
           <div className="space-y-2">
-            <Label>Responsable</Label>
+            <Label>Responsable (quién lo hace)</Label>
             <SearchableSelect
               options={profileOptions} value={assignedTo}
               onValueChange={setAssignedTo}
@@ -343,6 +409,7 @@ export function ActivityTasksCard({ activityId }: { activityId: string }) {
                             activityId={activityId}
                             providers={providers} rubros={rubros} attendees={attendees}
                             defaultCategory={g.key === "__asistentes__" ? "" : g.key}
+                            defaultScope={g.key === "__asistentes__" ? "asistentes" : g.key ? "rubro" : "general"}
                             trigger={
                               <Button size="sm" variant="ghost" className="h-7 text-xs">
                                 <Plus className="mr-1 h-3 w-3" />Pendiente
