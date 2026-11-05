@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Banknote, Landmark, Plus, Sparkles, Upload, Wallet, Check, Inbox, Brain } from "lucide-react";
+import { AlertTriangle, Banknote, CalendarClock, Landmark, Plus, Sparkles, Upload, Wallet, Check, Inbox, Brain, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,12 +10,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BankImportDialog } from "./BankImportDialog";
+import { CommitmentsPanel } from "./CommitmentsPanel";
+import { ThirdPartyPanel } from "./ThirdPartyPanel";
 import {
   useAddManualMovement, useClassifyMovements, useCreateAccount, useFinanceAccounts, useFinanceCategories,
-  useFinanceMovements, useFinanceRules, useRuleIndex, type FinanceMovement,
+  useFinanceMovements, useFinanceCommitments, useFinanceRules, useRuleIndex, type FinanceMovement,
 } from "@/hooks/useFinanceBank";
 import { proposeNewCategories, suggestCategory } from "@/lib/finance/classifier";
-import { accountBalances } from "@/lib/finance/planning";
+import { accountBalances, summarizeCommitments } from "@/lib/finance/planning";
 
 const money = (n: number, d = 0) => n.toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: d });
 const day = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "2-digit" });
@@ -200,6 +202,7 @@ function LearningPanel({ movements }: { movements: FinanceMovement[] }) {
 export function BankTab() {
   const { data: accounts = [], isLoading: la } = useFinanceAccounts();
   const { data: movements = [], isLoading: lm } = useFinanceMovements();
+  const { data: commitments = [] } = useFinanceCommitments();
   const { categories } = useFinanceCategories();
   const [importOpen, setImportOpen] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
@@ -207,7 +210,11 @@ export function BankTab() {
   const [catFilter, setCatFilter] = useState("todas");
   const [search, setSearch] = useState("");
 
-  const bal = useMemo(() => accountBalances(accounts, movements.map((m) => ({ account_id: m.account_id, debit: Number(m.debit), credit: Number(m.credit) }))), [accounts, movements]);
+  const bal = useMemo(() => accountBalances(accounts, movements.map((m) => ({
+    account_id: m.account_id, debit: Number(m.debit), credit: Number(m.credit), movement_date: m.movement_date,
+    row_seq: m.row_seq, reported_balance: m.reported_balance == null ? null : Number(m.reported_balance),
+  }))), [accounts, movements]);
+  const cs = useMemo(() => summarizeCommitments(commitments, new Date().toISOString().slice(0, 10), bal.available), [commitments, bal.available]);
   const pending = useMemo(() => movements.filter((m) => m.review_status === "pendiente"), [movements]);
   const lastDate = movements[0]?.movement_date;
   const filtered = useMemo(() => {
@@ -226,7 +233,7 @@ export function BankTab() {
         <div>
           <p className="text-2xl font-semibold tabular-nums">{money(bal.available)}</p>
           <p className="text-xs text-muted-foreground">
-            Disponible estimado en bancos y efectivo{lastDate ? ` · último movimiento ${day(lastDate)}` : ""}
+            Disponible propio en bancos y efectivo{lastDate ? ` · último movimiento ${day(lastDate)}` : ""}
             {bal.held !== 0 && ` · ${money(bal.held)} en cuentas de terceros (no incluido)`}
           </p>
         </div>
@@ -235,6 +242,31 @@ export function BankTab() {
           <Button size="sm" onClick={() => setImportOpen(true)}><Upload className="h-4 w-4 mr-1.5" /> Cargar movimientos</Button>
         </div>
       </div>
+
+      {accounts.length > 0 && (
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <Card variant="glass"><CardContent className="p-4">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1"><CalendarClock className="h-3.5 w-3.5" /> Comprometido a 30 días</div>
+            <p className="text-lg font-semibold tabular-nums">{money(cs.payable30)}</p>
+            <p className="text-[11px] text-muted-foreground">{cs.overdue > 0 ? `${money(cs.overdue)} ya vencido · ` : ""}total por pagar {money(cs.payablePending)}</p>
+          </CardContent></Card>
+          <Card variant="glass"><CardContent className="p-4">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1"><ShieldCheck className="h-3.5 w-3.5" /> Disponible libre</div>
+            <p className={`text-lg font-semibold tabular-nums ${cs.free < 0 ? "text-red-600" : ""}`}>{money(cs.free)}</p>
+            <p className="text-[11px] text-muted-foreground">disponible − comprometido 30 d</p>
+          </CardContent></Card>
+          <Card variant="glass"><CardContent className="p-4">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1"><Banknote className="h-3.5 w-3.5" /> Por cobrar (compromisos)</div>
+            <p className="text-lg font-semibold tabular-nums">{money(cs.receivablePending)}</p>
+            <p className="text-[11px] text-muted-foreground">fuera de Savio · Excel y manuales</p>
+          </CardContent></Card>
+          <Card variant="glass"><CardContent className="p-4">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1"><Landmark className="h-3.5 w-3.5" /> Faltaría por cobrar</div>
+            <p className={`text-lg font-semibold tabular-nums ${cs.shortfall > 0 ? "text-amber-600" : ""}`}>{money(cs.shortfall)}</p>
+            <p className="text-[11px] text-muted-foreground">{cs.shortfall > 0 ? "para cubrir lo comprometido" : "lo comprometido está cubierto"}</p>
+          </CardContent></Card>
+        </div>
+      )}
 
       {accounts.length === 0 ? (
         <Card variant="glass"><CardContent className="p-8 text-center space-y-3">
@@ -245,21 +277,32 @@ export function BankTab() {
       ) : (
         <>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            {accounts.filter((a) => a.is_active).map((a) => (
-              <Card key={a.id} variant="glass"><CardContent className="p-4">
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
-                  {a.kind === "efectivo" ? <Wallet className="h-3.5 w-3.5" /> : <Landmark className="h-3.5 w-3.5" />}{a.name}
-                  {!a.counts_as_available && <Badge variant="outline" className="text-[10px] ml-auto">terceros</Badge>}
-                </div>
-                <p className="text-lg font-semibold tabular-nums">{money(bal.byAccount[a.id] ?? 0)}</p>
-              </CardContent></Card>
-            ))}
+            {accounts.filter((a) => a.is_active).map((a) => {
+              const drift = bal.anchored[a.id] ? bal.byAccount[a.id] - bal.computed[a.id] : 0;
+              const parent = accounts.find((p) => p.id === a.parent_account_id);
+              return (
+                <Card key={a.id} variant="glass"><CardContent className="p-4">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+                    {a.kind === "efectivo" ? <Wallet className="h-3.5 w-3.5" /> : <Landmark className="h-3.5 w-3.5" />}{a.name}
+                    {!a.counts_as_available && <Badge variant="outline" className="text-[10px] ml-auto">{parent ? `en ${parent.name}` : "terceros"}</Badge>}
+                  </div>
+                  <p className="text-lg font-semibold tabular-nums">{money(bal.byAccount[a.id] ?? 0)}</p>
+                  {Math.abs(drift) > 1 && (
+                    <p className="mt-1 flex items-start gap-1 text-[10px] text-amber-600" title="El saldo viene del último saldo reportado por el banco; la suma de movimientos no coincide.">
+                      <AlertTriangle className="h-3 w-3 shrink-0 mt-px" /> Faltan movimientos por {money(Math.abs(drift))} vs. el banco
+                    </p>
+                  )}
+                </CardContent></Card>
+              );
+            })}
           </div>
 
           <Tabs defaultValue={pending.length ? "pendientes" : "movimientos"}>
             <TabsList className="h-9">
               <TabsTrigger value="pendientes" className="text-xs gap-1.5"><Inbox className="h-3.5 w-3.5" /> Por clasificar{pending.length > 0 && <Badge className="h-4 px-1.5 text-[10px]">{pending.length}</Badge>}</TabsTrigger>
               <TabsTrigger value="movimientos" className="text-xs">Movimientos</TabsTrigger>
+              <TabsTrigger value="compromisos" className="text-xs gap-1.5"><CalendarClock className="h-3.5 w-3.5" /> Compromisos</TabsTrigger>
+              <TabsTrigger value="terceros" className="text-xs gap-1.5"><ShieldCheck className="h-3.5 w-3.5" /> Terceros (impuestos)</TabsTrigger>
               <TabsTrigger value="aprendizaje" className="text-xs gap-1.5"><Brain className="h-3.5 w-3.5" /> Aprendizaje</TabsTrigger>
             </TabsList>
             <TabsContent value="pendientes" className="mt-4"><PendingQueue pending={pending} /></TabsContent>
@@ -294,6 +337,8 @@ export function BankTab() {
               </div>
               <p className="text-[11px] text-muted-foreground">Mostrando hasta 200 de {movements.length} movimientos.</p>
             </TabsContent>
+            <TabsContent value="compromisos" className="mt-4"><CommitmentsPanel /></TabsContent>
+            <TabsContent value="terceros" className="mt-4"><ThirdPartyPanel accounts={accounts} movements={movements} /></TabsContent>
             <TabsContent value="aprendizaje" className="mt-4"><LearningPanel movements={movements} /></TabsContent>
           </Tabs>
         </>

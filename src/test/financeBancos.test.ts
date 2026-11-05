@@ -61,12 +61,34 @@ describe("clasificación que aprende", () => {
 
 describe("planeación", () => {
   it("calcula saldos disponibles y excluye dinero de terceros", () => {
+    const d = "2026-01-01";
     const b = accountBalances(
       [{ id: "a", opening_balance: 100, counts_as_available: true }, { id: "b", opening_balance: 50, counts_as_available: false }],
-      [{ account_id: "a", debit: 30, credit: 0 }, { account_id: "a", debit: 0, credit: 80 }, { account_id: "b", debit: 0, credit: 10 }],
+      [{ account_id: "a", debit: 30, credit: 0, movement_date: d }, { account_id: "a", debit: 0, credit: 80, movement_date: d }, { account_id: "b", debit: 0, credit: 10, movement_date: d }],
     );
     expect(b.available).toBe(150);
     expect(b.held).toBe(60);
+  });
+
+  it("ancla al saldo reportado por el banco y resta el sub-libro de terceros del padre", () => {
+    const b = accountBalances(
+      [
+        { id: "bank", opening_balance: 500, counts_as_available: true },
+        { id: "tax", opening_balance: 0, counts_as_available: false, parent_account_id: "bank" },
+      ],
+      [
+        // al banco le falta registrar un cargo: el saldo reportado manda
+        { account_id: "bank", debit: 0, credit: 1000, movement_date: "2026-06-01", row_seq: 1, reported_balance: 1500 },
+        { account_id: "bank", debit: 300, credit: 0, movement_date: "2026-06-02", row_seq: 2, reported_balance: 700 },
+        { account_id: "bank", debit: 50, credit: 0, movement_date: "2026-06-03" }, // pegado después, sin saldo
+        { account_id: "tax", debit: 0, credit: 400, movement_date: "2026-06-01", row_seq: 1, reported_balance: 400 },
+      ],
+    );
+    expect(b.byAccount.bank).toBe(650);
+    expect(b.computed.bank).toBe(1150);
+    expect(b.anchored.bank).toBe(true);
+    expect(b.available).toBe(250);
+    expect(b.held).toBe(400);
   });
 
   it("flujo mensual ignora traspasos", () => {
@@ -94,5 +116,37 @@ describe("planeación", () => {
       { id: "4", slug: "perdido", position: 4, is_terminal: true },
     ]);
     expect(p["1"]).toBeLessThan(p["2"]); expect(p["3"]).toBe(1); expect(p["4"]).toBe(0);
+  });
+});
+
+import { summarizeCommitments } from "@/lib/finance/planning";
+import { detectEntity, summarizeEntities } from "@/lib/finance/thirdParty";
+
+describe("compromisos y terceros", () => {
+  it("calcula comprometido a 30 días, libre y faltante", () => {
+    const s = summarizeCommitments([
+      { direction: "pagar", amount: 20000, due_date: "2026-11-10", status: "pendiente" },
+      { direction: "pagar", amount: 11520, due_date: null, status: "pendiente" },
+      { direction: "pagar", amount: 72025, due_date: "2026-12-15", status: "pendiente" },
+      { direction: "pagar", amount: 999, due_date: "2026-11-01", status: "pagado" },
+      { direction: "cobrar", amount: 4000, due_date: "2026-01-01", status: "pendiente" },
+    ], "2026-11-05", 25000);
+    expect(s.payable30).toBe(31520);
+    expect(s.payablePending).toBe(103545);
+    expect(s.free).toBe(-6520);
+    expect(s.shortfall).toBe(6520);
+    expect(s.receivablePending).toBe(4000);
+  });
+
+  it("detecta el cliente dueño del dinero y resume la tesorería por entidad", () => {
+    expect(detectEntity("SPEI de STP de VIZUM TECHNOLOGIES SAPI DE CV (IMPUESTOS AGO26)")).toBe("Vizum");
+    expect(detectEntity("PAGO a PAGO REFERENCIADO SA", "IVA E ISR AGOSTO VIZUM")).toBe("Vizum");
+    expect(detectEntity("SPEI de BBVA MEXICO de FUZE LABS SAPI DE CV (ISR 2025)")).toBe("Fuze Labs");
+    expect(detectEntity("PAGO DE IMPUESTOS")).toBeNull();
+    const r = summarizeEntities([
+      { description: "SPEI de STP de VIZUM TECHNOLOGIES", movement_date: "2026-10-15", debit: 0, credit: 1000 },
+      { description: "PAGO", notes: "ISR VIZUM", movement_date: "2026-10-30", debit: 400, credit: 0 },
+    ]);
+    expect(r[0]).toMatchObject({ entity: "Vizum", deposited: 1000, paid: 400, held: 600 });
   });
 });

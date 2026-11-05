@@ -8,6 +8,9 @@ export interface ParsedMovement {
   debit: number; // cargo
   credit: number; // abono
   balance: number | null;
+  observation: string | null;
+  /** Posición de la fila en la hoja (orden original). */
+  seq: number;
   dedupeKey: string;
 }
 
@@ -79,10 +82,10 @@ export function parseMoney(value: unknown): number | null {
   return neg ? -n : n;
 }
 
-const norm = (s: unknown) =>
+export const norm = (s: unknown) =>
   String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
 
-type ColKey = "date" | "description" | "reference" | "debit" | "credit" | "balance" | "amount";
+type ColKey = "date" | "description" | "reference" | "debit" | "credit" | "balance" | "amount" | "observation";
 
 function detectColumns(row: unknown[]): Partial<Record<ColKey, number>> | null {
   const cols: Partial<Record<ColKey, number>> = {};
@@ -90,7 +93,8 @@ function detectColumns(row: unknown[]): Partial<Record<ColKey, number>> | null {
     const h = norm(cell);
     if (!h) return;
     const set = (k: ColKey) => { if (cols[k] === undefined) cols[k] = i; };
-    if (h === "fecha" || h.startsWith("fecha")) set("date");
+    if (h.startsWith("fecha") && !/pago|deposito|vencim/.test(h)) set("date");
+    else if (h.startsWith("observ")) set("observation");
     else if (h.startsWith("descrip") || h === "concepto" || h === "detalle") set("description");
     else if (h.startsWith("referen")) set("reference");
     else if (h === "cargo" || h === "cargos" || h === "retiro" || h === "retiros" || h === "egreso") set("debit");
@@ -129,12 +133,15 @@ function buildMovements(
     if (debit === 0 && credit === 0) { skipped++; continue; }
     const refRaw = cols.reference !== undefined ? String(row[cols.reference] ?? "").trim() : "";
     const balance = cols.balance !== undefined ? parseMoney(row[cols.balance]) : null;
+    const obs = cols.observation !== undefined ? String(row[cols.observation] ?? "").replace(/\s+/g, " ").trim() : "";
     const base = [date, norm(description).slice(0, 140), norm(refRaw).slice(0, 60), debit.toFixed(2), credit.toFixed(2)].join("|");
     const n = (seen.get(base) ?? 0) + 1;
     seen.set(base, n);
     movements.push({
       date, description, reference: refRaw || null, debit, credit,
       balance: balance == null ? null : balance,
+      observation: obs || null,
+      seq: r,
       dedupeKey: `${base}#${n}`,
     });
   }
@@ -145,7 +152,7 @@ function parseRows(rows: unknown[][], sheetName: string): ParsedSheet | null {
   let openingBalance: number | null = null;
   for (let i = 0; i < Math.min(rows.length, 30); i++) {
     const row = rows[i] ?? [];
-    const labelIdx = row.findIndex((c) => norm(c).startsWith("saldo inicial"));
+    const labelIdx = row.findIndex((c) => /^saldo (inicial|a favor)/.test(norm(c)));
     if (labelIdx >= 0 && openingBalance === null) {
       const val = row.slice(labelIdx + 1).map(parseMoney).find((v) => v !== null);
       if (val != null) openingBalance = val;

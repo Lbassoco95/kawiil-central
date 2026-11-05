@@ -7,6 +7,8 @@ import {
   DEFAULT_CATEGORIES, buildRuleIndex, extractPatterns, type CategoryDef, type CategoryKind, type Rule,
 } from "@/lib/finance/classifier";
 import type { ParsedMovement } from "@/lib/finance/bankImport";
+import type { ParsedCommitment } from "@/lib/finance/commitmentImport";
+import { detectEntity } from "@/lib/finance/thirdParty";
 
 // Las tablas finance_* son nuevas y aún no están en los tipos generados de Supabase.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -15,19 +17,28 @@ const db = supabase as any;
 export interface FinanceAccount {
   id: string; name: string; kind: "banco" | "efectivo" | "otro"; institution: string | null;
   opening_balance: number; counts_as_available: boolean; is_active: boolean; notes: string | null;
+  parent_account_id: string | null;
 }
 export interface FinanceMovement {
   id: string; account_id: string; movement_date: string; description: string; reference: string | null;
   debit: number; credit: number; reported_balance: number | null; category: string | null;
   category_source: "manual" | "regla" | "excel" | "sugerida" | null; review_status: "pendiente" | "clasificado";
-  excluded_from_flow: boolean; notes: string | null;
+  excluded_from_flow: boolean; notes: string | null; entity: string | null; row_seq: number | null;
 }
 export interface FinanceGoal {
   id?: string; year: number; month: number; income_target: number; expense_budget: number;
   new_clients_target: number; avg_new_client_monthly: number; notes?: string | null;
 }
 
+export interface FinanceCommitment {
+  id: string; direction: "pagar" | "cobrar"; counterparty: string | null; concept: string; amount: number;
+  currency: string; original_amount: number | null; fx_rate: number | null; due_date: string | null;
+  status: "pendiente" | "pagado" | "cancelado"; category: string | null; source: string; external_key: string | null;
+  notes: string | null; settled_at: string | null;
+}
+
 export const financeBankKeys = {
+  commitments: ["finance-commitments"] as const,
   accounts: ["finance-accounts"] as const,
   movements: ["finance-movements"] as const,
   categories: ["finance-categories"] as const,
@@ -66,6 +77,9 @@ export function useFinanceAccounts() {
 }
 export function useFinanceMovements() {
   return useQuery({ queryKey: financeBankKeys.movements, queryFn: () => fetchAll<FinanceMovement>("finance_movements", "movement_date", false) });
+}
+export function useFinanceCommitments() {
+  return useQuery({ queryKey: financeBankKeys.commitments, queryFn: () => fetchAll<FinanceCommitment>("finance_commitments", "due_date", true) });
 }
 export function useFinanceGoals() {
   return useQuery({ queryKey: financeBankKeys.goals, queryFn: () => fetchAll<FinanceGoal>("finance_goals", "year", true) });
@@ -150,6 +164,8 @@ export interface ImportPayload {
   openingBalance?: number | null;
   /** Categorías (con su tipo) que vienen ya clasificadas desde el Excel. */
   knownCategories: CategoryDef[];
+  /** Hoja de terceros: se detecta la entidad (cliente dueño del dinero) de cada movimiento. */
+  detectEntities?: boolean;
   /** Función que sugiere categoría automática a los movimientos nuevos. */
   suggest: (m: ParsedMovement) => { category: string; autoApply: boolean } | null;
 }
@@ -198,6 +214,8 @@ export function useImportMovements() {
           debit: m.debit, credit: m.credit, reported_balance: m.balance,
           category, category_source: source, review_status: category ? "clasificado" : "pendiente",
           excluded_from_flow: category ? kindOf(category) === "neutral" : false,
+          notes: m.observation, entity: p.detectEntities ? detectEntity(m.description, m.observation) : null,
+          row_seq: p.source === "excel" ? m.seq : null,
           dedupe_hash: m.dedupeKey, created_by: user?.id ?? null,
         };
       });
@@ -280,5 +298,75 @@ export function useSaveGoals() {
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: financeBankKeys.goals }); toast.success("Metas guardadas"); },
     onError: (e: Error) => toast.error(`No se pudieron guardar las metas: ${e.message}`),
+  });
+}
+
+export function useImportCommitments() {
+  const qc = useQueryClient();
+  const { data: orgId } = useOrgId();
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: async (items: ParsedCommitment[]) => {
+      if (!orgId) throw new Error("Organización no disponible");
+      const existing = new Map<string, { id: string; status: string }>();
+      for (const part of chunk(items.map((i) => i.externalKey), 100)) {
+        const { data, error } = await db.from("finance_commitments").select("id,status,external_key").eq("organization_id", orgId).in("external_key", part);
+        if (error) throw error;
+        (data ?? []).forEach((r: { id: string; status: string; external_key: string }) => existing.set(r.external_key, r));
+      }
+      const fresh = items.filter((i) => !existing.has(i.externalKey));
+      const rows = fresh.map((i) => ({
+        organization_id: orgId, direction: i.direction, counterparty: i.counterparty, concept: i.concept, amount: i.amount,
+        currency: i.currency, original_amount: i.originalAmount, fx_rate: i.fxRate, due_date: i.dueDate, status: i.status,
+        category: i.category, source: `excel:${i.kind}`, external_key: i.externalKey, notes: i.notes, created_by: user?.id ?? null,
+        settled_at: i.status === "pagado" ? new Date().toISOString().slice(0, 10) : null,
+      }));
+      for (const part of chunk(rows, 200)) {
+        const { error } = await db.from("finance_commitments").insert(part);
+        if (error) throw error;
+      }
+      // Si el Excel ya marca como pagado algo que aquí seguía pendiente, se actualiza (nunca se reabre lo cerrado en la app).
+      const toClose = items.filter((i) => i.status === "pagado" && existing.get(i.externalKey)?.status === "pendiente");
+      for (const i of toClose) {
+        await db.from("finance_commitments").update({ status: "pagado", settled_at: new Date().toISOString().slice(0, 10) }).eq("id", existing.get(i.externalKey)!.id);
+      }
+      return { added: fresh.length, existing: items.length - fresh.length, closed: toClose.length };
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: financeBankKeys.commitments }),
+    onError: (e: Error) => toast.error(`No se pudieron cargar los compromisos: ${e.message}`),
+  });
+}
+
+export function useSaveCommitment() {
+  const qc = useQueryClient();
+  const { data: orgId } = useOrgId();
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: async (c: Partial<FinanceCommitment> & { id?: string }) => {
+      if (c.id) {
+        const { id, ...patch } = c;
+        const { error } = await db.from("finance_commitments").update(patch).eq("id", id);
+        if (error) throw error;
+      } else {
+        const { error } = await db.from("finance_commitments").insert({ organization_id: orgId, source: "manual", created_by: user?.id ?? null, ...c });
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: financeBankKeys.commitments }),
+    onError: (e: Error) => toast.error(`No se pudo guardar el compromiso: ${e.message}`),
+  });
+}
+
+export function useSetMovementEntity() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (p: { ids: string[]; entity: string }) => {
+      for (const part of chunk(p.ids, 200)) {
+        const { error } = await db.from("finance_movements").update({ entity: p.entity }).in("id", part);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: financeBankKeys.movements }),
+    onError: (e: Error) => toast.error(`No se pudo asignar la entidad: ${e.message}`),
   });
 }

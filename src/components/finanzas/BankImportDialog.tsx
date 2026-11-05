@@ -10,11 +10,12 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  parseBankWorkbook, parsePastedMovements, suggestAccountName, type ParsedSheet,
+  parseBankBuffer, parsePastedMovements, suggestAccountName, type ParsedSheet,
 } from "@/lib/finance/bankImport";
+import { COMMITMENT_KIND_LABEL, parseCommitmentsBuffer, type CommitmentKind, type ParsedCommitment } from "@/lib/finance/commitmentImport";
 import { categoryFromReference, suggestCategory } from "@/lib/finance/classifier";
 import {
-  useCreateAccount, useFinanceAccounts, useFinanceCategories, useImportMovements, useRuleIndex,
+  useCreateAccount, useFinanceAccounts, useFinanceCategories, useImportCommitments, useImportMovements, useRuleIndex,
 } from "@/hooks/useFinanceBank";
 
 interface SheetChoice {
@@ -22,11 +23,15 @@ interface SheetChoice {
   include: boolean;
   accountName: string;
   thirdParty: boolean;
+  /** Si es dinero de terceros: cuenta bancaria donde está depositado (sub-libro). */
+  parentName: string;
   useReference: boolean;
 }
 
 const money = (n: number) => n.toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 });
 const looksIrrelevant = (name: string) => /navidad|apuntes|control/i.test(name);
+/** Hojas de tesorería de terceros conocidas (impuestos de clientes) y banco donde viven. */
+const THIRD_PARTY_SHEET = /gonzalo|pcr|nuup/i;
 
 export function BankImportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   const { data: accounts = [] } = useFinanceAccounts();
@@ -34,6 +39,9 @@ export function BankImportDialog({ open, onOpenChange }: { open: boolean; onOpen
   const ruleIndex = useRuleIndex();
   const createAccount = useCreateAccount();
   const importMut = useImportMovements();
+  const importCommitments = useImportCommitments();
+  const [commitments, setCommitments] = useState<ParsedCommitment[]>([]);
+  const [commitKinds, setCommitKinds] = useState<Record<string, boolean>>({});
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [choices, setChoices] = useState<SheetChoice[]>([]);
@@ -43,22 +51,29 @@ export function BankImportDialog({ open, onOpenChange }: { open: boolean; onOpen
   const [busy, setBusy] = useState(false);
   const [summary, setSummary] = useState<string[]>([]);
 
-  const reset = () => { setChoices([]); setFilename(""); setPasteText(""); setSummary([]); };
+  const reset = () => { setChoices([]); setFilename(""); setPasteText(""); setSummary([]); setCommitments([]); setCommitKinds({}); };
 
   async function onFile(file: File) {
     setBusy(true); setSummary([]);
     try {
-      const sheets = await parseBankWorkbook(file);
-      if (sheets.length === 0) { toast.error("No encontré hojas con Fecha, Descripción y Cargo/Abono."); return; }
+      const buf = await file.arrayBuffer();
+      const sheets = parseBankBuffer(buf);
+      const found = parseCommitmentsBuffer(buf);
+      if (sheets.length === 0 && found.length === 0) { toast.error("No encontré hojas con Fecha, Descripción y Cargo/Abono."); return; }
       setFilename(file.name);
+      const mainBank = sheets.find((x) => /banregio/i.test(x.sheetName) )?.sheetName ?? "";
       setChoices(sheets.map((sheet) => {
         const labeled = sheet.movements.filter((m) => categoryFromReference(m.reference)).length;
+        const third = THIRD_PARTY_SHEET.test(sheet.sheetName);
         return {
-          sheet, include: !looksIrrelevant(sheet.sheetName) && sheet.movements.length >= 10,
-          accountName: suggestAccountName(sheet.sheetName), thirdParty: false,
-          useReference: labeled / sheet.movements.length >= 0.2,
+          sheet, include: !looksIrrelevant(sheet.sheetName),
+          accountName: suggestAccountName(sheet.sheetName), thirdParty: third,
+          parentName: third ? mainBank : "",
+          useReference: !third && labeled / sheet.movements.length >= 0.2,
         };
       }));
+      setCommitments(found);
+      setCommitKinds(Object.fromEntries([...new Set(found.map((c) => c.kind))].map((k) => [k, true])));
     } catch (e) {
       toast.error(`No se pudo leer el archivo: ${(e as Error).message}`);
     } finally { setBusy(false); }
@@ -84,16 +99,37 @@ export function BankImportDialog({ open, onOpenChange }: { open: boolean; onOpen
   async function importExcel() {
     setBusy(true);
     try {
-      const items: { sheet: ParsedSheet; accountId: string; useReference: boolean }[] = [];
-      for (const c of choices.filter((x) => x.include)) {
-        const existing = accounts.find((a) => a.name.toLowerCase() === c.accountName.trim().toLowerCase());
-        const acc = existing ?? (await createAccount.mutateAsync({
-          name: c.accountName.trim(), kind: "banco", opening_balance: 0, counts_as_available: !c.thirdParty,
-        }));
-        items.push({ sheet: c.sheet, accountId: acc.id, useReference: c.useReference });
+      const picked = choices.filter((x) => x.include);
+      const ids = new Map<string, string>();
+      // Primero las cuentas (sin padre), luego se enlazan los sub-libros de terceros.
+      for (const c of picked) {
+        const name = c.accountName.trim();
+        const existing = accounts.find((a) => a.name.toLowerCase() === name.toLowerCase());
+        const acc = existing ?? (await createAccount.mutateAsync({ name, kind: "banco", opening_balance: 0, counts_as_available: !c.thirdParty }));
+        ids.set(c.sheet.sheetName, acc.id);
       }
-      await run(items, "excel");
-      setChoices([]);
+      for (const c of picked.filter((x) => x.thirdParty && x.parentName)) {
+        const parent = picked.find((p) => p.accountName.trim() === c.parentName)?.sheet.sheetName;
+        const parentId = parent ? ids.get(parent) : accounts.find((a) => a.name === c.parentName)?.id;
+        if (parentId) await createAccount.mutateAsync({ name: c.accountName.trim(), kind: "banco", counts_as_available: false, parent_account_id: parentId });
+      }
+      const lines: string[] = [];
+      for (const c of picked) {
+        const res = await importMut.mutateAsync({
+          accountId: ids.get(c.sheet.sheetName)!, source: "excel", filename,
+          movements: c.sheet.movements.map((m) => ({ ...m, category: c.useReference ? categoryFromReference(m.reference) : null })),
+          openingBalance: c.sheet.openingBalance, knownCategories: categories, detectEntities: c.thirdParty,
+          suggest: (m) => suggestCategory(m, ruleIndex),
+        });
+        lines.push(`${c.sheet.sheetName}: ${res.added} nuevos, ${res.duplicates} ya existían${c.thirdParty ? "" : `, ${res.pending} por clasificar`}`);
+      }
+      const chosen = commitments.filter((c) => commitKinds[c.kind]);
+      if (chosen.length) {
+        const r = await importCommitments.mutateAsync(chosen);
+        lines.push(`Compromisos: ${r.added} nuevos, ${r.existing} ya estaban${r.closed ? `, ${r.closed} marcados como pagados` : ""}`);
+      }
+      setSummary(lines);
+      setChoices([]); setCommitments([]);
     } finally { setBusy(false); }
   }
 
@@ -156,16 +192,44 @@ export function BankImportDialog({ open, onOpenChange }: { open: boolean; onOpen
                           </Label>
                           <Label className="flex items-center gap-2 text-xs font-normal">
                             <Checkbox checked={c.thirdParty} onCheckedChange={(v) => update(i, { thirdParty: !!v })} />
-                            Es dinero de terceros (no suma a disponible)
+                            Es dinero de terceros (impuestos de clientes; no suma a disponible)
                           </Label>
+                          {c.thirdParty && (
+                            <Label className="flex items-center gap-2 text-xs font-normal">
+                              Depositado en la cuenta
+                              <Select value={c.parentName || "__none"} onValueChange={(v) => update(i, { parentName: v === "__none" ? "" : v })}>
+                                <SelectTrigger className="h-7 w-40 text-xs"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="__none">Cuenta propia</SelectItem>
+                                  {choices.filter((o) => o !== c && !o.thirdParty).map((o) => <SelectItem key={o.sheet.sheetName} value={o.accountName.trim()}>{o.accountName}</SelectItem>)}
+                                  {accounts.filter((a) => !a.parent_account_id).map((a) => <SelectItem key={a.id} value={a.name}>{a.name}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                            </Label>
+                          )}
                         </div>
                       )}
                     </div>
                   );
                 })}
-                <Button onClick={importExcel} disabled={busy || included.length === 0} className="w-full">
+                {commitments.length > 0 && (
+                  <div className="rounded-xl border border-border/60 p-3 space-y-1.5">
+                    <p className="text-xs font-medium">También encontré compromisos y cuentas por cobrar</p>
+                    {(Object.keys(COMMITMENT_KIND_LABEL) as CommitmentKind[]).filter((k) => commitments.some((c) => c.kind === k)).map((k) => {
+                      const list = commitments.filter((c) => c.kind === k);
+                      return (
+                        <Label key={k} className="flex items-center gap-2 text-xs font-normal">
+                          <Checkbox checked={!!commitKinds[k]} onCheckedChange={(v) => setCommitKinds((o) => ({ ...o, [k]: !!v }))} />
+                          {COMMITMENT_KIND_LABEL[k]}: {list.length} · {money(list.reduce((a, c) => a + c.amount, 0))}
+                          {list.some((c) => c.status === "pagado") && ` (${list.filter((c) => c.status === "pagado").length} ya pagados)`}
+                        </Label>
+                      );
+                    })}
+                  </div>
+                )}
+                <Button onClick={importExcel} disabled={busy || (included.length === 0 && commitments.length === 0)} className="w-full">
                   {busy && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                  Cargar {included.length} {included.length === 1 ? "hoja" : "hojas"}
+                  Cargar {included.length} {included.length === 1 ? "hoja" : "hojas"}{commitments.length > 0 ? " y compromisos" : ""}
                 </Button>
               </div>
             )}

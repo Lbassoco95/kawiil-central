@@ -10,10 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { usePipelineLeads, usePipelineStages } from "@/hooks/usePipeline";
 import {
-  useFinanceAccounts, useFinanceGoals, useFinanceMovements, useSaveGoals, type FinanceGoal,
+  useFinanceAccounts, useFinanceCommitments, useFinanceGoals, useFinanceMovements, useSaveGoals, type FinanceGoal,
 } from "@/hooks/useFinanceBank";
 import {
-  accountBalances, addMonthsKey, monthlyFlow, newClientsNeeded, project, runRate, stageProbabilities,
+  accountBalances, addMonthsKey, monthlyFlow, newClientsNeeded, project, runRate, stageProbabilities, summarizeCommitments,
 } from "@/lib/finance/planning";
 
 const money = (n: number) => n.toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 });
@@ -30,6 +30,7 @@ export function PlanningTab() {
   const { data: movements = [], isLoading } = useFinanceMovements();
   const { data: accounts = [] } = useFinanceAccounts();
   const { data: goals = [] } = useFinanceGoals();
+  const { data: commitments = [] } = useFinanceCommitments();
   const { data: leads = [] } = usePipelineLeads(false);
   const { data: stages = [] } = usePipelineStages();
   const saveGoals = useSaveGoals();
@@ -62,9 +63,13 @@ export function PlanningTab() {
   const current = useMemo(() => monthlyFlow(movements).find((f) => f.key === nowKey), [movements, nowKey]);
   const rr = useMemo(() => runRate(history, 3), [history]);
   const available = useMemo(
-    () => accountBalances(accounts, movements.map((m) => ({ account_id: m.account_id, debit: Number(m.debit), credit: Number(m.credit) }))).available,
+    () => accountBalances(accounts, movements.map((m) => ({
+      account_id: m.account_id, debit: Number(m.debit), credit: Number(m.credit), movement_date: m.movement_date,
+      row_seq: m.row_seq, reported_balance: m.reported_balance == null ? null : Number(m.reported_balance),
+    }))).available,
     [accounts, movements],
   );
+  const cs = useMemo(() => summarizeCommitments(commitments, new Date().toISOString().slice(0, 10), available), [commitments, available]);
 
   const probs = useMemo(() => stageProbabilities(stages), [stages]);
   const { pipelineWeighted, openCount, expectedWins, closeRate } = useMemo(() => {
@@ -115,10 +120,11 @@ export function PlanningTab() {
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
         {kpi(<TrendingUp className="h-3.5 w-3.5" />, "Ritmo actual (3 meses)", money(rr.income), `ingresos/mes · gastos ${money(rr.expense)}`)}
         {kpi(<Hourglass className="h-3.5 w-3.5" />, "Autonomía de caja", runwayMonths == null ? "Sin quema" : `${runwayMonths.toFixed(1)} meses`, `disponible ${money(available)}`)}
         {kpi(<Users className="h-3.5 w-3.5" />, "Pipeline ponderado", money(pipelineWeighted), `${openCount} leads abiertos · ~${expectedWins.toFixed(1)} cierres esperados`)}
+        {kpi(<Hourglass className="h-3.5 w-3.5" />, "Comprometido a 30 días", money(cs.payable30), cs.shortfall > 0 ? `faltan ${money(cs.shortfall)} por cobrar para cubrirlo` : `libre después de pagar: ${money(cs.free)}`)}
         {kpi(<Target className="h-3.5 w-3.5" />, `Meta ${label(last.key)}`, lastTarget ? money(lastTarget) : "Define metas ↓",
           lastTarget ? (need.gap > 0 ? `faltan ${money(need.gap)}/mes → ${need.clients} clientes nuevos (${need.leadsToGenerate} leads por generar)` : "ya cubierta con el ritmo actual") : "para calcular cuántos clientes faltan")}
       </div>
