@@ -56,3 +56,28 @@ describe("<Oficina />", () => {
     expect(screen.getByText(/No hay agentes/)).toBeTruthy();
   });
 });
+
+describe("ámbito de la oficina y agentes legales reales (5 nov 2026)", () => {
+  const A5 = new Date("2026-11-05T18:00:00Z");
+  const real = (id: string, name: string, display: string, status: string, hb: string | null, ok: number, mal: number): AgenteRegistro =>
+    ({ id, name, display_name: display, description: null, role: null, status, kind: "consultable", last_heartbeat: hb, last_task_at: null, tasks_completed: ok, tasks_failed: mal });
+  const LEGALES = [
+    real("l1", "legal_archivist", "Archivero", "idle", "2026-06-07T14:02:54Z", 1, 15),
+    real("l2", "legal_contradiction_detector", "Antinomia", "idle", null, 0, 0),
+    real("l3", "legal_cross_referencer", "Vínculo", "idle", null, 0, 0),
+    real("l4", "legal_dof_watchdog", "Vigía DOF", "working", "2026-05-29T19:25:38Z", 0, 2),
+    real("l5", "legal_litigation_strategist", "Estratega", "idle", null, 0, 0),
+    real("l6", "legal_socratic_jurist", "Sócrates", "idle", null, 0, 0),
+  ];
+  const OTRO = real("x1", "nelli", "Nelli", "idle", "2026-04-30T15:07:21Z", 9, 2);
+  it("filtra legales vs todos", async () => {
+    const { filtrarAmbito } = await import("@/lib/agentes/oficina");
+    expect(filtrarAmbito([...LEGALES, OTRO], "legales")).toHaveLength(6);
+    expect(filtrarAmbito([...LEGALES, OTRO], "todos")).toHaveLength(7);
+  });
+  it("con los datos reales: Vigía DOF atascado y los otros cinco sin señal", () => {
+    const f = Object.fromEntries(figurasOficina(LEGALES, [], A5).map((x) => [x.nombre, x.estado]));
+    expect(f["Vigía DOF"]).toBe("atascado");
+    expect(["Archivero", "Antinomia", "Vínculo", "Estratega", "Sócrates"].map((n) => f[n])).toEqual(Array(5).fill("apagado"));
+  });
+});

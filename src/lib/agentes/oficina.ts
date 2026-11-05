@@ -1,6 +1,6 @@
 // Mapa «estado real del agente → qué hace en la oficina». Funciones puras, solo lectura.
 // Sin eventos de avance (ai_task_events aún no es legible por los usuarios) el estado se deduce de agent_registry + agent_tasks.
-import { nombreAgente, senalAgente, type AgenteRegistro, type TareaAgente } from "./registro";
+import { esAgenteLegal, nombreAgente, senalAgente, type AgenteRegistro, type TareaAgente } from "./registro";
 
 export type EstadoOficina = "trabajando" | "celebrando" | "con_error" | "atascado" | "sentado" | "descansando" | "apagado";
 
@@ -51,6 +51,10 @@ export function figurasOficina(agentes: AgenteRegistro[], tareas: TareaAgente[],
     }))
     .sort((x, y) => x.nombre.localeCompare(y.nombre));
 }
+
+export type AmbitoOficina = "legales" | "todos";
+export const filtrarAmbito = (agentes: AgenteRegistro[], ambito: AmbitoOficina): AgenteRegistro[] =>
+  ambito === "legales" ? agentes.filter(esAgenteLegal) : agentes;
 
 // ── Datos de ejemplo (modo «Demostración»): ficticios, uno por estado, para ver la oficina mientras la VM no escriba. ──
 export function datosDemo(ahora: Date): { agentes: AgenteRegistro[]; tareas: TareaAgente[] } {

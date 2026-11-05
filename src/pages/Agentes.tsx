@@ -7,7 +7,7 @@ import { AgentesRegistro } from "@/components/marketing/AgentesRegistro";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Oficina } from "@/components/agentes/Oficina";
 import { agentesDelModulo, esAgenteLegal, resumenServicio } from "@/lib/agentes/registro";
-import { datosDemo, figurasOficina } from "@/lib/agentes/oficina";
+import { datosDemo, figurasOficina, filtrarAmbito, type AmbitoOficina } from "@/lib/agentes/oficina";
 import { useAgentesRegistro, useErroresAgentes, useTareasAgentes } from "@/hooks/useAgentesRegistro";
 
 // Módulo Agentes · fases 1 y 2 (solo lectura): oficina y tablas: agentes de Cerebro / kawiil-agents y su historial de tareas.
@@ -19,10 +19,11 @@ export default function Agentes() {
   const [reloj, setReloj] = useState(() => new Date());
   useEffect(() => { const t = setInterval(() => setReloj(new Date()), 60_000); return () => clearInterval(t); }, []);
   const [demo, setDemo] = useState(false);
+  const [ambito, setAmbito] = useState<AmbitoOficina>("legales");
   const reales = useMemo(() => agentesDelModulo(agentes.data ?? []), [agentes.data]);
   const servicio = useMemo(() => resumenServicio(reales, reloj), [reales, reloj]);
   const fuente = useMemo(() => (demo ? datosDemo(reloj) : { agentes: reales, tareas: tareas.data ?? [] }), [demo, reales, tareas.data, reloj]);
-  const figuras = useMemo(() => figurasOficina(fuente.agentes, fuente.tareas, reloj), [fuente, reloj]);
+  const figuras = useMemo(() => figurasOficina(demo ? fuente.agentes : filtrarAmbito(fuente.agentes, ambito), fuente.tareas, reloj), [fuente, reloj, demo, ambito]);
   const cargando = !demo && agentes.isLoading;
   return (
     <AppLayout>
@@ -41,6 +42,16 @@ export default function Agentes() {
               <p className="zen-glass rounded-2xl p-3 text-sm" data-testid="oficina-sin-servicio">
                 El servicio de agentes no da señal reciente, así que la oficina muestra el último estado conocido. Puedes ver cómo se vería con actividad.
               </p>
+            )}
+            {!demo && (
+              <div className="flex gap-2 text-xs" role="group" aria-label="Qué agentes ver en la oficina">
+                {(["legales", "todos"] as const).map((v) => (
+                  <button key={v} type="button" aria-pressed={ambito === v} data-testid={`ambito-${v}`} onClick={() => setAmbito(v)}
+                    className={`rounded-full border px-3 py-1 ${ambito === v ? "border-primary/60 bg-primary/10" : "border-border/60"}`}>
+                    {v === "legales" ? "Agentes legales" : "Todos los agentes"}
+                  </button>
+                ))}
+              </div>
             )}
             <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={demo} onChange={(e) => setDemo(e.target.checked)} /> Ver demostración con datos de ejemplo</label>
             {cargando ? <p className="text-sm text-muted-foreground">Leyendo el registro de agentes…</p>
