@@ -6,15 +6,16 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { AgentesRegistro } from "@/components/marketing/AgentesRegistro";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Oficina } from "@/components/agentes/Oficina";
-import { agentesDelModulo, resumenServicio } from "@/lib/agentes/registro";
+import { agentesDelModulo, esAgenteLegal, resumenServicio } from "@/lib/agentes/registro";
 import { datosDemo, figurasOficina } from "@/lib/agentes/oficina";
-import { useAgentesRegistro, useTareasAgentes } from "@/hooks/useAgentesRegistro";
+import { useAgentesRegistro, useErroresAgentes, useTareasAgentes } from "@/hooks/useAgentesRegistro";
 
 // Módulo Agentes · fases 1 y 2 (solo lectura): oficina y tablas: agentes de Cerebro / kawiil-agents y su historial de tareas.
 // No escribe en la base ni despacha tareas. Los agentes de Marketing tienen su vista en /marketing.
 export default function Agentes() {
   const agentes = useAgentesRegistro();
   const tareas = useTareasAgentes();
+  const errores = useErroresAgentes((agentes.data ?? []).filter(esAgenteLegal).map((a) => a.id));
   const [reloj, setReloj] = useState(() => new Date());
   useEffect(() => { const t = setInterval(() => setReloj(new Date()), 60_000); return () => clearInterval(t); }, []);
   const [demo, setDemo] = useState(false);
@@ -47,7 +48,7 @@ export default function Agentes() {
               : <Oficina figuras={figuras} ahora={reloj} demo={demo} />}
           </TabsContent>
           <TabsContent value="tablas" className="mt-4">
-            <AgentesRegistro sinMarketing agentes={agentes.data ?? []} tareas={tareas.data ?? []}
+            <AgentesRegistro sinMarketing errores={errores.data ?? []} agentes={agentes.data ?? []} tareas={tareas.data ?? []}
               estadoAgentes={agentes.isError ? "error" : agentes.isLoading ? "cargando" : "ok"}
               estadoTareas={tareas.isError ? "error" : tareas.isLoading ? "cargando" : "ok"} />
           </TabsContent>

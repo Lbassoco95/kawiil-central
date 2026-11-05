@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Pastilla, Vacio } from "./marketingUi";
 import {
-  cuandoRelativo, cumplimiento, agentesDelModulo, esAgenteDeMarketing, esSistema, nombreAgente, ordenarAgentes, resumenServicio, senalAgente, SENAL_ETIQUETA, tareasRecientes, tasaExito, ultimaTareaDe,
-  type AgenteRegistro, type TareaAgente, type TareaMarketing,
+  cuandoRelativo, cumplimiento, agentesDelModulo, esAgenteDeMarketing, esAgenteLegal, saludLegal, ultimoErrorPorAgente, esSistema, nombreAgente, ordenarAgentes, resumenServicio, senalAgente, SENAL_ETIQUETA, tareasRecientes, tasaExito, ultimaTareaDe,
+  type AgenteRegistro, type ErrorTarea, type TareaAgente, type TareaMarketing,
 } from "@/lib/agentes/registro";
 
 export type EstadoCarga = "cargando" | "error" | "ok";
@@ -10,8 +10,8 @@ export type EstadoCarga = "cargando" | "error" | "ok";
 // Agentes del registro de kawiil-central (solo lectura): estado, latido, tareas y quién los opera. No ejecuta ni despacha nada.
 // `soloMarketing`: la pestaña de Marketing muestra SOLO sus 3 agentes de sistema (marketing_*). Los demás agentes del registro
 // (los de Cerebro / kawiil-agents) no se mezclan aquí: tienen su propio módulo.
-export function AgentesRegistro({ agentes: todos, tareas: todasLasTareas, estadoAgentes, estadoTareas, ahora, tareasMarketing = [], soloMarketing = false, sinMarketing = false }: {
-  agentes: AgenteRegistro[]; tareas: TareaAgente[]; estadoAgentes: EstadoCarga; estadoTareas: EstadoCarga; ahora?: Date; tareasMarketing?: TareaMarketing[]; soloMarketing?: boolean; sinMarketing?: boolean;
+export function AgentesRegistro({ agentes: todos, tareas: todasLasTareas, estadoAgentes, estadoTareas, ahora, tareasMarketing = [], errores = [], soloMarketing = false, sinMarketing = false }: {
+  agentes: AgenteRegistro[]; tareas: TareaAgente[]; estadoAgentes: EstadoCarga; estadoTareas: EstadoCarga; ahora?: Date; tareasMarketing?: TareaMarketing[]; errores?: ErrorTarea[]; soloMarketing?: boolean; sinMarketing?: boolean;
 }) {
   // `sinMarketing`: módulo Agentes (/agentes), que excluye a los agentes de Marketing.
   const agentes = useMemo(() => (soloMarketing ? todos.filter(esAgenteDeMarketing) : sinMarketing ? agentesDelModulo(todos) : todos), [todos, soloMarketing, sinMarketing]);
@@ -30,6 +30,8 @@ export function AgentesRegistro({ agentes: todos, tareas: todasLasTareas, estado
 
   const visibles = useMemo(() => ordenarAgentes(archivados ? agentes : agentes.filter((a) => a.status !== "archived"), now), [agentes, archivados, now]);
   const servicio = useMemo(() => resumenServicio(agentes, now), [agentes, now]);
+  const salud = useMemo(() => saludLegal(agentes, now), [agentes, now]);
+  const ultimosErrores = useMemo(() => ultimoErrorPorAgente(errores), [errores]);
   const lista = useMemo(() => tareasRecientes(tareas, agentes, now, { dias, agenteId: agenteId || null, soloFallas }), [tareas, agentes, now, dias, agenteId, soloFallas]);
 
   if (estadoAgentes === "error") return <Vacio>No pudimos leer el registro de agentes de kawiil-central. Inténtalo de nuevo.</Vacio>;
@@ -37,6 +39,15 @@ export function AgentesRegistro({ agentes: todos, tareas: todasLasTareas, estado
 
   return (
     <div className="space-y-6" data-testid="agentes-registro">
+      {sinMarketing && salud.estado === "alerta" && (
+        <div role="alert" className="flex flex-wrap items-center gap-3 rounded-2xl border border-red-500/40 bg-red-500/10 p-4 text-sm" data-testid="alerta-legal">
+          <Pastilla color="rojo">Revisión legal detenida</Pastilla>
+          <span>
+            {salud.sinVida} de {salud.total} agentes legales sin vida: nadie está revisando el DOF ni la Suprema Corte.{" "}
+            <span className="text-muted-foreground">{salud.sinVidaNombres.map((x) => `${x.nombre} (${SENAL_ETIQUETA[x.senal].etiqueta.toLowerCase()})`).join(", ")}.</span>
+          </span>
+        </div>
+      )}
       {!soloMarketing && (
       <div className="zen-glass flex flex-wrap items-center gap-3 rounded-2xl p-4 text-sm" data-testid="registro-servicio">
         <Pastilla color={servicio.estado === "en_linea" ? "verde" : servicio.estado === "sin_senal" ? "rojo" : "gris"}>
@@ -75,6 +86,11 @@ export function AgentesRegistro({ agentes: todos, tareas: todasLasTareas, estado
                     <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Última tarea</dt><dd>{cuandoRelativo(a.last_task_at, now)}</dd></div>
                     <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Tareas</dt><dd data-testid="registro-tareas">{a.tasks_completed ?? 0} bien · {a.tasks_failed ?? 0} con error{tasa !== null && ` (${tasa} %)`}</dd></div>
                   </dl>
+                  {esAgenteLegal(a) && ultimosErrores.get(a.id) && (
+                    <p className="border-t border-border/40 pt-2 text-xs" data-testid={`ultimo-error-${a.name}`}>
+                      <span className="text-muted-foreground">Último error: </span>{ultimosErrores.get(a.id)!.etiqueta} ({cuandoRelativo(ultimosErrores.get(a.id)!.cuando, now)}) · {ultimosErrores.get(a.id)!.repeticiones} {ultimosErrores.get(a.id)!.repeticiones === 1 ? "vez" : "veces"}
+                    </p>
+                  )}
                   {objetivo && (
                     <div className="space-y-1 border-t border-border/40 pt-2 text-xs" data-testid={`objetivo-${a.name}`}>
                       <p><span className="text-muted-foreground">Objetivo: </span>{objetivo}</p>

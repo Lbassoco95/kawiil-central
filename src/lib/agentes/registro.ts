@@ -188,3 +188,55 @@ export function cumplimiento(a: AgenteRegistro, ultima: TareaMarketing | undefin
 // ── Módulo «Agentes» ────────────────────────────────────────────────────────────────────────────────────────────────
 // El módulo muestra los agentes de Cerebro / kawiil-agents; los de Marketing (marketing_*) tienen su vista en /marketing.
 export const agentesDelModulo = (agentes: AgenteRegistro[]): AgenteRegistro[] => agentes.filter((a) => !esAgenteDeMarketing(a));
+
+// ── Salud de los agentes legales (DOF / SCJN) ───────────────────────────────────────────────────────────────────────
+// Los agentes legal_* revisan el DOF y la Suprema Corte. Si no dan señal, nadie está revisando: se avisa arriba de todo.
+export const esAgenteLegal = (a: Pick<AgenteRegistro, "name">): boolean => a.name.startsWith("legal_");
+
+export interface SaludLegal {
+  estado: "ok" | "alerta" | "sin_agentes";
+  total: number; sinVida: number;
+  sinVidaNombres: Array<{ nombre: string; senal: Senal }>;
+}
+
+// «Sin vida» = atascado, sin señal o sin latido. Los archivados no cuentan.
+export function saludLegal(agentes: AgenteRegistro[], ahora: Date): SaludLegal {
+  const legales = agentes.filter((a) => esAgenteLegal(a) && a.status !== "archived");
+  const muertos = legales
+    .map((a) => ({ nombre: nombreAgente(a), senal: senalAgente(a, ahora) }))
+    .filter((x) => x.senal === "atascado" || x.senal === "sin_senal" || x.senal === "sin_latido");
+  return {
+    estado: legales.length === 0 ? "sin_agentes" : muertos.length > 0 ? "alerta" : "ok",
+    total: legales.length, sinVida: muertos.length, sinVidaNombres: muertos,
+  };
+}
+
+// El mensaje de error crudo no se muestra: solo su categoría (puede traer texto de expedientes).
+export type CategoriaError = "tiempo_agotado" | "recurso_no_disponible" | "conexion" | "otro";
+export const ERROR_ETIQUETA: Record<CategoriaError, string> = {
+  tiempo_agotado: "Tiempo agotado", recurso_no_disponible: "Recurso no disponible", conexion: "Sin conexión", otro: "Otro error",
+};
+export function categoriaError(msg: string | null | undefined): CategoriaError {
+  const m = (msg ?? "").toLowerCase();
+  if (m.includes("timed out") || m.includes("timeout")) return "tiempo_agotado";
+  if (m.includes("errno 35") || m.includes("resource temporarily unavailable")) return "recurso_no_disponible";
+  if (m.includes("connection") || m.includes("refused") || m.includes("unreachable")) return "conexion";
+  return "otro";
+}
+
+export interface ErrorTarea { agent_id: string | null; created_at: string; error_message: string | null }
+export interface UltimoError { categoria: CategoriaError; etiqueta: string; cuando: string; repeticiones: number }
+
+// Último error de cada agente y cuántas veces se repitió esa misma categoría.
+export function ultimoErrorPorAgente(errores: ErrorTarea[]): Map<string, UltimoError> {
+  const porAgente = new Map<string, ErrorTarea[]>();
+  for (const e of errores) if (e.agent_id) porAgente.set(e.agent_id, [...(porAgente.get(e.agent_id) ?? []), e]);
+  const salida = new Map<string, UltimoError>();
+  for (const [id, lista] of porAgente) {
+    const ordenados = [...lista].sort((a, b) => b.created_at.localeCompare(a.created_at));
+    const categoria = categoriaError(ordenados[0].error_message);
+    salida.set(id, { categoria, etiqueta: ERROR_ETIQUETA[categoria], cuando: ordenados[0].created_at,
+      repeticiones: ordenados.filter((e) => categoriaError(e.error_message) === categoria).length });
+  }
+  return salida;
+}
