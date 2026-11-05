@@ -9,6 +9,7 @@ import {
 import type { ParsedMovement } from "@/lib/finance/bankImport";
 import type { ParsedCommitment } from "@/lib/finance/commitmentImport";
 import { detectEntity } from "@/lib/finance/thirdParty";
+import { dropAlreadyLoaded } from "@/lib/finance/dedupe";
 
 // Las tablas finance_* son nuevas y aún no están en los tipos generados de Supabase.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -194,7 +195,23 @@ export function useImportMovements() {
         if (error) throw error;
         (data ?? []).forEach((r: { dedupe_hash: string }) => existing.add(r.dedupe_hash));
       }
-      const fresh = p.movements.filter((m) => !existing.has(m.dedupeKey));
+      const exactFresh = p.movements.filter((m) => !existing.has(m.dedupeKey));
+      // Mismo movimiento con otra redacción (Excel vs. PDF vs. captura): se detecta por fecha e importes.
+      let fresh = exactFresh;
+      if (exactFresh.length > 0) {
+        const dates = p.movements.map((m) => m.date).sort();
+        const incomingKeys = new Set(p.movements.map((m) => m.dedupeKey));
+        const sameAmounts: { date: string; debit: number; credit: number }[] = [];
+        for (let from = 0; ; from += 1000) {
+          const { data, error } = await db.from("finance_movements").select("movement_date,debit,credit,dedupe_hash")
+            .eq("organization_id", orgId).eq("account_id", p.accountId)
+            .gte("movement_date", dates[0]).lte("movement_date", dates[dates.length - 1]).range(from, from + 999);
+          if (error) throw error;
+          for (const r of data ?? []) if (!incomingKeys.has(r.dedupe_hash)) sameAmounts.push({ date: r.movement_date, debit: Number(r.debit), credit: Number(r.credit) });
+          if (!data || data.length < 1000) break;
+        }
+        fresh = dropAlreadyLoaded(exactFresh, sameAmounts);
+      }
       // 2) Lote.
       const { data: batch, error: bErr } = await db.from("finance_import_batches").insert({
         organization_id: orgId, account_id: p.accountId, source: p.source, filename: p.filename ?? null,
