@@ -41,6 +41,7 @@ export function ActivityFormDialog({ activity, trigger }: Props) {
   const [activityType, setActivityType] = useState("");
   const [status, setStatus] = useState("planeacion");
   const [eventDate, setEventDate] = useState("");
+  const [eventTime, setEventTime] = useState("");
   const [location, setLocation] = useState("");
   const [responsibleUserId, setResponsibleUserId] = useState("");
   const [budgetEstimated, setBudgetEstimated] = useState("");
@@ -55,6 +56,7 @@ export function ActivityFormDialog({ activity, trigger }: Props) {
     setActivityType(activity?.activity_type ?? "");
     setStatus(activity?.status ?? "planeacion");
     setEventDate(activity?.event_date ?? "");
+    setEventTime(activity?.event_time ? activity.event_time.slice(0, 5) : "");
     setLocation(activity?.location ?? "");
     setResponsibleUserId(activity?.responsible_user_id ?? "");
     setBudgetEstimated(activity?.budget_estimated != null ? String(activity.budget_estimated) : "");
@@ -73,6 +75,7 @@ export function ActivityFormDialog({ activity, trigger }: Props) {
       activity_type: activityType || null,
       status,
       event_date: eventDate || null,
+      event_time: eventTime || null,
       location: location.trim() || null,
       responsible_user_id: responsibleUserId || null,
       budget_estimated: emptyNum(budgetEstimated),
@@ -139,13 +142,21 @@ export function ActivityFormDialog({ activity, trigger }: Props) {
               />
             </div>
             <div className="space-y-2">
-              <Label>Responsable</Label>
-              <SearchableSelect
-                options={profileOptions} value={responsibleUserId}
-                onValueChange={setResponsibleUserId}
-                placeholder="Sin responsable" searchPlaceholder="Buscar persona..."
+              <Label htmlFor="activity-time">Hora del evento</Label>
+              <Input
+                id="activity-time" type="time"
+                value={eventTime} onChange={(e) => setEventTime(e.target.value)}
               />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Responsable</Label>
+            <SearchableSelect
+              options={profileOptions} value={responsibleUserId}
+              onValueChange={setResponsibleUserId}
+              placeholder="Sin responsable" searchPlaceholder="Buscar persona..."
+            />
           </div>
 
           <div className="space-y-2">
