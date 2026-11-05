@@ -1,16 +1,24 @@
 import { useEffect, useMemo, useState } from "react";
 import { Pastilla, Vacio } from "./marketingUi";
 import {
-  cuandoRelativo, cumplimiento, esSistema, nombreAgente, ordenarAgentes, resumenServicio, senalAgente, SENAL_ETIQUETA, tareasRecientes, tasaExito, ultimaTareaDe,
+  cuandoRelativo, cumplimiento, esAgenteDeMarketing, esSistema, nombreAgente, ordenarAgentes, resumenServicio, senalAgente, SENAL_ETIQUETA, tareasRecientes, tasaExito, ultimaTareaDe,
   type AgenteRegistro, type TareaAgente, type TareaMarketing,
 } from "./agentesRegistro";
 
 export type EstadoCarga = "cargando" | "error" | "ok";
 
 // Agentes del registro de kawiil-central (solo lectura): estado, latido, tareas y quién los opera. No ejecuta ni despacha nada.
-export function AgentesRegistro({ agentes, tareas, estadoAgentes, estadoTareas, ahora, tareasMarketing = [] }: {
-  agentes: AgenteRegistro[]; tareas: TareaAgente[]; estadoAgentes: EstadoCarga; estadoTareas: EstadoCarga; ahora?: Date; tareasMarketing?: TareaMarketing[];
+// `soloMarketing`: la pestaña de Marketing muestra SOLO sus 3 agentes de sistema (marketing_*). Los demás agentes del registro
+// (los de Cerebro / kawiil-agents) no se mezclan aquí: tienen su propio módulo.
+export function AgentesRegistro({ agentes: todos, tareas: todasLasTareas, estadoAgentes, estadoTareas, ahora, tareasMarketing = [], soloMarketing = false }: {
+  agentes: AgenteRegistro[]; tareas: TareaAgente[]; estadoAgentes: EstadoCarga; estadoTareas: EstadoCarga; ahora?: Date; tareasMarketing?: TareaMarketing[]; soloMarketing?: boolean;
 }) {
+  const agentes = useMemo(() => (soloMarketing ? todos.filter(esAgenteDeMarketing) : todos), [todos, soloMarketing]);
+  const tareas = useMemo(() => {
+    if (!soloMarketing) return todasLasTareas;
+    const ids = new Set(agentes.map((a) => a.id));
+    return todasLasTareas.filter((t) => t.agent_id !== null && ids.has(t.agent_id));
+  }, [todasLasTareas, agentes, soloMarketing]);
   const [reloj, setReloj] = useState(() => new Date());
   useEffect(() => { const t = setInterval(() => setReloj(new Date()), 60_000); return () => clearInterval(t); }, []);
   const now = ahora ?? reloj;
@@ -28,6 +36,7 @@ export function AgentesRegistro({ agentes, tareas, estadoAgentes, estadoTareas, 
 
   return (
     <div className="space-y-6" data-testid="agentes-registro">
+      {!soloMarketing && (
       <div className="zen-glass flex flex-wrap items-center gap-3 rounded-2xl p-4 text-sm" data-testid="registro-servicio">
         <Pastilla color={servicio.estado === "en_linea" ? "verde" : servicio.estado === "sin_senal" ? "rojo" : "gris"}>
           {servicio.estado === "en_linea" ? "Servicio en línea" : servicio.estado === "sin_senal" ? "Servicio sin señal" : "Sin datos del servicio"}
@@ -39,11 +48,12 @@ export function AgentesRegistro({ agentes, tareas, estadoAgentes, estadoTareas, 
           {servicio.activos} activos · {servicio.enLinea} en línea{servicio.atascados > 0 && ` · ${servicio.atascados} atascados`}{servicio.sinSenal > 0 && ` · ${servicio.sinSenal} sin señal`}
         </span>
       </div>
+      )}
 
       <section>
         <div className="mb-3 flex flex-wrap items-center gap-3">
-          <h2 className="text-sm font-medium text-muted-foreground">Agentes del registro</h2>
-          <label className="flex items-center gap-1.5 text-xs"><input type="checkbox" checked={archivados} onChange={(e) => setArchivados(e.target.checked)} /> Mostrar archivados</label>
+          <h2 className="text-sm font-medium text-muted-foreground">{soloMarketing ? "Agentes de Marketing en el registro" : "Agentes del registro"}</h2>
+          {!soloMarketing && <label className="flex items-center gap-1.5 text-xs"><input type="checkbox" checked={archivados} onChange={(e) => setArchivados(e.target.checked)} /> Mostrar archivados</label>}
         </div>
         {visibles.length === 0 ? <Vacio>No hay agentes en el registro.</Vacio> : (
           <div className="grid gap-4 md:grid-cols-3">

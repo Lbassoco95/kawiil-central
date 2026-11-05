@@ -72,8 +72,8 @@ export default function Marketing() {
             <TabsContent value="agentes" className="mt-4">
               <Agentes filas={bitacora.data ?? []} casos={casos.data!} propuestas={propuestas.data ?? []} decisiones={decisiones.data ?? []} trabajos={trabajos.data}
                 estadoBitacora={bitacora.isError ? "error" : bitacora.isLoading ? "cargando" : "ok"} />
-              <h2 className="mb-3 mt-8 text-base font-medium">Agentes de kawiil-central</h2>
-              <AgentesRegistro agentes={agentesReg.data ?? []} tareas={tareasReg.data ?? []} tareasMarketing={tareasMk.data ?? []}
+              <h2 className="mb-3 mt-8 text-base font-medium">Registro y cumplimiento de los agentes de Marketing</h2>
+              <AgentesRegistro soloMarketing agentes={agentesReg.data ?? []} tareas={tareasReg.data ?? []} tareasMarketing={tareasMk.data ?? []}
                 estadoAgentes={agentesReg.isError ? "error" : agentesReg.isLoading ? "cargando" : "ok"}
                 estadoTareas={tareasReg.isError ? "error" : tareasReg.isLoading ? "cargando" : "ok"} />
             </TabsContent>
