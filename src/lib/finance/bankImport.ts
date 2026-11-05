@@ -30,6 +30,11 @@ const MONTHS: Record<string, number> = {
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
+/** Número de mes (1-12) a partir de su nombre en español, con o sin acentos y abreviado. */
+export function monthFromName(name: string): number | null {
+  return MONTHS[name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\./g, "")] ?? null;
+}
+
 export function toIsoDate(y: number, m: number, d: number): string | null {
   if (y < 2000 || y > 2100 || m < 1 || m > 12 || d < 1 || d > 31) return null;
   const dt = new Date(Date.UTC(y, m - 1, d));

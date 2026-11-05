@@ -1,4 +1,4 @@
-import { movementsFromRaw, norm, parseMovementDate, parseMoney, type ParsedSheet } from "./bankImport";
+import { monthFromName, movementsFromRaw, norm, parseMovementDate, parseMoney, toIsoDate, type ParsedSheet } from "./bankImport";
 
 /** Fragmento de texto del PDF con su posición (x hacia la derecha, y hacia arriba, como en pdf.js). */
 export interface PdfTextItem { str: string; x: number; y: number; width: number; page: number }
@@ -12,6 +12,8 @@ export interface PdfStatementResult {
   chainOk: number;
   warnings: string[];
   finalBalance: number | null;
+  /** ¿El último saldo de los movimientos coincide con el saldo final del documento? null si no se pudo comparar. */
+  finalOk: boolean | null;
 }
 
 const MONEY = /^-?\(?\$?\s?-?\d{1,3}(,\d{3})*(\.\d{2})\)?$|^-?\(?\$?\s?-?\d+\.\d{2}\)?$/;
@@ -81,9 +83,21 @@ export function parseStatementItems(items: PdfTextItem[]): PdfStatementResult {
   interface Raw { date: string; description: string; reference: string | null; debit: number; credit: number; balance: number | null; amount: number | null; negative: boolean; hint: boolean }
   let raw: Raw[] = [];
   let mode: "columnas" | "saldo" | null = null;
+  // Estados de cuenta con solo el día en la primera columna (ej. Banregio): el mes y año salen del periodo.
+  let dayColX: number | null = null;
+  let period: { month: number; year: number } | null = null;
+  // Última línea de un movimiento: solo se acepta continuación pegada debajo y alineada con la descripción.
+  let lastLine: { page: number; y: number; descX: number } | null = null;
   const amountAfter = (t: string, label: RegExp): number | null => {
     const m = new RegExp(`${label.source}[^\\d()-]*(\\(?-?\\$?\\s?-?[\\d,]+\\.\\d{2}\\)?)`, "i").exec(t);
     return m ? parseMoney(m[m.length - 1].replace(/\s/g, "")) : null;
+  };
+  /** Importe cercano (misma página, casi a la misma altura y a la derecha) para etiquetas cuyo monto quedó en otro renglón. */
+  const amountNear = (line: PdfTextItem[]): number | null => {
+    const lx = Math.max(...line.map((i) => i.x)); const ly = line[0].y; const pg = line[0].page;
+    const cand = items.filter((i) => i.page === pg && isMoney(i.str) && Math.abs(i.y - ly) <= 8 && i.x >= lx - 5);
+    cand.sort((a, b) => Math.abs(a.y - ly) - Math.abs(b.y - ly) || a.x - b.x);
+    return cand.length ? toNum(cand[0].str) : null;
   };
 
   for (const line of lines) {
@@ -100,14 +114,24 @@ export function parseStatementItems(items: PdfTextItem[]): PdfStatementResult {
       else if (kw.balance.test(w)) found.balance = it.x + it.width / 2;
       else if (/^referencia$/.test(w)) found.reference = it.x - 3;
     }
-    if ((found.debit !== undefined || found.credit !== undefined) && /fecha|descrip|concepto|detalle|referencia/.test(t)) { cols = found; continue; }
+    if ((found.debit !== undefined || found.credit !== undefined) && /fecha|dia|descrip|concepto|detalle|referencia/.test(t)) {
+      cols = found;
+      dayColX = norm(line[0].str) === "dia" ? line[0].x : null;
+      continue;
+    }
+    const per = /del\s+\d{1,2}\s+al\s+\d{1,2}\s+de\s+([a-záéíóú]+)\s+(?:de\s+)?(\d{4})/i.exec(text);
+    if (per) { const mo = monthFromName(per[1]); if (mo) period = { month: mo, year: Number(per[2]) }; }
 
-    const op = amountAfter(text, /saldo (inicial|anterior)/);
+    const op = amountAfter(text, /saldo (inicial|anterior)/) ?? (/saldo (inicial|anterior)/.test(t) && !/saldo (inicial|anterior)[^\d]*\d/.test(t) ? amountNear(line) : null);
     if (/saldo (inicial|anterior)/.test(t) && op !== null) { opening = op; continue; }
-    const fin = amountAfter(text, /saldo (final|al corte)/);
+    const fin = amountAfter(text, /saldo (final|al corte)/) ?? (/saldo (final|al corte)/.test(t) && !/saldo (final|al corte)[^\d]*\d/.test(t) ? amountNear(line) : null);
     if (/saldo (final|al corte)/.test(t) && fin !== null) { finalBalance = fin; continue; }
 
-    const d = takeDate(line, year);
+    let d = takeDate(line, year);
+    if (!d && dayColX !== null && period && /^\d{1,2}$/.test(line[0].str.trim()) && line[0].x <= dayColX + 20) {
+      const iso = toIsoDate(period.year, period.month, Number(line[0].str.trim()));
+      if (iso) d = { iso, used: 1 };
+    }
     const rest = d ? line.slice(d.used) : line;
     const amounts = rest.filter((i) => isMoney(i.str));
     const textItems = rest.filter((i) => !isMoney(i.str));
@@ -129,24 +153,28 @@ export function parseStatementItems(items: PdfTextItem[]): PdfStatementResult {
         }
         if (debit === 0 && credit === 0) continue;
         raw.push({ date: d.iso, description: words, reference, debit, credit, balance, amount: null, negative: false, hint: false });
+        lastLine = { page: line[0].page, y: line[0].y, descX: (textItems[0] ?? rest[0]).x };
       } else {
         mode = mode ?? "saldo";
         const balance = amounts.length >= 2 ? toNum(amounts[amounts.length - 1].str) : null;
         const amtItem = amounts.length >= 2 ? amounts[amounts.length - 2] : amounts[0];
         raw.push({ date: d.iso, description: words, reference, debit: 0, credit: 0, balance, amount: Math.abs(toNum(amtItem.str)), negative: /^-|^\(/.test(amtItem.str.trim()), hint: false });
+        lastLine = { page: line[0].page, y: line[0].y, descX: (textItems[0] ?? rest[0]).x };
       }
       continue;
     }
 
     // Línea sin fecha ni importes: continuación de la descripción anterior.
-    if (!d && amounts.length === 0 && raw.length && text.length < 90 && !STOP_LINE.test(t) && !/^\d+$/.test(text.trim())) {
+    if (!d && amounts.length === 0 && raw.length && lastLine && lastLine.page === line[0].page && lastLine.y - line[0].y > 0 && lastLine.y - line[0].y <= 16
+        && Math.abs(line[0].x - lastLine.descX) <= 8 && !STOP_LINE.test(t) && !/^\d+$/.test(text.trim())) {
       const last = raw[raw.length - 1];
-      if (last.description.length < 200) last.description = `${last.description} ${words}`.trim();
+      if (last.description.length < 240) last.description = `${last.description} ${words}`.trim();
+      lastLine = { ...lastLine, y: line[0].y };
     }
   }
 
   if (raw.length === 0) {
-    return { sheet: null, mode: null, checked: 0, chainOk: 0, warnings: ["No encontré movimientos en el PDF. Puede ser un PDF escaneado (imagen) o un formato distinto."], finalBalance };
+    return { sheet: null, mode: null, checked: 0, chainOk: 0, warnings: ["No encontré movimientos en el PDF. Puede ser un PDF escaneado (imagen) o un formato distinto."], finalBalance, finalOk: null };
   }
 
   // Modo saldo: sin columnas de cargo/abono, el signo sale del cambio de saldo, en orden cronológico.
@@ -176,9 +204,12 @@ export function parseStatementItems(items: PdfTextItem[]): PdfStatementResult {
     if (m.balance !== null) prev = m.balance;
   }
   if (checked > 0 && chainOk < checked) warnings.push(`El saldo cuadra en ${chainOk} de ${checked} renglones: puede haber movimientos mal leídos o faltantes. Revisa la vista previa.`);
+  const lastBal = [...movements].reverse().find((m) => m.balance !== null)?.balance ?? null;
+  const finalOk = finalBalance !== null && lastBal !== null ? Math.abs(finalBalance - lastBal) < 0.02 : null;
+  if (finalOk === false) warnings.push(`El último saldo leído (${lastBal}) no coincide con el saldo final del documento (${finalBalance}): puede faltar algún movimiento.`);
   if (checked === 0) warnings.push("No pude comprobar los saldos (el PDF no trae saldo por renglón o falta el saldo inicial). Revisa la vista previa con cuidado.");
 
-  return { sheet: { sheetName: "PDF", openingBalance: opening, movements, skippedRows: 0 }, mode, checked, chainOk, warnings, finalBalance };
+  return { sheet: { sheetName: "PDF", openingBalance: opening, movements, skippedRows: 0 }, mode, checked, chainOk, warnings, finalBalance, finalOk };
 }
 
 /** Lee el PDF en el navegador con pdf.js y devuelve los textos con su posición. */

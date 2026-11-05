@@ -241,3 +241,65 @@ describe("estado de cuenta en PDF", () => {
     expect(r.warnings[0]).toMatch(/escaneado/);
   });
 });
+
+describe("estado de cuenta en PDF: formatos reales (sintéticos)", () => {
+  it("fecha de solo día con el mes del periodo (tipo Banregio), descripción en varios renglones y sin pegar el pie de página", () => {
+    const items = [
+      it_("del 01 al 30 de SEPTIEMBRE 2026", 415, 740), it_("Saldo Inicial", 461, 594), it_("542,887.10", 547, 594),
+      it_("DIA", 47, 577), it_("CONCEPTO", 187, 577), it_("CARGOS", 378, 577), it_("ABONOS", 456, 577), it_("SALDO", 538, 577),
+      it_("01", 49, 565), it_("INT 2026090140145PE0000013715678 SPEI, BBASE,", 67, 565), it_("5,000.00", 480, 565), it_("547,887.10", 548, 565),
+      it_("EBAC ASESORES S.A. DE C.V.,", 67, 556), it_("asesoria julio y agosto", 67, 547),
+      it_("02", 49, 520), it_("TRA 0426691N99 Pago servicio: PAGO REFERENCIADO SA", 67, 520), it_("851.00", 402, 520), it_("547,036.10", 548, 520),
+      it_("Total", 340, 480), it_("851.00", 402, 480), it_("5,000.00", 480, 480),
+      it_("Leyendas del banco sin relación", 67, 300), it_("Página 4 de 6", 520, 40),
+      it_("= Saldo Final", 358, 385), it_("547,036.10", 548, 385),
+    ];
+    const r = parseStatementItems(items);
+    const m = r.sheet!.movements;
+    expect(m.map((x) => [x.date, x.debit, x.credit])).toEqual([["2026-09-01", 0, 5000], ["2026-09-02", 851, 0]]);
+    expect(m[0].description).toBe("INT 2026090140145PE0000013715678 SPEI, BBASE, EBAC ASESORES S.A. DE C.V., asesoria julio y agosto");
+    expect(r.sheet!.openingBalance).toBe(542887.1);
+    expect(r.checked).toBe(2); expect(r.chainOk).toBe(2);
+    expect(r.finalBalance).toBe(547036.1); expect(r.finalOk).toBe(true);
+  });
+
+  it("fechas completas dd/mm/aaaa con cargos y abonos en cero (tipo Fondeadora) y saldo final en otro renglón", () => {
+    const items = [
+      it_("Saldo inicial $16,453.02", 330, 400),
+      it_("Fecha", 65, 708), it_("Descripción", 146, 708), it_("Cargos", 391, 708), it_("Abonos", 460, 708), it_("Saldo", 532, 708),
+      it_("01/10/2026", 65, 682), it_("Compra con TD Uber en DLO*UBER EATS", 146, 682), it_("910.54", 391, 682), it_("0.00", 471, 682), it_("15,542.48", 512, 682),
+      it_("01/10/2026", 65, 657), it_("Depósito SPEI de STRIPE", 146, 657), it_("0.00", 401, 657), it_("763.11", 453, 657), it_("16,305.59", 512, 657),
+      it_("Aviso legal que no es un movimiento", 146, 620), it_("Pag 1/20", 500, 30),
+      it_("Saldo Final del periodo", 328, 370), it_("$16,305.59", 540, 365),
+    ];
+    const r = parseStatementItems(items);
+    expect(r.sheet!.movements.map((x) => [x.debit, x.credit])).toEqual([[910.54, 0], [0, 763.11]]);
+    expect(r.sheet!.movements[1].description).toBe("Depósito SPEI de STRIPE");
+    expect(r.chainOk).toBe(2); expect(r.finalOk).toBe(true);
+  });
+});
+
+import { dropAlreadyLoaded } from "@/lib/finance/dedupe";
+import { shotRowsToMovements } from "@/lib/finance/screenshotImport";
+
+describe("deduplicación por importe y captura de pantalla", () => {
+  it("descarta lo ya cargado con otra redacción pero respeta movimientos repetidos legítimos", () => {
+    const existing = [{ date: "2026-11-04", debit: 119.91, credit: 0 }];
+    const incoming = [
+      { date: "2026-11-04", debit: 119.91, credit: 0, d: "Uber (app)" },
+      { date: "2026-11-04", debit: 119.91, credit: 0, d: "Uber (app) 2" },
+      { date: "2026-11-04", debit: 0, credit: 299.95, d: "Devolución" },
+    ];
+    expect(dropAlreadyLoaded(incoming, existing).map((m) => m.d)).toEqual(["Uber (app) 2", "Devolución"]);
+  });
+
+  it("convierte los renglones revisados de una captura y omite los incompletos", () => {
+    const rows = [
+      { id: "1", date: "2026-11-04", description: " Transferencia ", debit: 11520, credit: 0, balance: null, uncertain: false },
+      { id: "2", date: null, description: "Sin fecha", debit: 10, credit: 0, balance: null, uncertain: true },
+      { id: "3", date: "2026-11-03", description: "Depósito", debit: 0, credit: 5000, balance: 100, uncertain: false },
+    ];
+    const m = shotRowsToMovements(rows);
+    expect(m.map((x) => [x.date, x.description, x.debit, x.credit])).toEqual([["2026-11-03", "Depósito", 0, 5000], ["2026-11-04", "Transferencia", 11520, 0]]);
+  });
+});
