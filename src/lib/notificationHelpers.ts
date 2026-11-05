@@ -42,17 +42,14 @@ export async function createNotifications(items: NotificationItem[]) {
 }
 
 /**
- * Get user IDs in finance/admin cells for the current org
+ * Usuarios que revisan solicitudes de gasto (rol transformador). Conserva el nombre por compatibilidad.
  */
 export async function getFinanceCelulaUserIds(): Promise<string[]> {
+  // Quienes pueden revisar solicitudes de gasto: solo el rol transformador (igual que public.has_finance_access).
   try {
-    const { data, error } = await supabase
-      .from("user_celulas")
-      .select("user_id, celulas!inner(slug)")
-      .filter("celulas.slug", "in", '("finanzas","administracion")');
-
+    const { data, error } = await supabase.from("user_roles").select("user_id").eq("role", "transformador");
     if (error || !data) return [];
-    return [...new Set(data.map((uc: any) => uc.user_id))];
+    return [...new Set(data.map((r: { user_id: string }) => r.user_id))];
   } catch {
     return [];
   }
