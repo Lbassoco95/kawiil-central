@@ -21,7 +21,8 @@ explícita de Dirección, escritura por escritura.
 Orden, cada paso con confirmación de Dirección:
 1. ~~`marketing_analista_datos`~~ **APLICADA el 5 nov 2026** (20261105191631, ya en `supabase/migrations/`): función de lectura `mk_analista_datos` (solo `service_role`). Reversa: `tools/marketing/rollback_analista_datos.sql`.
 2. `20261105120100_marketing_analista_registro.sql`: agente `marketing_analista`, tabla `mk_consulta` (RLS, sin escritura para usuarios) y las dos funciones de registro de corridas ampliadas. Reversa: `tools/marketing/rollback_analista_registro.sql`.
-3. Fusionar a `main` **después** de los pasos 1 y 2: el flujo despliega `marketing-agente` (`supabase/functions/`) y Vercel el panel.
+2. ORDEN CORREGIDO: **fusionar el PR a `main` antes del paso 2** (el flujo despliega `marketing-agente` y Vercel el panel; nada llama a la función hasta que el agente esté registrado). Si el paso 2 se aplicara primero, la oficina de producción dibujaría un personaje gris «Sin datos» encima del Informe hasta desplegar el código nuevo.
+3. Aplicar `marketing_analista_registro` (paso 2) con confirmación de Dirección.
 4. Pregunta de prueba con la sesión de Dirección.
 Pruebas: `tools/marketing/prueba_analista_pglite.mjs`; Node `supabase/functions/_shared/analista*.test.ts`.
 

@@ -128,10 +128,10 @@ La carpeta de Cerebro ya tiene antecedentes (por ejemplo el Calendario Maestro y
 
 **Dos defectos reales que las pruebas encontraron y ya están corregidos:** un corte de 7 días **nulo** ganaba a un acumulado con dato, y las fechas dentro de marcas de tiempo (`2026-11-05T17:00:00Z`) no se reconocían, lo que habría marcado como «no verificada» una respuesta correcta que cita su corte.
 
-**Orden de puesta en producción (cada paso con la confirmación de Dirección):**
+**Orden de puesta en producción (cada paso con la confirmación de Dirección; el orden final es: 1 → fusionar el PR → 2 → pregunta de prueba):**
 1. ~~Migración `marketing_analista_datos`~~ **aplicada el 5 nov 2026** a las 13:16 CDMX (solo crea una función de lectura; verificada: `SECURITY DEFINER`, ruta fija, `anon` y `authenticated` sin permiso, `service_role` con permiso, sus salidas con datos reales, y sin cambios en tareas, casos ni trabajos).
 2. Migración `marketing_analista_registro` (agente, tabla `mk_consulta` con permisos cerrados, y las dos funciones de registro de corridas aceptan al Analista).
-3. **Después** fusionar el PR a `main`: el flujo despliega `marketing-agente` y Vercel publica el panel. Si se fusionara antes del paso 2, la función se desplegaría sin su base: el panel no aparece (el agente no está registrado) y nada se rompe, pero no conviene.
+3. **Orden corregido: fusionar el PR a `main` ANTES del paso 2.** El flujo despliega `marketing-agente` (sin su tabla, pero nada la llama) y Vercel publica el panel, que no aparece mientras el agente no esté registrado. Si el paso 2 se aplicara antes, la oficina de producción (sin el código nuevo) dibujaría un personaje gris «Sin datos» encima del Informe, porque no conoce al Analista.
 4. Una pregunta de prueba con la sesión de Dirección para comprobar el modelo, la verificación y el registro. **Pendiente de verificar con una llamada real:** el nombre del modelo; no se pudo llamar a la API desde la nube.
 
 **Límites conocidos de esta versión:** no responde sobre anuncios; no recuerda la conversación (cada pregunta es independiente); el historial muestra las últimas 10; una cifra derivada que el modelo calcule por su cuenta (una suma, una diferencia) se marcará «sin verificar» aunque esté bien, por eso se le indica que cite los valores tal cual los devuelven las herramientas.
