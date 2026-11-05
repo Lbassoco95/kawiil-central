@@ -105,6 +105,7 @@ const ActividadDetalle = () => {
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <Row label="Fecha">{activity.event_date ? formatDateMX(activity.event_date) : "—"}</Row>
+              <Row label="Hora">{activity.event_time ? `${activity.event_time.slice(0, 5)} h` : "—"}</Row>
               <Row label="Sede / Lugar">{activity.location || "—"}</Row>
               <Row label="Responsable">{responsibleName}</Row>
               <Row label="Presupuesto estimado">{formatMxn(activity.budget_estimated, { compact: false })}</Row>
