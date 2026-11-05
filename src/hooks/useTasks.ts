@@ -322,6 +322,8 @@ export function useCreateTask() {
       lawsuit_id?: string;
       phase_key?: string;
       activity_id?: string;
+      activity_category?: string | null;
+      activity_provider_id?: string | null;
       additional_assignees?: string[];
       dropbox_links?: string[];
       criticality_level?: string;
