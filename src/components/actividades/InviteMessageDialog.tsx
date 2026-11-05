@@ -8,6 +8,8 @@ import { Copy, Check, MessageSquareText, Send } from "lucide-react";
 import { toast } from "sonner";
 import { formatMX } from "@/lib/dateUtils";
 import { useActivity } from "@/hooks/useActivities";
+import { useActivityAttendees } from "@/hooks/useActivityExtras";
+import { normalizeWhatsappNumber, whatsappUrl, personalizeGreeting, firstName } from "@/lib/whatsapp";
 
 /** Mensaje base para los invitados con los datos reales de la actividad. */
 function buildInviteMessage(a: {
@@ -54,6 +56,7 @@ async function copyText(text: string): Promise<boolean> {
 
 export function InviteMessageDialog({ activityId }: { activityId: string }) {
   const { data: activity } = useActivity(activityId);
+  const { data: attendees } = useActivityAttendees(activityId);
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [copied, setCopied] = useState(false);
@@ -80,12 +83,22 @@ export function InviteMessageDialog({ activityId }: { activityId: string }) {
     }
   };
 
-  // Abre WhatsApp (app o web) con el texto listo; ahí se elige a quién enviarlo.
-  const handleWhatsApp = () => {
-    const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+  const openWhatsApp = (url: string) => {
     const win = window.open(url, "_blank", "noopener,noreferrer");
     if (!win) toast.error("El navegador bloqueó la ventana. Permite ventanas emergentes o usa Copiar mensaje.");
   };
+
+  // Sin número: abre WhatsApp con el texto y ahí se elige a quién enviarlo.
+  const handleWhatsApp = () => openWhatsApp(whatsappUrl(text));
+
+  // Con número: abre el chat directo con ese invitado, con su nombre en el saludo.
+  const list = (attendees ?? []).filter((a) => a.confirmed !== "no");
+  const withPhone = list
+    .map((a) => ({ a, number: normalizeWhatsappNumber(a.phone) }))
+    .filter((x): x is { a: typeof x.a; number: string } => !!x.number);
+  const withoutPhone = list.filter((a) => !normalizeWhatsappNumber(a.phone));
+  const sendTo = (a: (typeof list)[number], number: string) =>
+    openWhatsApp(whatsappUrl(personalizeGreeting(text, a.name), number));
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -110,11 +123,31 @@ export function InviteMessageDialog({ activityId }: { activityId: string }) {
           </p>
         )}
         <Textarea rows={12} value={text} onChange={(e) => setText(e.target.value)} />
+        {list.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Enviar directo por WhatsApp</p>
+            {withPhone.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {withPhone.map(({ a, number }) => (
+                  <Button key={a.id} type="button" size="sm" variant="outline" className="h-8"
+                    disabled={!text.trim()} onClick={() => sendTo(a, number)}>
+                    <Send className="mr-1.5 h-3 w-3" />{firstName(a.name) || a.name}
+                  </Button>
+                ))}
+              </div>
+            )}
+            {withoutPhone.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Sin teléfono válido: {withoutPhone.map((a) => a.name).join(", ")}. Agrégalo al editar al asistente.
+              </p>
+            )}
+          </div>
+        )}
         <DialogFooter>
           <Button variant="ghost" onClick={() => setOpen(false)}>Cerrar</Button>
           <Button variant="outline" onClick={handleWhatsApp} disabled={!text.trim()}>
             <Send className="mr-1.5 h-4 w-4" />
-            Enviar por WhatsApp
+            WhatsApp (elegir contacto)
           </Button>
           <Button onClick={handleCopy} disabled={!text.trim()}>
             {copied ? <Check className="mr-1.5 h-4 w-4" /> : <Copy className="mr-1.5 h-4 w-4" />}
