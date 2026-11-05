@@ -225,3 +225,44 @@ export function useDeleteProviderComment() {
     onError: (e: Error) => toast.error("Error al eliminar comentario: " + e.message),
   });
 }
+
+// ─── Confirmaciones de asistentes (pendientes en lote) ──────────────────────
+/**
+ * Crea un pendiente "Confirmar asistencia de X" (y "Confirmar acompañante de X"
+ * si lleva +1) por cada asistente indicado. Inserta directo (sin una notificación
+ * por tarea) y ligado al asistente mediante tasks.activity_attendee_id.
+ */
+export function useCreateAttendeeConfirmationTasks() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: async ({ activityId, rows }: {
+      activityId: string;
+      rows: { attendeeId: string; title: string; assignedTo?: string | null; dueDate?: string | null }[];
+    }) => {
+      if (rows.length === 0) return 0;
+      const organization_id = await getOrgId(user!.id);
+      const { error } = await supabase.from("tasks").insert(
+        rows.map((r) => ({
+          title: r.title,
+          status: "pendiente" as const,
+          priority: "media" as const,
+          activity_id: activityId,
+          activity_attendee_id: r.attendeeId,
+          assigned_to: r.assignedTo ?? null,
+          due_date: r.dueDate ?? null,
+          organization_id,
+          created_by: user!.id,
+        })),
+      );
+      if (error) throw error;
+      return rows.length;
+    },
+    onSuccess: (n) => {
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      if (n > 0) toast.success(`${n} pendiente${n === 1 ? "" : "s"} de confirmación creado${n === 1 ? "" : "s"}`);
+      else toast.info("No hay confirmaciones por pedir: ya existen todos los pendientes.");
+    },
+    onError: (e: Error) => toast.error("Error al crear pendientes: " + e.message),
+  });
+}

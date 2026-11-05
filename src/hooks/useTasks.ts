@@ -323,6 +323,7 @@ export function useCreateTask() {
       phase_key?: string;
       activity_id?: string;
       activity_category?: string | null;
+      activity_attendee_id?: string | null;
       activity_provider_id?: string | null;
       additional_assignees?: string[];
       dropbox_links?: string[];
