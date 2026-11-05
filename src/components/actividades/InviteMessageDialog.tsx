@@ -4,7 +4,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
-import { Copy, Check, MessageSquareText } from "lucide-react";
+import { Copy, Check, MessageSquareText, Send } from "lucide-react";
 import { toast } from "sonner";
 import { formatMX } from "@/lib/dateUtils";
 import { useActivity } from "@/hooks/useActivities";
@@ -80,6 +80,13 @@ export function InviteMessageDialog({ activityId }: { activityId: string }) {
     }
   };
 
+  // Abre WhatsApp (app o web) con el texto listo; ahí se elige a quién enviarlo.
+  const handleWhatsApp = () => {
+    const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+    const win = window.open(url, "_blank", "noopener,noreferrer");
+    if (!win) toast.error("El navegador bloqueó la ventana. Permite ventanas emergentes o usa Copiar mensaje.");
+  };
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -105,6 +112,10 @@ export function InviteMessageDialog({ activityId }: { activityId: string }) {
         <Textarea rows={12} value={text} onChange={(e) => setText(e.target.value)} />
         <DialogFooter>
           <Button variant="ghost" onClick={() => setOpen(false)}>Cerrar</Button>
+          <Button variant="outline" onClick={handleWhatsApp} disabled={!text.trim()}>
+            <Send className="mr-1.5 h-4 w-4" />
+            Enviar por WhatsApp
+          </Button>
           <Button onClick={handleCopy} disabled={!text.trim()}>
             {copied ? <Check className="mr-1.5 h-4 w-4" /> : <Copy className="mr-1.5 h-4 w-4" />}
             {copied ? "Copiado" : "Copiar mensaje"}
