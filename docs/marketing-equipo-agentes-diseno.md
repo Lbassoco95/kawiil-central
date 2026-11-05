@@ -1,6 +1,8 @@
 # Marketing · Equipo de agentes: verlos, dejarles tareas, preguntarles y diseñar campañas (diseño, sin implementar)
 
-Estado (5 nov 2026): **solo diseño y una maqueta visual**. No se ha escrito nada en producción. Maqueta: `docs/maquetas/oficina-agentes-marketing.html` (datos de ejemplo, claramente marcada).
+Estado (5 nov 2026): **fase 1 construida en el repo y probada, sin desplegar** (la oficina con los 3 agentes que ya existen, solo lectura). El resto es diseño. No se ha escrito nada en producción. Maqueta de todo el equipo: `docs/maquetas/oficina-agentes-marketing.html` (datos de ejemplo, claramente marcada).
+
+Fase 1 (código): `src/components/marketing/OficinaAgentes.tsx` (lienzo, lista accesible y panel), `oficinaAgentesLogica.ts` (qué estado se dibuja según los datos reales), integrada arriba de la pestaña Agentes de `/marketing`. Los archivos de lógica llevan el sufijo `Logica` (`agentesLogica.ts`, `agentesRegistroLogica.ts`, `oficinaAgentesLogica.ts`) para que no haya pares de nombres que solo difieran en mayúsculas con los componentes (`Agentes.tsx`, `AgentesRegistro.tsx`, `OficinaAgentes.tsx`), que pueden resolverse mal en sistemas de archivos que no distinguen mayúsculas. 17 pruebas nuevas en `src/test/marketingOficina.test.tsx`.
 
 ## 1. Qué pidió Dirección
 1. Ver a los agentes de Marketing **de forma gráfica**, como en el proyecto de GitHub.
@@ -81,7 +83,7 @@ La carpeta de Cerebro ya tiene antecedentes (por ejemplo el Calendario Maestro y
 | Fase | Qué entrega | Escrituras en producción |
 |---|---|---|
 | 0 | Maqueta y este diseño | Ninguna (hecho) |
-| 1 | `OficinaAgentes` con los 3 agentes existentes + el panel (estado, objetivo, cumplimiento, historial). Solo lectura. | Ninguna |
+| 1 | **Hecha en el repo (sin desplegar):** `OficinaAgentes` con los 3 agentes existentes + el panel (estado, objetivo, cumplimiento, historial). Solo lectura. | Ninguna (solo frontend) |
 | 2 | **Preguntar** al Analista de resultados (solo lectura de datos del módulo) | Función `marketing-agente`; registrar el agente en `agent_registry`; despliegue |
 | 3 | **Dejar tarea** + cola + resultado como propuesta | Migración (tareas/propuestas, límites de uso) |
 | 4 | Revisor y propuestas (entrega 4 del plan) | Función, registro |

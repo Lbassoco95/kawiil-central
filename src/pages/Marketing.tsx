@@ -12,6 +12,7 @@ import { Semaforo } from "@/components/marketing/Semaforo";
 import { Reglas } from "@/components/marketing/Reglas";
 import { Agentes } from "@/components/marketing/Agentes";
 import { AgentesRegistro } from "@/components/marketing/AgentesRegistro";
+import { OficinaAgentes } from "@/components/marketing/OficinaAgentes";
 
 // Marketing · monitoreo (primera versión, solo lectura). No escribe en la base ni llama a Metricool.
 export default function Marketing() {
@@ -70,6 +71,11 @@ export default function Marketing() {
             <TabsContent value="semaforo" className="mt-4"><Semaforo calibracion={calibracion.data!} reglas={reglas.data!} /></TabsContent>
             <TabsContent value="reglas" className="mt-4"><Reglas reglas={reglas.data!} historial={historial.data!} puedeDecidir={puedeDecidir} /></TabsContent>
             <TabsContent value="agentes" className="mt-4">
+              <h2 className="mb-3 text-base font-medium">Oficina de agentes</h2>
+              <OficinaAgentes agentes={agentesReg.data ?? []} tareasMarketing={tareasMk.data ?? []}
+                estadoAgentes={agentesReg.isError ? "error" : agentesReg.isLoading ? "cargando" : "ok"}
+                estadoTareas={tareasMk.isError ? "error" : tareasMk.isLoading ? "cargando" : "ok"} />
+              <div className="mt-8" />
               <Agentes filas={bitacora.data ?? []} casos={casos.data!} propuestas={propuestas.data ?? []} decisiones={decisiones.data ?? []} trabajos={trabajos.data}
                 estadoBitacora={bitacora.isError ? "error" : bitacora.isLoading ? "cargando" : "ok"} />
               <h2 className="mb-3 mt-8 text-base font-medium">Registro y cumplimiento de los agentes de Marketing</h2>

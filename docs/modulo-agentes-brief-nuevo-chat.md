@@ -54,7 +54,7 @@ Escrito el 4 nov 2026 desde el chat del módulo Marketing. Este documento es el 
 | `status = working` sin latido > 1 h | atascado |
 
 **Orden sugerido de construcción:**
-1. **Fase 1 (solo lectura, sin tocar producción):** lista y tarjetas de los agentes del registro + historial de tareas (reutilizar y **mover a un lugar compartido** `src/components/marketing/agentesRegistro.ts` y `AgentesRegistro.tsx`, que ya implementan señal, tasa de éxito, tareas recientes y banda del servicio `kawiil-agents`; hoy la pestaña de Marketing los usa en modo `soloMarketing`). Coordinar el movimiento para no romper Marketing (tiene pruebas en `src/test/marketingAgentesRegistro.test.tsx`).
+1. **Fase 1 (solo lectura, sin tocar producción):** lista y tarjetas de los agentes del registro + historial de tareas (reutilizar y **mover a un lugar compartido** `src/components/marketing/agentesRegistroLogica.ts` y `AgentesRegistro.tsx`, que ya implementan señal, tasa de éxito, tareas recientes y banda del servicio `kawiil-agents`; hoy la pestaña de Marketing los usa en modo `soloMarketing`). Coordinar el movimiento para no romper Marketing (tiene pruebas en `src/test/marketingAgentesRegistro.test.tsx`).
 2. **Fase 2:** la «oficina» (Canvas 2D o SVG) alimentada por esos datos, con datos de ejemplo mientras la VM esté apagada.
 3. **Fase 3 (con confirmación de Dirección):** exponer `ai_task_events` a los usuarios y activar Realtime.
 4. **Fase 4:** objetivos y cumplimiento por agente (como los de Marketing: objetivo declarado + meta medible).
@@ -77,4 +77,4 @@ Escrito el 4 nov 2026 desde el chat del módulo Marketing. Este documento es el 
 6. ¿Se adapta el código/arte de Pixel Agents (MIT) o se diseña uno propio?
 
 ## 7. Archivos clave para leer primero
-`supabase/functions/dispatch-to-agent/index.ts`, `supabase/functions/list-agents/index.ts`, `src/hooks/useAgentTaskProgress.ts`, `src/components/ai/AgentTaskCard.tsx`, `src/lib/agentTaskResult.ts`, `src/components/marketing/agentesRegistro.ts`, `src/components/marketing/AgentesRegistro.tsx`, `docs/seguridad/plan-seguridad-kawiil-os.md` (5.9 y 5.10), `docs/marketing-estado-produccion.md`, `docs/marketing-agentes-registro-diseno.md`, migraciones `20260508130000_agent_multitenancy_schema.sql`, `20260421130000_ai_task_events.sql`, `20260615120000_notify_agent_task_completion.sql`.
+`supabase/functions/dispatch-to-agent/index.ts`, `supabase/functions/list-agents/index.ts`, `src/hooks/useAgentTaskProgress.ts`, `src/components/ai/AgentTaskCard.tsx`, `src/lib/agentTaskResult.ts`, `src/components/marketing/agentesRegistroLogica.ts`, `src/components/marketing/AgentesRegistro.tsx`, `docs/seguridad/plan-seguridad-kawiil-os.md` (5.9 y 5.10), `docs/marketing-estado-produccion.md`, `docs/marketing-agentes-registro-diseno.md`, migraciones `20260508130000_agent_multitenancy_schema.sql`, `20260421130000_ai_task_events.sql`, `20260615120000_notify_agent_task_completion.sql`.
