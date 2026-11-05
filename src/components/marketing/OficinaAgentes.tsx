@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ConsultaAnalista, RespuestaAnalista } from "@/hooks/useMarketing";
 import { Pastilla, Vacio } from "./marketingUi";
+import { TextoAnalista } from "./TextoAnalista";
 import { cuandoRelativo, ESTADO_TAREA, type AgenteRegistro, type TareaMarketing } from "./agentesRegistroLogica";
 import { ALTO, ANCHO, personajeEn, personajes, type Animacion, type PersonajeOficina } from "./oficinaAgentesLogica";
 
@@ -193,7 +194,7 @@ function PreguntarAnalista({ analista, now, alPensar }: { analista: AnalistaProp
       )}
       {resp?.ok && (
         <div className="space-y-2 rounded-lg border border-border p-3" data-testid="analista-respuesta">
-          <p className="whitespace-pre-wrap text-sm">{resp.respuesta}</p>
+          <TextoAnalista texto={resp.respuesta} className="text-sm leading-relaxed" />
           <div className="flex flex-wrap items-center gap-2 text-xs">
             {resp.verificada
               ? <Pastilla color="verde">Cifras verificadas</Pastilla>
@@ -222,9 +223,9 @@ function PreguntarAnalista({ analista, now, alPensar }: { analista: AnalistaProp
                     <Pastilla color={ETIQUETA_CONSULTA[c.estado].color}>{ETIQUETA_CONSULTA[c.estado].etiqueta}</Pastilla>
                   </button>
                   {abierta === c.id && c.respuesta && (
-                    <p className="mt-1 whitespace-pre-wrap rounded bg-background/50 p-2" data-testid={`analista-detalle-${c.id}`}>
-                      {c.respuesta}{c.verificada === false && <span className="mt-1 block text-red-600">Cifras sin verificar{c.no_verificadas.length ? `: ${c.no_verificadas.join(", ")}` : ""}.</span>}
-                    </p>
+                    <div className="mt-1 rounded bg-background/50 p-2" data-testid={`analista-detalle-${c.id}`}>
+                      <TextoAnalista texto={c.respuesta} />{c.verificada === false && <span className="mt-1 block text-red-600">Cifras sin verificar{c.no_verificadas.length ? `: ${c.no_verificadas.join(", ")}` : ""}.</span>}
+                    </div>
                   )}
                 </li>
               ))}

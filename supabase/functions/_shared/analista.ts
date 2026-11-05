@@ -125,6 +125,8 @@ export async function correrConsulta(a: { pregunta: string; herramientas: Herram
   const maxPasos = a.maxPasos ?? 5;
   const mensajes: Mensaje[] = [{ role: "user", content: a.pregunta }];
   const salidas: unknown[] = [], fuentes: Fuente[] = [];
+  // Números que el propio agente pidió como parámetro (p. ej. «últimos 90 días»): son la ventana de la consulta, no una cifra de resultados.
+  const parametros: Record<string, number> = {};
   const tokens = { entrada: 0, salida: 0 };
   let texto = "", pasos = 0;
   const base = (o: Partial<ResultadoConsulta>): ResultadoConsulta => ({ ok: false, respuesta: "", verificada: false, no_verificadas: [], fuentes, tokens, pasos, ...o });
@@ -140,6 +142,7 @@ export async function correrConsulta(a: { pregunta: string; herramientas: Herram
         const fn = Object.hasOwn(a.herramientas, u.name) ? a.herramientas[u.name] : undefined;
         if (!fn) { resultados.push({ type: "tool_result", tool_use_id: u.id, content: "Herramienta no permitida.", is_error: true }); continue; }
         try {
+          for (const [k, v] of Object.entries(u.input ?? {})) if (typeof v === "number" && Number.isFinite(v)) parametros[`${u.id}_${k}`] = v;
           const salida = await fn(u.input ?? {});
           salidas.push(salida);
           const corte = (salida as { corte?: unknown } | null)?.corte;
@@ -157,7 +160,7 @@ export async function correrConsulta(a: { pregunta: string; herramientas: Herram
   }
   if (!texto) return base({ motivo: "sin_respuesta" });
   const respuesta = texto.slice(0, MAX_RESPUESTA);
-  const no_verificadas = verificarCifras(respuesta, salidas);
+  const no_verificadas = verificarCifras(respuesta, [...salidas, { parametros }]);
   return base({ ok: true, respuesta, verificada: no_verificadas.length === 0, no_verificadas });
 }
 
