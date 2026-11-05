@@ -16,6 +16,7 @@ import {
 import { Plus, Pencil, Trash2, Users } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { normalizeWhatsappNumber } from "@/lib/whatsapp";
+import { FoodCountDialog } from "@/components/actividades/FoodCountDialog";
 import { InviteMessageDialog } from "@/components/actividades/InviteMessageDialog";
 import { useActivityTasks } from "@/hooks/useActivities";
 import {
@@ -203,8 +204,9 @@ export function ActivityAttendeesCard({ activityId }: { activityId: string }) {
             </span>
           )}
         </CardTitle>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <InviteMessageDialog activityId={activityId} />
+          <FoodCountDialog activityId={activityId} />
           <AttendeeDialog
             activityId={activityId}
             trigger={
