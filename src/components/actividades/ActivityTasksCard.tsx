@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { Fragment, useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,13 +14,19 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
-import { Plus, Pencil, Trash2, ListChecks, Images } from "lucide-react";
+import { Plus, Pencil, Trash2, ListChecks, Images, UserCheck } from "lucide-react";
 import { formatDateMX } from "@/lib/dateUtils";
 import { TASK_STATUS_CONFIG, PRIORITY_CONFIG } from "@/lib/statusStyles";
 import { useProfiles, useCreateTask, useUpdateTask, useDeleteTask } from "@/hooks/useTasks";
 import { useActivityTasks, type ActivityTask } from "@/hooks/useActivities";
 import { useActivityFileCounts } from "@/hooks/useActivityFiles";
 import { TaskFilesDialog } from "@/components/actividades/TaskFilesDialog";
+import { RubroSelect } from "@/components/actividades/RubroSelect";
+import {
+  useActivityProviders, useActivityAttendees, useCreateAttendeeConfirmationTasks,
+  type ActivityProvider, type ActivityAttendee,
+} from "@/hooks/useActivityExtras";
+import { buildRubroOptions, rubroLabel, providerStatusLabel } from "@/lib/activityTypes";
 
 type TaskStatus = keyof typeof TASK_STATUS_CONFIG;
 
@@ -32,8 +38,13 @@ const PRIORITY_OPTIONS = Object.entries(PRIORITY_CONFIG)
 const isClosed = (s: string) => s === "completada" || s === "cancelada";
 
 function TaskDialog({
-  activityId, task, trigger,
-}: { activityId: string; task?: ActivityTask; trigger: React.ReactNode }) {
+  activityId, task, trigger, providers, rubros, attendees, defaultCategory = "", defaultProviderId = "", defaultAttendeeId = "",
+}: {
+  activityId: string; task?: ActivityTask; trigger: React.ReactNode;
+  providers: ActivityProvider[]; rubros: { value: string; label: string }[];
+  attendees: ActivityAttendee[];
+  defaultCategory?: string; defaultProviderId?: string; defaultAttendeeId?: string;
+}) {
   const isEdit = !!task;
   const [open, setOpen] = useState(false);
   const { data: profiles } = useProfiles();
@@ -45,6 +56,9 @@ function TaskDialog({
   const [dueDate, setDueDate] = useState("");
   const [priority, setPriority] = useState("media");
   const [status, setStatus] = useState<string>("pendiente");
+  const [category, setCategory] = useState("");
+  const [providerId, setProviderId] = useState("");
+  const [attendeeId, setAttendeeId] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -53,7 +67,24 @@ function TaskDialog({
     setDueDate(task?.due_date ?? "");
     setPriority(task?.priority ?? "media");
     setStatus(task?.status ?? "pendiente");
-  }, [open, task]);
+    setCategory(task ? (task.activity_category ?? "") : defaultCategory);
+    setProviderId(task ? (task.activity_provider_id ?? "") : defaultProviderId);
+    setAttendeeId(task ? (task.activity_attendee_id ?? "") : defaultAttendeeId);
+  }, [open, task, defaultCategory, defaultProviderId, defaultAttendeeId]);
+
+  const providerOptions = providers
+    .filter((p) => !category || p.category === category)
+    .map((p) => ({ value: p.id, label: p.name }));
+  const changeCategory = (c: string) => {
+    setCategory(c);
+    const cur = providers.find((p) => p.id === providerId);
+    if (cur && c && cur.category !== c) setProviderId("");
+  };
+  const changeProvider = (id: string) => {
+    setProviderId(id);
+    const p = providers.find((x) => x.id === id);
+    if (p) setCategory(p.category);
+  };
 
   const profileOptions = (profiles || []).map((p) => ({ value: p.user_id, label: p.full_name }));
   const isPending = createTask.isPending || updateTask.isPending;
@@ -68,6 +99,9 @@ function TaskDialog({
           due_date: dueDate || null,
           priority,
           status,
+          activity_category: category || null,
+          activity_provider_id: providerId || null,
+          activity_attendee_id: attendeeId || null,
         },
         { onSuccess: () => setOpen(false) },
       );
@@ -80,6 +114,9 @@ function TaskDialog({
           priority,
           status,
           activity_id: activityId,
+          activity_category: category || null,
+          activity_provider_id: providerId || null,
+          activity_attendee_id: attendeeId || null,
         },
         { onSuccess: () => setOpen(false) },
       );
@@ -96,9 +133,32 @@ function TaskDialog({
         <div className="space-y-4 py-2">
           <div className="space-y-2">
             <Label htmlFor="task-title">Pendiente *</Label>
-            <Input id="task-title" placeholder="Ej: Buscar casa / sede"
+            <Input id="task-title" placeholder="Ej: Comida lista, Montar carpas"
               value={title} onChange={(e) => setTitle(e.target.value)} />
           </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Rubro</Label>
+              <RubroSelect value={category} onChange={changeCategory} options={rubros} noneLabel="General (sin rubro)" />
+            </div>
+            <div className="space-y-2">
+              <Label>Proveedor</Label>
+              <SearchableSelect
+                options={providerOptions} value={providerId} onValueChange={changeProvider}
+                placeholder="Sin proveedor" searchPlaceholder="Buscar proveedor..."
+              />
+            </div>
+          </div>
+          {attendees.length > 0 && (
+            <div className="space-y-2">
+              <Label>Asistente (opcional)</Label>
+              <SearchableSelect
+                options={attendees.map((a) => ({ value: a.id, label: a.name }))}
+                value={attendeeId} onValueChange={setAttendeeId}
+                placeholder="Sin asistente" searchPlaceholder="Buscar asistente..."
+              />
+            </div>
+          )}
           <div className="space-y-2">
             <Label>Responsable</Label>
             <SearchableSelect
@@ -160,7 +220,44 @@ export function ActivityTasksCard({ activityId }: { activityId: string }) {
   const deleteTask = useDeleteTask();
 
   const { data: fileCounts } = useActivityFileCounts(activityId);
+  const { data: providersData } = useActivityProviders(activityId);
+  const providers = providersData ?? [];
+  const { data: attendeesData } = useActivityAttendees(activityId);
+  const attendees = attendeesData ?? [];
+  const attendeeById = new Map(attendees.map((a) => [a.id, a]));
+  const createConfirmations = useCreateAttendeeConfirmationTasks();
   const list = tasks ?? [];
+  const providerById = new Map(providers.map((p) => [p.id, p]));
+  const catOf = (t: ActivityTask) =>
+    t.activity_attendee_id ? "__asistentes__" : t.activity_category || (t.activity_provider_id ? providerById.get(t.activity_provider_id)?.category : "") || "";
+  const rubros = buildRubroOptions([...providers.map((p) => p.category), ...list.map((t) => t.activity_category)]);
+  const groups: { key: string; label: string; tasks: ActivityTask[]; providers: ActivityProvider[] }[] = [];
+  const keys = [...rubros.map((r) => r.value)];
+  for (const k of keys) {
+    const gt = list.filter((t) => catOf(t).toLowerCase() === k.toLowerCase());
+    const gp = providers.filter((p) => p.category.toLowerCase() === k.toLowerCase());
+    if (gt.length || gp.length) groups.push({ key: k, label: rubroLabel(k), tasks: gt, providers: gp });
+  }
+  const attTasks = list.filter((t) => catOf(t) === "__asistentes__");
+  if (attTasks.length || attendees.length) {
+    groups.push({ key: "__asistentes__", label: "Asistentes", tasks: attTasks, providers: [] });
+  }
+  const general = list.filter((t) => !catOf(t));
+
+  const pedirConfirmaciones = () => {
+    const titles = new Set(list.filter((t) => t.activity_attendee_id).map((t) => `${t.activity_attendee_id}|${t.title}`));
+    const rows: { attendeeId: string; title: string }[] = [];
+    for (const a of attendees) {
+      const own = `Confirmar asistencia de ${a.name}`;
+      if (a.confirmed === "pendiente" && !titles.has(`${a.id}|${own}`)) rows.push({ attendeeId: a.id, title: own });
+      const plus = `Confirmar acompañante de ${a.name}`;
+      if (a.has_plus_one && a.plus_one_confirmed === "pendiente" && !titles.has(`${a.id}|${plus}`)) {
+        rows.push({ attendeeId: a.id, title: plus });
+      }
+    }
+    createConfirmations.mutate({ activityId, rows });
+  };
+  if (general.length) groups.push({ key: "", label: "General", tasks: general, providers: [] });
   const done = list.filter((t) => t.status === "completada").length;
   const nameFor = (uid: string | null) =>
     uid ? (profiles || []).find((p) => p.user_id === uid)?.full_name || "—" : "—";
@@ -181,6 +278,7 @@ export function ActivityTasksCard({ activityId }: { activityId: string }) {
         </CardTitle>
         <TaskDialog
           activityId={activityId}
+          providers={providers} rubros={rubros} attendees={attendees}
           trigger={
             <Button size="sm" variant="outline">
               <Plus className="mr-1.5 h-3.5 w-3.5" />
@@ -192,10 +290,11 @@ export function ActivityTasksCard({ activityId }: { activityId: string }) {
       <CardContent>
         {isLoading ? (
           <p className="text-sm text-muted-foreground py-4">Cargando...</p>
-        ) : list.length === 0 ? (
+        ) : groups.length === 0 ? (
           <p className="text-sm text-muted-foreground py-4">
-            Sin pendientes aún. Agrega el primero: se crea como tarea con responsable y
-            fecha límite, y aparece en el perfil de esa persona.
+            Sin pendientes aún. Agrega el primero y asígnalo a un rubro y proveedor (ej. Alimentos →
+            DELIFOOD → “Comida lista”): se crea como tarea con responsable y fecha límite, y
+            aparece en el perfil de esa persona.
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -211,11 +310,72 @@ export function ActivityTasksCard({ activityId }: { activityId: string }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {list.map((t) => {
+                {groups.map((g) => {
+                  const gDone = g.tasks.filter((x) => x.status === "completada").length;
+                  const active = g.providers.filter((p) => p.status !== "descartado" && p.status !== "cotizacion");
+                  return (
+                  <Fragment key={g.key || "__general__"}>
+                    <TableRow className="bg-muted/40 hover:bg-muted/40">
+                      <TableCell colSpan={6}>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold">{g.label}</span>
+                            {g.tasks.length > 0 && (
+                              <span className="text-xs text-muted-foreground">{gDone}/{g.tasks.length} hechos</span>
+                            )}
+                            {g.providers.length > 0 && (
+                              <span className="text-xs text-muted-foreground">
+                                · {active.length > 0
+                                  ? active.map((p) => `${p.name} (${providerStatusLabel(p.status)})`).join(", ")
+                                  : `${g.providers.length} en cotización`}
+                              </span>
+                            )}
+                          </div>
+                          {g.key === "__asistentes__" && attendees.length > 0 && (
+                            <Button
+                              size="sm" variant="outline" className="h-7 text-xs"
+                              onClick={pedirConfirmaciones} disabled={createConfirmations.isPending}
+                            >
+                              <UserCheck className="mr-1 h-3 w-3" />Pedir confirmaciones
+                            </Button>
+                          )}
+                          <TaskDialog
+                            activityId={activityId}
+                            providers={providers} rubros={rubros} attendees={attendees}
+                            defaultCategory={g.key === "__asistentes__" ? "" : g.key}
+                            trigger={
+                              <Button size="sm" variant="ghost" className="h-7 text-xs">
+                                <Plus className="mr-1 h-3 w-3" />Pendiente
+                              </Button>
+                            }
+                          />
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                    {g.tasks.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-xs text-muted-foreground">
+                          Sin pendientes todavía.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                {g.tasks.map((t) => {
                   const overdue = !!t.due_date && t.due_date < todayYmd && !isClosed(t.status);
                   return (
                     <TableRow key={t.id}>
-                      <TableCell className="font-medium">{t.title}</TableCell>
+                      <TableCell className="font-medium">
+                        {t.title}
+                        {t.activity_attendee_id && attendeeById.get(t.activity_attendee_id) && (
+                          <Badge variant="outline" className="ml-2 text-[10px] font-normal">
+                            {attendeeById.get(t.activity_attendee_id)!.name}
+                          </Badge>
+                        )}
+                        {t.activity_provider_id && providerById.get(t.activity_provider_id) && (
+                          <Badge variant="outline" className="ml-2 text-[10px] font-normal">
+                            {providerById.get(t.activity_provider_id)!.name}
+                          </Badge>
+                        )}
+                      </TableCell>
                       <TableCell>{nameFor(t.assigned_to)}</TableCell>
                       <TableCell>
                         <Select
@@ -255,6 +415,7 @@ export function ActivityTasksCard({ activityId }: { activityId: string }) {
                           <TaskDialog
                             activityId={activityId}
                             task={t}
+                            providers={providers} rubros={rubros} attendees={attendees}
                             trigger={
                               <Button size="icon" variant="ghost" className="h-7 w-7">
                                 <Pencil className="h-3.5 w-3.5" />
@@ -270,6 +431,9 @@ export function ActivityTasksCard({ activityId }: { activityId: string }) {
                         </div>
                       </TableCell>
                     </TableRow>
+                  );
+                })}
+                  </Fragment>
                   );
                 })}
               </TableBody>

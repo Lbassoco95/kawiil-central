@@ -176,106 +176,9 @@ export function useDeleteActivityProvider() {
   });
 }
 
-// ─── Seguimiento de proveedor: subtareas y comentarios ──────────────────────
-export type ActivityProviderItem = Tables<"activity_provider_items">;
+// ─── Seguimiento de proveedor: comentarios ──────────────────────────────────
+// (Los pendientes de un proveedor son tareas reales: tasks.activity_provider_id.)
 export type ActivityProviderComment = Tables<"activity_provider_comments">;
-
-/** Resumen (hechas/total) de subtareas por proveedor de una actividad. */
-export function useActivityProviderItemCounts(providerIds: string[]) {
-  const { user } = useAuth();
-  const key = [...providerIds].sort().join(",");
-  return useQuery({
-    queryKey: ["activity-provider-item-counts", key],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("activity_provider_items")
-        .select("provider_id, completed")
-        .in("provider_id", providerIds);
-      if (error) throw error;
-      const out: Record<string, { done: number; total: number }> = {};
-      for (const r of data ?? []) {
-        const c = (out[r.provider_id] ??= { done: 0, total: 0 });
-        c.total += 1;
-        if (r.completed) c.done += 1;
-      }
-      return out;
-    },
-    enabled: !!user && providerIds.length > 0,
-  });
-}
-
-export function useActivityProviderItems(providerId?: string) {
-  const { user } = useAuth();
-  return useQuery({
-    queryKey: ["activity-provider-items", providerId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("activity_provider_items")
-        .select("*")
-        .eq("provider_id", providerId!)
-        .order("sort_order", { ascending: true })
-        .order("created_at", { ascending: true });
-      if (error) throw error;
-      return data as ActivityProviderItem[];
-    },
-    enabled: !!user && !!providerId,
-  });
-}
-
-function invalidateProviderItems(queryClient: ReturnType<typeof useQueryClient>, providerId: string) {
-  queryClient.invalidateQueries({ queryKey: ["activity-provider-items", providerId] });
-  queryClient.invalidateQueries({ queryKey: ["activity-provider-item-counts"] });
-}
-
-export function useCreateProviderItem() {
-  const queryClient = useQueryClient();
-  const { user } = useAuth();
-  return useMutation({
-    mutationFn: async (input: {
-      provider_id: string; title: string; assigned_to?: string | null; due_date?: string | null; sort_order?: number;
-    }) => {
-      const organization_id = await getOrgId(user!.id);
-      const { data, error } = await supabase
-        .from("activity_provider_items")
-        .insert({ ...input, organization_id, created_by: user!.id })
-        .select()
-        .single();
-      if (error) throw error;
-      return data as ActivityProviderItem;
-    },
-    onSuccess: (d) => invalidateProviderItems(queryClient, d.provider_id),
-    onError: (e: Error) => toast.error("Error al agregar subtarea: " + e.message),
-  });
-}
-
-export function useUpdateProviderItem() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, ...updates }: TablesUpdate<"activity_provider_items"> & { id: string }) => {
-      const patch = "completed" in updates
-        ? { ...updates, completed_at: updates.completed ? new Date().toISOString() : null }
-        : updates;
-      const { data, error } = await supabase
-        .from("activity_provider_items").update(patch).eq("id", id).select().single();
-      if (error) throw error;
-      return data as ActivityProviderItem;
-    },
-    onSuccess: (d) => invalidateProviderItems(queryClient, d.provider_id),
-    onError: (e: Error) => toast.error("Error al actualizar subtarea: " + e.message),
-  });
-}
-
-export function useDeleteProviderItem() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id }: { id: string; providerId: string }) => {
-      const { error } = await supabase.from("activity_provider_items").delete().eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: (_d, v) => invalidateProviderItems(queryClient, v.providerId),
-    onError: (e: Error) => toast.error("Error al eliminar subtarea: " + e.message),
-  });
-}
 
 export function useProviderComments(providerId?: string) {
   const { user } = useAuth();
@@ -320,5 +223,46 @@ export function useDeleteProviderComment() {
     },
     onSuccess: (_d, v) => queryClient.invalidateQueries({ queryKey: ["activity-provider-comments", v.providerId] }),
     onError: (e: Error) => toast.error("Error al eliminar comentario: " + e.message),
+  });
+}
+
+// ─── Confirmaciones de asistentes (pendientes en lote) ──────────────────────
+/**
+ * Crea un pendiente "Confirmar asistencia de X" (y "Confirmar acompañante de X"
+ * si lleva +1) por cada asistente indicado. Inserta directo (sin una notificación
+ * por tarea) y ligado al asistente mediante tasks.activity_attendee_id.
+ */
+export function useCreateAttendeeConfirmationTasks() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: async ({ activityId, rows }: {
+      activityId: string;
+      rows: { attendeeId: string; title: string; assignedTo?: string | null; dueDate?: string | null }[];
+    }) => {
+      if (rows.length === 0) return 0;
+      const organization_id = await getOrgId(user!.id);
+      const { error } = await supabase.from("tasks").insert(
+        rows.map((r) => ({
+          title: r.title,
+          status: "pendiente" as const,
+          priority: "media" as const,
+          activity_id: activityId,
+          activity_attendee_id: r.attendeeId,
+          assigned_to: r.assignedTo ?? null,
+          due_date: r.dueDate ?? null,
+          organization_id,
+          created_by: user!.id,
+        })),
+      );
+      if (error) throw error;
+      return rows.length;
+    },
+    onSuccess: (n) => {
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      if (n > 0) toast.success(`${n} pendiente${n === 1 ? "" : "s"} de confirmación creado${n === 1 ? "" : "s"}`);
+      else toast.info("No hay confirmaciones por pedir: ya existen todos los pendientes.");
+    },
+    onError: (e: Error) => toast.error("Error al crear pendientes: " + e.message),
   });
 }

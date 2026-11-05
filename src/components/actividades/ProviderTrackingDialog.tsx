@@ -11,28 +11,33 @@ import {
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { Trash2, Plus, Send, CalendarDays } from "lucide-react";
 import { formatDateMX } from "@/lib/dateUtils";
-import { providerStatusLabel } from "@/lib/activityTypes";
-import { useProfiles } from "@/hooks/useTasks";
+import { providerStatusLabel, rubroLabel, pendienteSuggestions } from "@/lib/activityTypes";
+import { useProfiles, useCreateTask, useUpdateTask, useDeleteTask } from "@/hooks/useTasks";
+import { useActivityTasks } from "@/hooks/useActivities";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  useUpdateActivityProvider, useActivityProviderItems, useCreateProviderItem,
-  useUpdateProviderItem, useDeleteProviderItem, useProviderComments,
-  useAddProviderComment, useDeleteProviderComment, type ActivityProvider,
+  useUpdateActivityProvider, useProviderComments, useAddProviderComment,
+  useDeleteProviderComment, type ActivityProvider,
 } from "@/hooks/useActivityExtras";
 
 const todayYmd = () => new Date().toISOString().slice(0, 10);
+const isClosed = (s: string) => s === "completada" || s === "cancelada";
 
-/** Seguimiento de un proveedor/cotización: responsable, fecha límite, subtareas y comentarios. */
+/**
+ * Seguimiento de un proveedor/cotización. Sus pendientes son TAREAS reales de la
+ * actividad (ligadas a este proveedor y a su rubro): aparecen también en la pestaña
+ * Pendientes y en las tareas/perfil de la persona asignada.
+ */
 export function ProviderTrackingDialog({
   provider, open, onOpenChange,
 }: { provider: ActivityProvider; open: boolean; onOpenChange: (o: boolean) => void }) {
   const { user } = useAuth();
   const { data: profiles } = useProfiles();
   const updateProvider = useUpdateActivityProvider();
-  const { data: items } = useActivityProviderItems(open ? provider.id : undefined);
-  const createItem = useCreateProviderItem();
-  const updateItem = useUpdateProviderItem();
-  const deleteItem = useDeleteProviderItem();
+  const { data: allTasks } = useActivityTasks(open ? provider.activity_id : undefined);
+  const createTask = useCreateTask();
+  const updateTask = useUpdateTask();
+  const deleteTask = useDeleteTask();
   const { data: comments } = useProviderComments(open ? provider.id : undefined);
   const addComment = useAddProviderComment();
   const deleteComment = useDeleteProviderComment();
@@ -46,20 +51,27 @@ export function ProviderTrackingDialog({
   const nameFor = (uid: string | null) =>
     uid ? (profiles || []).find((p) => p.user_id === uid)?.full_name || "—" : "—";
 
-  const list = items ?? [];
-  const done = list.filter((i) => i.completed).length;
+  const list = (allTasks ?? []).filter((t) => t.activity_provider_id === provider.id);
+  const done = list.filter((t) => t.status === "completada").length;
   const today = todayYmd();
+  const taken = new Set(list.map((t) => t.title.trim().toLowerCase()));
+  const suggestions = pendienteSuggestions(provider.category).filter((s) => !taken.has(s.toLowerCase()));
 
-  const addItem = () => {
-    const title = newTitle.trim();
-    if (!title) return;
-    createItem.mutate(
+  const addTask = (title: string, opts?: { keepForm?: boolean }) => {
+    const t = title.trim();
+    if (!t) return;
+    createTask.mutate(
       {
-        provider_id: provider.id, title,
-        assigned_to: newAssignee || null, due_date: newDue || null,
-        sort_order: list.length,
+        title: t,
+        status: "pendiente",
+        priority: "media",
+        assigned_to: (opts?.keepForm ? undefined : newAssignee) || provider.assigned_to || undefined,
+        due_date: (opts?.keepForm ? undefined : newDue) || provider.due_date || undefined,
+        activity_id: provider.activity_id,
+        activity_category: provider.category,
+        activity_provider_id: provider.id,
       },
-      { onSuccess: () => { setNewTitle(""); setNewAssignee(""); setNewDue(""); } },
+      { onSuccess: () => { if (!opts?.keepForm) { setNewTitle(""); setNewAssignee(""); setNewDue(""); } } },
     );
   };
 
@@ -77,6 +89,7 @@ export function ProviderTrackingDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 flex-wrap">
             {provider.name}
+            <Badge variant="outline">{rubroLabel(provider.category)}</Badge>
             <Badge variant="outline">{providerStatusLabel(provider.status)}</Badge>
           </DialogTitle>
           <DialogDescription>
@@ -85,7 +98,6 @@ export function ProviderTrackingDialog({
         </DialogHeader>
 
         <div className="space-y-6 py-1">
-          {/* Responsable y fecha límite */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Responsable</Label>
@@ -107,42 +119,46 @@ export function ProviderTrackingDialog({
             </div>
           </div>
 
-          {/* Subtareas */}
+          {/* Pendientes de este proveedor (tareas reales) */}
           <section className="space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold">Subtareas</h3>
+              <h3 className="text-sm font-semibold">Pendientes de {provider.name}</h3>
               {list.length > 0 && (
-                <span className="text-xs text-muted-foreground">{done}/{list.length} hechas</span>
+                <span className="text-xs text-muted-foreground">{done}/{list.length} hechos</span>
               )}
             </div>
             {list.length === 0 && (
               <p className="text-sm text-muted-foreground">
-                Sin subtareas. Divide el seguimiento en pasos (pedir muestra, confirmar diseño, pagar anticipo…).
+                Aún no hay pendientes para este proveedor. Agrega uno o usa una sugerencia.
               </p>
             )}
             <ul className="space-y-1.5">
-              {list.map((i) => {
-                const late = !!i.due_date && i.due_date < today && !i.completed;
+              {list.map((t) => {
+                const late = !!t.due_date && t.due_date < today && !isClosed(t.status);
                 return (
-                  <li key={i.id} className="flex items-center gap-3 rounded-md border px-3 py-2">
+                  <li key={t.id} className="flex items-center gap-3 rounded-md border px-3 py-2">
                     <Checkbox
-                      checked={i.completed}
-                      onCheckedChange={(c) => updateItem.mutate({ id: i.id, completed: c === true })}
+                      checked={t.status === "completada"}
+                      onCheckedChange={(c) =>
+                        updateTask.mutate({ id: t.id, status: c === true ? "completada" : "pendiente" })
+                      }
                     />
                     <div className="min-w-0 flex-1">
-                      <p className={`text-sm ${i.completed ? "line-through text-muted-foreground" : ""}`}>{i.title}</p>
+                      <p className={`text-sm ${t.status === "completada" ? "line-through text-muted-foreground" : ""}`}>
+                        {t.title}
+                      </p>
                       <p className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
-                        {i.assigned_to && <span>{nameFor(i.assigned_to)}</span>}
-                        {i.due_date && (
+                        {t.assigned_to && <span>{nameFor(t.assigned_to)}</span>}
+                        {t.due_date && (
                           <span className={`flex items-center gap-1 ${late ? "text-destructive font-medium" : ""}`}>
-                            <CalendarDays className="h-3 w-3" />{formatDateMX(i.due_date)}
+                            <CalendarDays className="h-3 w-3" />{formatDateMX(t.due_date)}
                           </span>
                         )}
                       </p>
                     </div>
                     <Button
                       size="icon" variant="ghost" className="h-7 w-7 text-destructive"
-                      onClick={() => deleteItem.mutate({ id: i.id, providerId: provider.id })}
+                      onClick={() => deleteTask.mutate(t.id)}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
@@ -150,24 +166,38 @@ export function ProviderTrackingDialog({
                 );
               })}
             </ul>
+
+            {suggestions.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {suggestions.map((s) => (
+                  <Button
+                    key={s} size="sm" variant="outline" className="h-7 text-xs"
+                    disabled={createTask.isPending}
+                    onClick={() => addTask(s, { keepForm: true })}
+                  >
+                    <Plus className="mr-1 h-3 w-3" />{s}
+                  </Button>
+                ))}
+              </div>
+            )}
+
             <div className="grid grid-cols-1 sm:grid-cols-[1fr_180px_150px_auto] gap-2 items-center">
               <Input
-                placeholder="Nueva subtarea…" value={newTitle}
+                placeholder="Nuevo pendiente…" value={newTitle}
                 onChange={(e) => setNewTitle(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addItem(); } }}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTask(newTitle); } }}
               />
               <SearchableSelect
                 options={profileOptions} value={newAssignee} onValueChange={setNewAssignee}
                 placeholder="Responsable" searchPlaceholder="Buscar persona..."
               />
               <Input type="date" value={newDue} onChange={(e) => setNewDue(e.target.value)} />
-              <Button size="sm" onClick={addItem} disabled={!newTitle.trim() || createItem.isPending}>
+              <Button size="sm" onClick={() => addTask(newTitle)} disabled={!newTitle.trim() || createTask.isPending}>
                 <Plus className="mr-1 h-3.5 w-3.5" />Agregar
               </Button>
             </div>
           </section>
 
-          {/* Comentarios */}
           <section className="space-y-3">
             <h3 className="text-sm font-semibold">Comentarios y seguimiento</h3>
             <div className="flex gap-2 items-end">
