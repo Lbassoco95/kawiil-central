@@ -45,6 +45,7 @@ function AttendeeDialog({
   const [plusName, setPlusName] = useState("");
   const [plusConfirmed, setPlusConfirmed] = useState<string>("pendiente");
   const [plusDietary, setPlusDietary] = useState("");
+  const [plusPhone, setPlusPhone] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -57,6 +58,7 @@ function AttendeeDialog({
     setPlusName(attendee?.plus_one_name ?? "");
     setPlusConfirmed(attendee?.plus_one_confirmed ?? "pendiente");
     setPlusDietary(attendee?.plus_one_dietary ?? "");
+    setPlusPhone(attendee?.plus_one_phone ?? "");
   }, [open, attendee]);
 
   const isPending = createAttendee.isPending || updateAttendee.isPending;
@@ -72,6 +74,7 @@ function AttendeeDialog({
       plus_one_name: hasPlusOne ? plusName.trim() || null : null,
       plus_one_confirmed: hasPlusOne ? plusConfirmed : "pendiente",
       plus_one_dietary: hasPlusOne ? plusDietary.trim() || null : null,
+      plus_one_phone: hasPlusOne ? plusPhone.trim() || null : null,
     };
     if (isEdit) {
       updateAttendee.mutate({ id: attendee!.id, ...payload }, { onSuccess: () => setOpen(false) });
@@ -136,6 +139,16 @@ function AttendeeDialog({
                   <Label htmlFor="att-plus-name">Nombre del acompañante</Label>
                   <Input id="att-plus-name" placeholder="Por definir"
                     value={plusName} onChange={(e) => setPlusName(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="att-plus-phone">Teléfono / WhatsApp del acompañante</Label>
+                  <Input id="att-plus-phone" type="tel" inputMode="tel" placeholder="Ej: 55 1234 5678"
+                    value={plusPhone} onChange={(e) => setPlusPhone(e.target.value)} />
+                  {plusPhone.trim() && !normalizeWhatsappNumber(plusPhone) && (
+                    <p className="text-xs text-destructive">
+                      No parece un número válido. Usa 10 dígitos (México) o el formato internacional con +.
+                    </p>
+                  )}
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-2">
@@ -271,6 +284,9 @@ export function ActivityAttendeesCard({ activityId }: { activityId: string }) {
                       {a.has_plus_one ? (
                         <div className="space-y-1">
                           <span className="block text-sm">{a.plus_one_name || "Por definir"}</span>
+                          {a.plus_one_phone && (
+                            <span className="block text-xs text-muted-foreground">{a.plus_one_phone}</span>
+                          )}
                           <Select
                             value={a.plus_one_confirmed}
                             onValueChange={(v) => updateAttendee.mutate({ id: a.id, plus_one_confirmed: v })}
