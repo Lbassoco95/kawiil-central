@@ -22,6 +22,8 @@ export const UMBRAL_ATASCADO_MS = 1 * H;       // "trabajando" sin latido en má
 export const UMBRAL_SIN_SENAL_MS = 7 * D;      // sin latido en más de 7 días
 export const UMBRAL_DIARIO_MS = 26 * H;        // agentes de sistema con corrida diaria: al día si corrieron en las últimas 26 h
 export const esSistema = (a: Pick<AgenteRegistro, "kind">): boolean => a.kind === "system";
+// Los agentes de Marketing son los de sistema cuyo nombre empieza con marketing_ (los demás del registro son de Cerebro / kawiil-agents).
+export const esAgenteDeMarketing = (a: Pick<AgenteRegistro, "kind" | "name">): boolean => esSistema(a) && a.name.startsWith("marketing_");
 
 export const nombreAgente = (a: Pick<AgenteRegistro, "name" | "display_name">): string => (a.display_name?.trim() || a.name);
 

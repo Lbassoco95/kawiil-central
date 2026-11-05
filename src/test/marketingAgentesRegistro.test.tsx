@@ -193,3 +193,33 @@ describe("agentes de sistema (Marketing)", () => {
     expect(screen.getByTestId("objetivo-marketing_vigilante").textContent).not.toContain("Cumple");
   });
 });
+
+describe("soloMarketing: la pestaña de Marketing no mezcla agentes de Cerebro / kawiil-agents", () => {
+  const MK = [sis("marketing_vigilante", { last_heartbeat: "2026-11-03T13:00:00Z" }), sis("marketing_informe_diario"), sis("marketing_vigia")];
+  const renderSolo = () => render(<AgentesRegistro soloMarketing agentes={[...AGENTES, ...MK]} tareas={[...TAREAS, t("m1", "marketing_vigilante", "completed", "2026-11-03T13:00:00Z")]}
+    estadoAgentes="ok" estadoTareas="ok" ahora={AHORA} />);
+  it("muestra solo los 3 agentes marketing_* (ninguno de los consultables ni los archivados)", () => {
+    renderSolo();
+    for (const n of ["marketing_vigilante", "marketing_informe_diario", "marketing_vigia"]) expect(screen.getByTestId(`registro-${n}`)).toBeTruthy();
+    for (const n of ["nelli", "legal_archivist", "legal_dof_watchdog", "balam"]) expect(screen.queryByTestId(`registro-${n}`)).toBeNull();
+  });
+  it("no muestra la banda del servicio kawiil-agents ni el interruptor de archivados", () => {
+    renderSolo();
+    expect(screen.queryByTestId("registro-servicio")).toBeNull();
+    expect(screen.queryByLabelText("Mostrar archivados")).toBeNull();
+  });
+  it("la lista de tareas solo trae tareas de los agentes de Marketing, nunca las de otros agentes", () => {
+    renderSolo();
+    const lista = within(screen.getByTestId("registro-tareas-lista"));
+    expect(lista.queryByTestId("tarea-t1")).toBeNull(); expect(lista.queryByTestId("tarea-t3")).toBeNull(); expect(lista.queryByTestId("tarea-t4")).toBeNull();
+    expect(lista.getByTestId("tarea-m1")).toBeTruthy();
+  });
+  it("un agente 'system' que no es de Marketing tampoco se muestra", () => {
+    render(<AgentesRegistro soloMarketing agentes={[sis("otro_sistema"), ...MK]} tareas={[]} estadoAgentes="ok" estadoTareas="ok" ahora={AHORA} />);
+    expect(screen.queryByTestId("registro-otro_sistema")).toBeNull();
+  });
+  it("sin soloMarketing (módulo general) sigue mostrando todo, incluida la banda del servicio", () => {
+    render(<AgentesRegistro agentes={[...AGENTES, ...MK]} tareas={TAREAS} estadoAgentes="ok" estadoTareas="ok" ahora={AHORA} />);
+    expect(screen.getByTestId("registro-servicio")).toBeTruthy(); expect(screen.getByTestId("registro-nelli")).toBeTruthy();
+  });
+});
