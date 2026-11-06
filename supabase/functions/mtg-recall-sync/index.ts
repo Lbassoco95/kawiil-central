@@ -4,7 +4,8 @@
  * Sirve cuando un webhook no llegó (p. ej. el estado se quedó en in_call_not_recording).
  *
  * JWT requerido. Secret: RECALL_API_KEY. Opcional: RECALL_REGION_HOST.
- * Body: { meeting_id, force? }. force=true vuelve a bajar la transcripción aunque ya exista.
+ * Body: { meeting_id, force?, leave? }. force=true vuelve a bajar la transcripción aunque ya exista;
+ * leave=true saca al bot de la llamada (POST /bot/{id}/leave_call/, irreversible) antes de leer.
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -60,6 +61,17 @@ serve(async (req) => {
     if (!meeting.recall_bot_id) return json({ error: "Esta junta no tiene bot de Kawiilito" }, 404);
     const botId = meeting.recall_bot_id as string;
 
+    if (body?.leave === true) {
+      const lv = await fetch(`https://${host}/api/v1/bot/${botId}/leave_call/`, {
+        method: "POST",
+        headers: { Authorization: `Token ${recallKey}` },
+      });
+      // 400 = el bot ya no estaba en una llamada: no es un error para quien pidió salir.
+      if (!lv.ok && lv.status !== 400) {
+        return json({ error: `Recall no pudo sacar al bot (${lv.status})` }, 502);
+      }
+    }
+
     const resp = await fetch(`https://${host}/api/v1/bot/${botId}/`, {
       headers: { Authorization: `Token ${recallKey}` },
     });
@@ -73,6 +85,7 @@ serve(async (req) => {
       await admin.from("mtg_meetings").update({ recall_bot_status: status }).eq("id", meeting.id);
     }
     const left = !!status && BOT_LEFT_STATUSES.has(status);
+    const leaving = body?.leave === true && !left;
     let ended = false;
     if (left) ended = await endMeetingFromBot(admin, meeting, botId);
 
@@ -88,6 +101,7 @@ serve(async (req) => {
       ok: true,
       bot_status: status,
       bot_left: left,
+      leaving,
       meeting_ended: ended,
       transcript_saved: transcriptSaved,
       has_transcript: hasTranscript,

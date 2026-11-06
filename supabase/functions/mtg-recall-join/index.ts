@@ -174,7 +174,18 @@ serve(async (req) => {
         bot_name: "Kawiilito",
         // Strings de nivel superior: regresan en data.bot.metadata de cada webhook.
         metadata: { meeting_id: meeting.id, organization_id: meeting.organization_id },
-        automatic_leave: { waiting_room_timeout: WAITING_ROOM_TIMEOUT_SEC },
+        automatic_leave: {
+          waiting_room_timeout: WAITING_ROOM_TIMEOUT_SEC,
+          // Otter, Fireflies, read.ai… cuentan como participantes y mantenían a Kawiilito
+          // en una llamada ya terminada. Si solo quedan bots (por nombre), sale a los 2 min.
+          bot_detection: {
+            using_participant_names: {
+              timeout: 120,
+              activate_after: 120,
+              matches: ["notetaker", "recorder", "assistant", "otter", "fireflies", "read.ai", "fathom"],
+            },
+          },
+        },
         automatic_video_output: {
           in_call_recording: { kind: "jpeg", b64_data: BOT_AVATAR_JPEG_B64 },
         },
