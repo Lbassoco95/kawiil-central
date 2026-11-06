@@ -9,7 +9,7 @@ import {
 import type { ParsedMovement } from "@/lib/finance/bankImport";
 import type { ParsedCommitment } from "@/lib/finance/commitmentImport";
 import { detectEntity } from "@/lib/finance/thirdParty";
-import { dropAlreadyLoaded } from "@/lib/finance/dedupe";
+import { DEFAULT_TOLERANCE_DAYS, planBankImport, planRecordImport, type ExistingMovement } from "@/lib/finance/reconcile";
 
 // Las tablas finance_* son nuevas y aún no están en los tipos generados de Supabase.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -26,6 +26,7 @@ export interface FinanceMovement {
   debit: number; credit: number; reported_balance: number | null; category: string | null;
   category_source: "manual" | "regla" | "excel" | "sugerida" | null; review_status: "pendiente" | "clasificado";
   excluded_from_flow: boolean; notes: string | null; entity: string | null; row_seq: number | null;
+  origin: MovementOrigin; bank_confirmed_at: string | null; bank_description: string | null; has_record: boolean;
 }
 export interface FinanceGoal {
   id?: string; year: number; month: number; income_target: number; expense_budget: number;
@@ -165,11 +166,14 @@ export function useCreateAccount() {
   });
 }
 
+export type MovementOrigin = "banco" | "contable" | "captura" | "pegado" | "manual";
+
 export interface ImportPayload {
   accountId: string;
-  source: "excel" | "pegado";
+  /** De dónde viene: el estado de cuenta del banco concilia; lo demás son registros. */
+  origin: MovementOrigin;
   filename?: string;
-  movements: (ParsedMovement & { category?: string | null })[];
+  movements: (ParsedMovement & { category?: string | null; categorySource?: "manual" | "sugerida" | "excel" })[];
   openingBalance?: number | null;
   /** Categorías (con su tipo) que vienen ya clasificadas desde el Excel. */
   knownCategories: CategoryDef[];
@@ -179,81 +183,189 @@ export interface ImportPayload {
   suggest: (m: ParsedMovement) => { category: string; autoApply: boolean } | null;
 }
 
+export interface ImportResult {
+  total: number;
+  /** Movimientos nuevos creados. */
+  added: number;
+  /** Ya estaban cargados (mismo archivo, o el mismo movimiento ya registrado). */
+  duplicates: number;
+  pending: number;
+  /** Solo estado de cuenta: registrados que el banco confirmó. */
+  confirmed: number;
+  /** Solo estado de cuenta: el banco trae movimientos que nadie había registrado. */
+  newFromBank: number;
+  /** Solo estado de cuenta: registrados del periodo que el banco NO confirma. */
+  unconfirmed: { count: number; debit: number; credit: number };
+  /** Solo registros: ya los tenía el banco y se les pasó la clasificación. */
+  linkedToBank: number;
+}
+
+const addDays = (iso: string, n: number) => {
+  const d = new Date(`${iso}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10);
+};
+
 export function useImportMovements() {
   const qc = useQueryClient();
   const { data: orgId } = useOrgId();
   const { user } = useAuth();
   return useMutation({
-    mutationFn: async (p: ImportPayload) => {
-      if (!orgId) throw new Error("Organización no disponible");
+    mutationFn: async (p: ImportPayload): Promise<ImportResult> => {
+      const org = requireOrg(orgId);
+      const isBank = p.origin === "banco";
       const kindOf = (name: string) => p.knownCategories.find((c) => c.name === name)?.kind ?? "gasto";
-      // 1) Cuáles ya existen (por dedupe_hash) para no duplicar.
-      const existing = new Set<string>();
+      const nowIso = new Date().toISOString();
+
+      // 1) Lo que ya está cargado idéntico (mismo archivo) se omite.
+      const sameHash = new Set<string>();
       for (const part of chunk(p.movements.map((m) => m.dedupeKey), 200)) {
         const { data, error } = await db.from("finance_movements").select("dedupe_hash")
-          .eq("organization_id", orgId).eq("account_id", p.accountId).in("dedupe_hash", part);
+          .eq("organization_id", org).eq("account_id", p.accountId).in("dedupe_hash", part);
         if (error) throw error;
-        (data ?? []).forEach((r: { dedupe_hash: string }) => existing.add(r.dedupe_hash));
+        (data ?? []).forEach((r: { dedupe_hash: string }) => sameHash.add(r.dedupe_hash));
       }
-      const exactFresh = p.movements.filter((m) => !existing.has(m.dedupeKey));
-      // Mismo movimiento con otra redacción (Excel vs. PDF vs. captura): se detecta por fecha e importes.
-      let fresh = exactFresh;
-      if (exactFresh.length > 0) {
-        const dates = p.movements.map((m) => m.date).sort();
-        const incomingKeys = new Set(p.movements.map((m) => m.dedupeKey));
-        const sameAmounts: { date: string; debit: number; credit: number }[] = [];
+      const fresh = p.movements.filter((m) => !sameHash.has(m.dedupeKey));
+      const dates = p.movements.map((m) => m.date).sort();
+      const minDate = dates[0]; const maxDate = dates[dates.length - 1];
+
+      // 2) Movimientos existentes de la cuenta en el periodo (± tolerancia) contra los que se concilia.
+      const pool: (ExistingMovement & { hash: string })[] = [];
+      if (fresh.length > 0) {
+        const incomingHashes = new Set(p.movements.map((m) => m.dedupeKey));
         for (let from = 0; ; from += 1000) {
-          const { data, error } = await db.from("finance_movements").select("movement_date,debit,credit,dedupe_hash")
-            .eq("organization_id", orgId).eq("account_id", p.accountId)
-            .gte("movement_date", dates[0]).lte("movement_date", dates[dates.length - 1]).range(from, from + 999);
+          const { data, error } = await db.from("finance_movements")
+            .select("id,movement_date,debit,credit,origin,bank_confirmed_at,has_record,category,dedupe_hash")
+            .eq("organization_id", org).eq("account_id", p.accountId)
+            .gte("movement_date", addDays(minDate, -DEFAULT_TOLERANCE_DAYS)).lte("movement_date", addDays(maxDate, DEFAULT_TOLERANCE_DAYS))
+            .range(from, from + 999);
           if (error) throw error;
-          for (const r of data ?? []) if (!incomingKeys.has(r.dedupe_hash)) sameAmounts.push({ date: r.movement_date, debit: Number(r.debit), credit: Number(r.credit) });
+          for (const r of data ?? []) {
+            if (incomingHashes.has(r.dedupe_hash)) continue;
+            pool.push({ id: r.id, date: r.movement_date, debit: Number(r.debit), credit: Number(r.credit), origin: r.origin, bankConfirmed: !!r.bank_confirmed_at, hasRecord: r.has_record, category: r.category, hash: r.dedupe_hash });
+          }
           if (!data || data.length < 1000) break;
         }
-        fresh = dropAlreadyLoaded(exactFresh, sameAmounts);
       }
-      // 2) Lote.
+
+      // 3) Plan de conciliación.
+      let toInsert: typeof fresh = [];
+      let confirmItems: { id: string; balance: number | null; seq: number; desc: string }[] = [];
+      const links: { id: string; category: string | null; source: "manual" | "sugerida" | "excel" | "regla" | null; move: (typeof fresh)[number] }[] = [];
+      let alreadyLoaded = p.movements.length - fresh.length;
+      if (isBank) {
+        const plan = planBankImport(fresh, pool);
+        alreadyLoaded += plan.alreadyLoaded.length;
+        confirmItems = plan.confirm.map((c) => ({ id: c.id, balance: fresh[c.index].balance, seq: fresh[c.index].seq, desc: fresh[c.index].description }));
+        toInsert = plan.insert.map((i) => fresh[i]);
+      } else {
+        const plan = planRecordImport(fresh, pool);
+        toInsert = plan.insert.map((i) => fresh[i]);
+        for (const d of plan.duplicates) {
+          if (!d.linkToBank) { alreadyLoaded++; continue; }
+          const m = fresh[d.index];
+          const existing = pool.find((e) => e.id === d.existingId);
+          let category = m.category ?? null; let source: "manual" | "sugerida" | "excel" | "regla" | null = category ? m.categorySource ?? "excel" : null;
+          if (!category) { const sug = p.suggest(m); if (sug?.autoApply) { category = sug.category; source = "regla"; } }
+          links.push({ id: d.existingId, category: existing?.category ? null : category, source, move: m });
+          alreadyLoaded++;
+        }
+      }
+
+      // 4) Lote.
       const { data: batch, error: bErr } = await db.from("finance_import_batches").insert({
-        organization_id: orgId, account_id: p.accountId, source: p.source, filename: p.filename ?? null,
-        rows_total: p.movements.length, rows_new: fresh.length, rows_duplicate: p.movements.length - fresh.length,
+        organization_id: org, account_id: p.accountId, source: p.origin, filename: p.filename ?? null,
+        rows_total: p.movements.length, rows_new: toInsert.length, rows_duplicate: p.movements.length - toInsert.length,
         created_by: user?.id ?? null,
       }).select("id").single();
       if (bErr) throw bErr;
-      // 3) Clasificación: la del Excel manda; si no, la sugerencia aprendida si es de alta confianza.
+
+      // 5) Movimientos nuevos (con su clasificación).
       const learned: { patterns: string[]; category: string }[] = [];
       const newCats = new Map<string, CategoryKind>();
-      const rows = fresh.map((m) => {
+      const rows = toInsert.map((m) => {
         let category: string | null = m.category ?? null;
-        let source: "excel" | "regla" | null = category ? "excel" : null;
+        let source: "manual" | "sugerida" | "excel" | "regla" | null = category ? m.categorySource ?? "excel" : null;
         if (!category) {
           const s = p.suggest(m);
           if (s?.autoApply) { category = s.category; source = "regla"; }
         }
         if (category) {
-          if (source === "excel") learned.push({ patterns: extractPatterns(m), category });
+          if (source !== "regla") learned.push({ patterns: extractPatterns(m), category });
           if (!p.knownCategories.some((c) => c.name === category)) newCats.set(category, m.credit > m.debit ? "ingreso" : "gasto");
         }
         return {
-          organization_id: orgId, account_id: p.accountId, batch_id: batch.id,
+          organization_id: org, account_id: p.accountId, batch_id: batch.id,
           movement_date: m.date, description: m.description, reference: m.reference,
           debit: m.debit, credit: m.credit, reported_balance: m.balance,
           category, category_source: source, review_status: category ? "clasificado" : "pendiente",
           excluded_from_flow: category ? kindOf(category) === "neutral" : false,
           notes: m.observation, entity: p.detectEntities ? detectEntity(m.description, m.observation) : null,
-          row_seq: p.source === "excel" ? m.seq : null,
+          row_seq: p.origin === "banco" || p.origin === "contable" ? m.seq : null,
+          origin: p.origin, bank_confirmed_at: isBank ? nowIso : null, bank_description: isBank ? m.description : null, has_record: !isBank,
           dedupe_hash: m.dedupeKey, created_by: user?.id ?? null,
         };
       });
-      await ensureCategories(orgId, [...newCats].map(([name, kind]) => ({ name, kind })), p.knownCategories);
+      await ensureCategories(org, [...newCats].map(([name, kind]) => ({ name, kind })), p.knownCategories);
       for (const part of chunk(rows, 500)) {
         const { error } = await db.from("finance_movements").upsert(part, { onConflict: "organization_id,account_id,dedupe_hash", ignoreDuplicates: true });
         if (error) throw error;
       }
-      await learnRules(orgId, learned);
-      if (p.openingBalance != null) {
-        await db.from("finance_accounts").update({ opening_balance: p.openingBalance }).eq("id", p.accountId).eq("opening_balance", 0);
+
+      // 6a) Estado de cuenta: el banco confirma lo ya registrado (conserva clasificación y descripción).
+      for (const part of chunk(confirmItems, 300)) {
+        const { error } = await db.rpc("finance_apply_bank_matches", { p_items: part });
+        if (error) throw error;
       }
-      return { total: p.movements.length, added: fresh.length, duplicates: p.movements.length - fresh.length, pending: rows.filter((r) => !r.category).length };
+      // 6b) Registro que ya tenía el banco: pasa su clasificación al movimiento del banco y lo da por registrado.
+      const byCat = new Map<string, { ids: string[]; source: string | null }>();
+      const plainIds: string[] = [];
+      for (const l of links) {
+        if (l.category) {
+          const g = byCat.get(l.category) ?? { ids: [], source: l.source }; g.ids.push(l.id); byCat.set(l.category, g);
+          learned.push({ patterns: extractPatterns(l.move), category: l.category });
+          if (!p.knownCategories.some((c) => c.name === l.category)) newCats.set(l.category, l.move.credit > l.move.debit ? "ingreso" : "gasto");
+        } else plainIds.push(l.id);
+      }
+      await ensureCategories(org, [...newCats].map(([name, kind]) => ({ name, kind })), p.knownCategories);
+      for (const [category, g] of byCat) {
+        for (const part of chunk(g.ids, 200)) {
+          const { error } = await db.from("finance_movements").update({
+            has_record: true, category, category_source: g.source === "regla" ? "regla" : g.source ?? "excel", review_status: "clasificado", excluded_from_flow: kindOf(category) === "neutral",
+          }).in("id", part);
+          if (error) throw error;
+        }
+      }
+      for (const part of chunk(plainIds, 200)) {
+        const { error } = await db.from("finance_movements").update({ has_record: true }).in("id", part);
+        if (error) throw error;
+      }
+      await learnRules(org, learned);
+
+      // 7) Saldo inicial de la cuenta = el del periodo más antiguo cargado (el estado de cuenta/Excel manda).
+      if (p.openingBalance != null) {
+        const { data: first } = await db.from("finance_movements").select("movement_date").eq("account_id", p.accountId)
+          .neq("batch_id", batch.id).order("movement_date", { ascending: true }).limit(1);
+        if (!first?.length || minDate <= first[0].movement_date) {
+          await db.from("finance_accounts").update({ opening_balance: p.openingBalance, opening_date: minDate }).eq("id", p.accountId);
+        }
+      }
+
+      // 8) Estado de cuenta: ¿qué registrado del periodo no confirmó el banco?
+      const unconfirmed = { count: 0, debit: 0, credit: 0 };
+      if (isBank) {
+        for (let from = 0; ; from += 1000) {
+          const { data, error } = await db.from("finance_movements").select("debit,credit")
+            .eq("account_id", p.accountId).gte("movement_date", minDate).lte("movement_date", maxDate)
+            .is("bank_confirmed_at", null).range(from, from + 999);
+          if (error) throw error;
+          for (const r of data ?? []) { unconfirmed.count++; unconfirmed.debit += Number(r.debit); unconfirmed.credit += Number(r.credit); }
+          if (!data || data.length < 1000) break;
+        }
+      }
+
+      return {
+        total: p.movements.length, added: rows.length, duplicates: alreadyLoaded, pending: rows.filter((r) => !r.category).length,
+        confirmed: confirmItems.length, newFromBank: isBank ? rows.length : 0, unconfirmed, linkedToBank: links.length,
+      };
     },
     onSuccess: () => {
       for (const k of Object.values(financeBankKeys)) qc.invalidateQueries({ queryKey: k });
@@ -275,7 +387,7 @@ export function useClassifyMovements() {
       for (const part of chunk(p.items.map((i) => i.id), 200)) {
         const { error } = await db.from("finance_movements").update({
           category: p.category, category_source: p.source ?? "manual", review_status: "clasificado",
-          excluded_from_flow: kind === "neutral",
+          excluded_from_flow: kind === "neutral", has_record: true, // clasificarlo es registrarlo
         }).in("id", part);
         if (error) throw error;
       }
@@ -302,7 +414,7 @@ export function useAddManualMovement() {
       const org = requireOrg(orgId);
       const dedupe = `manual|${crypto.randomUUID()}`;
       const { error } = await db.from("finance_movements").insert({
-        organization_id: org, ...m, category: m.category ?? null,
+        organization_id: org, origin: "manual", ...m, category: m.category ?? null,
         category_source: m.category ? "manual" : null, review_status: m.category ? "clasificado" : "pendiente",
         excluded_from_flow: m.excluded ?? false, dedupe_hash: dedupe, created_by: user?.id ?? null,
       });
@@ -429,5 +541,33 @@ export function useSaveImportProfile() {
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: financeBankKeys.accounts }),
+  });
+}
+
+export function useConfirmMovements() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (ids: string[]) => {
+      for (const part of chunk(ids, 200)) {
+        const { error } = await db.from("finance_movements").update({ bank_confirmed_at: new Date().toISOString() }).in("id", part);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: financeBankKeys.movements }),
+    onError: (e: Error) => toast.error(`No se pudo conciliar: ${e.message}`),
+  });
+}
+
+export function useDeleteMovements() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (ids: string[]) => {
+      for (const part of chunk(ids, 200)) {
+        const { error } = await db.from("finance_movements").delete().in("id", part);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: financeBankKeys.movements }),
+    onError: (e: Error) => toast.error(`No se pudo eliminar: ${e.message}`),
   });
 }

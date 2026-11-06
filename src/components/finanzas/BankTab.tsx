@@ -10,9 +10,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BankImportDialog } from "./BankImportDialog";
+import { CategoryPicker } from "./CategoryPicker";
 import { AccountDialog } from "./AccountDialog";
 import { CommitmentsPanel } from "./CommitmentsPanel";
 import { MonthlyClosePanel } from "./MonthlyClosePanel";
+import { ReconciliationPanel } from "./ReconciliationPanel";
 import { ThirdPartyPanel } from "./ThirdPartyPanel";
 import {
   useAddManualMovement, useClassifyMovements, useCreateAccount, useFinanceAccounts, useFinanceCategories,
@@ -23,31 +25,6 @@ import { accountBalances, summarizeCommitments } from "@/lib/finance/planning";
 
 const money = (n: number, d = 0) => n.toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: d });
 const day = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "2-digit" });
-const NEW = "__nueva__";
-
-function CategoryPicker({ value, onChange, className }: { value: string; onChange: (v: string, kind?: "gasto" | "ingreso" | "neutral") => void; className?: string }) {
-  const { categories } = useFinanceCategories();
-  const [custom, setCustom] = useState(false);
-  const [text, setText] = useState("");
-  if (custom) {
-    return (
-      <div className="flex gap-1">
-        <Input autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder="Nueva categoría" className="h-8 w-40" />
-        <Button size="sm" className="h-8" disabled={!text.trim()} onClick={() => { onChange(text.trim()); setCustom(false); setText(""); }}>OK</Button>
-      </div>
-    );
-  }
-  return (
-    <Select value={value} onValueChange={(v) => (v === NEW ? setCustom(true) : onChange(v))}>
-      <SelectTrigger className={`h-8 text-xs ${className ?? "w-48"}`}><SelectValue placeholder="Categoría…" /></SelectTrigger>
-      <SelectContent>
-        {categories.map((c) => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}
-        <SelectItem value={NEW}>+ Nueva categoría…</SelectItem>
-      </SelectContent>
-    </Select>
-  );
-}
-
 function ManualMovementDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   const { data: accounts = [] } = useFinanceAccounts();
   const createAccount = useCreateAccount();
@@ -308,6 +285,7 @@ export function BankTab() {
             <TabsList className="h-9">
               <TabsTrigger value="pendientes" className="text-xs gap-1.5"><Inbox className="h-3.5 w-3.5" /> Por clasificar{pending.length > 0 && <Badge className="h-4 px-1.5 text-[10px]">{pending.length}</Badge>}</TabsTrigger>
               <TabsTrigger value="movimientos" className="text-xs">Movimientos</TabsTrigger>
+              <TabsTrigger value="conciliacion" className="text-xs gap-1.5"><ShieldCheck className="h-3.5 w-3.5" /> Conciliación</TabsTrigger>
               <TabsTrigger value="cierres" className="text-xs gap-1.5"><Check className="h-3.5 w-3.5" /> Cierre mensual</TabsTrigger>
               <TabsTrigger value="compromisos" className="text-xs gap-1.5"><CalendarClock className="h-3.5 w-3.5" /> Compromisos</TabsTrigger>
               <TabsTrigger value="terceros" className="text-xs gap-1.5"><ShieldCheck className="h-3.5 w-3.5" /> Terceros (impuestos)</TabsTrigger>
@@ -345,6 +323,7 @@ export function BankTab() {
               </div>
               <p className="text-[11px] text-muted-foreground">Mostrando hasta 200 de {movements.length} movimientos.</p>
             </TabsContent>
+            <TabsContent value="conciliacion" className="mt-4"><ReconciliationPanel accounts={accounts} movements={movements} /></TabsContent>
             <TabsContent value="cierres" className="mt-4"><MonthlyClosePanel accounts={accounts} movements={movements} /></TabsContent>
             <TabsContent value="compromisos" className="mt-4"><CommitmentsPanel /></TabsContent>
             <TabsContent value="terceros" className="mt-4"><ThirdPartyPanel accounts={accounts} movements={movements} /></TabsContent>

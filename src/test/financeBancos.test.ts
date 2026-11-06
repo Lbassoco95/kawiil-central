@@ -279,20 +279,9 @@ describe("estado de cuenta en PDF: formatos reales (sintéticos)", () => {
   });
 });
 
-import { dropAlreadyLoaded } from "@/lib/finance/dedupe";
 import { shotRowsToMovements } from "@/lib/finance/screenshotImport";
 
-describe("deduplicación por importe y captura de pantalla", () => {
-  it("descarta lo ya cargado con otra redacción pero respeta movimientos repetidos legítimos", () => {
-    const existing = [{ date: "2026-11-04", debit: 119.91, credit: 0 }];
-    const incoming = [
-      { date: "2026-11-04", debit: 119.91, credit: 0, d: "Uber (app)" },
-      { date: "2026-11-04", debit: 119.91, credit: 0, d: "Uber (app) 2" },
-      { date: "2026-11-04", debit: 0, credit: 299.95, d: "Devolución" },
-    ];
-    expect(dropAlreadyLoaded(incoming, existing).map((m) => m.d)).toEqual(["Uber (app) 2", "Devolución"]);
-  });
-
+describe("captura de pantalla", () => {
   it("convierte los renglones revisados de una captura y omite los incompletos", () => {
     const rows = [
       { id: "1", date: "2026-11-04", description: " Transferencia ", debit: 11520, credit: 0, balance: null, uncertain: false },
@@ -301,5 +290,62 @@ describe("deduplicación por importe y captura de pantalla", () => {
     ];
     const m = shotRowsToMovements(rows);
     expect(m.map((x) => [x.date, x.description, x.debit, x.credit])).toEqual([["2026-11-03", "Depósito", 0, 5000], ["2026-11-04", "Transferencia", 11520, 0]]);
+  });
+});
+
+import { planBankImport, planRecordImport, reconcileMonth, type ExistingMovement } from "@/lib/finance/reconcile";
+
+const ex = (id: string, date: string, debit: number, credit: number, extra: Partial<ExistingMovement> = {}): ExistingMovement => ({
+  id, date, debit, credit, origin: "contable", bankConfirmed: false, hasRecord: true, category: null, ...extra,
+});
+
+describe("conciliación contra el banco", () => {
+  it("el banco confirma lo registrado, detecta lo que faltaba y lo que ya estaba cargado", () => {
+    const existing = [
+      ex("r1", "2026-10-01", 910.54, 0), ex("r2", "2026-10-01", 910.54, 0), // dos compras idénticas registradas
+      ex("r3", "2026-10-02", 0, 5000), ex("r4", "2026-10-09", 99, 0),       // r4 no aparece en el banco
+      ex("b1", "2026-10-03", 40, 0, { origin: "banco", bankConfirmed: true, hasRecord: false }),
+    ];
+    const bank = [
+      { date: "2026-10-01", debit: 910.54, credit: 0 }, { date: "2026-10-01", debit: 910.54, credit: 0 },
+      { date: "2026-10-02", debit: 0, credit: 5000 },
+      { date: "2026-10-03", debit: 40, credit: 0 },     // ya cargado del banco
+      { date: "2026-10-12", debit: 20.32, credit: 0 },  // el banco trae algo que no estaba registrado
+    ];
+    const p = planBankImport(bank, existing);
+    expect(p.confirm.map((c) => c.id).sort()).toEqual(["r1", "r2", "r3"]);
+    expect(p.alreadyLoaded).toEqual([3]);
+    expect(p.insert).toEqual([4]);
+  });
+
+  it("tolera desfase de fecha pero prefiere la fecha exacta", () => {
+    const existing = [ex("a", "2026-10-02", 100, 0), ex("b", "2026-10-05", 100, 0)];
+    const p = planBankImport([{ date: "2026-10-03", debit: 100, credit: 0 }, { date: "2026-10-05", debit: 100, credit: 0 }], existing);
+    expect(p.confirm.map((c) => [c.index, c.id])).toEqual([[0, "a"], [1, "b"]]);
+    expect(planBankImport([{ date: "2026-10-20", debit: 100, credit: 0 }], existing).insert).toEqual([0]);
+  });
+
+  it("registro que llega después del banco: se liga al movimiento del banco en vez de duplicarlo", () => {
+    const existing = [ex("b1", "2026-10-13", 263, 0, { origin: "banco", bankConfirmed: true, hasRecord: false }), ex("r9", "2026-10-13", 50, 0)];
+    const p = planRecordImport([
+      { date: "2026-10-14", debit: 263, credit: 0 }, // otro día pero el banco lo tiene: se liga
+      { date: "2026-10-13", debit: 50, credit: 0 },  // el mismo registro de antes: duplicado
+      { date: "2026-10-13", debit: 77, credit: 0 },  // nuevo
+    ], existing);
+    expect(p.duplicates).toEqual([{ index: 0, existingId: "b1", linkToBank: true }, { index: 1, existingId: "r9", linkToBank: false }]);
+    expect(p.insert).toEqual([2]);
+    // un registro NO se empareja con otro registro de otro día
+    expect(planRecordImport([{ date: "2026-10-14", debit: 50, credit: 0 }], existing).insert).toEqual([0]);
+  });
+
+  it("resume el mes: conciliados, registrados sin respaldo y solo en banco; sin estado de cuenta no marca faltantes", () => {
+    const month = [
+      ex("1", "2026-10-01", 1, 0, { bankConfirmed: true }), ex("2", "2026-10-02", 2, 0),
+      ex("3", "2026-10-03", 3, 0, { origin: "banco", bankConfirmed: true, hasRecord: false }),
+    ];
+    const r = reconcileMonth(month);
+    expect([r.total, r.confirmed, r.unconfirmed.map((m) => m.id), r.bankOnly.map((m) => m.id), r.hasBank]).toEqual([3, 2, ["2"], ["3"], true]);
+    const noBank = reconcileMonth([ex("2", "2026-10-02", 2, 0)]);
+    expect(noBank.hasBank).toBe(false); expect(noBank.unconfirmed).toEqual([]);
   });
 });

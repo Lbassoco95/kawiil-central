@@ -10,6 +10,9 @@ export interface ShotRow {
   credit: number;
   balance: number | null;
   uncertain: boolean;
+  /** Categoría elegida o sugerida para este renglón. */
+  category?: string | null;
+  categorySource?: "manual" | "sugerida";
 }
 
 export interface ShotResult { rows: ShotRow[]; notes: string | null }
@@ -60,6 +63,6 @@ export async function extractFromScreenshots(files: File[]): Promise<ShotResult>
 export function shotRowsToMovements(rows: ShotRow[]): ParsedMovement[] {
   return movementsFromRaw(
     rows.filter((r) => r.date && r.description.trim() && (r.debit > 0 || r.credit > 0))
-      .map((r) => ({ date: r.date as string, description: r.description.trim(), reference: null, debit: r.debit, credit: r.credit, balance: r.balance })),
+      .map((r) => ({ date: r.date as string, description: r.description.trim(), reference: null, debit: r.debit, credit: r.credit, balance: r.balance, meta: r.category ? { category: r.category, categorySource: r.categorySource ?? "manual" } : undefined })),
   );
 }

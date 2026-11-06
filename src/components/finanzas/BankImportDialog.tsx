@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { FileSpreadsheet, ClipboardPaste, Loader2, CheckCircle2 } from "lucide-react";
+import { Camera, FileSpreadsheet, ClipboardPaste, Loader2, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import {
 import { COMMITMENT_KIND_LABEL, parseCommitmentsBuffer, type CommitmentKind, type ParsedCommitment } from "@/lib/finance/commitmentImport";
 import { AccountDialog } from "./AccountDialog";
 import { StatementImportTab } from "./StatementImportTab";
+import { ScreenshotImportTab } from "./ScreenshotImportTab";
 import { categoryFromReference, suggestCategory } from "@/lib/finance/classifier";
 import {
   useCreateAccount, useFinanceAccounts, useFinanceCategories, useImportCommitments, useImportMovements, useRuleIndex,
@@ -85,16 +86,16 @@ export function BankImportDialog({ open, onOpenChange }: { open: boolean; onOpen
   const update = (i: number, patch: Partial<SheetChoice>) =>
     setChoices((cs) => cs.map((c, j) => (j === i ? { ...c, ...patch } : c)));
 
-  async function run(items: { sheet: ParsedSheet; accountId: string; useReference: boolean }[], source: "excel" | "pegado") {
+  async function run(items: { sheet: ParsedSheet; accountId: string; useReference: boolean }[], origin: "pegado" | "contable") {
     const lines: string[] = [];
     for (const it of items) {
       const res = await importMut.mutateAsync({
-        accountId: it.accountId, source, filename: source === "excel" ? filename : undefined,
+        accountId: it.accountId, origin, filename: origin === "contable" ? filename : undefined,
         movements: it.sheet.movements.map((m) => ({ ...m, category: it.useReference ? categoryFromReference(m.reference) : null })),
         openingBalance: it.sheet.openingBalance, knownCategories: categories,
         suggest: (m) => suggestCategory(m, ruleIndex),
       });
-      lines.push(`${it.sheet.sheetName}: ${res.added} nuevos, ${res.duplicates} ya existían, ${res.pending} por clasificar`);
+      lines.push(`${it.sheet.sheetName}: ${res.added} nuevos, ${res.duplicates} ya existían${res.linkedToBank ? ` (${res.linkedToBank} ya los tenía el banco)` : ""}, ${res.pending} por clasificar`);
     }
     setSummary(lines);
   }
@@ -119,12 +120,12 @@ export function BankImportDialog({ open, onOpenChange }: { open: boolean; onOpen
       const lines: string[] = [];
       for (const c of picked) {
         const res = await importMut.mutateAsync({
-          accountId: ids.get(c.sheet.sheetName)!, source: "excel", filename,
+          accountId: ids.get(c.sheet.sheetName)!, origin: "contable", filename,
           movements: c.sheet.movements.map((m) => ({ ...m, category: c.useReference ? categoryFromReference(m.reference) : null })),
           openingBalance: c.sheet.openingBalance, knownCategories: categories, detectEntities: c.thirdParty,
           suggest: (m) => suggestCategory(m, ruleIndex),
         });
-        lines.push(`${c.sheet.sheetName}: ${res.added} nuevos, ${res.duplicates} ya existían${c.thirdParty ? "" : `, ${res.pending} por clasificar`}`);
+        lines.push(`${c.sheet.sheetName}: ${res.added} nuevos, ${res.duplicates} ya existían${res.linkedToBank ? ` (${res.linkedToBank} ya los tenía el banco y recibieron su clasificación)` : ""}${c.thirdParty ? "" : `, ${res.pending} por clasificar`}`);
       }
       const chosen = commitments.filter((c) => commitKinds[c.kind]);
       if (chosen.length) {
@@ -162,6 +163,7 @@ export function BankImportDialog({ open, onOpenChange }: { open: boolean; onOpen
           <TabsList>
             <TabsTrigger value="excel" className="gap-1.5 text-xs"><FileSpreadsheet className="h-3.5 w-3.5" /> Excel contable</TabsTrigger>
             <TabsTrigger value="estado" className="gap-1.5 text-xs"><FileSpreadsheet className="h-3.5 w-3.5" /> Estado de cuenta del banco</TabsTrigger>
+            <TabsTrigger value="captura" className="gap-1.5 text-xs"><Camera className="h-3.5 w-3.5" /> Captura de pantalla</TabsTrigger>
             <TabsTrigger value="pegar" className="gap-1.5 text-xs"><ClipboardPaste className="h-3.5 w-3.5" /> Pegar movimientos</TabsTrigger>
           </TabsList>
 
@@ -240,6 +242,8 @@ export function BankImportDialog({ open, onOpenChange }: { open: boolean; onOpen
           </TabsContent>
 
           <TabsContent value="estado"><StatementImportTab /></TabsContent>
+
+          <TabsContent value="captura"><ScreenshotImportTab /></TabsContent>
 
           <TabsContent value="pegar" className="space-y-3">
             <div className="flex gap-2">
