@@ -1,4 +1,4 @@
--- Marketing: seguimientos del Analista (preguntas puntuales o periódicas). NO SE APLICA sin confirmación de Dirección.
+-- Marketing: seguimientos del Analista (preguntas puntuales o periódicas). APLICADA en producción el 5 nov 2026 (18:38 CDMX) con confirmación de Dirección.
 -- Requiere antes 20261105194055_marketing_analista_registro.sql (ya aplicada).
 --
 -- Un seguimiento es una pregunta que el Analista vuelve a responder solo: una vez, a diario o cada semana. Sigue siendo solo lectura.

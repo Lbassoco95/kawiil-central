@@ -1,4 +1,4 @@
--- Reversa de 20261106120000_marketing_analista_seguimientos.sql. Borra los seguimientos guardados (las respuestas pasadas en mk_consulta se conservan).
+-- Reversa de 20261106003827_marketing_analista_seguimientos.sql. Borra los seguimientos guardados (las respuestas pasadas en mk_consulta se conservan).
 DROP FUNCTION IF EXISTS public.mk_seguimiento_reclamar(integer);
 DROP FUNCTION IF EXISTS public.mk_seguimiento_cambiar(uuid, uuid, uuid, text);
 DROP FUNCTION IF EXISTS public.mk_seguimiento_crear(uuid, uuid, text, text, timestamptz);
