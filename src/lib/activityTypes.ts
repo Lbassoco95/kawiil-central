@@ -202,3 +202,14 @@ export function pendienteSuggestions(rubro?: string | null): string[] {
 export function venueText(p: { name: string; description?: string | null }): string {
   return [p.name, p.description?.trim()].filter(Boolean).join(" — ");
 }
+
+/**
+ * ¿El título del pendiente es el de "confirmar la sede"? ("Sede confirmada", "Confirmar sede",
+ * "Sede confirmada con los invitados"…). No incluye otros pasos de la sede como "Visitar sede",
+ * "Apartar fecha" o "Pagar anticipo".
+ */
+export function isVenueConfirmationTitle(title?: string | null): boolean {
+  const t = (title ?? "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  return /\bsede\b.*\bconfirm\w*|\bconfirm\w*\b.*\bsede\b/.test(t);
+}

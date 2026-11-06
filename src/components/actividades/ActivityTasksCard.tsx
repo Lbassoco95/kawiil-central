@@ -15,7 +15,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
-import { Plus, Pencil, Trash2, ListChecks, Images, UserCheck } from "lucide-react";
+import { Plus, Pencil, Trash2, ListChecks, Images, UserCheck, CheckCircle2, RotateCcw } from "lucide-react";
 import { formatDateMX } from "@/lib/dateUtils";
 import { TASK_STATUS_CONFIG, PRIORITY_CONFIG } from "@/lib/statusStyles";
 import { useProfiles, useCreateTask, useUpdateTask, useDeleteTask } from "@/hooks/useTasks";
@@ -562,6 +562,22 @@ export function ActivityTasksCard({ activityId }: { activityId: string }) {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center justify-end gap-1">
+                          {t.status !== "cancelada" && (
+                            <Button
+                              size="icon" variant="ghost"
+                              className={`h-7 w-7 ${t.status === "completada" ? "text-muted-foreground" : "text-emerald-700"}`}
+                              title={t.status === "completada" ? "Reabrir pendiente" : "Marcar como hecho"}
+                              disabled={updateTask.isPending}
+                              onClick={() =>
+                                updateTask.mutate({
+                                  id: t.id, status: t.status === "completada" ? "pendiente" : "completada",
+                                })}
+                            >
+                              {t.status === "completada"
+                                ? <RotateCcw className="h-3.5 w-3.5" />
+                                : <CheckCircle2 className="h-3.5 w-3.5" />}
+                            </Button>
+                          )}
                           <TaskDialog
                             activityId={activityId}
                             task={t}
