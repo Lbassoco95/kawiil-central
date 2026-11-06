@@ -266,3 +266,43 @@ export function useCreateAttendeeConfirmationTasks() {
     onError: (e: Error) => toast.error("Error al crear pendientes: " + e.message),
   });
 }
+
+// ─── Sede confirmada ────────────────────────────────────────────────────────
+/**
+ * Marca (o quita) la sede confirmada de una actividad.
+ * - Con `provider`: la sede pasa a ser ese proveedor (Sede / Lugar = nombre y dirección) y,
+ *   si seguía en cotización, queda como "Elegido".
+ * - Sin `provider`: solo cambia la confirmación de la sede que ya está escrita.
+ */
+export function useConfirmVenue() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ activityId, provider, confirmed }: {
+      activityId: string; provider?: ActivityProvider | null; confirmed: boolean;
+    }) => {
+      const patch: TablesUpdate<"activities"> = provider && confirmed
+        ? {
+            venue_confirmed: true, venue_provider_id: provider.id,
+            location: [provider.name, provider.description?.trim()].filter(Boolean).join(" — "),
+          }
+        : confirmed
+          ? { venue_confirmed: true }
+          : { venue_confirmed: false, venue_provider_id: null };
+      const { error } = await supabase.from("activities").update(patch).eq("id", activityId);
+      if (error) throw error;
+      if (provider && confirmed && provider.status === "cotizacion") {
+        const { error: e2 } = await supabase
+          .from("activity_providers").update({ status: "elegido" }).eq("id", provider.id);
+        if (e2) throw e2;
+      }
+      return { activityId, confirmed };
+    },
+    onSuccess: ({ activityId, confirmed }) => {
+      queryClient.invalidateQueries({ queryKey: ["activity", activityId] });
+      queryClient.invalidateQueries({ queryKey: ["activities"] });
+      queryClient.invalidateQueries({ queryKey: ["activity-providers", activityId] });
+      toast.success(confirmed ? "Sede confirmada" : "Se quitó la confirmación de la sede");
+    },
+    onError: (e: Error) => toast.error("Error al actualizar la sede: " + e.message),
+  });
+}

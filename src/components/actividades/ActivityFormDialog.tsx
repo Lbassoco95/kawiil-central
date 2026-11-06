@@ -84,7 +84,11 @@ export function ActivityFormDialog({ activity, trigger }: Props) {
       notes: notes.trim() || null,
     };
     if (isEdit) {
-      updateActivity.mutate({ id: activity!.id, ...payload }, { onSuccess: () => setOpen(false) });
+      // Si cambia la sede escrita, la confirmación anterior ya no aplica a la nueva.
+      const venueChanged = (activity!.location ?? "").trim() !== location.trim();
+      const extra = venueChanged && activity!.venue_confirmed
+        ? { venue_confirmed: false, venue_provider_id: null } : {};
+      updateActivity.mutate({ id: activity!.id, ...payload, ...extra }, { onSuccess: () => setOpen(false) });
     } else {
       createActivity.mutate(payload, { onSuccess: () => setOpen(false) });
     }

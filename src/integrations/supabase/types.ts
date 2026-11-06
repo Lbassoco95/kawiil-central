@@ -111,6 +111,8 @@ export type Database = {
           responsible_user_id: string | null
           status: string
           updated_at: string
+          venue_confirmed: boolean
+          venue_provider_id: string | null
         }
         Insert: {
           activity_type?: string | null
@@ -129,6 +131,8 @@ export type Database = {
           responsible_user_id?: string | null
           status?: string
           updated_at?: string
+          venue_confirmed?: boolean
+          venue_provider_id?: string | null
         }
         Update: {
           activity_type?: string | null
@@ -147,6 +151,8 @@ export type Database = {
           responsible_user_id?: string | null
           status?: string
           updated_at?: string
+          venue_confirmed?: boolean
+          venue_provider_id?: string | null
         }
         Relationships: []
       }

@@ -116,6 +116,11 @@ export function InviteMessageDialog({ activityId }: { activityId: string }) {
             {(!activity?.event_date || !activity?.event_time) && " La fecha y la hora se editan en Editar actividad."}
           </p>
         )}
+        {!missingVenue && !activity?.venue_confirmed && (
+          <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            La sede todavía no está marcada como confirmada. Confírmala en Detalles → “Confirmar sede” antes de avisar a los invitados.
+          </p>
+        )}
         <Textarea rows={12} value={text} onChange={(e) => setText(e.target.value)} />
         {recipients.length > 0 && (
           <div className="space-y-2">
