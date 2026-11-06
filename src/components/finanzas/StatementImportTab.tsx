@@ -10,7 +10,7 @@ import { analyzeTable, parseWithMapping, readStatementRows, type ColKey, type Co
 import { suggestCategory } from "@/lib/finance/classifier";
 import { parsePdfStatement, type PdfStatementResult } from "@/lib/finance/pdfStatement";
 import {
-  useFinanceAccounts, useFinanceCategories, useImportMovements, useRuleIndex, useSaveImportProfile,
+  useFinanceAccounts, useFinanceCategories, useImportMovements, useRuleIndex, useSaveImportProfile, type ImportResult,
 } from "@/hooks/useFinanceBank";
 
 const FIELDS: { key: ColKey; label: string; required?: boolean }[] = [
