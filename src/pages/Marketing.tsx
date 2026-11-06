@@ -4,7 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Megaphone } from "lucide-react";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
-import { useCalibracion, useCasos, useColchon, useCobertura, useInformeDiario, usePiezas, useUltimaCorrida, useReglaHistorial, useReglas, useBitacora, usePropuestas, useDecisiones, useEstadoTrabajos, useAgentesRegistro, useTareasAgentes, useTareasMarketingAgentes, useConsultasAnalista, preguntarAlAnalista } from "@/hooks/useMarketing";
+import { useCalibracion, useCasos, useColchon, useCobertura, useInformeDiario, usePiezas, useUltimaCorrida, useReglaHistorial, useReglas, useBitacora, usePropuestas, useDecisiones, useEstadoTrabajos, useAgentesRegistro, useTareasAgentes, useTareasMarketingAgentes, useConsultasAnalista, preguntarAlAnalista, useSeguimientosAnalista, gestionarSeguimiento } from "@/hooks/useMarketing";
 import { PanelDia } from "@/components/marketing/PanelDia";
 import { Calendario } from "@/components/marketing/Calendario";
 import { Casos } from "@/components/marketing/Casos";
@@ -37,6 +37,7 @@ export default function Marketing() {
   const tareasReg = useTareasAgentes();
   const tareasMk = useTareasMarketingAgentes();
   const consultas = useConsultasAnalista();
+  const seguimientos = useSeguimientosAnalista();
   const qc = useQueryClient();
 
   const cargando = [piezas, calibracion, casos, reglas, historial, cobertura, colchon, informe].some((q) => q.isLoading);
@@ -81,6 +82,8 @@ export default function Marketing() {
                 analista={{
                   consultas: consultas.data ?? [], estadoConsultas: consultas.isError ? "error" : consultas.isLoading ? "cargando" : "ok",
                   preguntar: async (p) => { const r = await preguntarAlAnalista(p); await Promise.all([qc.invalidateQueries({ queryKey: ["analista"] }), qc.invalidateQueries({ queryKey: ["agentes-registro"] })]); return r; },
+                  seguimientos: seguimientos.data ?? [], estadoSeguimientos: seguimientos.isError ? "error" : seguimientos.isLoading ? "cargando" : "ok",
+                  gestionarSeguimiento: async (c) => { const r = await gestionarSeguimiento(c); await qc.invalidateQueries({ queryKey: ["analista", "seguimientos"] }); return r; },
                 }} />
               <div className="mt-8" />
               <Agentes filas={bitacora.data ?? []} casos={casos.data!} propuestas={propuestas.data ?? []} decisiones={decisiones.data ?? []} trabajos={trabajos.data}

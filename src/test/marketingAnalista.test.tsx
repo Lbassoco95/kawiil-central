@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, vi } from "vitest";
-import { render, screen, within, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, within, fireEvent, waitFor, cleanup } from "@testing-library/react";
 import { OficinaAgentes, type AnalistaProps } from "@/components/marketing/OficinaAgentes";
 import { estadoVisual, personajes } from "@/components/marketing/oficinaAgentesLogica";
 import { cumplimiento, senalAgente, type AgenteRegistro, type TareaMarketing } from "@/components/marketing/agentesRegistroLogica";
@@ -143,5 +143,52 @@ describe("TextoAnalista: respuesta legible, sin símbolos", () => {
     expect(container.querySelector("em")?.textContent).toBe("rojo");
     expect(container.querySelector("b")).toBeNull();
     expect(screen.getByText(/no html/).textContent).toContain("<b>");
+  });
+});
+
+describe("seguimientos del Analista", () => {
+  const seg = (id: string, o: Partial<import("@/hooks/useMarketing").SeguimientoAnalista> = {}): import("@/hooks/useMarketing").SeguimientoAnalista =>
+    ({ id, pregunta: `Pregunta de ${id}`, frecuencia: "semanal", estado: "activo", proxima_at: "2026-11-09T13:45:00Z", ultima_at: null, corridas: 0, ...o });
+  const conSeg = (gestionar: NonNullable<AnalistaProps["gestionarSeguimiento"]>, seguimientos = [seg("s1")], estadoSeguimientos: AnalistaProps["estadoSeguimientos"] = "ok"): AnalistaProps =>
+    ({ ...props(vi.fn()), seguimientos, estadoSeguimientos, gestionarSeguimiento: gestionar });
+
+  it("sin gestionarSeguimiento no aparece nada de seguimientos (el panel sigue como antes)", () => {
+    vista(props(vi.fn())); elegirAnalista();
+    expect(screen.queryByTestId("analista-seguimientos")).toBeNull(); expect(screen.queryByTestId("analista-nuevo-seguimiento")).toBeNull();
+  });
+  it("lista los seguimientos con su frecuencia y próxima corrida; vacío y error tienen su mensaje", () => {
+    const g = vi.fn(); const { unmount } = vista(conSeg(g)); elegirAnalista();
+    const fila = screen.getByTestId("seguimiento-s1"); expect(fila.textContent).toContain("Pregunta de s1"); expect(fila.textContent).toContain("Cada semana"); expect(fila.textContent).toContain("7:45");
+    unmount(); vista(conSeg(g, [])); elegirAnalista(); expect(screen.getByTestId("analista-sin-seguimientos")).toBeTruthy();
+    cleanup(); vista(conSeg(g, [], "error")); elegirAnalista(); expect(screen.getByTestId("analista-seguimientos-error")).toBeTruthy();
+  });
+  it("dar seguimiento envía la pregunta limpia con la frecuencia elegida, avisa cuándo corre y vacía el texto; el botón se bloquea con pregunta corta", async () => {
+    const g = vi.fn().mockResolvedValue({ ok: true }); vista(conSeg(g)); elegirAnalista();
+    const boton = screen.getByTestId("analista-dar-seguimiento") as HTMLButtonElement; expect(boton.disabled).toBe(true);
+    escribir("  ¿Cómo va   el alcance de Facebook?  "); fireEvent.change(screen.getByLabelText("Frecuencia del seguimiento"), { target: { value: "diaria" } });
+    expect(boton.disabled).toBe(false); fireEvent.click(boton);
+    await waitFor(() => expect(g).toHaveBeenCalledWith({ accion: "crear_seguimiento", pregunta: "¿Cómo va el alcance de Facebook?", frecuencia: "diaria" }));
+    await waitFor(() => expect(screen.getByTestId("analista-aviso-seguimiento").textContent).toContain("7:45"));
+    expect((screen.getByLabelText("Pregúntale cómo van tus resultados") as HTMLTextAreaElement).value).toBe("");
+  });
+  it("si falla (por ejemplo el tope de 5), muestra el mensaje y conserva la pregunta", async () => {
+    const g = vi.fn().mockResolvedValue({ ok: false, error: "Ya tienes 5 seguimientos. Termina alguno para agregar otro." }); vista(conSeg(g)); elegirAnalista();
+    escribir("¿Cómo va Instagram esta semana?"); fireEvent.click(screen.getByTestId("analista-dar-seguimiento"));
+    await waitFor(() => expect(screen.getByTestId("analista-aviso-seguimiento").textContent).toContain("Ya tienes 5"));
+    expect((screen.getByLabelText("Pregúntale cómo van tus resultados") as HTMLTextAreaElement).value).toContain("Instagram");
+  });
+  it("pausar, reanudar y terminar envían la acción correcta; un seguimiento en pausa ofrece Reanudar", async () => {
+    const g = vi.fn().mockResolvedValue({ ok: true }); vista(conSeg(g, [seg("s1"), seg("s2", { estado: "pausado" })])); elegirAnalista();
+    fireEvent.click(within(screen.getByTestId("seguimiento-s1")).getByText("Pausar"));
+    await waitFor(() => expect(g).toHaveBeenCalledWith({ accion: "cambiar_seguimiento", id: "s1", estado: "pausado" }));
+    expect(screen.getByTestId("seguimiento-s2").textContent).toContain("en pausa");
+    fireEvent.click(within(screen.getByTestId("seguimiento-s2")).getByText("Reanudar"));
+    await waitFor(() => expect(g).toHaveBeenCalledWith({ accion: "cambiar_seguimiento", id: "s2", estado: "activo" }));
+    fireEvent.click(within(screen.getByTestId("seguimiento-s2")).getByText("Terminar"));
+    await waitFor(() => expect(g).toHaveBeenCalledWith({ accion: "cambiar_seguimiento", id: "s2", estado: "terminado" }));
+  });
+  it("las respuestas de un seguimiento se marcan en el historial", () => {
+    vista({ ...conSeg(vi.fn()), consultas: [consulta("c1", "Pregunta repetida", { seguimiento_id: "s1" })] }); elegirAnalista();
+    expect(within(screen.getByTestId("analista-historial")).getByText(/· seguimiento/)).toBeTruthy();
   });
 });

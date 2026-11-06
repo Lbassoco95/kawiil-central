@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ConsultaAnalista, RespuestaAnalista } from "@/hooks/useMarketing";
+import type { AccionSeguimiento, ConsultaAnalista, FrecuenciaSeguimiento, RespuestaAnalista, SeguimientoAnalista } from "@/hooks/useMarketing";
 import { Pastilla, Vacio } from "./marketingUi";
 import { TextoAnalista } from "./TextoAnalista";
 import { cuandoRelativo, ESTADO_TAREA, type AgenteRegistro, type TareaMarketing } from "./agentesRegistroLogica";
@@ -8,7 +8,11 @@ import { ALTO, ANCHO, personajeEn, personajes, type Animacion, type PersonajeOfi
 export type EstadoCarga = "cargando" | "error" | "ok";
 
 // Lo que necesita el panel «Preguntar» del Analista. Sin esta propiedad (o sin el agente en el registro) no aparece.
-export interface AnalistaProps { consultas: ConsultaAnalista[]; estadoConsultas: EstadoCarga; preguntar: (pregunta: string) => Promise<RespuestaAnalista> }
+export interface AnalistaProps {
+  consultas: ConsultaAnalista[]; estadoConsultas: EstadoCarga; preguntar: (pregunta: string) => Promise<RespuestaAnalista>;
+  // Seguimientos (opcionales: sin ellos no aparece la sección).
+  seguimientos?: SeguimientoAnalista[]; estadoSeguimientos?: EstadoCarga; gestionarSeguimiento?: (c: AccionSeguimiento) => Promise<{ ok: boolean; error?: string }>;
+}
 
 // ── Dibujo (Canvas 2D, pixel art propio) ────────────────────────────────────────────────────────────────────────────
 function rect(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, c: string) { g.fillStyle = c; g.fillRect(Math.round(x), Math.round(y), w, h); }
@@ -164,6 +168,9 @@ function PreguntarAnalista({ analista, now, alPensar }: { analista: AnalistaProp
   const [enviando, setEnviando] = useState(false);
   const [resp, setResp] = useState<RespuestaAnalista | null>(null);
   const [abierta, setAbierta] = useState<string | null>(null);
+  const [frecuencia, setFrecuencia] = useState<FrecuenciaSeguimiento>("semanal");
+  const [guardando, setGuardando] = useState(false);
+  const [avisoSeg, setAvisoSeg] = useState<{ ok: boolean; texto: string } | null>(null);
   const limpia = texto.replace(/\s+/g, " ").trim();
   const puede = limpia.length >= 3 && limpia.length <= MAX_PREGUNTA && !enviando;
 
@@ -172,6 +179,17 @@ function PreguntarAnalista({ analista, now, alPensar }: { analista: AnalistaProp
     setEnviando(true); setResp(null); alPensar(true);
     try { const r = await analista.preguntar(limpia); setResp(r); if (r.ok) setTexto(""); /* si falló, se conserva la pregunta para reintentar */ } catch { setResp({ ok: false, error: "No pudimos hablar con el Analista. Inténtalo de nuevo." }); }
     finally { setEnviando(false); alPensar(false); }
+  };
+
+  const darSeguimiento = async () => {
+    if (!puede || guardando || !analista.gestionarSeguimiento) return;
+    setGuardando(true); setAvisoSeg(null);
+    try {
+      const r = await analista.gestionarSeguimiento({ accion: "crear_seguimiento", pregunta: limpia, frecuencia });
+      if (r.ok) { setTexto(""); setAvisoSeg({ ok: true, texto: "Listo. Se responderá mañana a las 7:45 (hora de Ciudad de México) y lo verás aquí." }); }
+      else setAvisoSeg({ ok: false, texto: r.error ?? "No se pudo guardar el seguimiento." });
+    } catch { setAvisoSeg({ ok: false, texto: "No se pudo guardar el seguimiento." }); }
+    finally { setGuardando(false); }
   };
 
   return (
@@ -185,6 +203,18 @@ function PreguntarAnalista({ analista, now, alPensar }: { analista: AnalistaProp
         <button type="button" onClick={() => void enviar()} disabled={!puede} data-testid="analista-enviar"
           className="rounded-full bg-[#9b7b4f] px-4 py-1.5 text-xs text-white disabled:opacity-50">{enviando ? "Pensando…" : "Preguntar"}</button>
       </div>
+      {analista.gestionarSeguimiento && (
+        <div className="flex flex-wrap items-center gap-2 text-xs" data-testid="analista-nuevo-seguimiento">
+          <span className="text-muted-foreground">O pídele que lo repita:</span>
+          <select value={frecuencia} onChange={(e) => setFrecuencia(e.target.value as FrecuenciaSeguimiento)} aria-label="Frecuencia del seguimiento" disabled={guardando}
+            className="rounded-lg border border-border bg-background px-2 py-1">
+            {(Object.keys(FRECUENCIA) as FrecuenciaSeguimiento[]).map((f) => <option key={f} value={f}>{FRECUENCIA[f]}</option>)}
+          </select>
+          <button type="button" onClick={() => void darSeguimiento()} disabled={!puede || guardando} data-testid="analista-dar-seguimiento"
+            className="rounded-full border border-[#9b7b4f] px-3 py-1 text-[#9b7b4f] disabled:opacity-50">{guardando ? "Guardando…" : "Dar seguimiento"}</button>
+        </div>
+      )}
+      {avisoSeg && <p className={`text-xs ${avisoSeg.ok ? "text-muted-foreground" : "text-red-600"}`} role={avisoSeg.ok ? "status" : "alert"} data-testid="analista-aviso-seguimiento">{avisoSeg.texto}</p>}
 
       {resp && !resp.ok && (
         <div className="rounded-lg border border-border p-3 text-sm" role="alert" data-testid="analista-error">
@@ -210,6 +240,8 @@ function PreguntarAnalista({ analista, now, alPensar }: { analista: AnalistaProp
         </div>
       )}
 
+      {analista.gestionarSeguimiento && <SeguimientosLista analista={analista} now={now} />}
+
       <div>
         <p className="mb-1 text-xs font-medium text-muted-foreground">Preguntas recientes</p>
         {analista.estadoConsultas === "error" ? <p className="text-xs text-muted-foreground" data-testid="analista-historial-error">No pudimos leer el historial de preguntas.</p>
@@ -219,7 +251,7 @@ function PreguntarAnalista({ analista, now, alPensar }: { analista: AnalistaProp
               {analista.consultas.map((c) => (
                 <li key={c.id} className="py-1.5">
                   <button type="button" className="flex w-full items-start justify-between gap-2 text-left" aria-expanded={abierta === c.id} onClick={() => setAbierta(abierta === c.id ? null : c.id)}>
-                    <span className="min-w-0"><span className="block">{c.pregunta}</span><span className="block text-muted-foreground">{cuandoRelativo(c.created_at, now)}</span></span>
+                    <span className="min-w-0"><span className="block">{c.pregunta}</span><span className="block text-muted-foreground">{cuandoRelativo(c.created_at, now)}{c.seguimiento_id ? " · seguimiento" : ""}</span></span>
                     <Pastilla color={ETIQUETA_CONSULTA[c.estado].color}>{ETIQUETA_CONSULTA[c.estado].etiqueta}</Pastilla>
                   </button>
                   {abierta === c.id && c.respuesta && (
@@ -233,6 +265,55 @@ function PreguntarAnalista({ analista, now, alPensar }: { analista: AnalistaProp
           )}
       </div>
       <p className="text-xs text-muted-foreground">El Analista solo lee y explica: no publica ni cambia nada. Sus cifras salen de la base y se verifican antes de mostrarlas.</p>
+    </div>
+  );
+}
+
+// ── Seguimientos: preguntas que el Analista responde solo ──────────────────────────────────────────────────────────
+const FRECUENCIA: Record<FrecuenciaSeguimiento, string> = { una_vez: "Una vez", diaria: "Cada día", semanal: "Cada semana" };
+
+function proximaLegible(iso: string, ahora: Date): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "pronto";
+  if (d.getTime() <= ahora.getTime()) return "en la próxima corrida (7:45)";
+  return `el ${d.toLocaleDateString("es-MX", { day: "numeric", month: "short", timeZone: "America/Mexico_City" })} a las 7:45`;
+}
+
+function SeguimientosLista({ analista, now }: { analista: AnalistaProps; now: Date }) {
+  const [trabajando, setTrabajando] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const lista = analista.seguimientos ?? [];
+  const cambiar = async (id: string, estado: "activo" | "pausado" | "terminado") => {
+    if (!analista.gestionarSeguimiento || trabajando) return;
+    setTrabajando(id); setError(null);
+    try { const r = await analista.gestionarSeguimiento({ accion: "cambiar_seguimiento", id, estado }); if (!r.ok) setError(r.error ?? "No se pudo cambiar el seguimiento."); }
+    catch { setError("No se pudo cambiar el seguimiento."); }
+    finally { setTrabajando(null); }
+  };
+  return (
+    <div data-testid="analista-seguimientos">
+      <p className="mb-1 text-xs font-medium text-muted-foreground">Seguimientos</p>
+      {analista.estadoSeguimientos === "error" ? <p className="text-xs text-muted-foreground" data-testid="analista-seguimientos-error">No pudimos leer los seguimientos.</p>
+        : analista.estadoSeguimientos === "cargando" ? <p className="text-xs text-muted-foreground">Leyendo seguimientos…</p>
+        : lista.length === 0 ? <p className="text-xs text-muted-foreground" data-testid="analista-sin-seguimientos">Todavía no hay seguimientos. Escribe una pregunta y elige «Dar seguimiento».</p> : (
+          <ul className="divide-y divide-border/40 text-xs">
+            {lista.map((s) => (
+              <li key={s.id} className="flex items-start justify-between gap-2 py-1.5" data-testid={`seguimiento-${s.id}`}>
+                <span className="min-w-0">
+                  <span className="block">{s.pregunta}</span>
+                  <span className="block text-muted-foreground">{FRECUENCIA[s.frecuencia]} · {s.estado === "pausado" ? "en pausa" : `próxima ${proximaLegible(s.proxima_at, now)}`}</span>
+                </span>
+                <span className="flex shrink-0 gap-1">
+                  {s.estado === "activo"
+                    ? <button type="button" disabled={!!trabajando} onClick={() => void cambiar(s.id, "pausado")} className="rounded-full border border-border px-2 py-0.5 disabled:opacity-50">Pausar</button>
+                    : <button type="button" disabled={!!trabajando} onClick={() => void cambiar(s.id, "activo")} className="rounded-full border border-border px-2 py-0.5 disabled:opacity-50">Reanudar</button>}
+                  <button type="button" disabled={!!trabajando} onClick={() => void cambiar(s.id, "terminado")} className="rounded-full border border-border px-2 py-0.5 disabled:opacity-50">Terminar</button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      {error && <p className="mt-1 text-xs text-red-600" role="alert" data-testid="analista-seguimientos-fallo">{error}</p>}
     </div>
   );
 }

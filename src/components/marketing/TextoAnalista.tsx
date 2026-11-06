@@ -40,12 +40,12 @@ export function TextoAnalista({ texto, className = "" }: { texto: string; classN
   const bs = bloques(texto);
   const out: ReactNode[] = [];
   for (let i = 0; i < bs.length; ) {
-    const b = bs[i];
+    const b = bs[i], k = i;
     if (b.tipo === "li") {
       const items: Extract<Bloque, { tipo: "li" }>[] = [];
       while (i < bs.length && bs[i].tipo === "li") items.push(bs[i++] as Extract<Bloque, { tipo: "li" }>);
       out.push(
-        <ul key={i} className="my-1 space-y-1">
+        <ul key={k} className="my-1 space-y-1">
           {items.map((it, j) => (
             <li key={j} className="flex gap-2" style={{ paddingLeft: it.nivel * 14 }}>
               <span aria-hidden className="mt-[0.55em] h-1 w-1 shrink-0 rounded-full bg-[#9b7b4f]" />
@@ -56,9 +56,9 @@ export function TextoAnalista({ texto, className = "" }: { texto: string; classN
       );
       continue;
     }
-    if (b.tipo === "h") out.push(<p key={i} className="mt-2 font-semibold">{enLinea(b.texto)}</p>);
-    else if (b.tipo === "hr") out.push(<hr key={i} className="my-2 border-border" />);
-    else out.push(<p key={i} className="my-1">{enLinea(b.texto)}</p>);
+    if (b.tipo === "h") out.push(<p key={k} className="mt-2 font-semibold">{enLinea(b.texto)}</p>);
+    else if (b.tipo === "hr") out.push(<hr key={k} className="my-2 border-border" />);
+    else out.push(<p key={k} className="my-1">{enLinea(b.texto)}</p>);
     i++;
   }
   return <div className={className}>{out}</div>;

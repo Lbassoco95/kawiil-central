@@ -8,8 +8,9 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import {
   correrConsulta, evaluarLimites, inicioDiaCDMX, inicioMesCDMX, leerLimites, MODELO_POR_DEFECTO, validarPregunta,
-  type Herramienta, type Herramientas, type Llm, type Mensaje, type ResultadoConsulta,
+  type ResultadoConsulta,
 } from "../_shared/analista.ts";
+import { herramientasDe, llmAnthropic } from "../_shared/analista_servidor.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -18,21 +19,6 @@ const CORS = {
 };
 const json = (o: unknown, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { ...CORS, "Content-Type": "application/json" } });
 const AGENTE = "marketing_analista";
-
-// Llamada a la API de mensajes de Anthropic con herramientas. Devuelve el formato que espera correrConsulta.
-function llmAnthropic(apiKey: string, modelo: string): Llm {
-  return async ({ system, mensajes, herramientas }: { system: string; mensajes: Mensaje[]; herramientas: Herramienta[] }) => {
-    const r = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-      body: JSON.stringify({ model: modelo, max_tokens: 1024, system, messages: mensajes, tools: herramientas.map((h) => ({ name: h.name, description: h.description, input_schema: h.input_schema })) }),
-      signal: AbortSignal.timeout(45_000),
-    });
-    if (!r.ok) throw new Error(`anthropic ${r.status}`);
-    const d = await r.json();
-    return { contenido: d.content ?? [], stop_reason: d.stop_reason ?? "end_turn", uso: { entrada: d.usage?.input_tokens ?? 0, salida: d.usage?.output_tokens ?? 0 } };
-  };
-}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
@@ -53,8 +39,30 @@ Deno.serve(async (req) => {
   if (!org) return json({ ok: false, error: "No se pudo identificar tu organización." }, 403);
 
   // 2) La pregunta.
-  let cuerpo: { pregunta?: unknown } = {};
+  let cuerpo: { pregunta?: unknown; accion?: unknown; frecuencia?: unknown; id?: unknown; estado?: unknown } = {};
   try { cuerpo = await req.json(); } catch { return json({ ok: false, error: "Solicitud no válida." }, 400); }
+
+  // 2b) Seguimientos: crear, pausar, reanudar o terminar. Solo guardan la pregunta y su frecuencia; el Analista las responde después, en solo lectura.
+  if (cuerpo.accion === "crear_seguimiento" || cuerpo.accion === "cambiar_seguimiento") {
+    const dbSeg = createClient(url, service, { auth: { persistSession: false } });
+    if (cuerpo.accion === "crear_seguimiento") {
+      const vs = validarPregunta(cuerpo.pregunta);
+      if (!vs.ok) return json({ ok: false, error: vs.error }, 400);
+      if (cuerpo.frecuencia !== "una_vez" && cuerpo.frecuencia !== "diaria" && cuerpo.frecuencia !== "semanal") return json({ ok: false, error: "Elige si se repite una vez, a diario o cada semana." }, 400);
+      const { data: id, error } = await dbSeg.rpc("mk_seguimiento_crear", { p_org: org, p_user: u.user.id, p_pregunta: vs.pregunta, p_frecuencia: cuerpo.frecuencia, p_primera: new Date().toISOString() });
+      if (error) {
+        console.error("marketing-agente: no se pudo crear el seguimiento", error.message);
+        return error.message.includes("tope") ? json({ ok: false, error: "Ya tienes 5 seguimientos. Termina alguno para agregar otro." }, 409) : json({ ok: false, error: "No se pudo guardar el seguimiento." }, 500);
+      }
+      return json({ ok: true, id });
+    }
+    const idSeg = typeof cuerpo.id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cuerpo.id) ? cuerpo.id : null;
+    if (!idSeg || (cuerpo.estado !== "activo" && cuerpo.estado !== "pausado" && cuerpo.estado !== "terminado")) return json({ ok: false, error: "Solicitud no válida." }, 400);
+    const { error } = await dbSeg.rpc("mk_seguimiento_cambiar", { p_id: idSeg, p_org: org, p_user: u.user.id, p_estado: cuerpo.estado });
+    if (error) return json({ ok: false, error: "No se encontró ese seguimiento." }, 404);
+    return json({ ok: true });
+  }
+
   const v = validarPregunta(cuerpo.pregunta);
   if (!v.ok) return json({ ok: false, error: v.error }, 400);
 
@@ -76,13 +84,8 @@ Deno.serve(async (req) => {
     return json({ ok: false, error: limite.mensaje, limite: limite.motivo }, 429);
   }
 
-  // 4) Herramientas: cada una llama a la función SQL de lista cerrada con la organización del usuario.
-  const nombres = ["colchon_actual", "resultados_semanales", "resultados_por_formato", "resultados_por_pilar", "semaforo_semanas", "casos_abiertos", "informe_hoy", "piezas_proximas", "reglas_vigentes", "cobertura_fuentes"];
-  const herramientas: Herramientas = Object.fromEntries(nombres.map((n) => [n, async (entrada: Record<string, unknown>) => {
-    const { data, error } = await db.rpc("mk_analista_datos", { p_org: org, p_herramienta: n, p_entrada: entrada });
-    if (error) throw new Error(error.message);
-    return data;
-  }]));
+  // 4) Herramientas (lista cerrada, solo lectura).
+  const herramientas = herramientasDe(db, org);
 
   // 5) Consulta.
   const inicio = new Date().toISOString();
