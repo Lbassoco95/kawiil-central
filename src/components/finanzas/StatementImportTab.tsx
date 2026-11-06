@@ -122,7 +122,7 @@ export function StatementImportTab() {
                 {pdf.finalOk === true && " · el último saldo coincide con el saldo final del PDF"}
               </p>
               {pdf.warnings.map((w) => <p key={w} className="text-xs text-amber-600">{w}</p>)}
-              <div className="rounded-lg border border-border/50 overflow-hidden">
+              <div className="rounded-lg border border-border/50 overflow-x-auto">
                 <Table>
                   <TableHeader><TableRow><TableHead>Fecha</TableHead><TableHead>Descripción</TableHead><TableHead className="text-right">Cargo</TableHead><TableHead className="text-right">Abono</TableHead></TableRow></TableHeader>
                   <TableBody>
@@ -175,7 +175,7 @@ export function StatementImportTab() {
                 {parsed.movements.length} movimientos · {range![0]} → {range![1]}
                 {parsed.skippedRows > 0 && ` · ${parsed.skippedRows} filas ignoradas`}
               </p>
-              <div className="rounded-lg border border-border/50 overflow-hidden">
+              <div className="rounded-lg border border-border/50 overflow-x-auto">
                 <Table>
                   <TableHeader><TableRow><TableHead>Fecha</TableHead><TableHead>Descripción</TableHead><TableHead className="text-right">Cargo</TableHead><TableHead className="text-right">Abono</TableHead></TableRow></TableHeader>
                   <TableBody>

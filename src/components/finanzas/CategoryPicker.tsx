@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useFinanceCategories } from "@/hooks/useFinanceBank";
+import { cn } from "@/lib/utils";
 
 const NEW = "__nueva__";
 
@@ -20,7 +21,7 @@ export function CategoryPicker({ value, onChange, className }: { value: string; 
   }
   return (
     <Select value={value} onValueChange={(v) => (v === NEW ? setCustom(true) : onChange(v))}>
-      <SelectTrigger className={`h-8 text-xs ${className ?? "w-48"}`}><SelectValue placeholder="Categoría…" /></SelectTrigger>
+      <SelectTrigger className={cn("h-8 text-xs", className ?? "w-48")}><SelectValue placeholder="Categoría…" /></SelectTrigger>
       <SelectContent>
         {categories.map((c) => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}
         <SelectItem value={NEW}>+ Nueva categoría…</SelectItem>

@@ -151,7 +151,7 @@ export function BankImportDialog({ open, onOpenChange }: { open: boolean; onOpen
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) reset(); onOpenChange(o); }}>
-      <DialogContent className="max-w-3xl max-h-[88vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-5xl lg:max-w-6xl w-full grid-cols-[minmax(0,1fr)] sm:max-h-[92vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle>Cargar movimientos de bancos</DialogTitle>
           <DialogDescription>
@@ -160,7 +160,7 @@ export function BankImportDialog({ open, onOpenChange }: { open: boolean; onOpen
         </DialogHeader>
 
         <Tabs defaultValue="excel">
-          <TabsList>
+          <TabsList className="h-auto w-full flex-wrap justify-start gap-1">
             <TabsTrigger value="excel" className="gap-1.5 text-xs"><FileSpreadsheet className="h-3.5 w-3.5" /> Excel contable</TabsTrigger>
             <TabsTrigger value="estado" className="gap-1.5 text-xs"><FileSpreadsheet className="h-3.5 w-3.5" /> Estado de cuenta del banco</TabsTrigger>
             <TabsTrigger value="captura" className="gap-1.5 text-xs"><Camera className="h-3.5 w-3.5" /> Captura de pantalla</TabsTrigger>
