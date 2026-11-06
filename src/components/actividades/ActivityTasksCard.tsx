@@ -19,16 +19,16 @@ import { Plus, Pencil, Trash2, ListChecks, Images, UserCheck } from "lucide-reac
 import { formatDateMX } from "@/lib/dateUtils";
 import { TASK_STATUS_CONFIG, PRIORITY_CONFIG } from "@/lib/statusStyles";
 import { useProfiles, useCreateTask, useUpdateTask, useDeleteTask } from "@/hooks/useTasks";
-import { useActivityTasks, useActivity, useUpdateActivity, type ActivityTask } from "@/hooks/useActivities";
+import { useActivityTasks, useActivity, type ActivityTask } from "@/hooks/useActivities";
 import { useActivityFileCounts } from "@/hooks/useActivityFiles";
 import { TaskFilesDialog } from "@/components/actividades/TaskFilesDialog";
 import { RubroSelect } from "@/components/actividades/RubroSelect";
 import {
   useActivityProviders, useActivityAttendees, useCreateAttendeeConfirmationTasks,
-  useCreateActivityProvider, useUpdateActivityProvider,
+  useCreateActivityProvider, useConfirmVenue,
   type ActivityProvider, type ActivityAttendee,
 } from "@/hooks/useActivityExtras";
-import { buildRubroOptions, rubroLabel, providerStatusLabel, pendienteSuggestions } from "@/lib/activityTypes";
+import { buildRubroOptions, rubroLabel, providerStatusLabel, pendienteSuggestions, venueText } from "@/lib/activityTypes";
 
 type TaskStatus = keyof typeof TASK_STATUS_CONFIG;
 
@@ -49,13 +49,13 @@ const SCOPE_OPTIONS: { value: TaskScope; label: string }[] = [
 const ATTENDEE_SUGGESTIONS = ["Confirmar asistencia", "Confirmar acompañante (+1)", "Pedir restricciones alimentarias"];
 
 function TaskDialog({
-  activityId, task, trigger, providers, rubros, attendees, defaultCategory = "", defaultProviderId = "", defaultAttendeeId = "", defaultScope, activityLocation,
+  activityId, task, trigger, providers, rubros, attendees, defaultCategory = "", defaultProviderId = "", defaultAttendeeId = "", defaultScope, venueProviderId,
 }: {
   activityId: string; task?: ActivityTask; trigger: React.ReactNode;
   providers: ActivityProvider[]; rubros: { value: string; label: string }[];
   attendees: ActivityAttendee[];
   defaultCategory?: string; defaultProviderId?: string; defaultAttendeeId?: string;
-  defaultScope?: TaskScope; activityLocation?: string | null;
+  defaultScope?: TaskScope; venueProviderId?: string | null;
 }) {
   const isEdit = !!task;
   const [open, setOpen] = useState(false);
@@ -63,8 +63,7 @@ function TaskDialog({
   const createTask = useCreateTask();
   const updateTask = useUpdateTask();
   const createProvider = useCreateActivityProvider();
-  const updateProvider = useUpdateActivityProvider();
-  const updateActivity = useUpdateActivity();
+  const confirmVenue = useConfirmVenue();
 
   const [newProvOpen, setNewProvOpen] = useState(false);
   const [newProvName, setNewProvName] = useState("");
@@ -99,7 +98,7 @@ function TaskDialog({
     }
     setNewProvOpen(false); setNewProvName(""); setNewProvDesc("");
     const pv = providers.find((x) => x.id === (task ? task.activity_provider_id : defaultProviderId));
-    setIsVenue(!!pv && !!activityLocation && activityLocation.startsWith(pv.name));
+    setIsVenue(!!pv && !!venueProviderId && venueProviderId === pv.id);
     // Solo al abrir: si dependiera de `providers`, crear un proveedor aquí reiniciaría el formulario.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, task, defaultCategory, defaultProviderId, defaultAttendeeId, defaultScope]);
@@ -120,8 +119,7 @@ function TaskDialog({
 
   const isCasas = category === "casas";
   const selectedProvider = providers.find((x) => x.id === providerId);
-  const venueText = selectedProvider
-    ? [selectedProvider.name, selectedProvider.description].filter(Boolean).join(" — ") : "";
+  const venueLabel = selectedProvider ? venueText(selectedProvider) : "";
 
   const createInlineProvider = () => {
     const name = newProvName.trim();
@@ -138,13 +136,12 @@ function TaskDialog({
     );
   };
 
-  // Confirmar la sede: se muestra en Detalles de la actividad y el proveedor pasa a "Elegido".
+  // Confirmar la sede: pasa a ser la sede confirmada de la actividad (se muestra en Detalles)
+  // y el proveedor queda como "Elegido".
   const applyVenue = () => {
     if (!(scope === "rubro" && isCasas && isVenue && selectedProvider)) return;
-    updateActivity.mutate({ id: activityId, location: venueText });
-    if (selectedProvider.status === "cotizacion") {
-      updateProvider.mutate({ id: selectedProvider.id, status: "elegido" });
-    }
+    if (venueProviderId === selectedProvider.id) return; // ya es la sede confirmada
+    confirmVenue.mutate({ activityId, provider: selectedProvider, confirmed: true });
   };
 
   const profileOptions = (profiles || []).map((p) => ({ value: p.user_id, label: p.full_name }));
@@ -263,7 +260,7 @@ function TaskDialog({
                   <div>
                     <Label htmlFor="task-venue">Es la sede del evento</Label>
                     <p className="text-xs text-muted-foreground">
-                      Al guardar, “{venueText}” se muestra como Sede / Lugar en Detalles para confirmarla a
+                      Al guardar, “{venueLabel}” se muestra como Sede / Lugar en Detalles para confirmarla a
                       los invitados, y el proveedor pasa a Elegido.
                     </p>
                   </div>
@@ -430,7 +427,7 @@ export function ActivityTasksCard({ activityId }: { activityId: string }) {
         </CardTitle>
         <TaskDialog
           activityId={activityId}
-          providers={providers} rubros={rubros} attendees={attendees} activityLocation={activityData?.location}
+          providers={providers} rubros={rubros} attendees={attendees} venueProviderId={activityData?.venue_confirmed ? activityData.venue_provider_id : null}
           trigger={
             <Button size="sm" variant="outline">
               <Plus className="mr-1.5 h-3.5 w-3.5" />
@@ -493,7 +490,7 @@ export function ActivityTasksCard({ activityId }: { activityId: string }) {
                           )}
                           <TaskDialog
                             activityId={activityId}
-                            providers={providers} rubros={rubros} attendees={attendees} activityLocation={activityData?.location}
+                            providers={providers} rubros={rubros} attendees={attendees} venueProviderId={activityData?.venue_confirmed ? activityData.venue_provider_id : null}
                             defaultCategory={g.key === "__asistentes__" ? "" : g.key}
                             defaultScope={g.key === "__asistentes__" ? "asistentes" : g.key ? "rubro" : "general"}
                             trigger={
@@ -568,7 +565,7 @@ export function ActivityTasksCard({ activityId }: { activityId: string }) {
                           <TaskDialog
                             activityId={activityId}
                             task={t}
-                            providers={providers} rubros={rubros} attendees={attendees} activityLocation={activityData?.location}
+                            providers={providers} rubros={rubros} attendees={attendees} venueProviderId={activityData?.venue_confirmed ? activityData.venue_provider_id : null}
                             trigger={
                               <Button size="icon" variant="ghost" className="h-7 w-7">
                                 <Pencil className="h-3.5 w-3.5" />

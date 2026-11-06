@@ -4,7 +4,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Pencil, Trash2, ExternalLink } from "lucide-react";
+import { ArrowLeft, Pencil, Trash2, ExternalLink, MapPinCheck } from "lucide-react";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ActivityFormDialog } from "@/components/actividades/ActivityFormDialog";
@@ -12,6 +12,7 @@ import { ActivityTasksCard } from "@/components/actividades/ActivityTasksCard";
 import { ActivityAttendeesCard } from "@/components/actividades/ActivityAttendeesCard";
 import { ActivityProvidersCard } from "@/components/actividades/ActivityProvidersCard";
 import { useActivity, useDeleteActivity } from "@/hooks/useActivities";
+import { useConfirmVenue } from "@/hooks/useActivityExtras";
 import { useProfiles } from "@/hooks/useTasks";
 import { useUserRole } from "@/hooks/useUserRole";
 import {
@@ -33,6 +34,7 @@ const ActividadDetalle = () => {
   const { data: activity, isLoading } = useActivity(id);
   const { data: profiles } = useProfiles();
   const deleteActivity = useDeleteActivity();
+  const confirmVenue = useConfirmVenue();
   const { isTransformador, isLoading: roleLoading } = useUserRole();
   const [confirmOpen, setConfirmOpen] = useState(false);
 
@@ -107,6 +109,26 @@ const ActividadDetalle = () => {
               <Row label="Fecha">{activity.event_date ? formatDateMX(activity.event_date) : "—"}</Row>
               <Row label="Hora">{activity.event_time ? `${activity.event_time.slice(0, 5)} h` : "—"}</Row>
               <Row label="Sede / Lugar">{activity.location || "—"}</Row>
+              {activity.location && (
+                <div className="flex items-center justify-between gap-2">
+                  <Badge
+                    variant="outline"
+                    className={activity.venue_confirmed
+                      ? "border-emerald-200 bg-emerald-100 text-emerald-800"
+                      : "border-amber-200 bg-amber-100 text-amber-800"}
+                  >
+                    {activity.venue_confirmed ? "Sede confirmada" : "Sede por confirmar"}
+                  </Badge>
+                  <Button
+                    size="sm" variant="outline" className="h-7 text-xs"
+                    disabled={confirmVenue.isPending}
+                    onClick={() => confirmVenue.mutate({ activityId: activity.id, confirmed: !activity.venue_confirmed })}
+                  >
+                    <MapPinCheck className="mr-1 h-3 w-3" />
+                    {activity.venue_confirmed ? "Quitar confirmación" : "Confirmar sede"}
+                  </Button>
+                </div>
+              )}
               <Row label="Responsable">{responsibleName}</Row>
               <Row label="Presupuesto estimado">{formatMxn(activity.budget_estimated, { compact: false })}</Row>
               <Row label="Gasto real">{formatMxn(activity.budget_spent, { compact: false })}</Row>

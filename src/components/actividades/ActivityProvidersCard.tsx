@@ -14,12 +14,12 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
-import { Plus, Pencil, Trash2, Store, ExternalLink, ListChecks } from "lucide-react";
+import { Plus, Pencil, Trash2, Store, ExternalLink, ListChecks, MapPinCheck } from "lucide-react";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { formatDateMX } from "@/lib/dateUtils";
 import { useProfiles } from "@/hooks/useTasks";
 import { RubroSelect } from "@/components/actividades/RubroSelect";
-import { useActivityTasks } from "@/hooks/useActivities";
+import { useActivityTasks, useActivity } from "@/hooks/useActivities";
 import { ProviderTrackingDialog } from "@/components/actividades/ProviderTrackingDialog";
 import { formatMxn } from "@/lib/pipelineFormat";
 import {
@@ -29,7 +29,7 @@ import {
 } from "@/lib/activityTypes";
 import {
   useActivityProviders, useCreateActivityProvider, useUpdateActivityProvider,
-  useDeleteActivityProvider, type ActivityProvider,
+  useDeleteActivityProvider, useConfirmVenue, type ActivityProvider,
 } from "@/hooks/useActivityExtras";
 
 const emptyNum = (s: string) => {
@@ -200,6 +200,9 @@ export function ActivityProvidersCard({ activityId }: { activityId: string }) {
 
   const list = providers ?? [];
   const { data: tasks } = useActivityTasks(activityId);
+  const { data: activity } = useActivity(activityId);
+  const confirmVenue = useConfirmVenue();
+  const confirmedVenueId = activity?.venue_confirmed ? activity.venue_provider_id : null;
   const rubros = buildRubroOptions([...list.map((p) => p.category), ...(tasks ?? []).map((t) => t.activity_category)]);
   const taskCounts: Record<string, { done: number; total: number }> = {};
   for (const t of tasks ?? []) {
@@ -264,6 +267,11 @@ export function ActivityProvidersCard({ activityId }: { activityId: string }) {
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-1.5">
                         {p.name}
+                        {confirmedVenueId === p.id && (
+                          <Badge variant="outline" className="border-emerald-200 bg-emerald-100 text-[10px] font-normal text-emerald-800">
+                            Sede confirmada
+                          </Badge>
+                        )}
                         {p.link && (
                           <a href={p.link} target="_blank" rel="noreferrer" className="text-primary">
                             <ExternalLink className="h-3 w-3" />
@@ -320,6 +328,16 @@ export function ActivityProvidersCard({ activityId }: { activityId: string }) {
                     <TableCell className="text-right">{formatMxn(providerBalance(p), { compact: false })}</TableCell>
                     <TableCell>
                       <div className="flex items-center justify-end gap-1">
+                        {p.category === "casas" && confirmedVenueId !== p.id && (
+                          <Button
+                            size="icon" variant="ghost" className="h-7 w-7 text-emerald-700"
+                            title="Marcar como sede confirmada"
+                            disabled={confirmVenue.isPending}
+                            onClick={() => confirmVenue.mutate({ activityId, provider: p, confirmed: true })}
+                          >
+                            <MapPinCheck className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
                         <ProviderDialog
                           activityId={activityId}
                           rubros={rubros}
