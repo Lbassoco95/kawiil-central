@@ -116,7 +116,8 @@ export function providerCategoryLabel(value?: string | null): string {
 }
 
 // ─── Estatus de proveedor ────────────────────────────────────────────────────
-export type ProviderStatus = "cotizacion" | "elegido" | "apartado" | "pagado" | "descartado";
+export type ProviderStatus =
+  | "cotizacion" | "elegido" | "apartado" | "pagado" | "descartado" | "no_disponible";
 
 export const PROVIDER_STATUS_LABELS: Record<ProviderStatus, string> = {
   cotizacion: "Cotización",
@@ -124,6 +125,7 @@ export const PROVIDER_STATUS_LABELS: Record<ProviderStatus, string> = {
   apartado: "Apartado",
   pagado: "Pagado",
   descartado: "Descartado",
+  no_disponible: "No disponible",
 };
 
 export const PROVIDER_STATUS_STYLES: Record<ProviderStatus, string> = {
@@ -132,6 +134,7 @@ export const PROVIDER_STATUS_STYLES: Record<ProviderStatus, string> = {
   apartado: "bg-amber-100 text-amber-800 border-amber-200",
   pagado: "bg-emerald-100 text-emerald-800 border-emerald-200",
   descartado: "bg-rose-100 text-rose-800 border-rose-200",
+  no_disponible: "bg-orange-100 text-orange-800 border-orange-200",
 };
 
 export const PROVIDER_STATUS_OPTIONS = (

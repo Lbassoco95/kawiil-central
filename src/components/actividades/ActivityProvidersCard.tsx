@@ -14,7 +14,7 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
-import { Plus, Pencil, Trash2, Store, ExternalLink, ListChecks, MapPinCheck } from "lucide-react";
+import { Plus, Pencil, Trash2, Store, ExternalLink, ListChecks, MapPinCheck, Ban } from "lucide-react";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { formatDateMX } from "@/lib/dateUtils";
 import { useProfiles } from "@/hooks/useTasks";
@@ -29,7 +29,7 @@ import {
 } from "@/lib/activityTypes";
 import {
   useActivityProviders, useCreateActivityProvider, useUpdateActivityProvider,
-  useDeleteActivityProvider, useConfirmVenue, type ActivityProvider,
+  useDeleteActivityProvider, useConfirmVenue, useMarkProviderUnavailable, type ActivityProvider,
 } from "@/hooks/useActivityExtras";
 
 const emptyNum = (s: string) => {
@@ -202,6 +202,7 @@ export function ActivityProvidersCard({ activityId }: { activityId: string }) {
   const { data: tasks } = useActivityTasks(activityId);
   const { data: activity } = useActivity(activityId);
   const confirmVenue = useConfirmVenue();
+  const markUnavailable = useMarkProviderUnavailable();
   const confirmedVenueId = activity?.venue_confirmed ? activity.venue_provider_id : null;
   const rubros = buildRubroOptions([...list.map((p) => p.category), ...(tasks ?? []).map((t) => t.activity_category)]);
   const taskCounts: Record<string, { done: number; total: number }> = {};
@@ -215,7 +216,10 @@ export function ActivityProvidersCard({ activityId }: { activityId: string }) {
   const todayYmd = new Date().toISOString().slice(0, 10);
   const nameFor = (uid: string | null) =>
     uid ? (profiles || []).find((pr) => pr.user_id === uid)?.full_name || "—" : "—";
-  const totalGeneral = list.reduce((s, p) => s + providerTotal(p), 0);
+  // Lo no disponible no cuenta para el total (no se va a contratar).
+  const totalGeneral = list
+    .filter((p) => p.status !== "no_disponible")
+    .reduce((s, p) => s + providerTotal(p), 0);
 
   return (
     <Card>
@@ -262,11 +266,11 @@ export function ActivityProvidersCard({ activityId }: { activityId: string }) {
               </TableHeader>
               <TableBody>
                 {list.map((p) => (
-                  <TableRow key={p.id}>
+                  <TableRow key={p.id} className={p.status === "no_disponible" ? "opacity-60" : ""}>
                     <TableCell>{rubroLabel(p.category)}</TableCell>
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-1.5">
-                        {p.name}
+                        <span className={p.status === "no_disponible" ? "line-through" : ""}>{p.name}</span>
                         {confirmedVenueId === p.id && (
                           <Badge variant="outline" className="border-emerald-200 bg-emerald-100 text-[10px] font-normal text-emerald-800">
                             Sede confirmada
@@ -328,7 +332,23 @@ export function ActivityProvidersCard({ activityId }: { activityId: string }) {
                     <TableCell className="text-right">{formatMxn(providerBalance(p), { compact: false })}</TableCell>
                     <TableCell>
                       <div className="flex items-center justify-end gap-1">
-                        {p.category === "casas" && confirmedVenueId !== p.id && (
+                        {p.status !== "no_disponible" && (
+                          <Button
+                            size="icon" variant="ghost" className="h-7 w-7 text-orange-700"
+                            title={p.category === "casas" ? "Marcar sede como no disponible" : "Marcar como no disponible"}
+                            disabled={markUnavailable.isPending}
+                            onClick={() => {
+                              const isVenue = confirmedVenueId === p.id;
+                              if (isVenue && !window.confirm(
+                                `“${p.name}” es la sede confirmada. Si la marcas como no disponible se quitará como sede del evento. ¿Continuar?`,
+                              )) return;
+                              markUnavailable.mutate({ provider: p, activity });
+                            }}
+                          >
+                            <Ban className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                        {p.category === "casas" && confirmedVenueId !== p.id && p.status !== "no_disponible" && (
                           <Button
                             size="icon" variant="ghost" className="h-7 w-7 text-emerald-700"
                             title="Marcar como sede confirmada"
