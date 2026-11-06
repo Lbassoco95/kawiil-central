@@ -4,7 +4,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Pencil, Trash2, ExternalLink, MapPinCheck } from "lucide-react";
+import { ArrowLeft, Pencil, Trash2, ExternalLink, MapPinCheck, CheckCircle2 } from "lucide-react";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ActivityFormDialog } from "@/components/actividades/ActivityFormDialog";
@@ -13,10 +13,12 @@ import { ActivityAttendeesCard } from "@/components/actividades/ActivityAttendee
 import { ActivityProvidersCard } from "@/components/actividades/ActivityProvidersCard";
 import { useActivity, useDeleteActivity } from "@/hooks/useActivities";
 import { useConfirmVenue } from "@/hooks/useActivityExtras";
+import { useActivityTasks } from "@/hooks/useActivities";
+import { useUpdateTask } from "@/hooks/useTasks";
 import { useProfiles } from "@/hooks/useTasks";
 import { useUserRole } from "@/hooks/useUserRole";
 import {
-  activityTypeLabel, activityStatusLabel, ACTIVITY_STATUS_STYLES, type ActivityStatus,
+  isVenueConfirmationTitle, activityTypeLabel, activityStatusLabel, ACTIVITY_STATUS_STYLES, type ActivityStatus,
 } from "@/lib/activityTypes";
 import { formatMxn } from "@/lib/pipelineFormat";
 import { formatDateMX } from "@/lib/dateUtils";
@@ -35,6 +37,16 @@ const ActividadDetalle = () => {
   const { data: profiles } = useProfiles();
   const deleteActivity = useDeleteActivity();
   const confirmVenue = useConfirmVenue();
+  const updateTask = useUpdateTask();
+  const { data: activityTasks } = useActivityTasks(id);
+  // Pendientes abiertos de "confirmar la sede" (rubro Casas / Sede).
+  const openVenueTasks = (activityTasks ?? []).filter(
+    (t) => t.activity_category === "casas" && isVenueConfirmationTitle(t.title)
+      && t.status !== "completada" && t.status !== "cancelada",
+  );
+  const markVenueTasksDone = () => {
+    for (const t of openVenueTasks) updateTask.mutate({ id: t.id, status: "completada" });
+  };
   const { isTransformador, isLoading: roleLoading } = useUserRole();
   const [confirmOpen, setConfirmOpen] = useState(false);
 
@@ -109,6 +121,16 @@ const ActividadDetalle = () => {
               <Row label="Fecha">{activity.event_date ? formatDateMX(activity.event_date) : "—"}</Row>
               <Row label="Hora">{activity.event_time ? `${activity.event_time.slice(0, 5)} h` : "—"}</Row>
               <Row label="Sede / Lugar">{activity.location || "—"}</Row>
+              {activity.venue_confirmed && openVenueTasks.length > 0 && (
+                <Button
+                  size="sm" variant="outline" className="h-8 w-full justify-start text-xs text-emerald-700"
+                  disabled={updateTask.isPending} onClick={markVenueTasksDone}
+                >
+                  <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                  Marcar pendiente de sede como hecho
+                  {openVenueTasks.length > 1 ? ` (${openVenueTasks.length})` : ""}
+                </Button>
+              )}
               {activity.location && (
                 <div className="flex items-center justify-between gap-2">
                   <Badge
