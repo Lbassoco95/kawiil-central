@@ -8,7 +8,7 @@
 
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
-import { ExternalLink, Link2, Bot, Loader2, Video } from "lucide-react";
+import { ExternalLink, Link2, Bot, Loader2, Video, DownloadCloud } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -22,6 +22,7 @@ export function MtgCallCaptureBar(props: {
 }) {
   const [busy, setBusy] = useState(false);
   const [mediaBusy, setMediaBusy] = useState(false);
+  const [syncBusy, setSyncBusy] = useState(false);
   const [media, setMedia] = useState<{ video_url: string | null; audio_url: string | null } | null>(
     null,
   );
@@ -54,6 +55,37 @@ export function MtgCallCaptureBar(props: {
       });
     } finally {
       setMediaBusy(false);
+    }
+  };
+
+  const onSyncRecall = async () => {
+    setSyncBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("mtg-recall-sync", {
+        body: { meeting_id: props.meeting.id },
+      });
+      if (error) {
+        const ctx = (error as { context?: Response }).context;
+        const detail = ctx ? await ctx.json().catch(() => null) : null;
+        throw new Error(detail?.error ?? error.message);
+      }
+      if (data?.error) throw new Error(data.error);
+      if (data.transcript_saved) {
+        toast.success("Listo: se trajo la transcripción con hablantes y se está armando la minuta");
+      } else if (!data.bot_left) {
+        toast.message(
+          `Kawiilito sigue en la llamada${data.bot_status ? ` (${data.bot_status})` : ""}. Cuando termine, vuelve a pulsar Traer grabación.`,
+        );
+      } else if (!data.has_transcript) {
+        toast.message("La llamada terminó, pero Recall todavía no tiene la transcripción. Intenta en unos minutos.");
+      } else {
+        toast.message("La transcripción ya estaba guardada.");
+      }
+      props.onBotSent?.();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo traer la grabación");
+    } finally {
+      setSyncBusy(false);
     }
   };
 
@@ -135,6 +167,23 @@ export function MtgCallCaptureBar(props: {
             </span>
           )}
         </Button>
+        {props.meeting.recall_bot_id && (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={onSyncRecall}
+            disabled={syncBusy}
+            title="Actualiza el estado del bot y trae de Recall la transcripción con hablantes"
+          >
+            {syncBusy ? (
+              <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+            ) : (
+              <DownloadCloud className="h-3.5 w-3.5 mr-1" />
+            )}
+            Traer grabación
+          </Button>
+        )}
         {props.meeting.recall_bot_id && (
           <Button
             type="button"

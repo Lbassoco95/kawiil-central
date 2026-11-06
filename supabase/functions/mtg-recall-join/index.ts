@@ -146,7 +146,7 @@ serve(async (req) => {
 
     const { data: meeting, error: mErr } = await admin
       .from("mtg_meetings")
-      .select("id, organization_id, series_id, teams_join_url, recall_bot_id, recall_bot_status, transcript_path")
+      .select("id, organization_id, series_id, status, teams_join_url, recall_bot_id, recall_bot_status, transcript_path")
       .eq("id", meetingId)
       .single();
     if (mErr || !meeting) return json({ error: "junta no encontrada" }, 404);
@@ -212,6 +212,10 @@ serve(async (req) => {
       .update({
         recall_bot_id: bot.id,
         recall_bot_status: "joining_call",
+        // Al mandar a Kawiilito la junta arranca; termina sola cuando el bot sale de la llamada.
+        ...(meeting.status === "planned"
+          ? { status: "in_progress", started_at: new Date().toISOString() }
+          : {}),
         // No pisar una transcripción ya recibida (p. ej. al reenviar el bot).
         ...(meeting.transcript_path
           ? {}
