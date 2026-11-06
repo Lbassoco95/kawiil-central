@@ -197,3 +197,8 @@ const SUGGESTIONS_BY_RUBRO: Record<string, string[]> = {
 export function pendienteSuggestions(rubro?: string | null): string[] {
   return SUGGESTIONS_BY_RUBRO[(rubro ?? "").toLowerCase()] ?? SUGGESTIONS_GENERIC;
 }
+
+/** Texto de la sede a partir del proveedor: nombre y, si hay, dirección/datos. */
+export function venueText(p: { name: string; description?: string | null }): string {
+  return [p.name, p.description?.trim()].filter(Boolean).join(" — ");
+}
