@@ -168,7 +168,7 @@ export const useTareasMarketingAgentes = () =>
   });
 
 // ── Analista de resultados (agente con IA, solo lectura) ─────────────────────────────────────────────────────────────
-export interface ConsultaAnalista { id: string; pregunta: string; respuesta: string | null; estado: "respondida" | "error" | "rechazada_limite"; verificada: boolean | null; no_verificadas: string[]; created_at: string }
+export interface ConsultaAnalista { id: string; pregunta: string; respuesta: string | null; estado: "respondida" | "error" | "rechazada_limite"; verificada: boolean | null; no_verificadas: string[]; created_at: string; seguimiento_id?: string | null }
 export interface RespuestaAnalista {
   ok: boolean; respuesta?: string; verificada?: boolean; no_verificadas?: string[]; fuentes?: Array<{ herramienta: string; filas: number | null; corte: string | null }>;
   restantes_hoy?: number; error?: string; limite?: "dia" | "mes";
@@ -180,7 +180,7 @@ export const useConsultasAnalista = () =>
     queryKey: ["analista", "consultas"],
     queryFn: async (): Promise<ConsultaAnalista[]> => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any).from("mk_consulta").select("id, pregunta, respuesta, estado, verificada, no_verificadas, created_at").order("created_at", { ascending: false }).limit(10);
+      const { data, error } = await (supabase as any).from("mk_consulta").select("id, pregunta, respuesta, estado, verificada, no_verificadas, created_at, seguimiento_id").order("created_at", { ascending: false }).limit(10);
       if (error) throw error;
       return data ?? [];
     },
@@ -201,3 +201,37 @@ export async function preguntarAlAnalista(pregunta: string): Promise<RespuestaAn
   }
 }
 
+
+// ── Seguimientos del Analista (preguntas que responde solo, una vez, a diario o cada semana) ──────────────────────────
+export type FrecuenciaSeguimiento = "una_vez" | "diaria" | "semanal";
+export interface SeguimientoAnalista { id: string; pregunta: string; frecuencia: FrecuenciaSeguimiento; estado: "activo" | "pausado" | "terminado"; proxima_at: string; ultima_at: string | null; corridas: number }
+
+// RLS: solo quien tiene el permiso de ver Marketing, de su organización. Si la tabla aún no existe, no rompe la pantalla.
+export const useSeguimientosAnalista = () =>
+  useQuery({
+    queryKey: ["analista", "seguimientos"],
+    queryFn: async (): Promise<SeguimientoAnalista[]> => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any).from("mk_seguimiento").select("id, pregunta, frecuencia, estado, proxima_at, ultima_at, corridas").neq("estado", "terminado").order("created_at", { ascending: false }).limit(20);
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 30_000,
+    retry: false,
+  });
+
+export type AccionSeguimiento =
+  | { accion: "crear_seguimiento"; pregunta: string; frecuencia: FrecuenciaSeguimiento }
+  | { accion: "cambiar_seguimiento"; id: string; estado: "activo" | "pausado" | "terminado" };
+
+// Crear, pausar, reanudar o terminar un seguimiento por marketing-agente. Devuelve siempre un objeto (nunca lanza).
+export async function gestionarSeguimiento(cuerpo: AccionSeguimiento): Promise<{ ok: boolean; error?: string }> {
+  const generico = { ok: false, error: "No pudimos hablar con el Analista. Inténtalo de nuevo." };
+  try {
+    const { data, error } = await supabase.functions.invoke("marketing-agente", { body: cuerpo });
+    if (!error) return data as { ok: boolean; error?: string };
+    const ctx = (error as { context?: Response }).context;
+    if (ctx && typeof ctx.json === "function") { try { return (await ctx.json()) as { ok: boolean; error?: string }; } catch { /* sin cuerpo */ } }
+    return generico;
+  } catch { return generico; }
+}

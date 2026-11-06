@@ -209,3 +209,7 @@ project_id = "qppfampapbxdgednkofc"
   # Analista de resultados de Marketing (IA, solo lectura): exige sesión de usuario y el permiso de ver Marketing.
   [functions.marketing-agente]
     verify_jwt = true
+
+  # Seguimientos del Analista: se autentica con su propio secreto (x-marketing-secret) y lo invoca pg_cron/pg_net sin JWT.
+  [functions.marketing-seguimientos]
+    verify_jwt = false
