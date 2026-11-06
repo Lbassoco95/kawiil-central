@@ -10,29 +10,19 @@ import { formatMX } from "@/lib/dateUtils";
 import { copyText } from "@/lib/clipboard";
 import { useActivity } from "@/hooks/useActivities";
 import { useActivityAttendees } from "@/hooks/useActivityExtras";
+import { inviteeMessage, companionMessage, type InviteFields } from "@/lib/activityInviteMessage";
 import { normalizeWhatsappNumber, whatsappUrl, personalizeGreeting, firstName } from "@/lib/whatsapp";
 
-/** Mensaje base para los invitados con los datos reales de la actividad. */
-function buildInviteMessage(a: {
+type ActivityInfo = {
   name: string; event_date: string | null; event_time: string | null; location: string | null;
-}): string {
-  const fecha = a.event_date ? formatMX(a.event_date, "EEEE d 'de' MMMM 'de' yyyy") : "";
-  const lines = [
-    "¡Hola! 👋",
-    "",
-    `Te esperamos en ${a.name}.`,
-    "",
-    `📅 Fecha: ${fecha || "por confirmar"}`,
-    `🕒 Hora: ${a.event_time ? `${a.event_time.slice(0, 5)} h` : "por confirmar"}`,
-    `📍 Lugar: ${a.location?.trim() || "por confirmar"}`,
-    "",
-    "El evento es +1: puedes venir con un acompañante.",
-    "Por favor confírmanos tu asistencia, el nombre de tu acompañante y si tú o tu acompañante tienen alguna restricción alimentaria.",
-    "",
-    "¡Gracias!",
-  ];
-  return lines.join("\n");
-}
+};
+
+const toFields = (a: ActivityInfo): InviteFields => ({
+  name: a.name,
+  fecha: a.event_date ? formatMX(a.event_date, "EEEE d 'de' MMMM 'de' yyyy") : "",
+  hora: a.event_time,
+  lugar: a.location,
+});
 
 export function InviteMessageDialog({ activityId }: { activityId: string }) {
   const { data: activity } = useActivity(activityId);
@@ -43,7 +33,7 @@ export function InviteMessageDialog({ activityId }: { activityId: string }) {
 
   // Se regenera al abrir, para tomar la sede y fecha vigentes.
   useEffect(() => {
-    if (open && activity) { setText(buildInviteMessage(activity)); setCopied(false); }
+    if (open && activity) { setText(inviteeMessage(toFields(activity))); setCopied(false); }
   }, [open, activity]);
 
   const missingVenue = !activity?.location?.trim();
@@ -71,14 +61,38 @@ export function InviteMessageDialog({ activityId }: { activityId: string }) {
   // Sin número: abre WhatsApp con el texto y ahí se elige a quién enviarlo.
   const handleWhatsApp = () => openWhatsApp(whatsappUrl(text));
 
-  // Con número: abre el chat directo con ese invitado, con su nombre en el saludo.
-  const list = (attendees ?? []).filter((a) => a.confirmed !== "no");
-  const withPhone = list
-    .map((a) => ({ a, number: normalizeWhatsappNumber(a.phone) }))
-    .filter((x): x is { a: typeof x.a; number: string } => !!x.number);
-  const withoutPhone = list.filter((a) => !normalizeWhatsappNumber(a.phone));
-  const sendTo = (a: (typeof list)[number], number: string) =>
-    openWhatsApp(whatsappUrl(personalizeGreeting(text, a.name), number));
+  // Destinatarios: invitados y sus acompañantes (+1). Quien no asiste no recibe el mensaje,
+  // y si el invitado no asiste, su acompañante tampoco.
+  type Recipient = {
+    key: string; label: string; person: string; phone: string | null; kind: "invitado" | "acompañante";
+    inviter?: string;
+  };
+  const recipients: Recipient[] = (attendees ?? []).flatMap((a) => {
+    if (a.confirmed === "no") return [];
+    const out: Recipient[] = [
+      { key: a.id, label: firstName(a.name) || a.name, person: a.name, phone: a.phone, kind: "invitado" },
+    ];
+    if (a.has_plus_one && a.plus_one_confirmed !== "no") {
+      const nombre = a.plus_one_name?.trim() || `Acompañante de ${firstName(a.name) || a.name}`;
+      out.push({
+        key: `${a.id}-plus`, label: `${nombre} (+1)`, person: nombre, phone: a.plus_one_phone,
+        kind: "acompañante", inviter: firstName(a.name) || a.name,
+      });
+    }
+    return out;
+  });
+  const withPhone = recipients
+    .map((r) => ({ r, number: normalizeWhatsappNumber(r.phone) }))
+    .filter((x): x is { r: Recipient; number: string } => !!x.number);
+  const withoutPhone = recipients.filter((r) => !normalizeWhatsappNumber(r.phone));
+
+  // Invitado: el texto del cuadro (editable). Acompañante: texto propio que dice quién lo invitó.
+  const sendTo = (r: Recipient, number: string) => {
+    const body = r.kind === "acompañante" && activity
+      ? companionMessage(toFields(activity), r.inviter ?? "")
+      : text;
+    openWhatsApp(whatsappUrl(personalizeGreeting(body, r.person), number));
+  };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -103,22 +117,27 @@ export function InviteMessageDialog({ activityId }: { activityId: string }) {
           </p>
         )}
         <Textarea rows={12} value={text} onChange={(e) => setText(e.target.value)} />
-        {list.length > 0 && (
+        {recipients.length > 0 && (
           <div className="space-y-2">
             <p className="text-sm font-medium">Enviar directo por WhatsApp</p>
             {withPhone.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
-                {withPhone.map(({ a, number }) => (
-                  <Button key={a.id} type="button" size="sm" variant="outline" className="h-8"
-                    disabled={!text.trim()} onClick={() => sendTo(a, number)}>
-                    <Send className="mr-1.5 h-3 w-3" />{firstName(a.name) || a.name}
+                {withPhone.map(({ r, number }) => (
+                  <Button key={r.key} type="button" size="sm" variant="outline" className="h-8"
+                    disabled={r.kind === "invitado" && !text.trim()} onClick={() => sendTo(r, number)}>
+                    <Send className="mr-1.5 h-3 w-3" />{r.label}
                   </Button>
                 ))}
               </div>
             )}
+            {recipients.some((r) => r.kind === "acompañante") && (
+              <p className="text-xs text-muted-foreground">
+                Los acompañantes (+1) reciben un mensaje propio que dice quién los invitó; el texto de arriba es para los invitados.
+              </p>
+            )}
             {withoutPhone.length > 0 && (
               <p className="text-xs text-muted-foreground">
-                Sin teléfono válido: {withoutPhone.map((a) => a.name).join(", ")}. Agrégalo al editar al asistente.
+                Sin teléfono válido: {withoutPhone.map((r) => r.label).join(", ")}. Agrégalo al editar al asistente.
               </p>
             )}
           </div>
