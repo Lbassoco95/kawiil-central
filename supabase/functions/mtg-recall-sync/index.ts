@@ -61,7 +61,8 @@ serve(async (req) => {
     if (!meeting.recall_bot_id) return json({ error: "Esta junta no tiene bot de Kawiilito" }, 404);
     const botId = meeting.recall_bot_id as string;
 
-    if (body?.leave === true) {
+    const wantLeave = body?.leave === true;
+    if (wantLeave) {
       const lv = await fetch(`https://${host}/api/v1/bot/${botId}/leave_call/`, {
         method: "POST",
         headers: { Authorization: `Token ${recallKey}` },
@@ -72,22 +73,41 @@ serve(async (req) => {
       }
     }
 
-    const resp = await fetch(`https://${host}/api/v1/bot/${botId}/`, {
-      headers: { Authorization: `Token ${recallKey}` },
-    });
-    if (!resp.ok) return json({ error: `Recall respondió ${resp.status}` }, 502);
     // deno-lint-ignore no-explicit-any
-    const bot: any = await resp.json();
-    const changes: { code?: string }[] = Array.isArray(bot.status_changes) ? bot.status_changes : [];
-    const status: string | null = changes.length ? (changes[changes.length - 1].code ?? null) : null;
+    const readBot = async (): Promise<{ bot: any; status: string | null } | Response> => {
+      const r = await fetch(`https://${host}/api/v1/bot/${botId}/`, {
+        headers: { Authorization: `Token ${recallKey}` },
+      });
+      if (!r.ok) return json({ error: `Recall respondió ${r.status}` }, 502);
+      const b = await r.json();
+      const ch: { code?: string }[] = Array.isArray(b.status_changes) ? b.status_changes : [];
+      return { bot: b, status: ch.length ? (ch[ch.length - 1].code ?? null) : null };
+    };
 
-    if (status) {
-      await admin.from("mtg_meetings").update({ recall_bot_status: status }).eq("id", meeting.id);
+    let read = await readBot();
+    if (read instanceof Response) return read;
+    // Recall tarda unos segundos en reflejar la salida y en dejar lista la transcripción.
+    for (let i = 0; wantLeave && i < 8; i++) {
+      const done = !!read.status && BOT_LEFT_STATUSES.has(read.status);
+      // deno-lint-ignore no-explicit-any
+      const hasT = (read.bot.recordings ?? []).some((r: any) => r?.media_shortcuts?.transcript?.data?.download_url);
+      if (done && hasT) break;
+      await new Promise((res) => setTimeout(res, 3000));
+      const next = await readBot();
+      if (next instanceof Response) return next;
+      read = next;
     }
+    const { bot, status } = read;
+
     const left = !!status && BOT_LEFT_STATUSES.has(status);
-    const leaving = body?.leave === true && !left;
+    // Quien pidió sacar al bot quiere cerrar la junta aunque Recall aún no confirme la salida.
+    const leaving = wantLeave && !left;
+    const shownStatus = leaving ? "leaving" : status;
+    if (shownStatus) {
+      await admin.from("mtg_meetings").update({ recall_bot_status: shownStatus }).eq("id", meeting.id);
+    }
     let ended = false;
-    if (left) ended = await endMeetingFromBot(admin, meeting, botId);
+    if (left || wantLeave) ended = await endMeetingFromBot(admin, meeting, botId);
 
     // deno-lint-ignore no-explicit-any
     const hasTranscript = (bot.recordings ?? []).some((r: any) => r?.media_shortcuts?.transcript?.data?.download_url);

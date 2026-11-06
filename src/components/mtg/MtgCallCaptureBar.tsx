@@ -59,9 +59,10 @@ export function MtgCallCaptureBar(props: {
     }
   };
 
-  const botInCall = ["in_waiting_room", "in_call_not_recording", "in_call_recording"].includes(
-    props.meeting.recall_bot_status ?? "",
-  );
+  // Se ofrece sacarlo mientras no conste que ya salió (también con estados viejos o vacíos).
+  const botInCall =
+    !!props.meeting.recall_bot_id &&
+    !["call_ended", "done", "fatal", "leaving"].includes(props.meeting.recall_bot_status ?? "");
 
   const onLeaveBot = async () => {
     if (
@@ -82,9 +83,13 @@ export function MtgCallCaptureBar(props: {
         throw new Error(detail?.error ?? error.message);
       }
       if (data?.error) throw new Error(data.error);
-      toast.success(
-        "Kawiilito va saliendo de la llamada. En un momento llega la transcripción; si no, pulsa Traer grabación.",
-      );
+      if (data?.transcript_saved) {
+        toast.success("Kawiilito salió, la junta se cerró y ya se trajo la transcripción con hablantes");
+      } else {
+        toast.success(
+          "Kawiilito salió y la junta se cerró. La transcripción tarda unos minutos: pulsa Traer grabación para bajarla.",
+        );
+      }
       props.onBotSent?.();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "No se pudo sacar a Kawiilito");
@@ -226,7 +231,7 @@ export function MtgCallCaptureBar(props: {
             variant="outline"
             onClick={onLeaveBot}
             disabled={leaveBusy}
-            title="Saca a Kawiilito de la llamada si la junta ya terminó y sigue conectado"
+            title="Saca a Kawiilito de la llamada, cierra la junta y trae la transcripción si ya está lista"
           >
             {leaveBusy ? (
               <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
