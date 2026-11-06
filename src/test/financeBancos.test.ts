@@ -349,3 +349,31 @@ describe("conciliación contra el banco", () => {
     expect(noBank.hasBank).toBe(false); expect(noBank.unconfirmed).toEqual([]);
   });
 });
+
+import { skipAlreadyConfirmed } from "@/lib/finance/reconcile";
+
+describe("volver a cargar el mismo estado de cuenta", () => {
+  it("no confirma el registro duplicado con el mismo renglón del banco", () => {
+    // Tu Excel tiene dos «UBER $289.94» el 15 de junio; el banco, uno.
+    const records = [ex("r1", "2026-06-15", 289.94, 0), ex("r2", "2026-06-15", 289.94, 0)];
+    const bank = [{ date: "2026-06-15", debit: 289.94, credit: 0, dedupeKey: "2026-06-15|compra con td uber en dlo*uber rides||289.94|0.00#1" }];
+
+    // 1ª carga: el banco confirma uno; el otro queda sin respaldo.
+    const first = planBankImport(bank, records);
+    expect(first.confirm).toHaveLength(1);
+    const confirmedId = first.confirm[0].id;
+
+    // 2ª carga del MISMO archivo: el renglón ya confirmó algo, no debe tocar al duplicado.
+    const base = "2026-06-15|compra con td uber en dlo*uber rides||289.94|0.00";
+    const { remaining, skipped } = skipAlreadyConfirmed(bank, [base, null]);
+    expect(skipped).toHaveLength(1); expect(remaining).toHaveLength(0);
+    const pool = records.filter((r) => r.id !== confirmedId);
+    expect(planBankImport(remaining, pool)).toEqual({ alreadyLoaded: [], confirm: [], insert: [] });
+  });
+
+  it("respeta renglones idénticos del banco (dos compras iguales el mismo día)", () => {
+    const mk = (n: number) => ({ dedupeKey: `2026-06-15|uber||10.00|0.00#${n}` });
+    const { remaining, skipped } = skipAlreadyConfirmed([mk(1), mk(2), mk(3)], ["2026-06-15|uber||10.00|0.00", "2026-06-15|uber||10.00|0.00"]);
+    expect(skipped).toHaveLength(2); expect(remaining).toHaveLength(1);
+  });
+});

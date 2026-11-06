@@ -125,3 +125,25 @@ export function reconcileMonth(items: ExistingMovement[]): MonthReconciliation {
     hasBank,
   };
 }
+
+/** Identidad de un renglón del banco sin su consecutivo (#n): fecha|descripción|referencia|cargo|abono. */
+export const bankBase = (hash: string) => hash.replace(/#\d+$/, "");
+
+/**
+ * Volver a cargar el mismo estado de cuenta no debe confirmar otros registros: los renglones del banco
+ * que ya confirmaron un registro en una carga anterior se omiten (una por una, respetando repetidos).
+ */
+export function skipAlreadyConfirmed<T extends { dedupeKey: string }>(
+  incoming: T[],
+  confirmedBases: (string | null)[],
+): { remaining: T[]; skipped: T[] } {
+  const available = new Map<string, number>();
+  for (const b of confirmedBases) if (b) available.set(b, (available.get(b) ?? 0) + 1);
+  const remaining: T[] = []; const skipped: T[] = [];
+  for (const m of incoming) {
+    const base = bankBase(m.dedupeKey);
+    const n = available.get(base) ?? 0;
+    if (n > 0) { available.set(base, n - 1); skipped.push(m); } else remaining.push(m);
+  }
+  return { remaining, skipped };
+}

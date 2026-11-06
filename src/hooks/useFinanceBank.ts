@@ -6,10 +6,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   DEFAULT_CATEGORIES, buildRuleIndex, extractPatterns, type CategoryDef, type CategoryKind, type Rule,
 } from "@/lib/finance/classifier";
-import type { ParsedMovement } from "@/lib/finance/bankImport";
+import { norm, type ParsedMovement } from "@/lib/finance/bankImport";
 import type { ParsedCommitment } from "@/lib/finance/commitmentImport";
 import { detectEntity } from "@/lib/finance/thirdParty";
-import { DEFAULT_TOLERANCE_DAYS, planBankImport, planRecordImport, type ExistingMovement } from "@/lib/finance/reconcile";
+import { DEFAULT_TOLERANCE_DAYS, bankBase, planBankImport, planRecordImport, skipAlreadyConfirmed, type ExistingMovement } from "@/lib/finance/reconcile";
 
 // Las tablas finance_* son nuevas y aún no están en los tipos generados de Supabase.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -230,19 +230,24 @@ export function useImportMovements() {
       const minDate = dates[0]; const maxDate = dates[dates.length - 1];
 
       // 2) Movimientos existentes de la cuenta en el periodo (± tolerancia) contra los que se concilia.
-      const pool: (ExistingMovement & { hash: string })[] = [];
+      const pool: (ExistingMovement & { hash: string; confirmedBase: string | null })[] = [];
       if (fresh.length > 0) {
         const incomingHashes = new Set(p.movements.map((m) => m.dedupeKey));
         for (let from = 0; ; from += 1000) {
           const { data, error } = await db.from("finance_movements")
-            .select("id,movement_date,debit,credit,origin,bank_confirmed_at,has_record,category,dedupe_hash")
+            .select("id,movement_date,debit,credit,origin,bank_confirmed_at,has_record,category,dedupe_hash,bank_description,bank_row_hash")
             .eq("organization_id", org).eq("account_id", p.accountId)
             .gte("movement_date", addDays(minDate, -DEFAULT_TOLERANCE_DAYS)).lte("movement_date", addDays(maxDate, DEFAULT_TOLERANCE_DAYS))
             .range(from, from + 999);
           if (error) throw error;
           for (const r of data ?? []) {
             if (incomingHashes.has(r.dedupe_hash)) continue;
-            pool.push({ id: r.id, date: r.movement_date, debit: Number(r.debit), credit: Number(r.credit), origin: r.origin, bankConfirmed: !!r.bank_confirmed_at, hasRecord: r.has_record, category: r.category, hash: r.dedupe_hash });
+            // Identidad del renglón del banco que confirmó este registro (si hubo): evita re-confirmar al recargar el mismo estado de cuenta.
+            const confirmedBase = r.bank_confirmed_at && r.origin !== "banco"
+              ? (r.bank_row_hash ? bankBase(r.bank_row_hash)
+                : r.bank_description ? `${r.movement_date}|${norm(r.bank_description).slice(0, 140)}||${Number(r.debit).toFixed(2)}|${Number(r.credit).toFixed(2)}` : null)
+              : null;
+            pool.push({ id: r.id, date: r.movement_date, debit: Number(r.debit), credit: Number(r.credit), origin: r.origin, bankConfirmed: !!r.bank_confirmed_at, hasRecord: r.has_record, category: r.category, hash: r.dedupe_hash, confirmedBase });
           }
           if (!data || data.length < 1000) break;
         }
@@ -250,14 +255,21 @@ export function useImportMovements() {
 
       // 3) Plan de conciliación.
       let toInsert: typeof fresh = [];
-      let confirmItems: { id: string; balance: number | null; seq: number; desc: string }[] = [];
+      let confirmItems: { id: string; balance: number | null; seq: number; desc: string; hash: string }[] = [];
       const links: { id: string; category: string | null; source: "manual" | "sugerida" | "excel" | "regla" | null; move: (typeof fresh)[number] }[] = [];
       let alreadyLoaded = p.movements.length - fresh.length;
       if (isBank) {
-        const plan = planBankImport(fresh, pool);
+        // Renglones del banco que ya confirmaron algo en una carga anterior: se omiten (y sus registros salen del pool).
+        const { remaining, skipped } = skipAlreadyConfirmed(fresh, pool.map((e) => e.confirmedBase));
+        alreadyLoaded += skipped.length;
+        for (const m of skipped) {
+          const i = pool.findIndex((e) => e.confirmedBase === bankBase(m.dedupeKey));
+          if (i >= 0) pool.splice(i, 1);
+        }
+        const plan = planBankImport(remaining, pool);
         alreadyLoaded += plan.alreadyLoaded.length;
-        confirmItems = plan.confirm.map((c) => ({ id: c.id, balance: fresh[c.index].balance, seq: fresh[c.index].seq, desc: fresh[c.index].description }));
-        toInsert = plan.insert.map((i) => fresh[i]);
+        confirmItems = plan.confirm.map((c) => ({ id: c.id, balance: remaining[c.index].balance, seq: remaining[c.index].seq, desc: remaining[c.index].description, hash: remaining[c.index].dedupeKey }));
+        toInsert = plan.insert.map((i) => remaining[i]);
       } else {
         const plan = planRecordImport(fresh, pool);
         toInsert = plan.insert.map((i) => fresh[i]);
