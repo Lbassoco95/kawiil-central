@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { CheckCircle2, FileText, Loader2, X } from "lucide-react";
+import { CheckCircle2, FileText, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -9,8 +9,6 @@ import { AccountDialog } from "./AccountDialog";
 import { analyzeTable, parseWithMapping, readStatementRows, type ColKey, type ColumnMapping } from "@/lib/finance/bankImport";
 import { suggestCategory } from "@/lib/finance/classifier";
 import { parsePdfStatement, type PdfStatementResult } from "@/lib/finance/pdfStatement";
-import { extractFromScreenshots, shotRowsToMovements, type ShotRow } from "@/lib/finance/screenshotImport";
-import { Input } from "@/components/ui/input";
 import {
   useFinanceAccounts, useFinanceCategories, useImportMovements, useRuleIndex, useSaveImportProfile,
 } from "@/hooks/useFinanceBank";
@@ -44,37 +42,15 @@ export function StatementImportTab() {
   const [mapping, setMapping] = useState<ColumnMapping>({});
   const [detected, setDetected] = useState(false);
   const [pdf, setPdf] = useState<PdfStatementResult | null>(null);
-  const [shotRows, setShotRows] = useState<ShotRow[]>([]);
-  const [shotNotes, setShotNotes] = useState<string | null>(null);
-  const shotMovements = useMemo(() => shotRowsToMovements(shotRows), [shotRows]);
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState("");
+  const [result, setResult] = useState<ImportResult | null>(null);
 
   const account = accounts.find((a) => a.id === accountId);
   const headers = useMemo(() => (rows[headerRow] ?? []).map((c) => String(c ?? "")), [rows, headerRow]);
   const parsed = useMemo(() => (pdf ? pdf.sheet : rows.length ? parseWithMapping(rows, mapping, headerRow) : null), [pdf, rows, mapping, headerRow]);
 
-  const IMAGE = /\.(png|jpe?g|webp|heic|heif)$/i;
-  async function onFiles(files: File[]) {
-    if (files.length && files.every((f) => IMAGE.test(f.name) || f.type.startsWith("image/"))) return onShots(files);
-    return onFile(files[0]);
-  }
-
-  async function onShots(files: File[]) {
-    setBusy(true); setResult(""); setPdf(null); setRows([]); setShotRows([]); setShotNotes(null);
-    try {
-      const res = await extractFromScreenshots(files);
-      setFilename(files.length === 1 ? files[0].name : `${files.length} capturas`);
-      setShotRows(res.rows); setShotNotes(res.notes);
-      if (res.rows.length === 0) toast.error("No encontré movimientos en la captura.");
-    } catch (e) { toast.error((e as Error).message); }
-    finally { setBusy(false); }
-  }
-
-  const editShot = (id: string, patch: Partial<ShotRow>) => setShotRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch, uncertain: patch.date !== undefined || patch.debit !== undefined || patch.credit !== undefined ? false : r.uncertain } : r)));
-
   async function onFile(file: File) {
-    setBusy(true); setResult(""); setPdf(null); setShotRows([]); setShotNotes(null);
+    setBusy(true); setResult(null); setPdf(null);
     try {
       if (/\.pdf$/i.test(file.name)) {
         const res = await parsePdfStatement(file);
@@ -95,29 +71,16 @@ export function StatementImportTab() {
     const next = { ...m }; if (v === "__none") delete next[key]; else next[key] = Number(v); return next;
   });
 
-  async function runShots() {
-    if (!account || shotMovements.length === 0) return;
-    setBusy(true);
-    try {
-      const res = await importMut.mutateAsync({
-        accountId: account.id, source: "pegado", filename, movements: shotMovements, knownCategories: categories,
-        detectEntities: !account.counts_as_available, suggest: (m) => suggestCategory(m, ruleIndex),
-      });
-      setResult(`${res.added} movimientos nuevos, ${res.duplicates} ya existían (mismo día e importe), ${res.pending} por clasificar.`);
-      setShotRows([]); setFilename(""); setShotNotes(null);
-    } finally { setBusy(false); }
-  }
-
   async function run() {
     if (!parsed || !account) return;
     setBusy(true);
     try {
       const res = await importMut.mutateAsync({
-        accountId: account.id, source: "excel", filename, movements: parsed.movements, openingBalance: parsed.openingBalance, knownCategories: categories,
+        accountId: account.id, origin: "banco", filename, movements: parsed.movements, openingBalance: parsed.openingBalance, knownCategories: categories,
         detectEntities: !account.counts_as_available, suggest: (m) => suggestCategory(m, ruleIndex),
       });
       if (!pdf) await saveProfile.mutateAsync({ accountId: account.id, profile: { headerRow, mapping: mapping as Record<string, number>, headers } });
-      setResult(`${res.added} movimientos nuevos, ${res.duplicates} ya existían, ${res.pending} por clasificar.${pdf ? "" : ` El mapeo quedó guardado para ${account.name}.`}`);
+      setResult(res);
       setRows([]); setFilename(""); setPdf(null);
     } finally { setBusy(false); }
   }
@@ -127,50 +90,22 @@ export function StatementImportTab() {
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">
-        Sube el CSV o Excel que descargas del banco, tal cual. Se detectan las columnas; si no las reconoce, indícalas una vez y se recuerdan para esa cuenta.
-        También acepta PDF (se comprueba que los saldos cuadren) y capturas de pantalla (hasta 4, leídas con IA); revisa siempre la vista previa.
+        Sube el estado de cuenta tal como lo emite el banco (PDF, CSV o Excel). Se detectan las columnas; si no las reconoce, indícalas una vez y se recuerdan para esa cuenta.
+        También acepta PDF (se comprueba que los saldos cuadren). Al cargarlo, se concilia contra lo que ya está registrado.
       </p>
       <div className="flex gap-2">
-        <Select value={accountId} onValueChange={(v) => { setAccountId(v); setRows([]); setPdf(null); setResult(""); }}>
+        <Select value={accountId} onValueChange={(v) => { setAccountId(v); setRows([]); setPdf(null); setResult(null); }}>
           <SelectTrigger className="h-9"><SelectValue placeholder={accounts.length ? "¿De qué cuenta es el estado de cuenta?" : "Aún no hay cuentas: crea la primera →"} /></SelectTrigger>
           <SelectContent>{accounts.filter((a) => a.is_active).map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}</SelectContent>
         </Select>
         <Button type="button" variant="outline" className="h-9 shrink-0" onClick={() => setAccountOpen(true)}>+ Nueva cuenta</Button>
       </div>
-      <input ref={fileRef} type="file" accept=".csv,.txt,.xlsx,.xls,.pdf,.png,.jpg,.jpeg,.webp,.heic,image/*" multiple className="hidden"
-        onChange={(e) => { const fs = Array.from(e.target.files ?? []); if (fs.length) void onFiles(fs); e.target.value = ""; }} />
+      <input ref={fileRef} type="file" accept=".csv,.txt,.xlsx,.xls,.pdf" className="hidden"
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) void onFile(f); e.target.value = ""; }} />
       <Button variant="outline" disabled={!account || busy} onClick={() => fileRef.current?.click()} className="w-full h-16 border-dashed">
         {busy ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <FileText className="h-4 w-4 mr-2" />}
-        {filename ? `Archivo: ${filename} (cambiar)` : account ? "Elegir estado de cuenta o captura (.pdf, .csv, .xlsx, imagen)" : "Primero elige la cuenta"}
+        {filename ? `Archivo: ${filename} (cambiar)` : account ? "Elegir estado de cuenta (.pdf, .csv, .xlsx)" : "Primero elige la cuenta"}
       </Button>
-
-      {shotRows.length > 0 && (
-        <div className="space-y-3 rounded-xl border border-border/60 p-3">
-          <p className="text-xs font-medium">Leí {shotRows.length} renglones de la captura. Revisa y corrige cada uno antes de cargar.</p>
-          <p className="text-[11px] text-muted-foreground">La imagen se envía a Anthropic (Claude) para leerla; no se guarda en Kawiil. Los renglones en ámbar tienen algún dato dudoso o sin fecha.</p>
-          {shotNotes && <p className="text-xs text-amber-600">{shotNotes}</p>}
-          <div className="max-h-80 overflow-auto rounded-lg border border-border/50">
-            <Table>
-              <TableHeader><TableRow><TableHead>Fecha</TableHead><TableHead>Descripción</TableHead><TableHead className="text-right">Cargo</TableHead><TableHead className="text-right">Abono</TableHead><TableHead /></TableRow></TableHeader>
-              <TableBody>
-                {shotRows.map((r) => (
-                  <TableRow key={r.id} className={r.uncertain || !r.date ? "bg-amber-50 dark:bg-amber-950/20" : ""}>
-                    <TableCell className="w-36"><Input type="date" className="h-8 text-xs" value={r.date ?? ""} onChange={(e) => editShot(r.id, { date: e.target.value || null })} /></TableCell>
-                    <TableCell><Input className="h-8 text-xs" value={r.description} onChange={(e) => editShot(r.id, { description: e.target.value })} /></TableCell>
-                    <TableCell className="w-28"><Input type="number" step="0.01" min="0" className="h-8 text-right text-xs" value={r.debit || ""} onChange={(e) => editShot(r.id, { debit: Number(e.target.value) || 0 })} /></TableCell>
-                    <TableCell className="w-28"><Input type="number" step="0.01" min="0" className="h-8 text-right text-xs" value={r.credit || ""} onChange={(e) => editShot(r.id, { credit: Number(e.target.value) || 0 })} /></TableCell>
-                    <TableCell className="w-8"><button type="button" aria-label="Quitar renglón" className="text-muted-foreground hover:text-foreground" onClick={() => setShotRows((rs) => rs.filter((x) => x.id !== r.id))}><X className="h-4 w-4" /></button></TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-          {shotMovements.length < shotRows.length && <p className="text-xs text-amber-600">{shotRows.length - shotMovements.length} renglones sin fecha o sin importe no se cargarán hasta que los completes.</p>}
-          <Button className="w-full" disabled={busy || shotMovements.length === 0} onClick={runShots}>
-            {busy && <Loader2 className="h-4 w-4 animate-spin mr-2" />} Cargar {shotMovements.length} movimientos
-          </Button>
-        </div>
-      )}
 
       {pdf && (
         <div className="space-y-3 rounded-xl border border-border/60 p-3">
@@ -262,7 +197,17 @@ export function StatementImportTab() {
           </Button>
         </div>
       )}
-      {result && <p className="flex items-center gap-2 rounded-xl bg-green-50 dark:bg-green-950/30 border border-green-200/60 p-3 text-sm"><CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />{result}</p>}
+      {result && (
+        <div className="space-y-1.5 rounded-xl border border-green-200/60 bg-green-50 p-3 text-sm dark:bg-green-950/30">
+          <p className="flex items-center gap-2 font-medium"><CheckCircle2 className="h-4 w-4 text-green-600" /> Estado de cuenta cargado y conciliado</p>
+          <p className="text-xs">✓ <b>{result.confirmed}</b> movimientos del banco coinciden con lo que ya estaba registrado.</p>
+          {result.newFromBank > 0 && <p className="text-xs">➕ <b>{result.newFromBank}</b> movimientos del banco no estaban registrados: se crearon{result.pending > 0 ? ` (${result.pending} por clasificar)` : ""}.</p>}
+          {result.duplicates > 0 && <p className="text-xs text-muted-foreground">{result.duplicates} ya estaban cargados del banco.</p>}
+          {result.unconfirmed.count > 0
+            ? <p className="text-xs text-amber-700">⚠ <b>{result.unconfirmed.count}</b> movimientos registrados en este periodo el banco no los confirma ({money(result.unconfirmed.debit)} en cargos, {money(result.unconfirmed.credit)} en abonos). Revísalos en la pestaña «Conciliación».</p>
+            : <p className="text-xs text-green-700">Todo lo registrado en este periodo quedó confirmado por el banco.</p>}
+        </div>
+      )}
       <AccountDialog open={accountOpen} onOpenChange={setAccountOpen} onCreated={(a) => setAccountId(a.id)} />
     </div>
   );

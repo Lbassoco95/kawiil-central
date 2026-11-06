@@ -37,7 +37,7 @@ export function MonthlyClosePanel({ accounts, movements }: { accounts: FinanceAc
         <Table>
           <TableHeader><TableRow>
             <TableHead>Mes</TableHead><TableHead className="text-right">Abonos</TableHead><TableHead className="text-right">Cargos</TableHead>
-            <TableHead className="text-right">Saldo al cierre</TableHead><TableHead>Estado</TableHead>
+            <TableHead className="text-right">Saldo al cierre</TableHead><TableHead>Conciliado con el banco</TableHead><TableHead>Estado</TableHead>
           </TableRow></TableHeader>
           <TableBody>
             {rows.map((r) => {
@@ -49,6 +49,7 @@ export function MonthlyClosePanel({ accounts, movements }: { accounts: FinanceAc
                   <TableCell className="text-right text-xs tabular-nums text-green-700">{money(r.credit)}</TableCell>
                   <TableCell className="text-right text-xs tabular-nums">{money(r.debit)}</TableCell>
                   <TableCell className="text-right text-xs tabular-nums">{money(r.endReported ?? r.endComputed)}</TableCell>
+                  <TableCell className="text-xs tabular-nums">{(() => { const ms = movements.filter((m) => m.account_id === current.id && m.movement_date.startsWith(r.key)); const c = ms.filter((m) => m.bank_confirmed_at).length; return ms.length === 0 ? "—" : <span className={c === ms.length ? "text-green-700" : c === 0 ? "text-muted-foreground" : "text-amber-600"}>{c} de {ms.length}</span>; })()}</TableCell>
                   <TableCell className="text-xs">
                     {empty ? <span className="flex items-center gap-1 text-amber-600"><CircleSlash className="h-3 w-3" /> Sin movimientos cargados</span>
                       : r.endReported == null ? <span className="text-muted-foreground">Sin saldo del banco para comparar</span>
