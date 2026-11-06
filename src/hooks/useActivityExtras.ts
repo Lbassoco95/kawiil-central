@@ -5,6 +5,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useUpdateTask } from "@/hooks/useTasks";
+import { isVenueConfirmationTitle } from "@/lib/activityTypes";
 import { toast } from "sonner";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 
@@ -273,9 +275,12 @@ export function useCreateAttendeeConfirmationTasks() {
  * - Con `provider`: la sede pasa a ser ese proveedor (Sede / Lugar = nombre y dirección) y,
  *   si seguía en cotización, queda como "Elegido".
  * - Sin `provider`: solo cambia la confirmación de la sede que ya está escrita.
+ * - Al CONFIRMAR, se cierran los pendientes abiertos de "confirmar la sede" (rubro Casas / Sede),
+ *   con el mismo flujo que al completarlos a mano. Al quitar la confirmación no se reabre nada.
  */
 export function useConfirmVenue() {
   const queryClient = useQueryClient();
+  const updateTask = useUpdateTask();
   return useMutation({
     mutationFn: async ({ activityId, provider, confirmed }: {
       activityId: string; provider?: ActivityProvider | null; confirmed: boolean;
@@ -295,13 +300,37 @@ export function useConfirmVenue() {
           .from("activity_providers").update({ status: "elegido" }).eq("id", provider.id);
         if (e2) throw e2;
       }
-      return { activityId, confirmed };
+
+      // Cierra el pendiente de confirmar la sede. Si falla, la sede ya quedó confirmada.
+      let closed = 0;
+      let failed = 0;
+      if (confirmed) {
+        const { data: open } = await supabase
+          .from("tasks")
+          .select("id, title")
+          .eq("activity_id", activityId)
+          .eq("activity_category", "casas")
+          .not("status", "in", "(completada,cancelada)");
+        for (const t of (open ?? []).filter((x) => isVenueConfirmationTitle(x.title))) {
+          try {
+            await updateTask.mutateAsync({ id: t.id, status: "completada" });
+            closed += 1;
+          } catch {
+            failed += 1;
+          }
+        }
+      }
+      return { activityId, confirmed, closed, failed };
     },
-    onSuccess: ({ activityId, confirmed }) => {
+    onSuccess: ({ activityId, confirmed, closed, failed }) => {
       queryClient.invalidateQueries({ queryKey: ["activity", activityId] });
       queryClient.invalidateQueries({ queryKey: ["activities"] });
       queryClient.invalidateQueries({ queryKey: ["activity-providers", activityId] });
-      toast.success(confirmed ? "Sede confirmada" : "Se quitó la confirmación de la sede");
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      if (!confirmed) toast.success("Se quitó la confirmación de la sede");
+      else if (closed > 0) toast.success(`Sede confirmada · ${closed === 1 ? "pendiente cerrado" : `${closed} pendientes cerrados`}`);
+      else toast.success("Sede confirmada");
+      if (failed > 0) toast.warning("No se pudo cerrar el pendiente de la sede. Márcalo como hecho a mano.");
     },
     onError: (e: Error) => toast.error("Error al actualizar la sede: " + e.message),
   });
