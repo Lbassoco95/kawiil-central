@@ -23,3 +23,8 @@ explícita de Dirección, escritura por escritura.
 3. **APLICADA el 5 nov 2026** `marketing_analista_registro` (20261105194055, ya en `supabase/migrations/`): agente `marketing_analista`, tabla `mk_consulta` (RLS, sin escritura para usuarios) y las dos funciones de registro ampliadas. Reversa: `tools/marketing/rollback_analista_registro.sql`.
 4. Pendiente: pregunta de prueba con la sesión de Dirección.
 Pruebas: `tools/marketing/prueba_analista_pglite.mjs`; Node `supabase/functions/_shared/analista*.test.ts`.
+
+## Seguimientos del Analista (fase 2b)
+- **APLICADA el 5 nov 2026** `marketing_analista_seguimientos` (20261106003827, ya en `supabase/migrations/`): tabla `mk_seguimiento` (RLS, solo lectura para usuarios), columna `mk_consulta.seguimiento_id` y 3 funciones solo `service_role` (`mk_seguimiento_crear`, `_cambiar`, `_reclamar`). Tope de 5 por usuario. Reversa: `tools/marketing/rollback_analista_seguimientos.sql`. Prueba: `tools/marketing/prueba_seguimientos_pglite.mjs`.
+- Pendiente (paso B): función `marketing-seguimientos` y acciones crear/pausar en `marketing-agente`, más el panel; se despliegan por el flujo al fusionar.
+- Pendiente (paso C): `tools/marketing/cron_analista_seguimientos_0745.sql` (trabajo diario 7:45 CDMX; NO programado), solo con confirmación de Dirección y después del paso B.
