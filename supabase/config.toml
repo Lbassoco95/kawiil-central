@@ -192,6 +192,8 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = false
   [functions.mtg-recall-media]
     verify_jwt = true
+  [functions.mtg-recall-sync]
+    verify_jwt = true
   [functions.mtg-summarize-meeting]
     verify_jwt = true
 
