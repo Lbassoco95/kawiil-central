@@ -166,6 +166,7 @@ export type Database = {
           plus_one_confirmed: string
           plus_one_dietary: string | null
           plus_one_name: string | null
+          plus_one_phone: string | null
           updated_at: string
           user_id: string | null
         }
@@ -184,6 +185,7 @@ export type Database = {
           plus_one_confirmed?: string
           plus_one_dietary?: string | null
           plus_one_name?: string | null
+          plus_one_phone?: string | null
           updated_at?: string
           user_id?: string | null
         }
@@ -202,6 +204,7 @@ export type Database = {
           plus_one_confirmed?: string
           plus_one_dietary?: string | null
           plus_one_name?: string | null
+          plus_one_phone?: string | null
           updated_at?: string
           user_id?: string | null
         }
