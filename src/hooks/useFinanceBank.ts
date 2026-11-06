@@ -574,3 +574,18 @@ export function useDeleteMovements() {
     onError: (e: Error) => toast.error(`No se pudo eliminar: ${e.message}`),
   });
 }
+
+/** Da por registrados movimientos que solo trajo el banco (los acepta tal cual; luego se clasifican). */
+export function useMarkRegistered() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (ids: string[]) => {
+      for (const part of chunk(ids, 200)) {
+        const { error } = await db.from("finance_movements").update({ has_record: true }).in("id", part);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: financeBankKeys.movements }),
+    onError: (e: Error) => toast.error(`No se pudo registrar: ${e.message}`),
+  });
+}
