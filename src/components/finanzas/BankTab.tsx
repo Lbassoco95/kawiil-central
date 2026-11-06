@@ -21,7 +21,7 @@ import {
   useFinanceMovements, useFinanceCommitments, useFinanceRules, useRuleIndex, type FinanceMovement,
 } from "@/hooks/useFinanceBank";
 import { proposeNewCategories, suggestCategory } from "@/lib/finance/classifier";
-import { accountBalances, summarizeCommitments } from "@/lib/finance/planning";
+import { accountBalances, monthlyClose, summarizeCommitments } from "@/lib/finance/planning";
 
 const money = (n: number, d = 0) => n.toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: d });
 const day = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "2-digit" });
@@ -96,7 +96,7 @@ function PendingQueue({ pending }: { pending: FinanceMovement[] }) {
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-muted-foreground">
-          {pending.length} movimientos por clasificar{pending.length > 150 ? " (mostrando 150)" : ""}. Cada confirmación enseña al sistema.
+          {pending.length} movimientos sin categoría{pending.length > 150 ? " (mostrando 150)" : ""}. Aquí se asigna <b>de qué es cada gasto</b>; no tiene que ver con la conciliación con el banco (pestaña «Conciliación»). Cada confirmación enseña al sistema.
         </p>
         {withSuggestion.length > 0 && (
           <Button size="sm" variant="secondary" disabled={classify.isPending} onClick={async () => {
@@ -194,6 +194,18 @@ export function BankTab() {
     account_id: m.account_id, debit: Number(m.debit), credit: Number(m.credit), movement_date: m.movement_date,
     row_seq: m.row_seq, reported_balance: m.reported_balance == null ? null : Number(m.reported_balance),
   }))), [accounts, movements]);
+  // Meses donde la suma de movimientos no cuadra con el saldo que reporta el banco (por cuenta).
+  const driftMonths = useMemo(() => {
+    const out: Record<string, { label: string; amount: number }[]> = {};
+    const MES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+    for (const a of accounts) {
+      const ms = movements.filter((m) => m.account_id === a.id).map((m) => ({ account_id: m.account_id, debit: Number(m.debit), credit: Number(m.credit), movement_date: m.movement_date, row_seq: m.row_seq, reported_balance: m.reported_balance == null ? null : Number(m.reported_balance) }));
+      out[a.id] = monthlyClose(Number(a.opening_balance), ms).filter((r) => r.monthDrift != null && Math.abs(r.monthDrift) > 1).map((r) => ({ label: `${MES[Number(r.key.slice(5)) - 1]} ${r.key.slice(0, 4)}`, amount: r.monthDrift as number }));
+    }
+    return out;
+  }, [accounts, movements]);
+  // Meses con estado de cuenta del banco cargado, por cuenta (para saber si «no está en el banco» tiene sentido).
+  const bankMonths = useMemo(() => new Set(movements.filter((m) => m.bank_confirmed_at).map((m) => `${m.account_id}|${m.movement_date.slice(0, 7)}`)), [movements]);
   const cs = useMemo(() => summarizeCommitments(commitments, new Date().toISOString().slice(0, 10), bal.available), [commitments, bal.available]);
   const pending = useMemo(() => movements.filter((m) => m.review_status === "pendiente"), [movements]);
   const lastDate = movements[0]?.movement_date;
@@ -272,8 +284,12 @@ export function BankTab() {
                   </div>
                   <p className="text-lg font-semibold tabular-nums">{money(bal.byAccount[a.id] ?? 0)}</p>
                   {Math.abs(drift) > 1 && (
-                    <p className="mt-1 flex items-start gap-1 text-[10px] text-amber-600" title="El saldo viene del último saldo reportado por el banco; la suma de movimientos no coincide.">
-                      <AlertTriangle className="h-3 w-3 shrink-0 mt-px" /> Faltan movimientos por {money(Math.abs(drift))} vs. el banco
+                    <p className="mt-1 flex items-start gap-1 text-[10px] text-amber-600" title="El saldo que se muestra es el que reporta el banco. La suma de los movimientos cargados no llega a ese saldo: falta algún movimiento en el registro de los meses indicados. Detalle en «Cierre mensual».">
+                      <AlertTriangle className="h-3 w-3 shrink-0 mt-px" />
+                      <span>
+                        La suma de movimientos no cuadra con el saldo del banco: diferencia de {money(Math.abs(drift))}
+                        {(driftMonths[a.id] ?? []).length > 0 && <> en {(driftMonths[a.id] ?? []).slice(0, 2).map((d) => `${d.label} (${money(Math.abs(d.amount))})`).join(" y ")}</>}. Se corrige cargando ese mes.
+                      </span>
                     </p>
                   )}
                 </CardContent></Card>
@@ -306,13 +322,19 @@ export function BankTab() {
               </div>
               <div className="rounded-xl border border-border/50 overflow-hidden">
                 <Table>
-                  <TableHeader><TableRow><TableHead>Fecha</TableHead><TableHead>Descripción</TableHead><TableHead>Categoría</TableHead><TableHead className="text-right">Monto</TableHead></TableRow></TableHeader>
+                  <TableHeader><TableRow><TableHead>Fecha</TableHead><TableHead>Descripción</TableHead><TableHead>Categoría</TableHead><TableHead>Conciliación</TableHead><TableHead className="text-right">Monto</TableHead></TableRow></TableHeader>
                   <TableBody>
                     {filtered.map((m) => (
                       <TableRow key={m.id}>
                         <TableCell className="text-xs whitespace-nowrap">{day(m.movement_date)}</TableCell>
                         <TableCell className="text-xs max-w-[360px] truncate" title={m.description}>{m.description}</TableCell>
                         <TableCell className="text-xs">{m.category ? <Badge variant="outline" className="text-[10px]">{m.category}</Badge> : <span className="text-muted-foreground">—</span>}</TableCell>
+                        <TableCell className="text-xs whitespace-nowrap">
+                          {m.bank_confirmed_at
+                            ? (m.has_record ? <span className="text-green-700">✓ Conciliado</span> : <span className="text-amber-600">Solo en el banco</span>)
+                            : bankMonths.has(`${m.account_id}|${m.movement_date.slice(0, 7)}`) ? <span className="text-amber-600">No está en el banco</span>
+                            : <span className="text-muted-foreground">Falta estado de cuenta</span>}
+                        </TableCell>
                         <TableCell className={`text-right text-xs tabular-nums ${Number(m.credit) > 0 ? "text-green-700" : ""}`}>
                           {Number(m.credit) > 0 ? `+${money(Number(m.credit), 2)}` : `−${money(Number(m.debit), 2)}`}
                         </TableCell>
