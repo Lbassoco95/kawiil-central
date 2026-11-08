@@ -1,11 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
+  AVISO_SECRETO,
   HERRAMIENTA_PROPONER,
   ORG_AGENTES,
   SYSTEM_CONSTRUCTOR,
   filaDesdePropuesta,
   limpiarMensajes,
+  pareceSecreto,
   validarPropuesta,
 } from "../_shared/agenteConstructor.ts";
 
@@ -23,6 +25,7 @@ import {
  *   - "chat" solo habla con el modelo y devuelve una propuesta; el modelo no tiene ninguna herramienta que escriba.
  *   - "crear" no confía en el modelo ni en el navegador: revalida la propuesta, arma el prompt de sistema en el servidor
  *     (con las reglas fijas del despacho) y inserta con service_role una fila `kind='consultable'`, `status='idle'`.
+ *   - Contraseñas: nunca se guardan ni se mandan al modelo. Solo se aceptan referencias op:// de 1Password; un mensaje que parezca contener un secreto se rechaza.
  *   - No ejecuta tareas ni toca a la VM: el agente queda registrado; la VM `kawiil-agents` lo tomará del registro.
  *
  * Secrets: ANTHROPIC_API_KEY, SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY.
@@ -64,6 +67,8 @@ serve(async (req: Request) => {
     if (body.action === "chat") {
       const mensajes = limpiarMensajes(body.mensajes);
       if (mensajes.length === 0) return json({ error: "Escribe un mensaje para empezar." }, 400);
+      // Un secreto pegado en el chat no se manda al modelo ni se guarda: se le pide a la persona que use 1Password.
+      if (pareceSecreto(mensajes[mensajes.length - 1].content)) return json({ texto: AVISO_SECRETO, propuesta: null, avisos: [], secreto: true });
       const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
       if (!apiKey) return json({ error: "El servicio de IA no está configurado." }, 503);
 

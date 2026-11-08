@@ -4,7 +4,7 @@ import type { MensajeChat, PropuestaAgente } from "../../supabase/functions/_sha
 
 // Chat especializado para crear agentes. «chat» solo conversa y propone; «crear» inserta UN agente en el registro
 // y únicamente se llama cuando la persona confirma la propuesta en pantalla.
-export interface RespuestaConstructor { texto: string; propuesta: PropuestaAgente | null; avisos: string[] }
+export interface RespuestaConstructor { texto: string; propuesta: PropuestaAgente | null; avisos: string[]; secreto?: boolean }
 export interface AgenteCreado { id: string; name: string; display_name: string; role: string; status: string }
 
 async function invocar<T>(body: Record<string, unknown>): Promise<T> {

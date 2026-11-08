@@ -122,3 +122,50 @@ describe("oficina: Mi equipo", () => {
     expect(filtrarAmbito([a, b], "equipo")).toEqual([a]);
   });
 });
+
+import { normalizarDominio, esReferencia1Password, pareceSecreto } from "../../supabase/functions/_shared/agenteConstructor";
+
+describe("internet y 1Password", () => {
+  it("normaliza dominios y rechaza internos o IP", () => {
+    expect(normalizarDominio("https://www.CNBV.gob.mx/ruta?x=1")).toBe("www.cnbv.gob.mx");
+    for (const m of ["localhost", "127.0.0.1", "servidor.internal", "10.0.0.5", "sin-punto", 5]) expect(normalizarDominio(m)).toBeNull();
+  });
+  it("solo acepta referencias op:// y nunca el valor", () => {
+    expect(esReferencia1Password("op://Agentes-Kawiil/Vizum-portal/password")).toBe(true);
+    for (const m of ["Hunter2!", "op://solo", "op:// a/b/c", "https://op://a/b"]) expect(esReferencia1Password(m)).toBe(false);
+    const r = validarPropuesta({ ...BUENA, credenciales: [{ etiqueta: "Portal", referencia: "MiClave123" }] });
+    expect(r.ok).toBe(false);
+  });
+  it("las páginas deben ser https, sin usuario, y su dominio queda permitido", () => {
+    expect(validarPropuesta({ ...BUENA, paginas: [{ titulo: "x", url: "http://a.com" }] }).ok).toBe(false);
+    expect(validarPropuesta({ ...BUENA, paginas: [{ titulo: "x", url: "https://u:p@a.com" }] }).ok).toBe(false);
+    const r = validarPropuesta({ ...BUENA, paginas: [{ titulo: "CNBV", url: "https://www.cnbv.gob.mx/x" }], credenciales: [{ etiqueta: "Portal", referencia: "op://Agentes/Vizum/password", dominio: "portal.vizum.mx" }] });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.propuesta.dominios_permitidos).toEqual(["www.cnbv.gob.mx", "portal.vizum.mx"]);
+  });
+  it("la fila guarda solo referencias y el prompt prohíbe otros dominios", () => {
+    const v = validarPropuesta({ ...BUENA, dominios_permitidos: ["cnbv.gob.mx"], credenciales: [{ etiqueta: "Portal", referencia: "op://Agentes/Vizum/password", dominio: "cnbv.gob.mx" }] });
+    if (!v.ok) throw new Error();
+    const f = filaDesdePropuesta(v.propuesta, "u", new Date());
+    expect(JSON.stringify(f.config)).toContain("op://Agentes/Vizum/password");
+    expect(f.config.system_prompt).toMatch(/cualquier otro está prohibido/);
+    expect(f.config.system_prompt).not.toMatch(/Hunter2/);
+  });
+  it("detecta secretos pegados", () => {
+    expect(pareceSecreto("mi contraseña es Hunter2!")).toBe(true);
+    expect(pareceSecreto("password: abc12345")).toBe(true);
+    expect(pareceSecreto("sk-ant-api03-abcdefghijklmnopqrstuvwxyz")).toBe(true);
+    expect(pareceSecreto("la bóveda se llama Agentes-Kawiil y el elemento Vizum-portal")).toBe(false);
+  });
+});
+
+describe("el chat no deja pasar secretos", () => {
+  beforeEach(() => invoke.mockReset());
+  it("no llama al servidor si el mensaje parece una contraseña", () => {
+    envolver(<ConstructorAgentes />);
+    fireEvent.change(screen.getByLabelText(/Mensaje para el Constructor/), { target: { value: "la contraseña es Hunter2!" } });
+    fireEvent.click(screen.getByTestId("constructor-enviar"));
+    expect(invoke).not.toHaveBeenCalled();
+    expect(screen.getByTestId("constructor-error").textContent).toMatch(/1Password/);
+  });
+});

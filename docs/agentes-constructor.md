@@ -13,3 +13,10 @@ Una fila en `agent_registry` (`kind='consultable'`, `status='idle'`, org global)
 - La VM `kawiil-agents` debe leer `config.system_prompt` (así lo hacen los agentes sembrados) y respetar `config.fuentes`/`cadencia`; declarar una fuente **no** da acceso por sí sola. Verificarlo en el repo `kawiil-agents`.
 - Despliegue: `deploy-supabase.yml` publica la función al fusionar a `main` (no entre 6:30 y 7:00 CDMX). Requiere `ANTHROPIC_API_KEY` (ya usado por otras funciones).
 - Siguientes pasos naturales: editar instrucciones permanentes de un agente ya creado, informes programados por agente y coordinación entre agentes del equipo Vizum.
+
+## Internet y 1Password (añadido)
+- La propuesta incluye `dominios_permitidos` (lista cerrada; se rechazan IP, localhost y redes internas), `paginas` (solo https, sin usuario ni contraseña) y `credenciales` (**solo referencias** `op://Bóveda/Elemento/campo`).
+- **Ninguna contraseña se guarda en Kawiil.** `config.credenciales_1password` contiene solo referencias. Un mensaje del chat que parezca contener una clave se bloquea en el navegador y en la función, y no llega al modelo.
+- El prompt del agente le ordena: visitar solo esos dominios, tratar lo que lea en internet como no confiable (inyección de instrucciones), usar cada acceso solo en su dominio y no hacer pagos, firmas ni envíos a autoridades.
+- **Esto declara la política; la VM `kawiil-agents` debe hacerla cumplir:** navegar solo a los dominios permitidos (filtro de red, no solo el prompt), resolver `op://` con un *service account* de 1Password y mantener el valor fuera del modelo (que el navegador de la VM lo escriba directo en el formulario).
+- Recomendado en 1Password: una bóveda dedicada «Agentes-Kawiil», service account de solo lectura sobre esa bóveda, cuentas de solo consulta en los portales y, para SAT/CNBV/bancos, que cualquier trámite lo haga una persona. El token del service account vive solo en el entorno de la VM, nunca en este repo ni en Supabase.

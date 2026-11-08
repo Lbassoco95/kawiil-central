@@ -3,7 +3,7 @@ import { Loader2, Send, Sparkles, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useChatConstructor, useCrearAgente, type AgenteCreado } from "@/hooks/useAgenteConstructor";
-import { CADENCIAS, FUENTES_KAWIIL, type MensajeChat, type PropuestaAgente } from "../../../supabase/functions/_shared/agenteConstructor";
+import { AVISO_SECRETO, CADENCIAS, FUENTES_KAWIIL, pareceSecreto, type MensajeChat, type PropuestaAgente } from "../../../supabase/functions/_shared/agenteConstructor";
 
 // Chat especializado para crear agentes (solo Dirección). El chat propone; nada se crea hasta que la persona pulsa «Crear agente».
 const SALUDO = "Hola, soy el Constructor de Agentes. Cuéntame qué agente necesitas, por ejemplo: «un oficial de cumplimiento para Vizum que vigile sus documentos y me entregue un informe semanal». Yo te hago las preguntas que falten y te dejo una propuesta para que la revises antes de crearlo.";
@@ -32,6 +32,13 @@ export function TarjetaPropuesta({ p, onCrear, creando, error }: { p: PropuestaA
       {p.informes && <div><p className="text-xs font-medium text-muted-foreground">Informes</p><p className="text-sm">{p.informes}</p></div>}
       <Lista titulo="Conectado a (solo lectura)" items={p.fuentes.map((f) => FUENTES_KAWIIL[f])} />
       <p className="text-sm"><span className="text-xs font-medium text-muted-foreground">Cadencia: </span>{CADENCIAS[p.cadencia]}</p>
+      <Lista titulo="Internet: solo estos dominios" items={p.dominios_permitidos} />
+      <Lista titulo="Páginas que se le dejan" items={p.paginas.map((x) => `${x.titulo}: ${x.url}`)} />
+      {p.credenciales.length > 0 && (
+        <div data-testid="constructor-credenciales">
+          <Lista titulo="Accesos por 1Password (solo la referencia; la contraseña nunca se guarda en Kawiil)" items={p.credenciales.map((c) => `${c.etiqueta} → ${c.referencia}${c.dominio ? ` · ${c.dominio}` : ""}`)} />
+        </div>
+      )}
       <Lista titulo="Límites y cuándo escala a una persona" items={p.limites} />
       <p className="text-xs text-muted-foreground">Se crea en el registro de agentes, en reposo. Solo prepara borradores y lee dentro de Kawiil; la conexión real con tus fuentes depende del servicio de agentes. Si quieres cambiar algo, díselo al chat y te dejo otra versión.</p>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
@@ -56,10 +63,13 @@ export function ConstructorAgentes({ onCreado }: { onCreado?: (a: AgenteCreado) 
   const enviar = () => {
     const t = texto.trim();
     if (!t || chat.isPending) return;
+    // Un secreto no sale del navegador: ni al modelo ni al servidor.
+    if (pareceSecreto(t)) { setFallo(AVISO_SECRETO); setTexto(""); return; }
     const siguiente: MensajeChat[] = [...mensajes, { role: "user", content: t }];
     setMensajes(siguiente); setTexto(""); setFallo(null);
     chat.mutate(siguiente, {
       onSuccess: (r) => {
+        if (r.secreto) { setMensajes(mensajes); setFallo(r.texto); return; }
         setMensajes((m) => [...m, { role: "assistant", content: r.texto }]);
         if (r.propuesta) { setPropuesta(r.propuesta); setCreado(null); }
         else if (r.avisos?.length) setFallo(`La propuesta quedó incompleta: ${r.avisos.join(" ")} Pídele al chat que la complete.`);
