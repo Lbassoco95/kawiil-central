@@ -6,12 +6,14 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { AgentesRegistro } from "@/components/marketing/AgentesRegistro";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Oficina } from "@/components/agentes/Oficina";
+import { ConstructorAgentes } from "@/components/agentes/ConstructorAgentes";
+import { InstruirAgente } from "@/components/agentes/InstruirAgente";
 import { agentesDelModulo, esAgenteLegal, resumenServicio } from "@/lib/agentes/registro";
 import { datosDemo, figurasOficina, filtrarAmbito, type AmbitoOficina } from "@/lib/agentes/oficina";
 import { useAgentesRegistro, useErroresAgentes, useTareasAgentes } from "@/hooks/useAgentesRegistro";
 
-// Módulo Agentes · fases 1 y 2 (solo lectura): oficina y tablas: agentes de Cerebro / kawiil-agents y su historial de tareas.
-// No escribe en la base ni despacha tareas. Los agentes de Marketing tienen su vista en /marketing.
+// Módulo Agentes: oficina y tablas (solo lectura) + Constructor de agentes y envío de instrucciones (solo Dirección, vía funciones).
+// La pantalla no escribe en la base directamente: crear agentes pasa por `agente-constructor` y las instrucciones por `dispatch-to-agent`. Los agentes de Marketing tienen su vista en /marketing.
 export default function Agentes() {
   const agentes = useAgentesRegistro();
   const tareas = useTareasAgentes();
@@ -28,7 +30,7 @@ export default function Agentes() {
   return (
     <AppLayout>
       <div className="space-y-6 p-4 md:p-6">
-        <PageHeader title="Agentes" description="Quién está activo, qué hizo y si falló. Solo lectura." icon={<Bot className="h-5 w-5" />} />
+        <PageHeader title="Agentes" description="Quién está activo, qué hizo y si falló. Crea agentes y dales instrucciones." icon={<Bot className="h-5 w-5" />} />
         <p className="text-xs text-muted-foreground">
           Los agentes de Marketing se ven en <Link className="underline" to="/marketing">Marketing → Agentes</Link>.
         </p>
@@ -36,6 +38,8 @@ export default function Agentes() {
           <TabsList>
             <TabsTrigger value="oficina">Oficina</TabsTrigger>
             <TabsTrigger value="tablas">Tablas</TabsTrigger>
+            <TabsTrigger value="crear">Crear agente</TabsTrigger>
+            <TabsTrigger value="instrucciones">Instrucciones</TabsTrigger>
           </TabsList>
           <TabsContent value="oficina" className="mt-4 space-y-3">
             {!demo && servicio.estado !== "en_linea" && (
@@ -45,10 +49,10 @@ export default function Agentes() {
             )}
             {!demo && (
               <div className="flex gap-2 text-xs" role="group" aria-label="Qué agentes ver en la oficina">
-                {(["legales", "todos"] as const).map((v) => (
+                {(["legales", "equipo", "todos"] as const).map((v) => (
                   <button key={v} type="button" aria-pressed={ambito === v} data-testid={`ambito-${v}`} onClick={() => setAmbito(v)}
                     className={`rounded-full border px-3 py-1 ${ambito === v ? "border-primary/60 bg-primary/10" : "border-border/60"}`}>
-                    {v === "legales" ? "Agentes legales" : "Todos los agentes"}
+                    {v === "legales" ? "Agentes legales" : v === "equipo" ? "Mi equipo" : "Todos los agentes"}
                   </button>
                 ))}
               </div>
@@ -63,6 +67,8 @@ export default function Agentes() {
               estadoAgentes={agentes.isError ? "error" : agentes.isLoading ? "cargando" : "ok"}
               estadoTareas={tareas.isError ? "error" : tareas.isLoading ? "cargando" : "ok"} />
           </TabsContent>
+          <TabsContent value="crear" className="mt-4"><ConstructorAgentes /></TabsContent>
+          <TabsContent value="instrucciones" className="mt-4"><InstruirAgente agentes={reales} /></TabsContent>
         </Tabs>
       </div>
     </AppLayout>
