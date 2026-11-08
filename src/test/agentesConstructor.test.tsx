@@ -169,3 +169,38 @@ describe("el chat no deja pasar secretos", () => {
     expect(screen.getByTestId("constructor-error").textContent).toMatch(/1Password/);
   });
 });
+
+describe("accesos 1Password: dominio obligatorio y autorización por tarea", () => {
+  it("rechaza un acceso sin dominio", () => {
+    const r = validarPropuesta({ ...BUENA, credenciales: [{ etiqueta: "Portal", referencia: "op://Agentes/Vizum" }] });
+    expect(r.ok).toBe(false);
+    expect("errores" in r && r.errores.join(" ")).toMatch(/dominio/);
+  });
+  it("acepta la referencia al elemento sin campo", () => {
+    const r = validarPropuesta({ ...BUENA, credenciales: [{ etiqueta: "Portal", referencia: "op://Agentes-Kawiil/Vizum-portal", dominio: "portal.vizum.mx" }] });
+    expect(r.ok).toBe(true);
+  });
+});
+
+describe("InstruirAgente: autorizar accesos", () => {
+  const conAcceso = { id: "a", name: "oficial", display_name: "Oficial", description: null, role: null, status: "idle", kind: "consultable", last_heartbeat: null, last_task_at: null, tasks_completed: 0, tasks_failed: 0,
+    config: { credenciales_1password: [{ etiqueta: "Portal Vizum", referencia: "op://Agentes-Kawiil/Vizum-portal", dominio: "portal.vizum.mx" }] } } as unknown as AgenteRegistro;
+  beforeEach(() => invoke.mockReset());
+  it("no muestra la referencia, no envía accesos sin marcar y envía los marcados", async () => {
+    invoke.mockResolvedValue({ data: { ok: true }, error: null });
+    envolver(<InstruirAgente agentes={[conAcceso]} />);
+    fireEvent.change(screen.getByTestId("instruir-agente"), { target: { value: "a" } });
+    expect(screen.getByTestId("instruir-accesos").textContent).not.toContain("op://");
+    fireEvent.change(screen.getByTestId("instruir-titulo"), { target: { value: "Revisar" } });
+    fireEvent.change(screen.getByTestId("instruir-texto"), { target: { value: "Revisa el panel" } });
+    fireEvent.click(screen.getByTestId("instruir-enviar"));
+    await waitFor(() => expect(invoke).toHaveBeenCalledTimes(1));
+    expect(invoke.mock.calls[0][1].body.input_context).toBeUndefined();
+    fireEvent.change(screen.getByTestId("instruir-titulo"), { target: { value: "Revisar 2" } });
+    fireEvent.change(screen.getByTestId("instruir-texto"), { target: { value: "Otra vez" } });
+    fireEvent.click(screen.getByTestId("instruir-acceso-Portal Vizum"));
+    fireEvent.click(screen.getByTestId("instruir-enviar"));
+    await waitFor(() => expect(invoke).toHaveBeenCalledTimes(2));
+    expect(invoke.mock.calls[1][1].body.input_context).toEqual({ accesos_aprobados: ["Portal Vizum"] });
+  });
+});

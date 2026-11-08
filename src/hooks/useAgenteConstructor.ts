@@ -32,9 +32,11 @@ export function useCrearAgente() {
 // Darle una instrucción a un agente: usa el despacho que ya existe (dispatch-to-agent → VM). Crea una tarea; no cambia al agente.
 export const useInstruirAgente = () =>
   useMutation({
-    mutationFn: async (v: { agent_id: string; title: string; instructions: string }) => {
+    mutationFn: async (v: { agent_id: string; title: string; instructions: string; accesos_aprobados?: string[] }) => {
       const { data, error } = await supabase.functions.invoke("dispatch-to-agent", {
-        body: { agent_id: v.agent_id, title: v.title, instructions: v.instructions, description: v.instructions, task_type: "manual", priority: "normal" },
+        body: { agent_id: v.agent_id, title: v.title, instructions: v.instructions, description: v.instructions, task_type: "manual", priority: "normal",
+          // Accesos de 1Password que la persona autoriza SOLO para esta tarea (la VM exige esta lista para iniciar sesión).
+          ...(v.accesos_aprobados?.length ? { input_context: { accesos_aprobados: v.accesos_aprobados } } : {}) },
       });
       if (error) throw new Error("No se pudo enviar la instrucción. Revisa que el servicio de agentes esté encendido.");
       return data;

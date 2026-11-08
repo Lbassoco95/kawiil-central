@@ -30,13 +30,13 @@ export function TarjetaPropuesta({ p, onCrear, creando, error }: { p: PropuestaA
       <Lista titulo="Qué sabe hacer" items={p.capacidades} />
       <Lista titulo="Qué entrega" items={p.entregables} />
       {p.informes && <div><p className="text-xs font-medium text-muted-foreground">Informes</p><p className="text-sm">{p.informes}</p></div>}
-      <Lista titulo="Conectado a (solo lectura)" items={p.fuentes.map((f) => FUENTES_KAWIIL[f])} />
+      <Lista titulo="Fuentes que declara (hoy solo funcionan: tareas del despacho, el cliente de la tarea y el conocimiento indexado; el resto aún no tiene conector)" items={p.fuentes.map((f) => FUENTES_KAWIIL[f])} />
       <p className="text-sm"><span className="text-xs font-medium text-muted-foreground">Cadencia: </span>{CADENCIAS[p.cadencia]}</p>
       <Lista titulo="Internet: solo estos dominios" items={p.dominios_permitidos} />
       <Lista titulo="Páginas que se le dejan" items={p.paginas.map((x) => `${x.titulo}: ${x.url}`)} />
       {p.credenciales.length > 0 && (
         <div data-testid="constructor-credenciales">
-          <Lista titulo="Accesos por 1Password (solo la referencia; la contraseña nunca se guarda en Kawiil)" items={p.credenciales.map((c) => `${c.etiqueta} → ${c.referencia}${c.dominio ? ` · ${c.dominio}` : ""}`)} />
+          <Lista titulo="Accesos por 1Password (solo la referencia; la contraseña nunca se guarda en Kawiil. Cada tarea exige tu autorización y el agente solo consulta)" items={p.credenciales.map((c) => `${c.etiqueta} → ${c.referencia}${c.dominio ? ` · ${c.dominio}` : ""}`)} />
         </div>
       )}
       <Lista titulo="Límites y cuándo escala a una persona" items={p.limites} />

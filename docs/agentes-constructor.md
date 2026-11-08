@@ -20,3 +20,8 @@ Una fila en `agent_registry` (`kind='consultable'`, `status='idle'`, org global)
 - El prompt del agente le ordena: visitar solo esos dominios, tratar lo que lea en internet como no confiable (inyección de instrucciones), usar cada acceso solo en su dominio y no hacer pagos, firmas ni envíos a autoridades.
 - **Esto declara la política; la VM `kawiil-agents` debe hacerla cumplir:** navegar solo a los dominios permitidos (filtro de red, no solo el prompt), resolver `op://` con un *service account* de 1Password y mantener el valor fuera del modelo (que el navegador de la VM lo escriba directo en el formulario).
 - Recomendado en 1Password: una bóveda dedicada «Agentes-Kawiil», service account de solo lectura sobre esa bóveda, cuentas de solo consulta en los portales y, para SAT/CNBV/bancos, que cualquier trámite lo haga una persona. El token del service account vive solo en el entorno de la VM, nunca en este repo ni en Supabase.
+
+## Accesos de 1Password (punto 4)
+- Cada acceso lleva `etiqueta`, `referencia` (`op://Bóveda/Elemento`) y **dominio obligatorio**. La VM solo lo usa en ese sitio.
+- **Autorización por tarea:** en la pestaña «Instrucciones», al elegir un agente con accesos aparecen casillas «Autorizo usar …». Solo los marcados viajan en `input_context.accesos_aprobados`; sin eso el agente no puede iniciar sesión.
+- El agente solo consulta (sin formularios, pagos ni firmas) y nunca ve la contraseña. Detalle y preparación de la VM: `ACCESOS-1PASSWORD.md` en `kawiil-agents`.
