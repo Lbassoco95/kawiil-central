@@ -204,3 +204,81 @@ describe("InstruirAgente: autorizar accesos", () => {
     expect(invoke.mock.calls[1][1].body.input_context).toEqual({ accesos_aprobados: ["Portal Vizum"] });
   });
 });
+
+import { validarProgramacion } from "../../supabase/functions/_shared/agenteConstructor";
+import { ProgramarAgente, programable, resumenProgramacion } from "@/components/agentes/ProgramarAgente";
+
+describe("validarProgramacion", () => {
+  const ok = { activa: true, hora: "08:30", instruccion: "Revisa los documentos nuevos de Vizum", accesos_autorizados: ["Portal"] };
+  it("acepta una diaria y una semanal válidas", () => {
+    const d = validarProgramacion(ok, "diaria", ["Portal"]);
+    expect(d.ok && d.programacion).toMatchObject({ activa: true, hora: "08:30", accesos_autorizados: ["Portal"] });
+    expect(d.ok && "dia_semana" in d.programacion).toBe(false);
+    const s = validarProgramacion({ ...ok, dia_semana: 0 }, "semanal", ["Portal"]);
+    expect(s.ok && s.programacion.dia_semana).toBe(0);
+  });
+  it.each([
+    [{ ...ok, hora: "25:00" }, "diaria", /HH:MM/], [{ ...ok, hora: "8:30" }, "diaria", /HH:MM/],
+    [{ ...ok }, "semanal", /día/], [{ ...ok, dia_semana: 7 }, "semanal", /día/],
+    [{ ...ok, instruccion: "corta" }, "diaria", /instrucción/],
+    [{ ...ok, instruccion: "Entra con la contraseña es Hunter2!" }, "diaria", /1Password/],
+    [{ ...ok, accesos_autorizados: ["Ajeno"] }, "diaria", /accesos/],
+    [ok, "bajo_demanda", /cadencia/],
+  ])("rechaza %#", (raw, cad, msg) => {
+    const r = validarProgramacion(raw, cad, ["Portal"]);
+    expect(r.ok).toBe(false);
+    expect("errores" in r && r.errores.join(" ")).toMatch(msg);
+  });
+  it("pausar no exige los demás campos y descarta accesos que no existen", () => {
+    const r = validarProgramacion({ activa: false, accesos_autorizados: ["Portal", "Fantasma"] }, "diaria", ["Portal"]);
+    expect(r.ok).toBe(false); // un acceso ajeno incluso al pausar es un dato inválido
+    const p = validarProgramacion({ activa: false }, "diaria", ["Portal"]);
+    expect(p.ok && p.programacion).toEqual({ activa: false, accesos_autorizados: [] });
+  });
+});
+
+describe("ProgramarAgente", () => {
+  const ag = (o: Record<string, unknown>) => ({ id: "a", name: "oficial", display_name: "Oficial", description: null, role: null, status: "idle", kind: "consultable", last_heartbeat: null, last_task_at: null, tasks_completed: 0, tasks_failed: 0, ...o }) as unknown as AgenteRegistro;
+  const cfg = (extra: Record<string, unknown> = {}) => ({ origen: "constructor_agentes", cadencia: "semanal", credenciales_1password: [{ etiqueta: "Portal Vizum", referencia: "op://Agentes-Kawiil/V", dominio: "portal.vizum.mx" }], ...extra });
+  beforeEach(() => invoke.mockReset());
+
+  it("solo ofrece agentes del constructor con cadencia diaria o semanal", () => {
+    expect(programable(ag({ config: cfg() }))).toBe(true);
+    expect(programable(ag({ config: cfg({ cadencia: "bajo_demanda" }) }))).toBe(false);
+    expect(programable(ag({ config: { cadencia: "diaria" } }))).toBe(false);          // no es del constructor
+    expect(programable(ag({ config: cfg(), kind: "system" }))).toBe(false);
+    expect(programable(ag({ config: cfg(), status: "archived" }))).toBe(false);
+  });
+  it("resume el estado", () => {
+    expect(resumenProgramacion(ag({ config: cfg() }))).toBe("Sin programar");
+    expect(resumenProgramacion(ag({ config: cfg({ programacion: { activa: true, hora: "08:00", dia_semana: 0 } }) }))).toBe("Activa · cada lunes a las 08:00");
+    expect(resumenProgramacion(ag({ config: cfg({ programacion: { activa: false, pausada_motivo: "3 corridas seguidas con error" } }) }))).toMatch(/Pausada automáticamente/);
+  });
+  it("sin agentes programables lo dice", () => {
+    envolver(<ProgramarAgente agentes={[ag({ config: {} })]} />);
+    expect(screen.getByTestId("programar-vacio")).toBeTruthy();
+  });
+  it("envía la programación con los accesos marcados y no muestra la referencia", async () => {
+    invoke.mockResolvedValue({ data: { programacion: { activa: true } }, error: null });
+    envolver(<ProgramarAgente agentes={[ag({ config: cfg() })]} />);
+    fireEvent.change(screen.getByTestId("programar-agente"), { target: { value: "a" } });
+    expect(screen.getByTestId("programar-accesos").textContent).not.toContain("op://");
+    fireEvent.click(screen.getByTestId("programar-activa"));
+    fireEvent.change(screen.getByTestId("programar-hora"), { target: { value: "09:15" } });
+    fireEvent.change(screen.getByTestId("programar-dia"), { target: { value: "2" } });
+    fireEvent.change(screen.getByTestId("programar-instruccion"), { target: { value: "Revisa los documentos nuevos y entrega un informe" } });
+    fireEvent.click(screen.getByTestId("programar-acceso-Portal Vizum"));
+    fireEvent.click(screen.getByTestId("programar-guardar"));
+    await screen.findByTestId("programar-ok");
+    expect(invoke.mock.calls[0][0]).toBe("agente-constructor");
+    expect(invoke.mock.calls[0][1].body).toMatchObject({ action: "programar", agent_id: "a", programacion: { activa: true, hora: "09:15", dia_semana: 2, accesos_autorizados: ["Portal Vizum"] } });
+  });
+  it("no manda al servidor una instrucción con una contraseña", () => {
+    envolver(<ProgramarAgente agentes={[ag({ config: cfg() })]} />);
+    fireEvent.change(screen.getByTestId("programar-agente"), { target: { value: "a" } });
+    fireEvent.change(screen.getByTestId("programar-instruccion"), { target: { value: "Entra con la contraseña es Hunter2!" } });
+    fireEvent.click(screen.getByTestId("programar-guardar"));
+    expect(invoke).not.toHaveBeenCalled();
+    expect(screen.getByTestId("programar-error").textContent).toMatch(/1Password/);
+  });
+});

@@ -8,6 +8,7 @@ import {
   filaDesdePropuesta,
   limpiarMensajes,
   pareceSecreto,
+  validarProgramacion,
   validarPropuesta,
 } from "../_shared/agenteConstructor.ts";
 
@@ -18,6 +19,7 @@ import {
  *
  *   action "chat"  → { mensajes } → { texto, propuesta | null }   (no escribe nada)
  *   action "crear" → { propuesta } → { agente }                   (inserta UNA fila en agent_registry)
+ *   action "programar" → { agent_id, programacion } → { programacion } (fusiona config.programacion; solo agentes del constructor)
  *
  * Seguridad:
  *   - verify_jwt=true; el usuario sale del JWT, nunca del body.
@@ -118,6 +120,33 @@ serve(async (req: Request) => {
       const { data, error } = await admin.from("agent_registry").insert(fila).select("id, name, display_name, role, status").single();
       if (error || !data) { console.error("agente-constructor: insert", error?.message); return json({ error: "No se pudo crear el agente." }, 500); }
       return json({ agente: data }, 201);
+    }
+
+    // ── Programar ─────────────────────────────────────────────────────────────────────────────────
+    // Guarda config.programacion de un agente creado desde el constructor. El planificador de la VM solo corre agentes con
+    // programacion.activa = true; los accesos de 1Password listados aquí son una autorización PERMANENTE (revocable) para las
+    // corridas sin persona presente.
+    if (body.action === "programar") {
+      const agentId = typeof body.agent_id === "string" ? body.agent_id : "";
+      if (!agentId) return json({ error: "Falta el agente." }, 400);
+      const { data: ag, error: errAg } = await admin.from("agent_registry").select("id, name, kind, status, config").eq("id", agentId).eq("organization_id", ORG_AGENTES).maybeSingle();
+      if (errAg) { console.error("agente-constructor: lee agente", errAg.message); return json({ error: "No se pudo leer el agente." }, 500); }
+      if (!ag) return json({ error: "Agente no encontrado." }, 404);
+      const cfg = (ag.config && typeof ag.config === "object" ? ag.config : {}) as Record<string, unknown>;
+      if (ag.kind !== "consultable" || ag.status === "archived" || cfg.origen !== "constructor_agentes") return json({ error: "Solo se pueden programar agentes creados desde el constructor." }, 403);
+      const etiquetas = (Array.isArray(cfg.credenciales_1password) ? cfg.credenciales_1password : [])
+        .map((c: unknown) => (c && typeof c === "object" ? (c as { etiqueta?: unknown }).etiqueta : null)).filter((x): x is string => typeof x === "string");
+      const v = validarProgramacion(body.programacion, cfg.cadencia, etiquetas);
+      if (!v.ok) return json({ error: "La programación no es válida.", errores: v.errores }, 422);
+      const ahora = new Date().toISOString();
+      const previa = (cfg.programacion && typeof cfg.programacion === "object" ? cfg.programacion : {}) as Record<string, unknown>;
+      // Al activar o cambiar una programación activa, `activada_en` se reinicia: nunca corre un horario anterior al cambio.
+      const programacion = v.programacion.activa
+        ? { ...v.programacion, activada_en: ahora, activada_por: userId, actualizado_en: ahora }
+        : { ...previa, ...v.programacion, activa: false, actualizado_en: ahora };
+      const { error: errUp } = await admin.from("agent_registry").update({ config: { ...cfg, programacion }, updated_at: ahora }).eq("id", agentId);
+      if (errUp) { console.error("agente-constructor: programar", errUp.message); return json({ error: "No se pudo guardar la programación." }, 500); }
+      return json({ programacion });
     }
 
     return json({ error: "Acción no válida." }, 400);

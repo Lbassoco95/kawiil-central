@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import type { MensajeChat, PropuestaAgente } from "../../supabase/functions/_shared/agenteConstructor";
+import type { MensajeChat, Programacion, PropuestaAgente } from "../../supabase/functions/_shared/agenteConstructor";
 
 // Chat especializado para crear agentes. «chat» solo conversa y propone; «crear» inserta UN agente en el registro
 // y únicamente se llama cuando la persona confirma la propuesta en pantalla.
@@ -42,3 +42,13 @@ export const useInstruirAgente = () =>
       return data;
     },
   });
+
+// Programar un agente (tareas recurrentes). Solo guarda la configuración; el planificador de la VM la ejecuta.
+export function useProgramarAgente() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { agent_id: string; programacion: Partial<Programacion> }) =>
+      invocar<{ programacion: Programacion }>({ action: "programar", agent_id: v.agent_id, programacion: v.programacion }).then((r) => r.programacion),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["agentes-registro"] }); },
+  });
+}

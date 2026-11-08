@@ -137,6 +137,35 @@ export function validarPropuesta(raw: unknown): ResultadoValidacion {
   };
 }
 
+// ── Programación (tareas recurrentes) ──────────────────────────────────────────────────────────────────
+export const DIAS_SEMANA = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"] as const;
+export interface Programacion {
+  activa: boolean; hora?: string; dia_semana?: number; instruccion?: string; accesos_autorizados: string[];
+  activada_en?: string; activada_por?: string; actualizado_en?: string; pausada_motivo?: string; pausada_en?: string;
+}
+export type ResultadoProgramacion = { ok: true; programacion: Programacion } | { ok: false; errores: string[] };
+
+// Valida lo que Dirección envía para programar a un agente. `cadencia` y `etiquetasAccesos` salen del agente en el servidor.
+export function validarProgramacion(raw: unknown, cadencia: unknown, etiquetasAccesos: string[]): ResultadoProgramacion {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { ok: false, errores: ["La programación no tiene forma de objeto."] };
+  const r = raw as Record<string, unknown>;
+  if (cadencia !== "diaria" && cadencia !== "semanal") return { ok: false, errores: ["Este agente no tiene cadencia diaria ni semanal; no se puede programar."] };
+  const errores: string[] = [];
+  const accesos = [...new Set((Array.isArray(r.accesos_autorizados) ? r.accesos_autorizados : []).filter((x): x is string => typeof x === "string"))];
+  const ajenos = accesos.filter((a) => !etiquetasAccesos.includes(a));
+  if (ajenos.length) errores.push("Hay accesos autorizados que el agente no tiene.");
+  if (r.activa !== true) return errores.length ? { ok: false, errores } : { ok: true, programacion: { activa: false, accesos_autorizados: accesos.filter((a) => etiquetasAccesos.includes(a)) } };
+  const hora = typeof r.hora === "string" ? r.hora.trim() : "";
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(hora)) errores.push("La hora debe tener el formato HH:MM (por ejemplo 08:30).");
+  const dia = r.dia_semana;
+  if (cadencia === "semanal" && !(typeof dia === "number" && Number.isInteger(dia) && dia >= 0 && dia <= 6)) errores.push("Elige el día de la semana.");
+  const instruccion = texto(r.instruccion, 1500);
+  if (instruccion.length < 10) errores.push("Escribe la instrucción que el agente ejecutará cada vez (mínimo 10 caracteres).");
+  if (pareceSecreto(instruccion)) errores.push(AVISO_SECRETO);
+  if (errores.length) return { ok: false, errores };
+  return { ok: true, programacion: { activa: true, hora, ...(cadencia === "semanal" ? { dia_semana: dia as number } : {}), instruccion, accesos_autorizados: accesos } };
+}
+
 const sinAcentos = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 // «Oficial de Cumplimiento · Vizum» → «oficial_de_cumplimiento_vizum». Mismo estilo que legal_archivist, nelli, etc.
 export function slugAgente(nombreVisible: string, cliente?: string): string {

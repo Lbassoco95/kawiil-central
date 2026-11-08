@@ -25,3 +25,9 @@ Una fila en `agent_registry` (`kind='consultable'`, `status='idle'`, org global)
 - Cada acceso lleva `etiqueta`, `referencia` (`op://Bóveda/Elemento`) y **dominio obligatorio**. La VM solo lo usa en ese sitio.
 - **Autorización por tarea:** en la pestaña «Instrucciones», al elegir un agente con accesos aparecen casillas «Autorizo usar …». Solo los marcados viajan en `input_context.accesos_aprobados`; sin eso el agente no puede iniciar sesión.
 - El agente solo consulta (sin formularios, pagos ni firmas) y nunca ve la contraseña. Detalle y preparación de la VM: `ACCESOS-1PASSWORD.md` en `kawiil-agents`.
+
+## Programar (punto 5)
+Pestaña **Programar** (solo Dirección): elegir un agente del constructor con cadencia diaria o semanal, hora (México), día, la instrucción que ejecutará cada vez y, si tiene accesos de 1Password, cuáles autoriza de forma **permanente** para las corridas sin nadie presente. La función `agente-constructor` (acción `programar`) guarda `config.programacion`; el planificador de la VM (`kawiil-agents/PLANIFICADOR.md`) hace el resto.
+- Guardar **no ejecuta nada al instante**: corre desde el siguiente horario. Cambiar una programación activa reinicia `activada_en`.
+- Pausar = quitar la marca «activa». Tras 3 errores seguidos la VM la pausa sola y aquí aparece «Pausada automáticamente».
+- Sin migración; la función se despliega al fusionar a `main` (no entre 6:30 y 7:00 CDMX).

@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Oficina } from "@/components/agentes/Oficina";
 import { ConstructorAgentes } from "@/components/agentes/ConstructorAgentes";
 import { InstruirAgente } from "@/components/agentes/InstruirAgente";
+import { ProgramarAgente } from "@/components/agentes/ProgramarAgente";
 import { agentesDelModulo, esAgenteLegal, resumenServicio } from "@/lib/agentes/registro";
 import { datosDemo, figurasOficina, filtrarAmbito, type AmbitoOficina } from "@/lib/agentes/oficina";
 import { useAgentesRegistro, useErroresAgentes, useTareasAgentes } from "@/hooks/useAgentesRegistro";
@@ -40,6 +41,7 @@ export default function Agentes() {
             <TabsTrigger value="tablas">Tablas</TabsTrigger>
             <TabsTrigger value="crear">Crear agente</TabsTrigger>
             <TabsTrigger value="instrucciones">Instrucciones</TabsTrigger>
+            <TabsTrigger value="programar">Programar</TabsTrigger>
           </TabsList>
           <TabsContent value="oficina" className="mt-4 space-y-3">
             {!demo && servicio.estado !== "en_linea" && (
@@ -69,6 +71,7 @@ export default function Agentes() {
           </TabsContent>
           <TabsContent value="crear" className="mt-4"><ConstructorAgentes /></TabsContent>
           <TabsContent value="instrucciones" className="mt-4"><InstruirAgente agentes={reales} /></TabsContent>
+          <TabsContent value="programar" className="mt-4"><ProgramarAgente agentes={reales} /></TabsContent>
         </Tabs>
       </div>
     </AppLayout>
