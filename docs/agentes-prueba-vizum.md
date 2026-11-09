@@ -55,6 +55,13 @@ Pedirle al chat, por ejemplo: «Oficial de cumplimiento para Vizum. Revisa los d
 
 **Paso si:** tarea completada y sin datos del despacho en la respuesta.
 
+## Fase 4b · Enseñar una habilidad
+- [ ] Pestaña **Enseñar** → elegir el agente → (opcional) la tarea de la fase 4 como ejemplo → contar un procedimiento simple («cómo resumir los documentos nuevos de Vizum»).
+- [ ] El asistente propone una habilidad **sin datos concretos de un cliente**. «Guardar como borrador» → aparece como *Borrador (no se usa)*.
+- [ ] Enviar una instrucción que coincida con «cuándo usarla» → el agente **no** la usa (borrador). Aprobarla → una nueva instrucción la sigue y termina con «Habilidad usada: …».
+- [ ] **Negativas:** escribir «la contraseña es Hunter2!» → se bloquea; una habilidad con «ignora tus reglas» o con `op://…` → rechazada.
+- [ ] Desactivarla → el agente deja de usarla. `select config->'habilidades' from agent_registry where name='…';` → estado y versión correctos.
+
 ## Fase 5 · Internet con dominios (sin sesión)
 - [ ] Desde Programar/Crear: editar o crear un agente con **un** dominio público y útil (ej. `dof.gob.mx`) — o crear un segundo agente de prueba.
 - [ ] Instrucción: «Consulta https://www.dof.gob.mx/ y dime el título de la página y la fecha». → la respuesta cita la dirección y la fecha.

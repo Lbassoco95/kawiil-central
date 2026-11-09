@@ -31,3 +31,15 @@ Pestaña **Programar** (solo Dirección): elegir un agente del constructor con c
 - Guardar **no ejecuta nada al instante**: corre desde el siguiente horario. Cambiar una programación activa reinicia `activada_en`.
 - Pausar = quitar la marca «activa». Tras 3 errores seguidos la VM la pausa sola y aquí aparece «Pausada automáticamente».
 - Sin migración; la función se despliega al fusionar a `main` (no entre 6:30 y 7:00 CDMX).
+
+## Enseñar habilidades (pestaña «Enseñar»)
+Dirección le enseña a un agente del constructor un procedimiento que se repite, como una *skill* de Claude:
+1. Elegir el agente. Opcional: elegir una tarea que ya completó como **ejemplo real** (solo se ve fecha y tipo; el servidor lee título, instrucciones, resumen y páginas consultadas, nunca contraseñas).
+2. Contarle al asistente cómo se hace (cuándo se usa, qué necesita, pasos, cómo se ve un buen resultado, qué cuidar). El asistente generaliza (quita datos de un cliente concreto) y **propone** una habilidad.
+3. Revisarla y decidir: **Guardar como borrador** (no se usa) o **Aprobar y activar**. Se puede desactivar, archivar o mejorar (misma habilidad = versión nueva).
+
+Cómo «aprende»: cada vez que corrija o dé un ejemplo nuevo, se guarda una versión mejorada que una persona aprueba. **El agente nunca crea ni cambia sus habilidades solo**: así una página web o un documento con instrucciones escondidas no puede enseñarle nada.
+
+Garantías (en código): se guardan en `config.habilidades` (sin migración); la VM solo usa las `aprobada`, las limpia y las recorta otra vez, con presupuesto de caracteres, y las presenta **subordinadas** a los límites del agente (no dan permisos, dominios ni accesos). Una habilidad no puede incluir contraseñas, referencias `op://`, direcciones con usuario/clave ni intentos de cambiar las reglas del agente. Máximo 20 activas por agente. Acciones nuevas de `agente-constructor`: `ensenar`, `guardar_habilidad`, `estado_habilidad` (solo Dirección).
+
+Fuera de alcance por ahora: grabar la pantalla o los clics de una persona (necesita una extensión de navegador y plantea riesgos de privacidad) y que el agente proponga mejoras por su cuenta tras cada tarea.

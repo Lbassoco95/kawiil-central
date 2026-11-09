@@ -11,6 +11,16 @@ import {
   validarProgramacion,
   validarPropuesta,
 } from "../_shared/agenteConstructor.ts";
+import {
+  HERRAMIENTA_HABILIDAD,
+  SYSTEM_MAESTRO,
+  cambiarEstadoHabilidad,
+  contextoParaMaestro,
+  ejemploParaMaestro,
+  guardarHabilidad,
+  validarHabilidad,
+  type EjemploTarea,
+} from "../_shared/habilidades.ts";
 
 /**
  * agente-constructor
@@ -19,6 +29,9 @@ import {
  *
  *   action "chat"  → { mensajes } → { texto, propuesta | null }   (no escribe nada)
  *   action "crear" → { propuesta } → { agente }                   (inserta UNA fila en agent_registry)
+ *   action "ensenar" → { agent_id, mensajes, task_id? } → { texto, habilidad | null }   (no escribe nada)
+ *   action "guardar_habilidad" → { agent_id, habilidad, estado: borrador|aprobada, task_id? } → { habilidades }
+ *   action "estado_habilidad" → { agent_id, id, estado: borrador|aprobada|archivada } → { habilidades }
  *   action "programar" → { agent_id, programacion } → { programacion } (fusiona config.programacion; solo agentes del constructor)
  *
  * Seguridad:
@@ -147,6 +160,83 @@ serve(async (req: Request) => {
       const { error: errUp } = await admin.from("agent_registry").update({ config: { ...cfg, programacion }, updated_at: ahora }).eq("id", agentId);
       if (errUp) { console.error("agente-constructor: programar", errUp.message); return json({ error: "No se pudo guardar la programación." }, 500); }
       return json({ programacion });
+    }
+
+    // ── Enseñar (habilidades) ─────────────────────────────────────────────────────────────────────
+    // Dirección le enseña un procedimiento a un agente del constructor. El asistente solo PROPONE; guardar y aprobar son
+    // acciones aparte de una persona. Una habilidad no da permisos: la VM la presenta subordinada a los límites del agente.
+    if (body.action === "ensenar" || body.action === "guardar_habilidad" || body.action === "estado_habilidad") {
+      const agentId = typeof body.agent_id === "string" ? body.agent_id : "";
+      if (!agentId) return json({ error: "Falta el agente." }, 400);
+      const { data: ag, error: errAg } = await admin.from("agent_registry").select("id, name, display_name, role, kind, status, config").eq("id", agentId).eq("organization_id", ORG_AGENTES).maybeSingle();
+      if (errAg) { console.error("agente-constructor: lee agente", errAg.message); return json({ error: "No se pudo leer el agente." }, 500); }
+      if (!ag) return json({ error: "Agente no encontrado." }, 404);
+      const cfg = (ag.config && typeof ag.config === "object" ? ag.config : {}) as Record<string, unknown>;
+      if (ag.kind !== "consultable" || ag.status === "archived" || cfg.origen !== "constructor_agentes") return json({ error: "Solo se pueden enseñar agentes creados desde el constructor." }, 403);
+      const guardar = async (habilidades: unknown) => {
+        const { error } = await admin.from("agent_registry").update({ config: { ...cfg, habilidades }, updated_at: new Date().toISOString() }).eq("id", agentId);
+        if (error) { console.error("agente-constructor: guarda habilidades", error.message); return json({ error: "No se pudo guardar." }, 500); }
+        return json({ habilidades });
+      };
+
+      if (body.action === "guardar_habilidad") {
+        const v = validarHabilidad(body.habilidad);
+        if (!v.ok) return json({ error: "La habilidad no es válida.", errores: v.errores }, 422);
+        const estado = body.estado === "aprobada" ? "aprobada" : "borrador";
+        const taskId = typeof body.task_id === "string" && body.task_id ? body.task_id : undefined;
+        const r = guardarHabilidad(cfg.habilidades, v.habilidad, estado, taskId ? { tipo: "tarea", task_id: taskId } : { tipo: "chat" }, userId, new Date());
+        if (!r.ok) return json({ error: r.errores[0], errores: r.errores }, 422);
+        return await guardar(r.habilidades);
+      }
+      if (body.action === "estado_habilidad") {
+        const estado = body.estado;
+        if (estado !== "borrador" && estado !== "aprobada" && estado !== "archivada") return json({ error: "Estado no válido." }, 400);
+        const r = cambiarEstadoHabilidad(cfg.habilidades, typeof body.id === "string" ? body.id : "", estado, userId, new Date());
+        if (!r.ok) return json({ error: r.errores[0], errores: r.errores }, 422);
+        return await guardar(r.habilidades);
+      }
+
+      // ensenar: chat con el asistente (+ ejemplo real opcional)
+      const mensajes = limpiarMensajes(body.mensajes);
+      if (mensajes.length === 0) return json({ error: "Cuéntame cómo se hace la tarea para empezar." }, 400);
+      if (pareceSecreto(mensajes[mensajes.length - 1].content)) return json({ texto: AVISO_SECRETO, habilidad: null, avisos: [], secreto: true });
+      const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+      if (!apiKey) return json({ error: "El servicio de IA no está configurado." }, 503);
+
+      let ejemplo = "";
+      if (typeof body.task_id === "string" && body.task_id) {
+        // La tarea debe ser de ESTE agente; se leen título, instrucciones y resumen en el servidor (solo Dirección llega aquí).
+        const { data: tk } = await admin.from("agent_tasks").select("id, agent_id, title, status, instructions, result_summary, error_message").eq("id", body.task_id).eq("agent_id", agentId).maybeSingle();
+        if (!tk) return json({ error: "Esa tarea no es de este agente." }, 404);
+        const { data: logs } = await admin.from("agent_activity_logs").select("details").eq("task_id", tk.id).in("action", ["web_fetch", "web_fetch_sesion", "web_login"]).limit(20);
+        const visitas = (logs ?? []).map((x: { details?: { url?: string; estado?: string } }) => ({ url: x.details?.url ?? "", estado: x.details?.estado ?? "" })).filter((x: { url: string }) => x.url);
+        const e: EjemploTarea = { titulo: tk.title, estado: tk.status, instrucciones: tk.instructions, resumen: tk.result_summary, error: tk.error_message, visitas };
+        ejemplo = ejemploParaMaestro(e);
+      }
+      const habs = (Array.isArray(cfg.habilidades) ? cfg.habilidades : []) as { nombre?: string; cuando_usarla?: string; estado?: string }[];
+      const internet = (cfg.internet && typeof cfg.internet === "object" ? cfg.internet : {}) as { dominios_permitidos?: string[] };
+      const accesos = (Array.isArray(cfg.credenciales_1password) ? cfg.credenciales_1password : []).map((c: { etiqueta?: string }) => c?.etiqueta).filter((x: unknown): x is string => typeof x === "string");
+      const contexto = contextoParaMaestro({
+        nombre: ag.display_name ?? ag.name, rol: typeof cfg.rol === "string" ? cfg.rol : ag.role ?? undefined, mision: typeof cfg.mision === "string" ? cfg.mision : undefined,
+        limites: Array.isArray(cfg.limites) ? cfg.limites.filter((x: unknown): x is string => typeof x === "string") : [],
+        dominios: Array.isArray(internet.dominios_permitidos) ? internet.dominios_permitidos : [], accesos,
+        habilidades: habs.filter((h) => h?.nombre).map((h) => ({ nombre: String(h.nombre), cuando_usarla: String(h.cuando_usarla ?? ""), estado: String(h.estado ?? "") })),
+      });
+      const r = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+        body: JSON.stringify({ model: MODELO_CHAT, max_tokens: 2048, system: SYSTEM_MAESTRO + contexto + ejemplo, messages: mensajes, tools: [HERRAMIENTA_HABILIDAD] }),
+        signal: AbortSignal.timeout(60_000),
+      });
+      if (!r.ok) { console.error("agente-constructor: anthropic (ensenar)", r.status, (await r.text()).slice(0, 300)); return json({ error: "El asistente no pudo responder. Inténtalo de nuevo." }, 502); }
+      const d = await r.json();
+      const bloques: Array<{ type: string; text?: string; name?: string; input?: unknown }> = d.content ?? [];
+      const texto = bloques.filter((b) => b.type === "text").map((b) => b.text ?? "").join("\n").trim();
+      const uso = bloques.find((b) => b.type === "tool_use" && b.name === HERRAMIENTA_HABILIDAD.name);
+      let habilidad = null;
+      let avisos: string[] = [];
+      if (uso) { const v = validarHabilidad(uso.input); if (v.ok) habilidad = v.habilidad; else avisos = v.errores; }
+      return json({ texto: texto || (habilidad ? "Te dejo la habilidad para que la revises." : "Cuéntame un poco más sobre cómo se hace."), habilidad, avisos });
     }
 
     return json({ error: "Acción no válida." }, 400);

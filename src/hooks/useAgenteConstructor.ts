@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { MensajeChat, Programacion, PropuestaAgente } from "../../supabase/functions/_shared/agenteConstructor";
+import type { EstadoHabilidad, Habilidad, HabilidadBorrador } from "../../supabase/functions/_shared/habilidades";
 
 // Chat especializado para crear agentes. «chat» solo conversa y propone; «crear» inserta UN agente en el registro
 // y únicamente se llama cuando la persona confirma la propuesta en pantalla.
@@ -49,6 +50,34 @@ export function useProgramarAgente() {
   return useMutation({
     mutationFn: (v: { agent_id: string; programacion: Partial<Programacion> }) =>
       invocar<{ programacion: Programacion }>({ action: "programar", agent_id: v.agent_id, programacion: v.programacion }).then((r) => r.programacion),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["agentes-registro"] }); },
+  });
+}
+
+// ── Enseñar habilidades a un agente ─────────────────────────────────────────────────────────────────
+// El asistente solo propone; guardar y aprobar son acciones de una persona. Una habilidad no da permisos.
+export interface RespuestaEnsenar { texto: string; habilidad: HabilidadBorrador | null; avisos: string[]; secreto?: boolean }
+
+export const useEnsenarAgente = () =>
+  useMutation({
+    mutationFn: (v: { agent_id: string; mensajes: MensajeChat[]; task_id?: string }) =>
+      invocar<RespuestaEnsenar>({ action: "ensenar", agent_id: v.agent_id, mensajes: v.mensajes, ...(v.task_id ? { task_id: v.task_id } : {}) }),
+  });
+
+export function useGuardarHabilidad() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { agent_id: string; habilidad: HabilidadBorrador; estado: "borrador" | "aprobada"; task_id?: string }) =>
+      invocar<{ habilidades: Habilidad[] }>({ action: "guardar_habilidad", ...v }).then((r) => r.habilidades),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["agentes-registro"] }); },
+  });
+}
+
+export function useEstadoHabilidad() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { agent_id: string; id: string; estado: EstadoHabilidad }) =>
+      invocar<{ habilidades: Habilidad[] }>({ action: "estado_habilidad", ...v }).then((r) => r.habilidades),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ["agentes-registro"] }); },
   });
 }
