@@ -24,7 +24,7 @@ export default function Agentes() {
   const [reloj, setReloj] = useState(() => new Date());
   useEffect(() => { const t = setInterval(() => setReloj(new Date()), 60_000); return () => clearInterval(t); }, []);
   const [demo, setDemo] = useState(false);
-  const [ambito, setAmbito] = useState<AmbitoOficina>("legales");
+  const [ambito, setAmbito] = useState<AmbitoOficina>("todos");
   const reales = useMemo(() => agentesDelModulo(agentes.data ?? []), [agentes.data]);
   const servicio = useMemo(() => resumenServicio(reales, reloj), [reales, reloj]);
   const fuente = useMemo(() => (demo ? datosDemo(reloj) : { agentes: reales, tareas: tareas.data ?? [] }), [demo, reales, tareas.data, reloj]);
@@ -55,7 +55,7 @@ export default function Agentes() {
             )}
             {!demo && (
               <div className="flex gap-2 text-xs" role="group" aria-label="Qué agentes ver en la oficina">
-                {(["legales", "equipo", "todos"] as const).map((v) => (
+                {(["todos", "legales", "equipo"] as const).map((v) => (
                   <button key={v} type="button" aria-pressed={ambito === v} data-testid={`ambito-${v}`} onClick={() => setAmbito(v)}
                     className={`rounded-full border px-3 py-1 ${ambito === v ? "border-primary/60 bg-primary/10" : "border-border/60"}`}>
                     {v === "legales" ? "Agentes legales" : v === "equipo" ? "Mi equipo" : "Todos los agentes"}

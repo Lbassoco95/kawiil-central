@@ -3,7 +3,8 @@ import { Loader2, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { nombreAgente, type AgenteRegistro } from "@/lib/agentes/registro";
+import { etiquetaOpcion, nombreAgente, type AgenteRegistro } from "@/lib/agentes/registro";
+import { FichaAgente } from "@/components/agentes/FichaAgente";
 import { useInstruirAgente } from "@/hooks/useAgenteConstructor";
 
 export function etiquetasAccesos(a: AgenteRegistro | undefined): { etiqueta: string; dominio: string }[] {
@@ -38,9 +39,10 @@ export function InstruirAgente({ agentes }: { agentes: AgenteRegistro[] }) {
       <label className="block space-y-1 text-sm">Agente
         <select className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={agenteId} onChange={(e) => { setAgenteId(e.target.value); setEnviado(null); setAprobados([]); }} data-testid="instruir-agente">
           <option value="">Elige un agente…</option>
-          {disponibles.map((a) => <option key={a.id} value={a.id}>{nombreAgente(a)}</option>)}
+          {disponibles.map((a) => <option key={a.id} value={a.id}>{etiquetaOpcion(a)}</option>)}
         </select>
       </label>
+      <FichaAgente agente={disponibles.find((a) => a.id === agenteId)} />
       <label className="block space-y-1 text-sm">Título
         <Input value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Revisar los documentos nuevos de Vizum" data-testid="instruir-titulo" />
       </label>

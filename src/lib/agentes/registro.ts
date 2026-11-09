@@ -29,6 +29,43 @@ export const esAgenteDeMarketing = (a: Pick<AgenteRegistro, "kind" | "name">): b
 
 export const nombreAgente = (a: Pick<AgenteRegistro, "name" | "display_name">): string => (a.display_name?.trim() || a.name);
 
+// Qué hace cada agente, en una frase. Si el registro no trae descripción (los agentes legal_* nacieron sin ella) se usa esta,
+// tomada de lo que dice su propio prompt; no se escribe nada en la base. Una descripción del registro siempre manda.
+export const DESCRIPCION_RESPALDO: Record<string, { rol: string; descripcion: string }> = {
+  legal_archivist: { rol: "Memoria del cerebro legal", descripcion: "Archivista del cerebro legal. Lee las decisiones de los demás agentes legales y guarda los patrones que se repiten (argumentos, criterios de jueces) para que no se pierdan." },
+  legal_contradiction_detector: { rol: "Contradicciones entre tesis", descripcion: "Compara dos o más tesis del SJF y dice si la contradicción es real o aparente, y si la SCJN ya la resolvió o sigue abierta." },
+  legal_cross_referencer: { rol: "Conecta leyes, tesis y DOF", descripcion: "Conecta tesis entre sí, con publicaciones del DOF y con leyes federales y estatales. Responde, por ejemplo, qué publicación dio origen a una línea jurisprudencial o si una tesis sigue vigente tras una reforma." },
+  legal_dof_watchdog: { rol: "Vigila el Diario Oficial", descripcion: "Lee cada publicación nueva del Diario Oficial de la Federación y determina si impacta operativamente a algún cliente del despacho, según su giro, sector y jurisdicción." },
+  legal_litigation_strategist: { rol: "Estrategia de litigio", descripcion: "Arma la estrategia litigiosa de un caso abierto a partir de los hechos, el estado procesal, lo que quiere el cliente y su contexto en el ERP." },
+  legal_socratic_jurist: { rol: "Jurista para decisiones de litigio", descripcion: "Ayuda a los abogados del despacho a tomar decisiones litigiosas informadas sobre derecho mexicano, combinando el contexto social del derecho con el análisis técnico." },
+};
+
+export const descripcionAgente = (a: Pick<AgenteRegistro, "name" | "description" | "role">): string => {
+  const d = a.description?.trim();
+  if (d) return d;
+  const r = DESCRIPCION_RESPALDO[a.name]?.descripcion;
+  if (r) return r;
+  // El rol del registro a veces es solo el nombre técnico del agente: eso no dice nada, se omite.
+  const rol = a.role?.trim();
+  return rol && rol.toLowerCase() !== a.name.toLowerCase() && !/^[a-z]+(_[a-z]+)*$/.test(rol) ? rol : "";
+};
+
+// Rol corto para el selector y el escritorio: «Especialista en derecho fiscal mexicano. CFF, …» → «Derecho fiscal».
+export function rolCorto(a: Pick<AgenteRegistro, "name" | "description" | "role">, max = 30): string {
+  const fijo = DESCRIPCION_RESPALDO[a.name]?.rol;
+  if (!a.description?.trim() && fijo) return fijo;
+  let s = descripcionAgente(a).split(/(?<=[.!?])\s/)[0].replace(/[.!?]+$/, "");
+  s = s.replace(/^(especialista|experto|experta|agente)\s+(en|de)\s+/i, "").replace(/\s+mexican[oa]s?$/i, "").trim();
+  if (!s) return "";
+  s = s[0].toUpperCase() + s.slice(1);
+  if (s.length <= max) return s;
+  const corte = s.slice(0, max - 1);
+  return corte.slice(0, corte.lastIndexOf(" ") > 12 ? corte.lastIndexOf(" ") : max - 1).replace(/[\s,;:]+$/, "") + "…";
+}
+
+// Opción del selector: «Nelli · Prevención de lavado de dinero». Si no hay rol, solo el nombre.
+export const etiquetaOpcion = (a: AgenteRegistro): string => { const r = rolCorto(a); return r ? `${nombreAgente(a)} · ${r}` : nombreAgente(a); };
+
 export function senalAgente(a: AgenteRegistro, ahora: Date): Senal {
   if (a.status === "archived") return "archivado";
   if (esSistema(a) && esBajoDemanda(a)) return a.status === "error" ? "con_error" : "disponible";

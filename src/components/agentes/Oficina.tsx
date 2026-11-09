@@ -12,7 +12,7 @@ const TONO: Record<string, { cuerpo: string; escritorio: string }> = {
   rosa: { cuerpo: "#e3a9b0", escritorio: "#d9c7a8" }, salvia: { cuerpo: "#b5c9a8", escritorio: "#d9c7a8" },
   arena: { cuerpo: "#d8c3a0", escritorio: "#d9c7a8" }, gris: { cuerpo: "#bdb8b0", escritorio: "#cfc7b8" },
 };
-const COLS = 4, CW = 190, CH = 170, PX = 5;
+const COLS = 4, CW = 190, CH = 188, PX = 5;
 const pintar = (rs: Rect[]) => rs.map((r, i) => <rect key={i} x={r.x * PX} y={r.y * PX} width={r.w * PX} height={r.h * PX} fill={r.c} />);
 void ALTO;
 
@@ -54,8 +54,9 @@ function Figura({ f, x, y, activo, onElegir }: { f: FiguraOficina; x: number; y:
         ))}
         <g className="of-emote">{pintar(sprite.emote)}</g>
       </g>
-      <text x={CW / 2} y={140} textAnchor="middle" fontSize={13} fontWeight={600} style={{ fill: "var(--of-texto, #4a4033)" }}>{f.nombre.length > 22 ? f.nombre.slice(0, 21) + "…" : f.nombre}</text>
-      <text x={CW / 2} y={157} textAnchor="middle" fontSize={11.5} style={{ fill: "var(--of-texto-suave, #7a6d58)" }}>{info.etiqueta}</text>
+      <text x={CW / 2} y={136} textAnchor="middle" fontSize={13} fontWeight={600} style={{ fill: "var(--of-texto, #4a4033)" }}>{f.nombre.length > 22 ? f.nombre.slice(0, 21) + "…" : f.nombre}</text>
+      {f.rol && <text x={CW / 2} y={152} textAnchor="middle" fontSize={10.5} data-testid={`oficina-rol-${f.id}`} style={{ fill: "var(--of-texto-suave, #7a6d58)" }}>{f.rol}</text>}
+      <text x={CW / 2} y={170} textAnchor="middle" fontSize={11.5} fontWeight={500} style={{ fill: "var(--of-texto, #4a4033)" }}>{info.etiqueta}</text>
     </g>
     </g>
   );
@@ -91,7 +92,7 @@ export function Oficina({ figuras, ahora, demo }: { figuras: FiguraOficina[]; ah
           <div className="space-y-1">
             <p className="text-base font-medium">{sel.nombre} · {ESTADO_OFICINA[sel.estado].etiqueta}</p>
             <p className="text-muted-foreground">{ESTADO_OFICINA[sel.estado].frase}</p>
-            {sel.descripcion && <p className="text-xs text-muted-foreground">{sel.descripcion}</p>}
+            {sel.descripcion && <p className="text-sm" data-testid="oficina-descripcion">{sel.descripcion}</p>}
             <p className="text-xs">Último latido {cuandoRelativo(sel.ultimoLatido, ahora)} · última tarea {cuandoRelativo(sel.ultimaTareaAt, ahora)} · {sel.tareasBien} bien, {sel.tareasMal} con error</p>
           </div>
         ) : <p className="text-muted-foreground">Elige un agente para ver qué está haciendo.</p>}

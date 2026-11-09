@@ -2,10 +2,11 @@ import { useEffect, useState } from "react";
 import { FolderOpen, Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { nombreAgente, type AgenteRegistro } from "@/lib/agentes/registro";
+import { etiquetaOpcion, nombreAgente, type AgenteRegistro } from "@/lib/agentes/registro";
 import { useFuentesDocs } from "@/hooks/useAgenteConstructor";
 import { ensenable } from "@/components/agentes/EnsenarAgente";
 import { idDeEnlaceGoogle, validarFuentesDocs, type FuenteDocs } from "../../../supabase/functions/_shared/fuentesDocs";
+import { FichaAgente } from "@/components/agentes/FichaAgente";
 
 // «Documentos»: qué carpetas de Google Drive o Microsoft (SharePoint/OneDrive) puede LEER un agente. Solo lectura y solo
 // dentro de cada carpeta; el cliente además tiene que haberla compartido con la identidad de la VM (ver FUENTES-DOCUMENTOS.md
@@ -54,9 +55,10 @@ export function DocumentosAgente({ agentes }: { agentes: AgenteRegistro[] }) {
           <label className="block space-y-1 text-sm">Agente
             <select className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={agenteId} onChange={(e) => setAgenteId(e.target.value)} data-testid="documentos-agente">
               <option value="">Elige un agente…</option>
-              {lista.map((a) => <option key={a.id} value={a.id}>{nombreAgente(a)} — {fuentesDe(a).length} fuentes</option>)}
+              {lista.map((a) => <option key={a.id} value={a.id}>{etiquetaOpcion(a)} — {fuentesDe(a).length} fuentes</option>)}
             </select>
           </label>
+          <FichaAgente agente={agente} />
           {agente && (
             <>
               <div className="zen-glass space-y-2 rounded-2xl p-3" data-testid="documentos-lista">
