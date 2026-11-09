@@ -1,0 +1,33 @@
+# Constructor de agentes (módulo Agentes)
+
+Pestañas nuevas en `/agentes` (solo Dirección, mismo permiso `admin` estricto del módulo):
+
+- **Crear agente**: chat especializado (`supabase/functions/agente-constructor`, acción `chat`). Hace las preguntas que faltan (rol, cliente, fuentes, informes, límites) y entrega una *propuesta* estructurada. Nada se crea hasta pulsar «Crear agente» (acción `crear`).
+- **Instrucciones**: elegir un agente y mandarle una tarea por el despacho existente (`dispatch-to-agent` → VM `kawiil-agents`).
+- Oficina: filtro nuevo **Mi equipo** (agentes con `config.origen = 'constructor_agentes'`).
+
+## Qué escribe «crear»
+Una fila en `agent_registry` (`kind='consultable'`, `status='idle'`, org global) con la misma forma que los agentes existentes: `config.system_prompt`, `tono`, `entregables`, `limites`, más `fuentes`, `cadencia`, `cliente`, `mision`, `creado_por`. El prompt lo arma el servidor (`_shared/agenteConstructor.ts`) con reglas fijas (solo lectura, borradores, sin secretos, escalar dudas legales); el modelo del chat no escribe nada. Sin migraciones ni cambios de RLS.
+
+## Pendiente / a confirmar
+- La VM `kawiil-agents` debe leer `config.system_prompt` (así lo hacen los agentes sembrados) y respetar `config.fuentes`/`cadencia`; declarar una fuente **no** da acceso por sí sola. Verificarlo en el repo `kawiil-agents`.
+- Despliegue: `deploy-supabase.yml` publica la función al fusionar a `main` (no entre 6:30 y 7:00 CDMX). Requiere `ANTHROPIC_API_KEY` (ya usado por otras funciones).
+- Siguientes pasos naturales: editar instrucciones permanentes de un agente ya creado, informes programados por agente y coordinación entre agentes del equipo Vizum.
+
+## Internet y 1Password (añadido)
+- La propuesta incluye `dominios_permitidos` (lista cerrada; se rechazan IP, localhost y redes internas), `paginas` (solo https, sin usuario ni contraseña) y `credenciales` (**solo referencias** `op://Bóveda/Elemento/campo`).
+- **Ninguna contraseña se guarda en Kawiil.** `config.credenciales_1password` contiene solo referencias. Un mensaje del chat que parezca contener una clave se bloquea en el navegador y en la función, y no llega al modelo.
+- El prompt del agente le ordena: visitar solo esos dominios, tratar lo que lea en internet como no confiable (inyección de instrucciones), usar cada acceso solo en su dominio y no hacer pagos, firmas ni envíos a autoridades.
+- **Esto declara la política; la VM `kawiil-agents` debe hacerla cumplir:** navegar solo a los dominios permitidos (filtro de red, no solo el prompt), resolver `op://` con un *service account* de 1Password y mantener el valor fuera del modelo (que el navegador de la VM lo escriba directo en el formulario).
+- Recomendado en 1Password: una bóveda dedicada «Agentes-Kawiil», service account de solo lectura sobre esa bóveda, cuentas de solo consulta en los portales y, para SAT/CNBV/bancos, que cualquier trámite lo haga una persona. El token del service account vive solo en el entorno de la VM, nunca en este repo ni en Supabase.
+
+## Accesos de 1Password (punto 4)
+- Cada acceso lleva `etiqueta`, `referencia` (`op://Bóveda/Elemento`) y **dominio obligatorio**. La VM solo lo usa en ese sitio.
+- **Autorización por tarea:** en la pestaña «Instrucciones», al elegir un agente con accesos aparecen casillas «Autorizo usar …». Solo los marcados viajan en `input_context.accesos_aprobados`; sin eso el agente no puede iniciar sesión.
+- El agente solo consulta (sin formularios, pagos ni firmas) y nunca ve la contraseña. Detalle y preparación de la VM: `ACCESOS-1PASSWORD.md` en `kawiil-agents`.
+
+## Programar (punto 5)
+Pestaña **Programar** (solo Dirección): elegir un agente del constructor con cadencia diaria o semanal, hora (México), día, la instrucción que ejecutará cada vez y, si tiene accesos de 1Password, cuáles autoriza de forma **permanente** para las corridas sin nadie presente. La función `agente-constructor` (acción `programar`) guarda `config.programacion`; el planificador de la VM (`kawiil-agents/PLANIFICADOR.md`) hace el resto.
+- Guardar **no ejecuta nada al instante**: corre desde el siguiente horario. Cambiar una programación activa reinicia `activada_en`.
+- Pausar = quitar la marca «activa». Tras 3 errores seguidos la VM la pausa sola y aquí aparece «Pausada automáticamente».
+- Sin migración; la función se despliega al fusionar a `main` (no entre 6:30 y 7:00 CDMX).

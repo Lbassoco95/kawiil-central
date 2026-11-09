@@ -52,9 +52,11 @@ export function figurasOficina(agentes: AgenteRegistro[], tareas: TareaAgente[],
     .sort((x, y) => x.nombre.localeCompare(y.nombre));
 }
 
-export type AmbitoOficina = "legales" | "todos";
+export type AmbitoOficina = "legales" | "equipo" | "todos";
+// «equipo»: agentes creados desde el Constructor de agentes (config.origen).
+export const esAgenteDelEquipo = (a: Pick<AgenteRegistro, "config">): boolean => a.config?.origen === "constructor_agentes";
 export const filtrarAmbito = (agentes: AgenteRegistro[], ambito: AmbitoOficina): AgenteRegistro[] =>
-  ambito === "legales" ? agentes.filter(esAgenteLegal) : agentes;
+  ambito === "legales" ? agentes.filter(esAgenteLegal) : ambito === "equipo" ? agentes.filter(esAgenteDelEquipo) : agentes;
 
 // ── Datos de ejemplo (modo «Demostración»): ficticios, uno por estado, para ver la oficina mientras la VM no escriba. ──
 export function datosDemo(ahora: Date): { agentes: AgenteRegistro[]; tareas: TareaAgente[] } {
