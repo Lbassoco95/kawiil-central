@@ -76,7 +76,7 @@ describe("validarRevision", () => {
     [{ ...OK, instruccion: "x".repeat(2001) }, /demasiado larga/], [{ ...OK, instruccion: "mi contraseña es sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789" }, /contraseña o llave/],
   ])("rechaza %j", (entrada, patron) => {
     const r = validarRevision(entrada, AHORA_MS);
-    if (r.ok) throw new Error("debía rechazarse");
+    if (!("errores" in r)) throw new Error("debía rechazarse");
     expect(r.errores.join(" ")).toMatch(patron);
   });
   it("el contexto lleva el hilo, la hora y la serie, y NUNCA accesos de 1Password", () => {
