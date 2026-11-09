@@ -14,11 +14,12 @@ export function etiquetasAccesos(a: AgenteRegistro | undefined): { etiqueta: str
 }
 
 // Darle una instrucción a un agente: crea una tarea por el despacho que ya existe. No modifica al agente ni guarda datos de expedientes aquí.
-export function InstruirAgente({ agentes, onVerSeguimiento }: { agentes: AgenteRegistro[]; onVerSeguimiento?: () => void }) {
+export function InstruirAgente({ agentes, onVerSeguimiento }: { agentes: AgenteRegistro[]; onVerSeguimiento?: (taskId?: string) => void }) {
   const [agenteId, setAgenteId] = useState("");
   const [titulo, setTitulo] = useState("");
   const [instruccion, setInstruccion] = useState("");
   const [enviado, setEnviado] = useState<string | null>(null);
+  const [tareaId, setTareaId] = useState<string | undefined>(undefined);
   const [aprobados, setAprobados] = useState<string[]>([]);
   const instruir = useInstruirAgente();
   const disponibles = agentes.filter((a) => a.status !== "archived" && a.kind !== "system");
@@ -30,7 +31,7 @@ export function InstruirAgente({ agentes, onVerSeguimiento }: { agentes: AgenteR
     const nombre = nombreAgente(disponibles.find((a) => a.id === agenteId)!);
     const validos = aprobados.filter((e) => accesos.some((a) => a.etiqueta === e));
     instruir.mutate({ agent_id: agenteId, title: titulo.trim(), instructions: instruccion.trim(), accesos_aprobados: validos }, {
-      onSuccess: () => { setEnviado(nombre); setTitulo(""); setInstruccion(""); setAprobados([]); },
+      onSuccess: (r) => { setTareaId(r?.task_id); setEnviado(nombre); setTitulo(""); setInstruccion(""); setAprobados([]); },
     });
   };
   return (
@@ -65,8 +66,8 @@ export function InstruirAgente({ agentes, onVerSeguimiento }: { agentes: AgenteR
       {instruir.isError && <p role="alert" className="text-sm text-destructive">{(instruir.error as Error).message}</p>}
       {enviado && (
         <p role="status" className="text-sm" data-testid="instruir-ok">
-          Instrucción enviada a {enviado}. Su avance y sus documentos aparecen en Seguimiento.
-          {onVerSeguimiento && <> <button type="button" className="underline" data-testid="instruir-ver-seguimiento" onClick={onVerSeguimiento}>Ver seguimiento</button></>}
+          Instrucción enviada a {enviado}. Su respuesta, sus documentos y la conversación aparecen en Seguimiento.
+          {onVerSeguimiento && <> <button type="button" className="underline" data-testid="instruir-ver-seguimiento" onClick={() => onVerSeguimiento(tareaId)}>Abrir la conversación</button></>}
         </p>
       )}
       <Button onClick={enviar} disabled={!listo || instruir.isPending} data-testid="instruir-enviar">

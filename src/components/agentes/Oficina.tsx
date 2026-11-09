@@ -96,7 +96,7 @@ export function Oficina({ figuras, ahora, demo, detalleExtra }: { figuras: Figur
             {sel.descripcion && <p className="text-sm" data-testid="oficina-descripcion">{sel.descripcion}</p>}
             <p className="text-xs">Último latido {cuandoRelativo(sel.ultimoLatido, ahora)} · última tarea {cuandoRelativo(sel.ultimaTareaAt, ahora)} · {sel.tareasBien} bien, {sel.tareasMal} con error</p>
           </div>
-        ) : <p className="text-muted-foreground">Elige un agente para ver qué está haciendo.</p>}
+        ) : <p className="text-muted-foreground">Elige un agente para ver qué está haciendo, sus trabajos, conversar con él y programar revisiones.</p>}
       </div>
       {sel && detalleExtra && <div data-testid="oficina-extra">{detalleExtra(sel)}</div>}
     </div>

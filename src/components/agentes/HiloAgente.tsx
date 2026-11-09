@@ -7,7 +7,9 @@ import { cuandoRelativo } from "@/lib/agentes/registro";
 import { useInstruirAgente } from "@/hooks/useAgenteConstructor";
 import { useCancelarRevision, useDescargarEntregable, useHilo, useProgramarRevision } from "@/hooks/useSeguimientoAgentes";
 import { INSTRUCCION_REVISION, MAX_VECES, REPETICIONES, type MensajeHilo } from "../../../supabase/functions/_shared/seguimiento";
-import { ETIQUETA_ESTADO, tamano } from "@/components/agentes/SeguimientoAgentes";
+import { ETIQUETA_ESTADO, tamano } from "@/lib/agentes/etiquetas";
+import { MarkdownAgente } from "@/components/agentes/MarkdownAgente";
+import { AvanceTarea } from "@/components/agentes/AvanceTarea";
 
 // Una solicitud con su conversación: lo que se le pidió al agente, lo que respondió y entregó, y lo que se le sigue pidiendo en el mismo
 // hilo (el agente recuerda lo ya hablado). Desde aquí también se programan revisiones («revísalo el lunes», «cada semana»).
@@ -52,7 +54,7 @@ function Burbuja({ m, ahora }: { m: MensajeHilo; ahora: Date }) {
       <div className={`max-w-[92%] rounded-2xl border px-3 py-2 text-sm ${agente ? (falla ? "border-rose-300/70 bg-rose-50/50" : "border-border/60 bg-background/50") : "border-primary/40 bg-primary/10"}`} data-testid={`hilo-msg-${m.rol}`}>
         {m.rol === "revision" && <p className="mb-1 flex items-center gap-1 text-xs font-medium text-muted-foreground"><CalendarClock className="h-3 w-3" aria-hidden />Revisión programada</p>}
         {enCurso ? <p className="flex items-center gap-2 text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />Trabajando… <span className="text-xs">({(ETIQUETA_ESTADO[m.estado]?.texto ?? m.estado).toLowerCase()})</span></p>
-          : <p className="whitespace-pre-wrap">{m.texto}</p>}
+          : agente && !falla ? <MarkdownAgente texto={m.texto} /> : <p className="whitespace-pre-wrap">{m.texto}</p>}
         <Entregables m={m} />
         <p className="mt-1 text-xs text-muted-foreground">{agente ? "Agente" : m.rol === "revision" ? "Sistema" : "Tú"} · {cuandoRelativo(m.cuando, ahora)}</p>
       </div>
@@ -122,6 +124,7 @@ export function HiloAgente({ taskId, ahora }: { taskId: string; ahora: Date }) {
   if (q.isLoading) return <p className="text-sm text-muted-foreground">Leyendo la solicitud…</p>;
   if (q.isError || !q.data) return <p role="alert" className="text-sm text-destructive">{(q.error as Error | null)?.message ?? "No se pudo leer la solicitud."}</p>;
   const { hilo, mensajes, revisiones, en_curso } = q.data;
+  const ultimaTarea = [...mensajes].reverse().find((m) => m.rol === "agente")?.task_id ?? null;   // el avance técnico es el de la última respuesta
   const enviar = () => {
     const t = texto.trim();
     if (!t) return;
@@ -131,9 +134,15 @@ export function HiloAgente({ taskId, ahora }: { taskId: string; ahora: Date }) {
   return (
     <div className="space-y-3" data-testid="hilo">
       <p className="text-base font-medium">{hilo.titulo || "Solicitud"} <span className="text-sm font-normal text-muted-foreground">· {hilo.agente}</span></p>
-      <div className="max-h-[28rem] space-y-2 overflow-auto rounded-2xl border border-border/50 p-3" aria-live="polite" data-testid="hilo-mensajes">
+      <div className="max-h-[32rem] space-y-2 overflow-auto rounded-2xl border border-border/50 p-3" aria-live="polite" data-testid="hilo-mensajes">
         {mensajes.map((m, i) => <Burbuja key={`${m.task_id}-${m.rol}-${i}`} m={m} ahora={ahora} />)}
       </div>
+      {ultimaTarea && (
+        <details className="rounded-2xl border border-border/60 p-3 text-sm" data-testid="hilo-avance">
+          <summary className="cursor-pointer font-medium">Ver cómo lo trabajó</summary>
+          <div className="mt-2"><AvanceTarea taskId={ultimaTarea} ahora={ahora} /></div>
+        </details>
+      )}
       <div className="space-y-2">
         <Textarea rows={2} value={texto} onChange={(e) => setTexto(e.target.value)} placeholder={en_curso ? "Espera a que termine para escribirle de nuevo…" : `Escríbele a ${hilo.agente}: pídele un cambio, otro documento o que siga con el tema…`}
           disabled={en_curso} data-testid="hilo-texto" />
