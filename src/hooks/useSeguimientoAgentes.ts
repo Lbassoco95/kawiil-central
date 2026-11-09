@@ -1,0 +1,48 @@
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import type { ActividadPublica, EntregablePublico, EventoPublico, GrupoEstado, ResumenTarea } from "../../supabase/functions/_shared/seguimiento";
+
+// Seguimiento de tareas de agentes y descarga de entregables. Solo lectura: todo pasa por `agente-seguimiento` (solo Dirección),
+// que firma enlaces temporales; el navegador nunca ve rutas del bucket ni lo lee directamente.
+export interface DetalleTarea extends ResumenTarea {
+  instrucciones: string; respuesta: string; error: string; entregables_lista: EntregablePublico[];
+}
+export interface RespuestaDetalle { tarea: DetalleTarea; eventos: EventoPublico[]; actividad: ActividadPublica[] }
+
+async function invocar<T>(body: Record<string, unknown>): Promise<T> {
+  const { data, error } = await supabase.functions.invoke("agente-seguimiento", { body });
+  if (error) {
+    let msg = "No se pudo leer el seguimiento. Inténtalo de nuevo.";
+    try { const j = await (error as { context?: Response }).context?.json(); if (j?.error) msg = j.error; } catch { /* mensaje general */ }
+    throw new Error(msg);
+  }
+  return data as T;
+}
+
+export const ESTADOS_EN_CURSO = ["pending", "queued", "in_progress", "waiting_approval"];
+export const enCurso = (estado: string | undefined): boolean => !!estado && ESTADOS_EN_CURSO.includes(estado);
+
+// Mientras haya algo en curso se actualiza cada pocos segundos; si no, con calma.
+export const useTareasSeguimiento = (grupo: GrupoEstado | "todas") =>
+  useQuery({
+    queryKey: ["agentes-seguimiento", "lista", grupo],
+    queryFn: () => invocar<{ tareas: ResumenTarea[] }>({ action: "listar", ...(grupo !== "todas" ? { grupo } : {}) }).then((r) => r.tareas),
+    refetchInterval: (q) => (q.state.data?.some((t) => enCurso(t.estado)) ? 6_000 : 20_000),
+    staleTime: 3_000,
+  });
+
+export const useDetalleSeguimiento = (taskId: string | null) =>
+  useQuery({
+    queryKey: ["agentes-seguimiento", "detalle", taskId],
+    enabled: !!taskId,
+    queryFn: () => invocar<RespuestaDetalle>({ action: "detalle", task_id: taskId }),
+    refetchInterval: (q) => (enCurso(q.state.data?.tarea.estado) ? 4_000 : false),
+    staleTime: 2_000,
+  });
+
+export const useDescargarEntregable = () =>
+  useMutation({
+    mutationFn: (v: { taskId: string; indice: number }) =>
+      invocar<{ url: string; nombre: string; expira_en: number }>({ action: "descargar", task_id: v.taskId, indice: v.indice }),
+    onSuccess: (r) => { window.open(r.url, "_blank", "noopener,noreferrer"); },
+  });

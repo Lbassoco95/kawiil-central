@@ -14,7 +14,7 @@ export function etiquetasAccesos(a: AgenteRegistro | undefined): { etiqueta: str
 }
 
 // Darle una instrucción a un agente: crea una tarea por el despacho que ya existe. No modifica al agente ni guarda datos de expedientes aquí.
-export function InstruirAgente({ agentes }: { agentes: AgenteRegistro[] }) {
+export function InstruirAgente({ agentes, onVerSeguimiento }: { agentes: AgenteRegistro[]; onVerSeguimiento?: () => void }) {
   const [agenteId, setAgenteId] = useState("");
   const [titulo, setTitulo] = useState("");
   const [instruccion, setInstruccion] = useState("");
@@ -63,7 +63,12 @@ export function InstruirAgente({ agentes }: { agentes: AgenteRegistro[] }) {
         </fieldset>
       )}
       {instruir.isError && <p role="alert" className="text-sm text-destructive">{(instruir.error as Error).message}</p>}
-      {enviado && <p role="status" className="text-sm" data-testid="instruir-ok">Instrucción enviada a {enviado}. Su avance aparece en Oficina y Tablas.</p>}
+      {enviado && (
+        <p role="status" className="text-sm" data-testid="instruir-ok">
+          Instrucción enviada a {enviado}. Su avance y sus documentos aparecen en Seguimiento.
+          {onVerSeguimiento && <> <button type="button" className="underline" data-testid="instruir-ver-seguimiento" onClick={onVerSeguimiento}>Ver seguimiento</button></>}
+        </p>
+      )}
       <Button onClick={enviar} disabled={!listo || instruir.isPending} data-testid="instruir-enviar">
         {instruir.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}Enviar instrucción
       </Button>

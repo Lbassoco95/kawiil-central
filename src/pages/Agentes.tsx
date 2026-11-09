@@ -11,6 +11,7 @@ import { InstruirAgente } from "@/components/agentes/InstruirAgente";
 import { ProgramarAgente } from "@/components/agentes/ProgramarAgente";
 import { EnsenarAgente } from "@/components/agentes/EnsenarAgente";
 import { DocumentosAgente } from "@/components/agentes/DocumentosAgente";
+import { SeguimientoAgentes } from "@/components/agentes/SeguimientoAgentes";
 import { agentesDelModulo, esAgenteLegal, resumenServicio } from "@/lib/agentes/registro";
 import { datosDemo, figurasOficina, filtrarAmbito, type AmbitoOficina } from "@/lib/agentes/oficina";
 import { useAgentesRegistro, useErroresAgentes, useTareasAgentes } from "@/hooks/useAgentesRegistro";
@@ -24,6 +25,7 @@ export default function Agentes() {
   const [reloj, setReloj] = useState(() => new Date());
   useEffect(() => { const t = setInterval(() => setReloj(new Date()), 60_000); return () => clearInterval(t); }, []);
   const [demo, setDemo] = useState(false);
+  const [pestana, setPestana] = useState("oficina");
   const [ambito, setAmbito] = useState<AmbitoOficina>("todos");
   const reales = useMemo(() => agentesDelModulo(agentes.data ?? []), [agentes.data]);
   const servicio = useMemo(() => resumenServicio(reales, reloj), [reales, reloj]);
@@ -37,12 +39,13 @@ export default function Agentes() {
         <p className="text-xs text-muted-foreground">
           Los agentes de Marketing se ven en <Link className="underline" to="/marketing">Marketing → Agentes</Link>.
         </p>
-        <Tabs defaultValue="oficina">
+        <Tabs value={pestana} onValueChange={setPestana}>
           <TabsList>
             <TabsTrigger value="oficina">Oficina</TabsTrigger>
             <TabsTrigger value="tablas">Tablas</TabsTrigger>
             <TabsTrigger value="crear">Crear agente</TabsTrigger>
             <TabsTrigger value="instrucciones">Instrucciones</TabsTrigger>
+            <TabsTrigger value="seguimiento">Seguimiento</TabsTrigger>
             <TabsTrigger value="documentos">Documentos</TabsTrigger>
             <TabsTrigger value="ensenar">Enseñar</TabsTrigger>
             <TabsTrigger value="programar">Programar</TabsTrigger>
@@ -74,7 +77,8 @@ export default function Agentes() {
               estadoTareas={tareas.isError ? "error" : tareas.isLoading ? "cargando" : "ok"} />
           </TabsContent>
           <TabsContent value="crear" className="mt-4"><ConstructorAgentes /></TabsContent>
-          <TabsContent value="instrucciones" className="mt-4"><InstruirAgente agentes={reales} /></TabsContent>
+          <TabsContent value="instrucciones" className="mt-4"><InstruirAgente agentes={reales} onVerSeguimiento={() => setPestana("seguimiento")} /></TabsContent>
+          <TabsContent value="seguimiento" className="mt-4"><SeguimientoAgentes ahora={reloj} /></TabsContent>
           <TabsContent value="documentos" className="mt-4"><DocumentosAgente agentes={reales} /></TabsContent>
           <TabsContent value="ensenar" className="mt-4"><EnsenarAgente agentes={reales} tareas={tareas.data ?? []} ahora={reloj} /></TabsContent>
           <TabsContent value="programar" className="mt-4"><ProgramarAgente agentes={reales} /></TabsContent>

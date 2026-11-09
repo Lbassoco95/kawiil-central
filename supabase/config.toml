@@ -165,6 +165,8 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = true
   [functions.agente-constructor]
     verify_jwt = true
+  [functions.agente-seguimiento]
+    verify_jwt = true
   [functions.analyze-candidate-fit]
     verify_jwt = true
   [functions.extract-cv-data]
