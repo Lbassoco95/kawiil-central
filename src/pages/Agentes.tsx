@@ -27,6 +27,7 @@ export default function Agentes() {
   useEffect(() => { const t = setInterval(() => setReloj(new Date()), 60_000); return () => clearInterval(t); }, []);
   const [demo, setDemo] = useState(false);
   const [pestana, setPestana] = useState("oficina");
+  const [seguir, setSeguir] = useState<string | null>(null);   // solicitud que se abre en Seguimiento al venir de Instrucciones
   const [ambito, setAmbito] = useState<AmbitoOficina>("todos");
   const reales = useMemo(() => agentesDelModulo(agentes.data ?? []), [agentes.data]);
   const servicio = useMemo(() => resumenServicio(reales, reloj), [reales, reloj]);
@@ -78,8 +79,8 @@ export default function Agentes() {
               estadoTareas={tareas.isError ? "error" : tareas.isLoading ? "cargando" : "ok"} />
           </TabsContent>
           <TabsContent value="crear" className="mt-4"><ConstructorAgentes /></TabsContent>
-          <TabsContent value="instrucciones" className="mt-4"><InstruirAgente agentes={reales} onVerSeguimiento={() => setPestana("seguimiento")} /></TabsContent>
-          <TabsContent value="seguimiento" className="mt-4"><SeguimientoAgentes ahora={reloj} /></TabsContent>
+          <TabsContent value="instrucciones" className="mt-4"><InstruirAgente agentes={reales} onVerSeguimiento={(id) => { setSeguir(id ?? null); setPestana("seguimiento"); }} /></TabsContent>
+          <TabsContent value="seguimiento" className="mt-4"><SeguimientoAgentes key={seguir ?? "lista"} ahora={reloj} seleccionInicial={seguir} /></TabsContent>
           <TabsContent value="documentos" className="mt-4"><DocumentosAgente agentes={reales} /></TabsContent>
           <TabsContent value="ensenar" className="mt-4"><EnsenarAgente agentes={reales} tareas={tareas.data ?? []} ahora={reloj} /></TabsContent>
           <TabsContent value="programar" className="mt-4"><ProgramarAgente agentes={reales} /></TabsContent>

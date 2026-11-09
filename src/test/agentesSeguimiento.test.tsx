@@ -69,6 +69,11 @@ describe("<SeguimientoAgentes />", () => {
     invoke.mockImplementation(async (_n: string, { body }: { body: Record<string, unknown> }) => {
       if (body.action === "listar") return { data: { tareas: body.grupo === "con_error" ? [TAREAS[1]] : TAREAS }, error: null };
       if (body.action === "detalle") return { data: DETALLE, error: null };
+      if (body.action === "hilo") return { data: { hilo: { id: T, titulo: "Revisión de actas", agent_id: "a1", agente: "Amatl" }, en_curso: false, revisiones: [],
+        mensajes: [
+          { task_id: T, rol: "persona", texto: DETALLE.tarea.instrucciones, cuando: "2026-11-09T05:00:00Z", estado: "completed", entregables: [] },
+          { task_id: T, rol: "agente", texto: "## Informe\n\nResumen **listo**\n\n| Acta | Estado |\n|---|---|\n| 3 | Sin firma |", cuando: "2026-11-09T05:02:00Z", estado: "completed", entregables: DETALLE.tarea.entregables_lista },
+        ] }, error: null };
       if (body.action === "descargar") return { data: { url: "https://x.supabase.co/signed/abc", nombre: "informe-actas.docx", expira_en: 300 }, error: null };
       return { data: null, error: new Error("acción rara") };
     });
@@ -85,25 +90,30 @@ describe("<SeguimientoAgentes />", () => {
     expect(invoke).toHaveBeenCalledWith("agente-seguimiento", { body: { action: "listar", grupo: "con_error" } });
   });
 
-  it("al elegir una tarea muestra instrucciones, avance, respuesta y documentos, todo como texto", async () => {
+  it("al elegir una solicitud abre su conversación: lo pedido, la respuesta con formato, el avance y los documentos", async () => {
     envolver(<SeguimientoAgentes ahora={AHORA} />);
     fireEvent.click(await screen.findByTestId(`seguimiento-tarea-${T}`));
-    const detalle = await screen.findByTestId("seguimiento-detalle");
-    expect(detalle.textContent).toContain("Empezó la tarea"); expect(detalle.textContent).toContain("Terminó");
-    expect(detalle.textContent).not.toContain("Adjunto revisado");             // el ruido por adjunto no se lista
-    expect(detalle.textContent).toContain("web_fetch: https://www.diariooficial.gob.mx/");
-    expect(screen.getByTestId("seguimiento-respuesta").textContent).toBe("Resumen **listo**");
-    expect(screen.getByTestId("seguimiento-instrucciones").textContent).toContain("<img src=x onerror=alert(1)>");   // se ve como texto
-    expect(detalle.querySelector("img")).toBeNull();                          // y nunca se interpreta como HTML
-    expect(screen.getByTestId("seguimiento-entregables").textContent).toContain("informe-actas.docx");
-    expect(screen.getByTestId("seguimiento-entregables").textContent).toContain("Word · 20 KB");
+    const hilo = await screen.findByTestId("hilo");
+    expect(screen.getByTestId("hilo-texto")).toBeTruthy();                                  // se le puede seguir escribiendo al agente
+    expect(screen.getByTestId("hilo-programar-resumen")).toBeTruthy();                      // y programar revisiones
+    expect(screen.getByTestId("hilo-msg-persona").textContent).toContain("<img src=x onerror=alert(1)>");   // lo pedido, como texto
+    expect(hilo.querySelector("img")).toBeNull();                                           // nunca como HTML
+    expect(screen.getByRole("heading", { name: "Informe" })).toBeTruthy();                  // «## Informe» es un título, no símbolos
+    expect(screen.getByText("listo").tagName).toBe("STRONG");                               // «**listo**» es negrita
+    expect(hilo.textContent).not.toContain("##"); expect(hilo.textContent).not.toContain("**");
+    expect(screen.getByTestId("markdown-tabla").querySelectorAll("tbody tr").length).toBe(1);   // la tabla es una tabla
+    expect(screen.getByTestId("hilo-entregables").textContent).toContain("informe-actas.docx");
+    const avance = await screen.findByTestId("seguimiento-avance");
+    expect(avance.textContent).toContain("Empezó la tarea"); expect(avance.textContent).toContain("Terminó");
+    expect(avance.textContent).not.toContain("Adjunto revisado");                           // el ruido por adjunto no se lista
+    expect(avance.textContent).toContain("web_fetch: https://www.diariooficial.gob.mx/");
   });
 
   it("descargar pide un enlace firmado por tarea e índice y lo abre en otra pestaña", async () => {
     const abrir = vi.spyOn(window, "open").mockImplementation(() => null);
     envolver(<SeguimientoAgentes ahora={AHORA} />);
     fireEvent.click(await screen.findByTestId(`seguimiento-tarea-${T}`));
-    fireEvent.click(await screen.findByTestId("seguimiento-descargar-0"));
+    fireEvent.click(await screen.findByTestId(`hilo-descargar-${T}-0`));
     await waitFor(() => expect(abrir).toHaveBeenCalledWith("https://x.supabase.co/signed/abc", "_blank", "noopener,noreferrer"));
     expect(invoke).toHaveBeenCalledWith("agente-seguimiento", { body: { action: "descargar", task_id: T, indice: 0 } });
     abrir.mockRestore();
