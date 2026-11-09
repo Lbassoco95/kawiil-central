@@ -33,7 +33,7 @@ import { validarFuentesDocs } from "../_shared/fuentesDocs.ts";
  *   action "ensenar" → { agent_id, mensajes, task_id? } → { texto, habilidad | null }   (no escribe nada)
  *   action "guardar_habilidad" → { agent_id, habilidad, estado: borrador|aprobada, task_id? } → { habilidades }
  *   action "estado_habilidad" → { agent_id, id, estado: borrador|aprobada|archivada } → { habilidades }
- *   action "fuentes_documentos" → { agent_id, fuentes } → { fuentes }   (reemplaza config.fuentes_docs; solo identificadores)
+ *   action "fuentes_documentos" → { agent_id, fuentes } → { fuentes }   (reemplaza config.fuentes_docs; solo identificadores; cualquier agente consultable activo)
  *   action "programar" → { agent_id, programacion } → { programacion } (fusiona config.programacion; solo agentes del constructor)
  *
  * Seguridad:
@@ -251,7 +251,7 @@ serve(async (req: Request) => {
       if (errAg) { console.error("agente-constructor: lee agente", errAg.message); return json({ error: "No se pudo leer el agente." }, 500); }
       if (!ag) return json({ error: "Agente no encontrado." }, 404);
       const cfg = (ag.config && typeof ag.config === "object" ? ag.config : {}) as Record<string, unknown>;
-      if (ag.kind !== "consultable" || ag.status === "archived" || cfg.origen !== "constructor_agentes") return json({ error: "Solo se pueden configurar agentes creados desde el constructor." }, 403);
+      if (ag.kind !== "consultable" || ag.status === "archived") return json({ error: "Solo se pueden configurar agentes consultables activos." }, 403);
       const v = validarFuentesDocs(body.fuentes);
       if (!v.ok) return json({ error: "Las fuentes no son válidas.", errores: v.errores }, 422);
       const { error: errUp } = await admin.from("agent_registry").update({ config: { ...cfg, fuentes_docs: v.fuentes }, updated_at: new Date().toISOString() }).eq("id", agentId);
