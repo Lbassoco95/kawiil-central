@@ -62,7 +62,8 @@ function Figura({ f, x, y, activo, onElegir }: { f: FiguraOficina; x: number; y:
   );
 }
 
-export function Oficina({ figuras, ahora, demo }: { figuras: FiguraOficina[]; ahora: Date; demo: boolean }) {
+// `detalleExtra`: lo que se muestra debajo de la tarjeta del agente elegido (la página lo usa para sus trabajos y conversaciones).
+export function Oficina({ figuras, ahora, demo, detalleExtra }: { figuras: FiguraOficina[]; ahora: Date; demo: boolean; detalleExtra?: (f: FiguraOficina) => React.ReactNode }) {
   const [elegido, setElegido] = useState<string | null>(null);
   const filas = Math.max(1, Math.ceil(figuras.length / COLS));
   const sel = figuras.find((f) => f.id === elegido) ?? null;
@@ -97,6 +98,7 @@ export function Oficina({ figuras, ahora, demo }: { figuras: FiguraOficina[]; ah
           </div>
         ) : <p className="text-muted-foreground">Elige un agente para ver qué está haciendo.</p>}
       </div>
+      {sel && detalleExtra && <div data-testid="oficina-extra">{detalleExtra(sel)}</div>}
     </div>
   );
 }
