@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { MensajeChat, Programacion, PropuestaAgente } from "../../supabase/functions/_shared/agenteConstructor";
 import type { EstadoHabilidad, Habilidad, HabilidadBorrador } from "../../supabase/functions/_shared/habilidades";
+import type { FuenteDocs } from "../../supabase/functions/_shared/fuentesDocs";
 
 // Chat especializado para crear agentes. «chat» solo conversa y propone; «crear» inserta UN agente en el registro
 // y únicamente se llama cuando la persona confirma la propuesta en pantalla.
@@ -78,6 +79,16 @@ export function useEstadoHabilidad() {
   return useMutation({
     mutationFn: (v: { agent_id: string; id: string; estado: EstadoHabilidad }) =>
       invocar<{ habilidades: Habilidad[] }>({ action: "estado_habilidad", ...v }).then((r) => r.habilidades),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["agentes-registro"] }); },
+  });
+}
+
+// Fuentes de documentos (Google Drive / Microsoft) de un agente. Reemplaza la lista completa; solo identificadores.
+export function useFuentesDocs() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { agent_id: string; fuentes: FuenteDocs[] }) =>
+      invocar<{ fuentes: FuenteDocs[] }>({ action: "fuentes_documentos", agent_id: v.agent_id, fuentes: v.fuentes }).then((r) => r.fuentes),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ["agentes-registro"] }); },
   });
 }

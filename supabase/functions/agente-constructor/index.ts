@@ -21,6 +21,7 @@ import {
   validarHabilidad,
   type EjemploTarea,
 } from "../_shared/habilidades.ts";
+import { validarFuentesDocs } from "../_shared/fuentesDocs.ts";
 
 /**
  * agente-constructor
@@ -32,6 +33,7 @@ import {
  *   action "ensenar" → { agent_id, mensajes, task_id? } → { texto, habilidad | null }   (no escribe nada)
  *   action "guardar_habilidad" → { agent_id, habilidad, estado: borrador|aprobada, task_id? } → { habilidades }
  *   action "estado_habilidad" → { agent_id, id, estado: borrador|aprobada|archivada } → { habilidades }
+ *   action "fuentes_documentos" → { agent_id, fuentes } → { fuentes }   (reemplaza config.fuentes_docs; solo identificadores)
  *   action "programar" → { agent_id, programacion } → { programacion } (fusiona config.programacion; solo agentes del constructor)
  *
  * Seguridad:
@@ -237,6 +239,24 @@ serve(async (req: Request) => {
       let avisos: string[] = [];
       if (uso) { const v = validarHabilidad(uso.input); if (v.ok) habilidad = v.habilidad; else avisos = v.errores; }
       return json({ texto: texto || (habilidad ? "Te dejo la habilidad para que la revises." : "Cuéntame un poco más sobre cómo se hace."), habilidad, avisos });
+    }
+
+    // ── Fuentes de documentos (Drive / Microsoft) ─────────────────────────────────────────────────
+    // Solo identificadores de carpeta: ninguna credencial pasa por aquí. La VM lee en solo lectura y únicamente dentro de
+    // la carpeta de cada fuente; lo que el cliente comparte con la identidad de la VM es la otra capa de permisos.
+    if (body.action === "fuentes_documentos") {
+      const agentId = typeof body.agent_id === "string" ? body.agent_id : "";
+      if (!agentId) return json({ error: "Falta el agente." }, 400);
+      const { data: ag, error: errAg } = await admin.from("agent_registry").select("id, kind, status, config").eq("id", agentId).eq("organization_id", ORG_AGENTES).maybeSingle();
+      if (errAg) { console.error("agente-constructor: lee agente", errAg.message); return json({ error: "No se pudo leer el agente." }, 500); }
+      if (!ag) return json({ error: "Agente no encontrado." }, 404);
+      const cfg = (ag.config && typeof ag.config === "object" ? ag.config : {}) as Record<string, unknown>;
+      if (ag.kind !== "consultable" || ag.status === "archived" || cfg.origen !== "constructor_agentes") return json({ error: "Solo se pueden configurar agentes creados desde el constructor." }, 403);
+      const v = validarFuentesDocs(body.fuentes);
+      if (!v.ok) return json({ error: "Las fuentes no son válidas.", errores: v.errores }, 422);
+      const { error: errUp } = await admin.from("agent_registry").update({ config: { ...cfg, fuentes_docs: v.fuentes }, updated_at: new Date().toISOString() }).eq("id", agentId);
+      if (errUp) { console.error("agente-constructor: fuentes_docs", errUp.message); return json({ error: "No se pudo guardar." }, 500); }
+      return json({ fuentes: v.fuentes });
     }
 
     return json({ error: "Acción no válida." }, 400);
