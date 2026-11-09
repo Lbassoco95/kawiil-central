@@ -27,12 +27,23 @@ describe("validarFuentesDocs", () => {
     [[{ ...G, carpeta_id: "https://evil.example.com/robo" }], /no es válido/],
     [[G, { ...G, etiqueta: "Otro nombre" }], /ya está en otra fuente/],
     [[{ ...M, tenant_id: "../x" }], /tenant/], [[{ ...M, drive_id: "a b" }], /drive_id/], [[{ ...M, carpeta_id: "" }], /drive_id/],
-    [[{ ...G, proveedor: "dropbox" }], /proveedor/], ["x", /lista/],
+    [[{ ...G, proveedor: "onedrive" }], /proveedor/], ["x", /lista/],
     [Array.from({ length: MAX_FUENTES_DOCS + 1 }, (_, i) => ({ ...G, etiqueta: `F${i}`, carpeta_id: `Carpeta${i}abcdefgh` })), /Máximo/],
   ])("rechaza %#", (raw, msg) => {
     const r = validarFuentesDocs(raw);
     expect(r.ok).toBe(false);
     expect("errores" in r && r.errores.join(" ")).toMatch(msg);
+  });
+  it("Dropbox: «raiz» por defecto o un id de Dropbox; nada más", () => {
+    const D = { proveedor: "dropbox", etiqueta: "Dropbox clientes", carpeta_id: "raiz" };
+    expect(validarFuentesDocs([D, { ...D, etiqueta: "Acme", carpeta_id: "id:AbC123_-xyz" }]).ok).toBe(true);
+    const sinCarpeta = validarFuentesDocs([{ proveedor: "dropbox", etiqueta: "Dropbox clientes" }]);
+    expect(sinCarpeta.ok && sinCarpeta.fuentes[0].carpeta_id).toBe("raiz");
+    for (const malo of ["/Kawiil Mx", "../x", "id:", "https://dropbox.com/x", "id:a b"]) {
+      const r = validarFuentesDocs([{ ...D, carpeta_id: malo }]);
+      expect(r.ok).toBe(false);
+    }
+    expect(validarFuentesDocs([D, { ...D, etiqueta: "Otra" }]).ok).toBe(false);            // la misma carpeta dos veces
   });
   it("no deja pasar campos extra (solo identificadores)", () => {
     const r = validarFuentesDocs([{ ...G, contraseña: "x", token: "y", url: "https://x" }]);
@@ -49,9 +60,26 @@ describe("DocumentosAgente", () => {
     expect(fuentesDe(ag({ fuentes_docs: [G, M, "x", null, { proveedor: "otro", etiqueta: "z" }] })).length).toBe(2);
     expect(fuentesDe(ag({})).length).toBe(0);
   });
-  it("sin agentes del constructor lo dice", () => {
-    envolver(<DocumentosAgente agentes={[ag({})]} />);
+  it("ofrece a cualquier agente consultable activo (también los anteriores al constructor), no a archivados ni de sistema", () => {
+    envolver(<DocumentosAgente agentes={[ag({}), ag({}, { id: "b", status: "archived" }), ag({}, { id: "c", kind: "system" })]} />);
+    expect(screen.queryByTestId("documentos-vacio")).toBeNull();
+    expect(screen.getAllByRole("option").length).toBe(2);                 // «Elige un agente…» + el consultable activo
+  });
+  it("sin agentes disponibles lo dice", () => {
+    envolver(<DocumentosAgente agentes={[ag({}, { status: "archived" })]} />);
     expect(screen.getByTestId("documentos-vacio")).toBeTruthy();
+  });
+  it("agrega Dropbox (clientes) sin pedir carpeta y manda carpeta_id «raiz»", async () => {
+    invoke.mockResolvedValue({ data: { fuentes: [] }, error: null });
+    envolver(<DocumentosAgente agentes={[ag({})]} />);
+    fireEvent.change(screen.getByTestId("documentos-agente"), { target: { value: "a" } });
+    fireEvent.click(screen.getByTestId("prov-dropbox"));
+    expect(screen.queryByTestId("documentos-carpeta")).toBeNull();
+    expect(screen.getByTestId("documentos-dropbox-aviso").textContent).toContain("solo lectura");
+    fireEvent.change(screen.getByTestId("documentos-etiqueta"), { target: { value: "Dropbox clientes" } });
+    fireEvent.click(screen.getByTestId("documentos-agregar"));
+    await waitFor(() => expect(invoke).toHaveBeenCalled());
+    expect(invoke.mock.calls[0][1].body).toMatchObject({ action: "fuentes_documentos", agent_id: "a", fuentes: [{ proveedor: "dropbox", etiqueta: "Dropbox clientes", carpeta_id: "raiz" }] });
   });
   it("agrega una carpeta de Drive desde su enlace y manda la lista completa", async () => {
     invoke.mockResolvedValue({ data: { fuentes: [] }, error: null });

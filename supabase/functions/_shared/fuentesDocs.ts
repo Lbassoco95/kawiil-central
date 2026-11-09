@@ -1,14 +1,16 @@
-// Fuentes de documentos de un agente (Google Drive / Microsoft): piezas puras compartidas por la función
+// Fuentes de documentos de un agente (Google Drive / Microsoft / Dropbox de clientes): piezas puras compartidas por la función
 // `agente-constructor` (acción `fuentes_documentos`) y las pruebas. Se guardan en `config.fuentes_docs`; la VM
 // (kawiil-agents/server/docs_sources.py) lee solo dentro de la carpeta raíz de cada fuente, en solo lectura.
 // Aquí solo se guardan identificadores: ninguna credencial pasa por Kawiil.
 
-export type ProveedorDocs = "google" | "microsoft";
+export type ProveedorDocs = "google" | "microsoft" | "dropbox";
 export interface FuenteDocs { proveedor: ProveedorDocs; etiqueta: string; carpeta_id: string; drive_id?: string; tenant_id?: string }
 export type ResultadoFuentes = { ok: true; fuentes: FuenteDocs[] } | { ok: false; errores: string[] };
 export const MAX_FUENTES_DOCS = 10;
 
 const ID = /^[A-Za-z0-9_\-!]{5,200}$/;                       // ids de Drive y de Graph
+// Dropbox: la fuente es siempre la carpeta de clientes que el puente autoriza («raiz»); un id de Dropbox solo sirve para acotarla a una subcarpeta.
+const ID_DROPBOX = /^id:[A-Za-z0-9_\-]{5,200}$/;
 const TENANT = /^([0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}|[A-Za-z0-9.\-]{3,100}\.[A-Za-z]{2,})$/;
 const t = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/[\u0000-\u001f\u007f]/g, "").replace(/\s+/g, " ").trim().slice(0, max) : "");
 
@@ -45,6 +47,12 @@ export function validarFuentesDocs(raw: unknown): ResultadoFuentes {
       if (carpetas.has(`microsoft:${drive}:${carpeta}`)) { errores.push(`«${etiqueta}»: esa carpeta ya está en otra fuente.`); return; }
       etiquetas.add(etiqueta.toLowerCase()); carpetas.add(`microsoft:${drive}:${carpeta}`);
       fuentes.push({ proveedor: "microsoft", etiqueta, carpeta_id: carpeta, drive_id: drive, tenant_id: tenant });
+    } else if (o.proveedor === "dropbox") {
+      const carpeta = t(o.carpeta_id, 210) || "raiz";
+      if (carpeta !== "raiz" && !ID_DROPBOX.test(carpeta)) { errores.push(`«${etiqueta}»: la carpeta de Dropbox debe ser «raiz» o un id de Dropbox (id:…).`); return; }
+      if (carpetas.has(`dropbox:${carpeta}`)) { errores.push(`«${etiqueta}»: esa carpeta de Dropbox ya está en otra fuente.`); return; }
+      etiquetas.add(etiqueta.toLowerCase()); carpetas.add(`dropbox:${carpeta}`);
+      fuentes.push({ proveedor: "dropbox", etiqueta, carpeta_id: carpeta });
     } else {
       errores.push(`Fuente ${n}: proveedor no válido.`);
     }
