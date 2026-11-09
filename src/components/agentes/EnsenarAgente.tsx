@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { GraduationCap, Loader2, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { cuandoRelativo, nombreAgente, type AgenteRegistro, type TareaAgente } from "@/lib/agentes/registro";
+import { cuandoRelativo, etiquetaOpcion, nombreAgente, type AgenteRegistro, type TareaAgente } from "@/lib/agentes/registro";
 import { useEnsenarAgente, useEstadoHabilidad, useGuardarHabilidad } from "@/hooks/useAgenteConstructor";
 import { AVISO_SECRETO, pareceSecreto, type MensajeChat } from "../../../supabase/functions/_shared/agenteConstructor";
 import type { EstadoHabilidad, Habilidad, HabilidadBorrador } from "../../../supabase/functions/_shared/habilidades";
+import { FichaAgente } from "@/components/agentes/FichaAgente";
 
 // «Enseñar»: Dirección le cuenta a un agente cómo se hace una tarea (y/o le señala una que ya hizo) y el asistente arma una
 // habilidad. Tú la revisas y decides: guardarla como borrador o aprobarla. Solo las aprobadas las usa el agente, y una
@@ -96,9 +97,10 @@ export function EnsenarAgente({ agentes, tareas, ahora = new Date() }: { agentes
           <label className="block space-y-1 text-sm">Agente
             <select className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={agenteId} onChange={(e) => setAgenteId(e.target.value)} data-testid="ensenar-agente">
               <option value="">Elige un agente…</option>
-              {lista.map((a) => <option key={a.id} value={a.id}>{nombreAgente(a)} — {habilidadesDe(a).filter((h) => h.estado === "aprobada").length} habilidades en uso</option>)}
+              {lista.map((a) => <option key={a.id} value={a.id}>{etiquetaOpcion(a)} — {habilidadesDe(a).filter((h) => h.estado === "aprobada").length} habilidades en uso</option>)}
             </select>
           </label>
+          <FichaAgente agente={agente} />
           {agente && (
             <>
               <div className="zen-glass space-y-2 rounded-2xl p-3" data-testid="ensenar-habilidades">

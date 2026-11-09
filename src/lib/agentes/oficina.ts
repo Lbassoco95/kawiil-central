@@ -1,6 +1,6 @@
 // Mapa «estado real del agente → qué hace en la oficina». Funciones puras, solo lectura.
 // Sin eventos de avance (ai_task_events aún no es legible por los usuarios) el estado se deduce de agent_registry + agent_tasks.
-import { esAgenteLegal, nombreAgente, senalAgente, type AgenteRegistro, type TareaAgente } from "./registro";
+import { descripcionAgente, esAgenteLegal, nombreAgente, rolCorto, senalAgente, type AgenteRegistro, type TareaAgente } from "./registro";
 
 export type EstadoOficina = "trabajando" | "celebrando" | "con_error" | "atascado" | "sentado" | "descansando" | "apagado";
 
@@ -39,7 +39,7 @@ export function estadoOficina(a: AgenteRegistro, tareas: TareaAgente[], ahora: D
 
 export interface FiguraOficina {
   id: string; nombre: string; estado: EstadoOficina; ultimoLatido: string | null; ultimaTareaAt: string | null;
-  tareasBien: number; tareasMal: number; descripcion: string;
+  tareasBien: number; tareasMal: number; descripcion: string; rol: string;
 }
 
 export function figurasOficina(agentes: AgenteRegistro[], tareas: TareaAgente[], ahora: Date): FiguraOficina[] {
@@ -47,7 +47,7 @@ export function figurasOficina(agentes: AgenteRegistro[], tareas: TareaAgente[],
     .filter((a) => a.status !== "archived")
     .map((a) => ({
       id: a.id, nombre: nombreAgente(a), estado: estadoOficina(a, tareas, ahora), ultimoLatido: a.last_heartbeat, ultimaTareaAt: a.last_task_at,
-      tareasBien: a.tasks_completed ?? 0, tareasMal: a.tasks_failed ?? 0, descripcion: a.description || a.role || "",
+      tareasBien: a.tasks_completed ?? 0, tareasMal: a.tasks_failed ?? 0, descripcion: descripcionAgente(a), rol: rolCorto(a),
     }))
     .sort((x, y) => x.nombre.localeCompare(y.nombre));
 }
