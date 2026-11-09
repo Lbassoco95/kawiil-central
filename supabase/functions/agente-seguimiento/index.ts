@@ -3,14 +3,22 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { ORG_AGENTES } from "../_shared/agenteConstructor.ts";
 import {
   BUCKET_ENTREGABLES,
+  MAX_REVISIONES_POR_AGENTE,
+  MAX_REVISIONES_POR_HILO,
+  TIPO_REVISION,
+  contextoRevision,
   detalleTarea,
   entregablesDe,
   esUuid,
   estadosDelGrupo,
   limpiarActividad,
   limpiarEvento,
+  mensajesDelHilo,
+  raizDelHilo,
   resumirTarea,
+  revisionesPendientes,
   truncar,
+  validarRevision,
 } from "../_shared/seguimiento.ts";
 
 /**
@@ -21,6 +29,9 @@ import {
  *   action "listar"    → { grupo?: en_curso|terminadas|con_error|canceladas, agent_id?, limite? } → { tareas }
  *   action "detalle"   → { task_id } → { tarea, eventos, actividad }
  *   action "descargar" → { task_id, indice } → { url, nombre, expira_en }   (enlace firmado de 5 minutos)
+ *   action "hilo"      → { task_id } → { hilo, mensajes, revisiones, en_curso }   (la solicitud y su conversación; cualquier tarea del hilo sirve)
+ *   action "programar_revision" → { task_id, cuando, repetir?, veces?, instruccion? } → { revision }   (una tarea pendiente que la VM ejecuta a su hora)
+ *   action "cancelar_revision"  → { task_id } → { ok }   (task_id = la revisión)
  *
  * Seguridad:
  *   - verify_jwt=true; el usuario sale del JWT. Solo admin/manager (is_admin_or_manager): las tareas traen datos de clientes.
@@ -42,6 +53,7 @@ const json = (payload: unknown, status = 200) =>
   new Response(JSON.stringify(payload), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
 const EXPIRA_SEGUNDOS = 300;
+const nombreDe = (nombres: Map<string, string>, id: string) => nombres.get(id) ?? "Agente";
 
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -74,7 +86,7 @@ serve(async (req: Request) => {
     if (body.action === "listar") {
       const limite = Math.min(Math.max(Number(body.limite) || 60, 1), 100);
       let q = admin.from("agent_tasks")
-        .select("id, agent_id, task_type, title, status, priority, created_at, started_at, completed_at, result_summary, entregables:result->entregables")
+        .select("id, agent_id, task_type, title, status, priority, created_at, started_at, completed_at, result_summary, entregables:result->entregables, hilo:input_context->>hilo_id")
         .eq("organization_id", ORG_AGENTES).in("agent_id", [...nombres.keys()])
         .order("created_at", { ascending: false }).limit(limite);
       const estados = estadosDelGrupo(body.grupo);
@@ -124,6 +136,58 @@ serve(async (req: Request) => {
         return json({ error: "El documento no está disponible todavía. Inténtalo de nuevo en un momento." }, 404);
       }
       return json({ url: firmado.signedUrl, nombre: e.nombre, expira_en: EXPIRA_SEGUNDOS });
+    }
+
+    // ── Hilos y revisiones programadas ──
+    if (body.action === "hilo" || body.action === "programar_revision" || body.action === "cancelar_revision") {
+      if (!esUuid(body.task_id)) return json({ error: "Tarea no válida." }, 400);
+      const { data: t0 } = await admin.from("agent_tasks").select("id, agent_id, title, task_type, status, input_context")
+        .eq("id", body.task_id).eq("organization_id", ORG_AGENTES).maybeSingle();
+      if (!t0 || !nombres.has(t0.agent_id)) return json({ error: "No encontramos esa tarea." }, 404);
+
+      if (body.action === "cancelar_revision") {
+        if (t0.task_type !== TIPO_REVISION || t0.status !== "pending") return json({ error: "Esa revisión ya no está pendiente." }, 409);
+        const { error: errC } = await admin.from("agent_tasks").update({ status: "cancelled", error_message: "Cancelada por Dirección.", updated_at: new Date().toISOString() })
+          .eq("id", t0.id).eq("status", "pending");
+        if (errC) { console.error("agente-seguimiento cancelar", errC.message); return json({ error: "No se pudo cancelar." }, 500); }
+        return json({ ok: true });
+      }
+
+      const raiz = raizDelHilo(t0);
+      if (!esUuid(raiz)) return json({ error: "Tarea no válida." }, 400);   // la raíz se interpola en el filtro: solo un uuid pasa
+      const { data: tareas, error: errT } = await admin.from("agent_tasks").select("*").eq("organization_id", ORG_AGENTES)
+        .or(`id.eq.${raiz},input_context->>hilo_id.eq.${raiz}`).order("created_at", { ascending: true }).limit(80);
+      if (errT) { console.error("agente-seguimiento hilo", errT.message); return json({ error: "No se pudo leer el hilo." }, 500); }
+      const lista = (tareas ?? []) as Record<string, unknown>[];
+      const original = lista.find((x) => x.id === raiz) ?? t0;
+
+      if (body.action === "hilo") {
+        const mensajes = mensajesDelHilo(lista);
+        return json({
+          hilo: { id: raiz, titulo: truncar(original.title, 200), agent_id: t0.agent_id, agente: nombreDe(nombres, t0.agent_id) },
+          mensajes, revisiones: revisionesPendientes(lista),
+          en_curso: mensajes.some((m) => m.rol === "agente" && ["pending", "queued", "in_progress", "waiting_approval"].includes(m.estado)),
+        });
+      }
+
+      // programar_revision
+      const v = validarRevision(body, Date.now());
+      if (!v.ok) return json({ error: "La revisión no es válida.", errores: v.errores }, 422);
+      const pendientes = (filtro: Record<string, string>) => {
+        let q = admin.from("agent_tasks").select("id", { count: "exact", head: true }).eq("organization_id", ORG_AGENTES).eq("task_type", TIPO_REVISION).eq("status", "pending");
+        for (const [k, val] of Object.entries(filtro)) q = q.eq(k, val);
+        return q;
+      };
+      const [{ count: enHilo }, { count: enAgente }] = await Promise.all([pendientes({ "input_context->>hilo_id": raiz }), pendientes({ agent_id: t0.agent_id })]);
+      if ((enHilo ?? 0) >= MAX_REVISIONES_POR_HILO) return json({ error: `Este hilo ya tiene ${MAX_REVISIONES_POR_HILO} revisiones pendientes. Cancela alguna primero.` }, 409);
+      if ((enAgente ?? 0) >= MAX_REVISIONES_POR_AGENTE) return json({ error: `Este agente ya tiene ${MAX_REVISIONES_POR_AGENTE} revisiones pendientes. Cancela alguna primero.` }, 409);
+      const { data: nueva, error: errI } = await admin.from("agent_tasks").insert({
+        organization_id: ORG_AGENTES, agent_id: t0.agent_id, task_type: TIPO_REVISION, status: "pending", priority: "normal",
+        title: truncar(`Revisión programada · ${original.title ?? "solicitud"}`, 200), description: "Revisión programada por Dirección desde la Oficina.",
+        instructions: v.revision.instruccion, input_context: contextoRevision(raiz, v.revision, userData.user.id), created_by: userData.user.id,
+      }).select("id").single();
+      if (errI) { console.error("agente-seguimiento programar", errI.message); return json({ error: "No se pudo programar la revisión." }, 500); }
+      return json({ revision: { id: nueva.id, cuando: v.revision.cuando, repetir: v.revision.repetir, veces: v.revision.veces } });
     }
 
     return json({ error: "Acción no válida." }, 400);

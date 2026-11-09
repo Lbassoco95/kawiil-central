@@ -12,6 +12,7 @@ import { ProgramarAgente } from "@/components/agentes/ProgramarAgente";
 import { EnsenarAgente } from "@/components/agentes/EnsenarAgente";
 import { DocumentosAgente } from "@/components/agentes/DocumentosAgente";
 import { SeguimientoAgentes } from "@/components/agentes/SeguimientoAgentes";
+import { TrabajosAgente } from "@/components/agentes/TrabajosAgente";
 import { agentesDelModulo, esAgenteLegal, resumenServicio } from "@/lib/agentes/registro";
 import { datosDemo, figurasOficina, filtrarAmbito, type AmbitoOficina } from "@/lib/agentes/oficina";
 import { useAgentesRegistro, useErroresAgentes, useTareasAgentes } from "@/hooks/useAgentesRegistro";
@@ -69,7 +70,7 @@ export default function Agentes() {
             <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={demo} onChange={(e) => setDemo(e.target.checked)} /> Ver demostración con datos de ejemplo</label>
             {cargando ? <p className="text-sm text-muted-foreground">Leyendo el registro de agentes…</p>
               : agentes.isError && !demo ? <p className="text-sm text-muted-foreground">No pudimos leer el registro de agentes. Inténtalo de nuevo.</p>
-              : <Oficina figuras={figuras} ahora={reloj} demo={demo} />}
+              : <Oficina figuras={figuras} ahora={reloj} demo={demo} detalleExtra={demo ? undefined : (f) => <TrabajosAgente agentId={f.id} nombre={f.nombre} ahora={reloj} />} />}
           </TabsContent>
           <TabsContent value="tablas" className="mt-4">
             <AgentesRegistro sinMarketing errores={errores.data ?? []} agentes={agentes.data ?? []} tareas={tareas.data ?? []}
