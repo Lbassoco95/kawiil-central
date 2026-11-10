@@ -3,7 +3,7 @@ import { FolderOpen, Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { etiquetaOpcion, nombreAgente, type AgenteRegistro } from "@/lib/agentes/registro";
-import { useFuentesDocs } from "@/hooks/useAgenteConstructor";
+import { useCuentasAgente, useFuentesDocs } from "@/hooks/useAgenteConstructor";
 import { ensenable } from "@/components/agentes/EnsenarAgente";
 import { idDeEnlaceGoogle, validarFuentesDocs, type FuenteDocs } from "../../../supabase/functions/_shared/fuentesDocs";
 import { FichaAgente } from "@/components/agentes/FichaAgente";
@@ -18,6 +18,9 @@ export const fuentesDe = (a?: AgenteRegistro): FuenteDocs[] => {
 const corto = (s: string) => (s.length > 18 ? `${s.slice(0, 8)}…${s.slice(-6)}` : s);
 
 // Las fuentes de documentos son una clave aparte de la configuración (no tocan el prompt): se pueden dar a cualquier agente consultable activo.
+// ¿Puede el agente leer correo y calendario de las cuentas vinculadas? (config.cuentas.activa; lo activa Dirección).
+export const cuentasActivas = (a?: AgenteRegistro): boolean => (a?.config as { cuentas?: { activa?: unknown } } | null | undefined)?.cuentas?.activa === true;
+
 export const documentable = (a: AgenteRegistro) => a.status !== "archived" && a.kind !== "system";
 
 export function DocumentosAgente({ agentes }: { agentes: AgenteRegistro[] }) {
@@ -33,7 +36,8 @@ export function DocumentosAgente({ agentes }: { agentes: AgenteRegistro[] }) {
   const [errores, setErrores] = useState<string[]>([]);
   const [ok, setOk] = useState<string | null>(null);
   const guardar = useFuentesDocs();
-  useEffect(() => { setErrores([]); setOk(null); guardar.reset(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [agenteId]);
+  const cuentas = useCuentasAgente();
+  useEffect(() => { setErrores([]); setOk(null); guardar.reset(); cuentas.reset(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [agenteId]);
 
   const enviar = (fuentes: FuenteDocs[], mensaje: string) => {
     if (!agente) return;
@@ -64,6 +68,15 @@ export function DocumentosAgente({ agentes }: { agentes: AgenteRegistro[] }) {
           <FichaAgente agente={agente} />
           {agente && (
             <>
+              <div className="zen-glass space-y-2 rounded-2xl p-3" data-testid="cuentas-agente">
+                <label className="flex items-start gap-3 text-sm">
+                  <input type="checkbox" className="mt-1" checked={cuentasActivas(agente)} disabled={cuentas.isPending} data-testid="cuentas-activa"
+                    onChange={(e) => cuentas.mutate({ agent_id: agente.id, activa: e.target.checked })} />
+                  <span><strong>Correo y calendario de las cuentas vinculadas</strong><br />
+                    <span className="text-muted-foreground">Si lo activas, {nombreAgente(agente)} puede buscar y leer (solo leer) el correo y los eventos de las cuentas de Google y Microsoft que se vinculan en Kawiil Central. No envía, responde, archiva ni borra nada. Lo que lee se trata como información de terceros, nunca como instrucciones, y cada consulta queda en su bitácora.</span></span>
+                </label>
+                {cuentas.isError && <p role="alert" className="text-sm text-destructive">{(cuentas.error as Error).message}</p>}
+              </div>
               <div className="zen-glass space-y-2 rounded-2xl p-3" data-testid="documentos-lista">
                 <p className="text-xs font-medium text-muted-foreground">Fuentes de {nombreAgente(agente)}</p>
                 {guardadas.length === 0 ? <p className="text-sm text-muted-foreground">Ninguna todavía.</p> : guardadas.map((f) => (

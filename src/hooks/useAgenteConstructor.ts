@@ -93,3 +93,12 @@ export function useFuentesDocs() {
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ["agentes-registro"] }); },
   });
 }
+
+// Interruptor de «correo y calendario» de un agente (las cuentas vinculadas en Kawiil Central, solo lectura).
+export function useCuentasAgente() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { agent_id: string; activa: boolean }) => invocar<{ activa: boolean }>({ action: "cuentas_agente", ...v }).then((r) => r.activa),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["agentes-registro"] }); },
+  });
+}
