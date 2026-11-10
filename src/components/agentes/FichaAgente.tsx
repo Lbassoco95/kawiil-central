@@ -13,6 +13,7 @@ export function capacidadesAgente(a: Pick<AgenteRegistro, "config">): string[] {
   if (accesos > 0) out.push(`1Password: ${accesos} ${accesos === 1 ? "acceso" : "accesos"}`);
   const docs = lista(c.fuentes_docs).length;
   if (docs > 0) out.push(`Documentos: ${docs} ${docs === 1 ? "fuente" : "fuentes"}`);
+  if ((c.cuentas as { activa?: unknown } | undefined)?.activa === true) out.push("Correo y calendario");
   const habs = lista(c.habilidades).filter((h) => (h as { estado?: unknown } | null)?.estado === "aprobada").length;
   if (habs > 0) out.push(`${habs} ${habs === 1 ? "habilidad aprobada" : "habilidades aprobadas"}`);
   if ((c.programacion as { activa?: unknown } | undefined)?.activa === true) out.push("Con tarea programada");

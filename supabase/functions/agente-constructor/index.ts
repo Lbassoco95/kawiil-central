@@ -33,6 +33,7 @@ import { validarFuentesDocs } from "../_shared/fuentesDocs.ts";
  *   action "ensenar" → { agent_id, mensajes, task_id? } → { texto, habilidad | null }   (no escribe nada)
  *   action "guardar_habilidad" → { agent_id, habilidad, estado: borrador|aprobada, task_id? } → { habilidades }
  *   action "estado_habilidad" → { agent_id, id, estado: borrador|aprobada|archivada } → { habilidades }
+ *   action "cuentas_agente"     → { agent_id, activa } → { activa }   (interruptor: el agente puede leer correo y calendario de las cuentas vinculadas; solo lectura)
  *   action "fuentes_documentos" → { agent_id, fuentes } → { fuentes }   (reemplaza config.fuentes_docs; solo identificadores; cualquier agente consultable activo)
  *   action "programar" → { agent_id, programacion } → { programacion } (fusiona config.programacion; solo agentes del constructor)
  *
@@ -257,6 +258,22 @@ serve(async (req: Request) => {
       const { error: errUp } = await admin.from("agent_registry").update({ config: { ...cfg, fuentes_docs: v.fuentes }, updated_at: new Date().toISOString() }).eq("id", agentId);
       if (errUp) { console.error("agente-constructor: fuentes_docs", errUp.message); return json({ error: "No se pudo guardar." }, 500); }
       return json({ fuentes: v.fuentes });
+    }
+
+    // Cuentas conectadas (correo y calendario de las cuentas vinculadas en Kawiil Central): solo un interruptor por agente. No hay credenciales aquí;
+    // el puente `agente-cuentas` es de solo lectura y la VM solo lo usa para los agentes que Dirección activa.
+    if (body.action === "cuentas_agente") {
+      const agentId = typeof body.agent_id === "string" ? body.agent_id : "";
+      if (!agentId || typeof body.activa !== "boolean") return json({ error: "Faltan datos." }, 400);
+      const { data: ag, error: errAg } = await admin.from("agent_registry").select("id, kind, status, config").eq("id", agentId).eq("organization_id", ORG_AGENTES).maybeSingle();
+      if (errAg) { console.error("agente-constructor: lee agente", errAg.message); return json({ error: "No se pudo leer el agente." }, 500); }
+      if (!ag) return json({ error: "Agente no encontrado." }, 404);
+      if (ag.kind !== "consultable" || ag.status === "archived") return json({ error: "Solo se pueden configurar agentes consultables activos." }, 403);
+      const cfg = (ag.config && typeof ag.config === "object" ? ag.config : {}) as Record<string, unknown>;
+      const { error: errUp } = await admin.from("agent_registry").update({ config: { ...cfg, cuentas: { activa: body.activa } }, updated_at: new Date().toISOString() }).eq("id", agentId);
+      if (errUp) { console.error("agente-constructor: cuentas", errUp.message); return json({ error: "No se pudo guardar." }, 500); }
+      console.log(`agente-constructor cuentas_agente ${agentId} activa=${body.activa} por=${userData.user.id}`);
+      return json({ activa: body.activa });
     }
 
     return json({ error: "Acción no válida." }, 400);
