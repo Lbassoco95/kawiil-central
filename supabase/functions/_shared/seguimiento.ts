@@ -103,6 +103,63 @@ export const ETIQUETA_EVENTO: Record<string, string> = {
   insight_generation_started: "Extrayendo aprendizajes", insight_written: "Aprendizaje guardado",
 };
 
+// ── Encargos: revisiones masivas que el agente planea y Dirección aprueba una vez ───────────────────────────────────────
+// El plan vive en result.plan de la tarea (lo escribe la VM). Aquí solo se lee lo que la pantalla necesita, acotado y sin ids internos.
+export const TIPO_UNIDAD = "encargo_unidad";
+export const FASES_PLAN = ["propuesto", "aprobado", "ejecutando", "pausado", "terminado", "cancelado", "reemplazado"] as const;
+export type FasePlan = (typeof FASES_PLAN)[number];
+export interface PlanPublico {
+  fase: FasePlan; objetivo: string; total: number; sin_carpeta: number; auxiliares: number; seguimiento_dias: number | null;
+  criterios: { nombre: string; que_verificar: string; severidad: string }[]; supuestos: string[];
+  progreso: { hechas: number; total: number; con_error: number }; motivo: string;
+  resultado: { clientes: number; al_dia: number; con_pendientes: number; sin_verificar: number; con_error: number } | null;
+}
+const entero = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0);
+
+export function planPublico(result: unknown): PlanPublico | null {
+  const p = (result as { plan?: unknown } | null | undefined)?.plan as Record<string, unknown> | null | undefined;
+  if (!p || typeof p !== "object" || !(FASES_PLAN as readonly unknown[]).includes(p.fase)) return null;
+  const al = (p.alcance && typeof p.alcance === "object" ? p.alcance : {}) as Record<string, unknown>;
+  const pr = (p.progreso && typeof p.progreso === "object" ? p.progreso : {}) as Record<string, unknown>;
+  const rs = p.resultado && typeof p.resultado === "object" ? (p.resultado as Record<string, unknown>) : null;
+  const lista = (v: unknown): unknown[] => (Array.isArray(v) ? v.slice(0, 30) : []);
+  return {
+    fase: p.fase as FasePlan, objetivo: truncar(p.objetivo, 600), total: entero(al.total), sin_carpeta: entero(al.sin_carpeta),
+    auxiliares: entero(p.auxiliares), seguimiento_dias: typeof p.seguimiento_dias === "number" ? entero(p.seguimiento_dias) : null,
+    criterios: lista(p.criterios).map((c) => {
+      const x = (c && typeof c === "object" ? c : {}) as Record<string, unknown>;
+      return { nombre: truncar(x.nombre, 120), que_verificar: truncar(x.que_verificar, 400), severidad: truncar(x.severidad, 20) };
+    }),
+    supuestos: lista(p.supuestos).map((x) => truncar(x, 300)).filter(Boolean),
+    progreso: { hechas: entero(pr.hechas), total: entero(pr.total) || entero(al.total), con_error: entero(pr.con_error) },
+    motivo: truncar(p.motivo, 300),
+    resultado: rs ? { clientes: entero(rs.clientes), al_dia: entero(rs.al_dia), con_pendientes: entero(rs.con_pendientes), sin_verificar: entero(rs.sin_verificar), con_error: entero(rs.con_error) } : null,
+  };
+}
+
+// Fases en las que Dirección puede decidir: aprobar (o reanudar) y cancelar.
+export const FASES_APROBABLES: readonly string[] = ["propuesto", "pausado"];
+export const FASES_CANCELABLES: readonly string[] = ["propuesto", "aprobado", "ejecutando", "pausado"];
+// ¿La respuesta sigue trabajándose sola? Un plan que espera a una persona (propuesto/pausado) NO cuenta como «en curso».
+export const planEnMarcha = (plan: PlanPublico | null): boolean => plan?.fase === "aprobado" || plan?.fase === "ejecutando";
+
+// Cambios al aprobar un plan. Si estaba propuesto empieza desde cero; si estaba pausado se reanuda donde iba (las unidades ya existen).
+export function aprobarPlan(result: Record<string, unknown>, userId: string, ahoraIso: string): Record<string, unknown> | null {
+  const plan = (result.plan && typeof result.plan === "object" ? result.plan : null) as Record<string, unknown> | null;
+  if (!plan || !FASES_APROBABLES.includes(plan.fase as string)) return null;
+  const reanuda = plan.fase === "pausado";
+  const pr = (plan.progreso && typeof plan.progreso === "object" ? plan.progreso : {}) as Record<string, unknown>;
+  const nuevo: Record<string, unknown> = { ...plan, fase: reanuda ? "ejecutando" : "aprobado", aprobado: { por: userId, en: ahoraIso } };
+  if (reanuda) { nuevo.progreso = { ...pr, fallas_seguidas: 0 }; delete nuevo.motivo; }
+  return { ...result, plan: nuevo };
+}
+
+export function cancelarPlan(result: Record<string, unknown>, motivo: string): Record<string, unknown> | null {
+  const plan = (result.plan && typeof result.plan === "object" ? result.plan : null) as Record<string, unknown> | null;
+  if (!plan || !FASES_CANCELABLES.includes(plan.fase as string)) return null;
+  return { ...result, plan: { ...plan, fase: "cancelado", motivo } };
+}
+
 // ── Hilos: una solicitud con su conversación ──────────────────────────────────────────────────────────────────────────
 // Un hilo es la tarea original más los mensajes de seguimiento que se le mandan al agente. Cada mensaje es una tarea normal con
 // `input_context.hilo_id` = id de la tarea original (la VM lee ese id y le da al agente lo ya hablado). No hay tabla nueva.
@@ -115,6 +172,7 @@ export function raizDelHilo(t: Record<string, unknown>): string {
 
 export interface MensajeHilo {
   task_id: string; rol: "persona" | "revision" | "agente"; texto: string; cuando: string; estado: string; entregables: EntregablePublico[];
+  plan?: PlanPublico;   // solo en la respuesta de un encargo (plan que espera aprobación, en ejecución o terminado)
 }
 const TERMINADAS = ["completed", "error", "failed"];
 
@@ -129,15 +187,20 @@ export function mensajesDelHilo(tareas: Record<string, unknown>[]): MensajeHilo[
     if (esRevision && estado === "pending") continue;
     out.push({ task_id: id, rol: esRevision ? "revision" : "persona", texto: truncar(t.instructions || t.description, 4000), cuando: truncar(t.created_at, 40), estado, entregables: [] });
     const r = (t.result && typeof t.result === "object" ? t.result : {}) as Record<string, unknown>;
+    const plan = planPublico(r);
+    if (plan && plan.fase === "reemplazado") { out.pop(); continue; }       // un plan nuevo lo sustituyó: no se muestra el viejo
     if (TERMINADAS.includes(estado)) {
       const ok = estado === "completed";
       out.push({
         task_id: id, rol: "agente", estado,
         texto: ok ? truncar(r.analysis, 20000) : `La tarea no salió como esperábamos: ${truncar(t.error_message, 300) || "sin detalle"}`,
-        cuando: truncar(t.completed_at || t.updated_at || t.created_at, 40), entregables: publicos(entregablesDe(id, t.result)),
+        cuando: truncar(t.completed_at || t.updated_at || t.created_at, 40), entregables: publicos(entregablesDe(id, t.result)), ...(plan ? { plan } : {}),
       });
     } else if (estado === "cancelled") {
-      out.push({ task_id: id, rol: "agente", estado, texto: "Tarea cancelada.", cuando: truncar(t.updated_at || t.created_at, 40), entregables: [] });
+      out.push({ task_id: id, rol: "agente", estado, texto: plan?.motivo || "Tarea cancelada.", cuando: truncar(t.updated_at || t.created_at, 40), entregables: [], ...(plan ? { plan } : {}) });
+    } else if (plan) {
+      // Encargo propuesto o en ejecución: el texto es lo que el agente explicó al proponerlo; el plan se pinta como tarjeta.
+      out.push({ task_id: id, rol: "agente", estado, texto: truncar(r.analysis, 20000), cuando: truncar(t.updated_at || t.created_at, 40), entregables: [], plan });
     } else {
       out.push({ task_id: id, rol: "agente", estado, texto: "", cuando: truncar(t.created_at, 40), entregables: [] });   // en curso: la pantalla muestra «Trabajando…»
     }

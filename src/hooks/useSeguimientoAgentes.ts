@@ -88,3 +88,20 @@ export function useCancelarRevision() {
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ["agentes-seguimiento", "hilo"] }); },
   });
 }
+
+// ── Encargos: aprobar (o reanudar) el plan y cancelarlo ──
+export function useAprobarPlan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (taskId: string) => invocar<{ ok: boolean; fase: string }>({ action: "aprobar_plan", task_id: taskId }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["agentes-seguimiento"] }); },
+  });
+}
+
+export function useCancelarEncargo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (taskId: string) => invocar<{ ok: boolean }>({ action: "cancelar_encargo", task_id: taskId }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["agentes-seguimiento"] }); },
+  });
+}

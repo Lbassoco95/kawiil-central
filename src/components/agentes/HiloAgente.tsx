@@ -10,6 +10,7 @@ import { INSTRUCCION_REVISION, MAX_VECES, REPETICIONES, type MensajeHilo } from 
 import { ETIQUETA_ESTADO, tamano } from "@/lib/agentes/etiquetas";
 import { MarkdownAgente } from "@/components/agentes/MarkdownAgente";
 import { AvanceTarea } from "@/components/agentes/AvanceTarea";
+import { PlanEncargo } from "@/components/agentes/PlanEncargo";
 
 // Una solicitud con su conversación: lo que se le pidió al agente, lo que respondió y entregó, y lo que se le sigue pidiendo en el mismo
 // hilo (el agente recuerda lo ya hablado). Desde aquí también se programan revisiones («revísalo el lunes», «cada semana»).
@@ -55,6 +56,7 @@ function Burbuja({ m, ahora }: { m: MensajeHilo; ahora: Date }) {
         {m.rol === "revision" && <p className="mb-1 flex items-center gap-1 text-xs font-medium text-muted-foreground"><CalendarClock className="h-3 w-3" aria-hidden />Revisión programada</p>}
         {enCurso ? <p className="flex items-center gap-2 text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />Trabajando… <span className="text-xs">({(ETIQUETA_ESTADO[m.estado]?.texto ?? m.estado).toLowerCase()})</span></p>
           : agente && !falla ? <MarkdownAgente texto={m.texto} /> : <p className="whitespace-pre-wrap">{m.texto}</p>}
+        {m.plan && <PlanEncargo taskId={m.task_id} plan={m.plan} />}
         <Entregables m={m} />
         <p className="mt-1 text-xs text-muted-foreground">{agente ? "Agente" : m.rol === "revision" ? "Sistema" : "Tú"} · {cuandoRelativo(m.cuando, ahora)}</p>
       </div>
