@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { MarkdownAgente } from "@/components/agentes/MarkdownAgente";
-import { Loader2, Send, Sparkles, CheckCircle2 } from "lucide-react";
+import { Loader2, Send, Sparkles, CheckCircle2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useChatConstructor, useCrearAgente, type AgenteCreado } from "@/hooks/useAgenteConstructor";
+import { useBorradores, useEliminarBorrador, useGuardarBorrador } from "@/hooks/useBorradoresAgente";
+import { guardable, type Borrador } from "@/lib/agentes/borradores";
+import { cuandoRelativo } from "@/lib/agentes/registro";
 import { AVISO_SECRETO, CADENCIAS, FUENTES_KAWIIL, pareceSecreto, type MensajeChat, type PropuestaAgente } from "../../../supabase/functions/_shared/agenteConstructor";
 
 // Chat especializado para crear agentes (solo Dirección). El chat propone; nada se crea hasta que la persona pulsa «Crear agente».
@@ -50,6 +53,28 @@ export function TarjetaPropuesta({ p, onCrear, creando, error }: { p: PropuestaA
   );
 }
 
+// Borradores guardados: si se quedó a la mitad la creación de un agente, aquí se retoma tal cual (conversación y propuesta).
+function Borradores({ lista, onContinuar, onEliminar, eliminando }: { lista: Borrador[]; onContinuar: (b: Borrador) => void; onEliminar: (id: string) => void; eliminando: boolean }) {
+  if (lista.length === 0) return null;
+  const ahora = new Date();
+  return (
+    <div className="zen-glass space-y-2 rounded-2xl p-3" data-testid="borradores">
+      <p className="text-sm font-medium">Continúa donde te quedaste</p>
+      <ul className="space-y-2">
+        {lista.map((b) => (
+          <li key={b.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/50 p-2 text-sm" data-testid={`borrador-${b.id}`}>
+            <span className="min-w-0 flex-1"><strong className="block truncate">{b.titulo}</strong><span className="text-xs text-muted-foreground">{b.propuesta ? "Con propuesta lista · " : ""}{b.mensajes.length} mensajes · {cuandoRelativo(b.actualizado, ahora)}</span></span>
+            <Button size="sm" onClick={() => onContinuar(b)} data-testid={`continuar-${b.id}`}>Continuar</Button>
+            <Button size="sm" variant="outline" disabled={eliminando} onClick={() => onEliminar(b.id)} aria-label={`Eliminar borrador ${b.titulo}`} data-testid={`eliminar-${b.id}`}><Trash2 className="h-4 w-4" /></Button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+const nuevoId = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (c) => (Number(c) ^ (Math.random() * 16) >> (Number(c) / 4)).toString(16)));
+
 export function ConstructorAgentes({ onCreado }: { onCreado?: (a: AgenteCreado) => void }) {
   const [mensajes, setMensajes] = useState<MensajeChat[]>([]);
   const [texto, setTexto] = useState("");
@@ -59,7 +84,24 @@ export function ConstructorAgentes({ onCreado }: { onCreado?: (a: AgenteCreado) 
   const chat = useChatConstructor();
   const crear = useCrearAgente();
   const fin = useRef<HTMLDivElement>(null);
+  const borradores = useBorradores();
+  const guardar = useGuardarBorrador();
+  const eliminar = useEliminarBorrador();
+  const [borradorId, setBorradorId] = useState<string | null>(null);
+  const [avisoGuardado, setAvisoGuardado] = useState<string | null>(null);
   useEffect(() => { fin.current?.scrollIntoView?.({ block: "nearest" }); }, [mensajes, propuesta, creado]);
+
+  // Autoguardado: cuando el chat se detiene (no mientras piensa) y hay algo dicho, se guarda el borrador. Un secreto nunca se guarda.
+  useEffect(() => {
+    if (creado || chat.isPending || !guardable(mensajes)) return;
+    const id = borradorId ?? nuevoId();
+    const t = setTimeout(() => {
+      if (!borradorId) setBorradorId(id);
+      guardar.mutate({ id, mensajes, propuesta }, { onSuccess: () => setAvisoGuardado("Borrador guardado"), onError: () => setAvisoGuardado("No se pudo guardar el borrador") });
+    }, 700);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mensajes, propuesta, chat.isPending, creado]);
 
   const enviar = () => {
     const t = texto.trim();
@@ -80,13 +122,25 @@ export function ConstructorAgentes({ onCreado }: { onCreado?: (a: AgenteCreado) 
   };
   const confirmar = () => {
     if (!propuesta) return;
-    crear.mutate(propuesta, { onSuccess: (a) => { setCreado(a); setPropuesta(null); onCreado?.(a); } });
+    crear.mutate(propuesta, { onSuccess: (a) => { setCreado(a); setPropuesta(null); onCreado?.(a); if (borradorId) { eliminar.mutate(borradorId); setBorradorId(null); } } });
   };
-  const nuevo = () => { setMensajes([]); setPropuesta(null); setCreado(null); setFallo(null); crear.reset(); };
+  const nuevo = () => { setMensajes([]); setPropuesta(null); setCreado(null); setFallo(null); setBorradorId(null); setAvisoGuardado(null); crear.reset(); };
+  const continuar = (b: Borrador) => { setMensajes(b.mensajes); setPropuesta(b.propuesta); setBorradorId(b.id); setCreado(null); setFallo(null); setAvisoGuardado(null); crear.reset(); };
+  const descartar = (id: string) => { eliminar.mutate(id); if (id === borradorId) nuevo(); };
 
   return (
     <div className="space-y-3" data-testid="constructor">
+      {mensajes.length === 0 && !creado && <Borradores lista={borradores.data ?? []} onContinuar={continuar} onEliminar={descartar} eliminando={eliminar.isPending} />}
       <div className="zen-glass space-y-3 rounded-3xl p-4">
+        {mensajes.length > 0 && !creado && (
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground" data-testid="borrador-estado">
+            <span role="status">{avisoGuardado ?? "Se guarda solo mientras avanzas"}</span>
+            <span className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={nuevo} data-testid="constructor-otro">Empezar otro</Button>
+              {borradorId && <Button variant="outline" size="sm" onClick={() => descartar(borradorId)} data-testid="constructor-descartar">Descartar borrador</Button>}
+            </span>
+          </div>
+        )}
         <div className="max-h-[50vh] space-y-3 overflow-y-auto" aria-live="polite">
           <p className="rounded-2xl bg-muted/50 p-3 text-sm">{SALUDO}</p>
           {mensajes.map((m, i) => (
