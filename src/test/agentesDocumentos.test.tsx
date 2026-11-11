@@ -69,17 +69,57 @@ describe("DocumentosAgente", () => {
     envolver(<DocumentosAgente agentes={[ag({}, { status: "archived" })]} />);
     expect(screen.getByTestId("documentos-vacio")).toBeTruthy();
   });
-  it("agrega Dropbox (clientes) sin pedir carpeta y manda carpeta_id «raiz»", async () => {
-    invoke.mockResolvedValue({ data: { fuentes: [] }, error: null });
+  const LISTA = { entries: [
+    { id: "id:CarpetaVizum_1", name: "VIZUM", type: "folder" }, { id: "id:CarpetaAcme_22", name: "ACME Servicios", type: "folder" },
+    { id: "id:ArchivoSuelto_3", name: "notas.pdf", type: "file" }, { id: "raro", name: "Mala", type: "folder" }], has_more: false };
+  const servir = () => invoke.mockImplementation(async (n: string, opts?: { body?: Record<string, unknown> }) =>
+    n === "dropbox-browse" ? { data: LISTA, error: null } : { data: { fuentes: opts?.body?.fuentes ?? [] }, error: null });
+  const guardado = () => invoke.mock.calls.find((c) => c[0] === "agente-constructor")?.[1].body;
+
+  it("Dropbox: elige la carpeta del cliente de la lista (solo carpetas) y manda su id, no «raiz»", async () => {
+    servir();
     envolver(<DocumentosAgente agentes={[ag({})]} />);
     fireEvent.change(screen.getByTestId("documentos-agente"), { target: { value: "a" } });
     fireEvent.click(screen.getByTestId("prov-dropbox"));
     expect(screen.queryByTestId("documentos-carpeta")).toBeNull();
     expect(screen.getByTestId("documentos-dropbox-aviso").textContent).toContain("solo lectura");
+    const sel = await screen.findByTestId("documentos-dbx-carpeta") as HTMLSelectElement;
+    expect([...sel.options].map((o) => o.textContent)).toEqual(["Elige una carpeta…", "ACME Servicios", "VIZUM", "Todas las carpetas de clientes (solo para agentes que revisan a todos)"]);   // sin archivos ni ids raros
+    fireEvent.change(sel, { target: { value: "id:CarpetaVizum_1" } });
+    expect((screen.getByTestId("documentos-etiqueta") as HTMLInputElement).value).toBe("Dropbox · VIZUM");      // nombre sugerido
+    fireEvent.click(screen.getByTestId("documentos-agregar"));
+    await waitFor(() => expect(guardado()).toBeTruthy());
+    expect(guardado()).toMatchObject({ action: "fuentes_documentos", agent_id: "a", fuentes: [{ proveedor: "dropbox", etiqueta: "Dropbox · VIZUM", carpeta_id: "id:CarpetaVizum_1" }] });
+  });
+  it("Dropbox: sin elegir carpeta no se guarda nada (nunca queda «todas» por descuido)", async () => {
+    servir();
+    envolver(<DocumentosAgente agentes={[ag({})]} />);
+    fireEvent.change(screen.getByTestId("documentos-agente"), { target: { value: "a" } });
+    fireEvent.click(screen.getByTestId("prov-dropbox"));
+    await screen.findByTestId("documentos-dbx-carpeta");
     fireEvent.change(screen.getByTestId("documentos-etiqueta"), { target: { value: "Dropbox clientes" } });
     fireEvent.click(screen.getByTestId("documentos-agregar"));
-    await waitFor(() => expect(invoke).toHaveBeenCalled());
-    expect(invoke.mock.calls[0][1].body).toMatchObject({ action: "fuentes_documentos", agent_id: "a", fuentes: [{ proveedor: "dropbox", etiqueta: "Dropbox clientes", carpeta_id: "raiz" }] });
+    expect((await screen.findByTestId("documentos-errores")).textContent).toContain("Elige la carpeta del cliente");
+    expect(guardado()).toBeUndefined();
+  });
+  it("Dropbox: «Todas las carpetas» es una elección explícita, avisa y manda «raiz»", async () => {
+    servir();
+    envolver(<DocumentosAgente agentes={[ag({})]} />);
+    fireEvent.change(screen.getByTestId("documentos-agente"), { target: { value: "a" } });
+    fireEvent.click(screen.getByTestId("prov-dropbox"));
+    fireEvent.change(await screen.findByTestId("documentos-dbx-carpeta"), { target: { value: "__todas__" } });
+    expect(screen.getByTestId("documentos-dbx-todas").textContent).toContain("TODOS los clientes");
+    fireEvent.change(screen.getByTestId("documentos-etiqueta"), { target: { value: "Dropbox clientes" } });
+    fireEvent.click(screen.getByTestId("documentos-agregar"));
+    await waitFor(() => expect(guardado()).toBeTruthy());
+    expect(guardado().fuentes).toEqual([{ proveedor: "dropbox", etiqueta: "Dropbox clientes", carpeta_id: "raiz" }]);
+  });
+  it("una fuente ya guardada muestra el nombre de la carpeta, no su id", async () => {
+    servir();
+    envolver(<DocumentosAgente agentes={[ag({ fuentes_docs: [{ proveedor: "dropbox", etiqueta: "Dropbox · VIZUM", carpeta_id: "id:CarpetaVizum_1" }] })]} />);
+    fireEvent.change(screen.getByTestId("documentos-agente"), { target: { value: "a" } });
+    fireEvent.click(screen.getByTestId("prov-dropbox"));
+    await waitFor(() => expect(screen.getByTestId("fuente-Dropbox · VIZUM").textContent).toContain("carpeta VIZUM"));
   });
   it("agrega una carpeta de Drive desde su enlace y manda la lista completa", async () => {
     invoke.mockResolvedValue({ data: { fuentes: [] }, error: null });
