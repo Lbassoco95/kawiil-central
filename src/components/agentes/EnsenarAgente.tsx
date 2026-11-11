@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { MarkdownAgente } from "@/components/agentes/MarkdownAgente";
 import { GraduationCap, Loader2, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -131,7 +132,9 @@ export function EnsenarAgente({ agentes, tareas, ahora = new Date() }: { agentes
                 )}
                 <div className="max-h-[40vh] space-y-3 overflow-y-auto" aria-live="polite">
                   {mensajes.length === 0 && <p className="rounded-2xl bg-muted/50 p-3 text-sm">Cuéntame cómo se hace la tarea paso a paso: cuándo se usa, qué necesita y cómo se ve un buen resultado. Si elegiste un ejemplo, dime qué hizo bien o qué hay que corregir.</p>}
-                  {mensajes.map((m, i) => <p key={i} data-testid={`ensenar-msg-${m.role}`} className={`whitespace-pre-wrap rounded-2xl p-3 text-sm ${m.role === "user" ? "ml-8 bg-primary/10" : "mr-8 bg-muted/50"}`}>{m.content}</p>)}
+                  {mensajes.map((m, i) => m.role === "user"
+                    ? <p key={i} data-testid={`ensenar-msg-${m.role}`} className="ml-8 whitespace-pre-wrap rounded-2xl bg-primary/10 p-3 text-sm">{m.content}</p>
+                    : <div key={i} data-testid={`ensenar-msg-${m.role}`} className="mr-8 rounded-2xl bg-muted/50 p-3 text-sm"><MarkdownAgente texto={m.content} /></div>)}
                   {chat.isPending && <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Pensando…</p>}
                   <div ref={fin} />
                 </div>
