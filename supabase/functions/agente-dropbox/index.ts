@@ -7,9 +7,11 @@ import {
   MAX_PAGINAS,
   dentroDeRaices,
   entradaPublica,
+  limiteValido,
   mimePorNombre,
   normalizarRaices,
   recortar,
+  raicesEfectivas,
   referenciaValida,
   tokensIguales,
 } from "../_shared/dropboxEquipo.ts";
@@ -21,6 +23,7 @@ import {
  * Así la VM no guarda ninguna credencial de Dropbox: el token, el contexto de equipo y la app viven solo aquí.
  *
  *   action "probar"  → {}                          → { ok, raices, en_la_raiz }    (diagnóstico de la conexión)
+ *   Todas las acciones aceptan `limite` (un id de Dropbox «id:…»): acota la consulta a ESA carpeta (la de un cliente). "raiz" pasa a ser el límite.
  *   action "listar"  → { ref: "raiz"|id|ruta }     → { carpeta, entradas, truncado }
  *   action "leer"    → { ref: id }                 → { nombre, mime, tamano, modificado, base64 }
  *
@@ -127,10 +130,21 @@ serve(async (req: Request) => {
     let body: Record<string, unknown>;
     try { body = await req.json(); } catch { return json({ error: "Invalid JSON body" }, 400); }
 
-    const raices = normalizarRaices(Deno.env.get("DROPBOX_AGENTES_RAICES"));
+    const autorizadas = normalizarRaices(Deno.env.get("DROPBOX_AGENTES_RAICES"));
+    if (body.limite !== undefined && body.limite !== null && !limiteValido(body.limite)) return json({ error: "Límite no válido." }, 400);
     const token = await tokenDeAcceso();
     const ctx = await contextoEquipo(token);
     const h = cabeceras(token, ctx);
+
+    // Límite por fuente (p. ej. la carpeta de UN cliente): se toma el path_lower que Dropbox devuelve para ese id y, desde aquí, TODO se decide
+    // contra esa carpeta. Si el id no es una carpeta dentro de las autorizadas, no se consulta nada.
+    let raices = autorizadas;
+    if (typeof body.limite === "string") {
+      const lm = await api(h, "files/get_metadata", { path: body.limite, include_deleted: false });
+      const efectivas = lm?.[".tag"] === "folder" ? raicesEfectivas(autorizadas, lm.path_lower) : null;
+      if (!efectivas) throw new ErrorPuente(403, "La carpeta de esta fuente está fuera de las autorizadas para los agentes.");
+      raices = efectivas;
+    }
 
     // Metadata del elemento pedido; decide el alcance con la ruta que devuelve Dropbox.
     const metadata = async (ref: string): Promise<any> => {

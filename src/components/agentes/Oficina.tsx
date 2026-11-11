@@ -1,41 +1,12 @@
 import { useMemo, useState } from "react";
 import { cuandoRelativo } from "@/lib/agentes/registro";
-import { spriteAgente, ANCHO, ALTO, type Rect } from "@/lib/agentes/sprites";
+import { spriteAgente, ANCHO, ALTO } from "@/lib/agentes/sprites";
+import { CSS, TONO, pintar, PX, COLS, CW, CH } from "@/components/agentes/escritorio";
 import { ESTADO_OFICINA, type EstadoOficina, type FiguraOficina } from "@/lib/agentes/oficina";
 
 // Oficina propia (Zen + Glass): cada agente es una figura sencilla en su escritorio; su postura sale del estado real
 // (ver src/lib/agentes/oficina.ts). Solo lectura. Movimiento lento; sin animación si el sistema pide menos movimiento.
 // Todo estado también se dice con texto (etiqueta y tarjeta), nunca solo por color o movimiento.
-
-const TONO: Record<string, { cuerpo: string; escritorio: string }> = {
-  azul: { cuerpo: "#8fb4d9", escritorio: "#d9c7a8" }, verde: { cuerpo: "#9cc5a1", escritorio: "#d9c7a8" },
-  rosa: { cuerpo: "#e3a9b0", escritorio: "#d9c7a8" }, salvia: { cuerpo: "#b5c9a8", escritorio: "#d9c7a8" },
-  arena: { cuerpo: "#d8c3a0", escritorio: "#d9c7a8" }, gris: { cuerpo: "#bdb8b0", escritorio: "#cfc7b8" },
-};
-const COLS = 4, CW = 190, CH = 188, PX = 5;
-const pintar = (rs: Rect[]) => rs.map((r, i) => <rect key={i} x={r.x * PX} y={r.y * PX} width={r.w * PX} height={r.h * PX} fill={r.c} />);
-void ALTO;
-
-const CSS = `
-/* Solo la celda recibe clics: la figura se mueve y, si también los recibiera, el clic se perdería al cambiar el objeto bajo el cursor. */
-[data-estado]>*:not(.of-celda){pointer-events:none}
-/* Pixel art: cada cuadro se alterna con saltos (sin transiciones suaves) y lento, a tono con Zen. */
-.of-frame-1{opacity:0}
-.of-trabajando .of-frame-0{animation:of-a 0.8s steps(1,end) infinite}
-.of-trabajando .of-frame-1{animation:of-b 0.8s steps(1,end) infinite}
-.of-celebrando .of-frame-0{animation:of-a 1.2s steps(1,end) infinite}
-.of-celebrando .of-frame-1{animation:of-b 1.2s steps(1,end) infinite}
-.of-sentado .of-frame-1{animation:of-parpadeo 4s steps(1,end) infinite}
-.of-sentado .of-frame-0{animation:of-parpadeo-inv 4s steps(1,end) infinite}
-.of-atascado .of-emote,.of-con_error .of-emote{animation:of-pulso 2.4s ease-in-out infinite}
-.of-descansando .of-emote{animation:of-pulso 3.2s ease-in-out infinite}
-@keyframes of-a{0%{opacity:1}50%{opacity:0}}
-@keyframes of-b{0%{opacity:0}50%{opacity:1}}
-@keyframes of-parpadeo{0%,90%{opacity:0}95%,100%{opacity:1}}
-@keyframes of-parpadeo-inv{0%,90%{opacity:1}95%,100%{opacity:0}}
-@keyframes of-pulso{0%,100%{opacity:1}50%{opacity:.35}}
-@media (prefers-reduced-motion: reduce){.of-frame-0,.of-frame-1,.of-emote{animation:none!important}.of-frame-0{opacity:1!important}.of-frame-1{opacity:0!important}}
-`;
 
 function Figura({ f, x, y, activo, onElegir }: { f: FiguraOficina; x: number; y: number; activo: boolean; onElegir: () => void }) {
   const info = ESTADO_OFICINA[f.estado], c = TONO[info.color] ?? TONO.gris;
@@ -63,8 +34,8 @@ function Figura({ f, x, y, activo, onElegir }: { f: FiguraOficina; x: number; y:
 }
 
 // `detalleExtra`: lo que se muestra debajo de la tarjeta del agente elegido (la página lo usa para sus trabajos y conversaciones).
-export function Oficina({ figuras, ahora, demo, detalleExtra }: { figuras: FiguraOficina[]; ahora: Date; demo: boolean; detalleExtra?: (f: FiguraOficina) => React.ReactNode }) {
-  const [elegido, setElegido] = useState<string | null>(null);
+export function Oficina({ figuras, ahora, demo, detalleExtra, seleccionInicial = null }: { figuras: FiguraOficina[]; ahora: Date; demo: boolean; detalleExtra?: (f: FiguraOficina) => React.ReactNode; seleccionInicial?: string | null }) {
+  const [elegido, setElegido] = useState<string | null>(seleccionInicial);
   const filas = Math.max(1, Math.ceil(figuras.length / COLS));
   const sel = figuras.find((f) => f.id === elegido) ?? null;
   const conteo = useMemo(() => {

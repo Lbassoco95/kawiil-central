@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { etiquetaOpcion, nombreAgente, type AgenteRegistro } from "@/lib/agentes/registro";
 import { useCuentasAgente, useFuentesDocs } from "@/hooks/useAgenteConstructor";
+import { useCarpetasClientes } from "@/hooks/useCarpetasClientes";
 import { ensenable } from "@/components/agentes/EnsenarAgente";
 import { idDeEnlaceGoogle, validarFuentesDocs, type FuenteDocs } from "../../../supabase/functions/_shared/fuentesDocs";
 import { FichaAgente } from "@/components/agentes/FichaAgente";
@@ -15,6 +16,7 @@ export const fuentesDe = (a?: AgenteRegistro): FuenteDocs[] => {
   const f = (a?.config as { fuentes_docs?: unknown } | null | undefined)?.fuentes_docs;
   return Array.isArray(f) ? (f as FuenteDocs[]).filter((x) => x && (x.proveedor === "google" || x.proveedor === "microsoft" || x.proveedor === "dropbox") && typeof x.etiqueta === "string") : [];
 };
+const TODAS = "__todas__";
 const corto = (s: string) => (s.length > 18 ? `${s.slice(0, 8)}…${s.slice(-6)}` : s);
 
 // Las fuentes de documentos son una clave aparte de la configuración (no tocan el prompt): se pueden dar a cualquier agente consultable activo.
@@ -37,6 +39,10 @@ export function DocumentosAgente({ agentes, agenteInicial }: { agentes: AgenteRe
   const [ok, setOk] = useState<string | null>(null);
   const guardar = useFuentesDocs();
   const cuentas = useCuentasAgente();
+  const [dbxCarpeta, setDbxCarpeta] = useState("");          // id de la carpeta del cliente, o TODAS
+  const [dbxFiltro, setDbxFiltro] = useState("");
+  const carpetasDbx = useCarpetasClientes(prov === "dropbox" && !!agente);
+  const nombreCarpeta = (id: string) => carpetasDbx.data?.carpetas.find((c) => c.id === id)?.nombre;
   useEffect(() => { setErrores([]); setOk(null); guardar.reset(); cuentas.reset(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [agenteId]);
 
   const enviar = (fuentes: FuenteDocs[], mensaje: string) => {
@@ -45,12 +51,13 @@ export function DocumentosAgente({ agentes, agenteInicial }: { agentes: AgenteRe
   };
   const agregar = () => {
     setOk(null);
-    const nueva = prov === "dropbox" ? { proveedor: prov, etiqueta, carpeta_id: "raiz" } : prov === "google" ? { proveedor: prov, etiqueta, carpeta_id: carpeta } : { proveedor: prov, etiqueta, carpeta_id: carpeta, drive_id: drive, tenant_id: tenant };
+    if (prov === "dropbox" && !dbxCarpeta) { setErrores(["Elige la carpeta del cliente (o «Todas las carpetas de clientes» solo para un agente que revisa a todos)."]); return; }
+    const nueva = prov === "dropbox" ? { proveedor: prov, etiqueta, carpeta_id: dbxCarpeta === TODAS ? "raiz" : dbxCarpeta } : prov === "google" ? { proveedor: prov, etiqueta, carpeta_id: carpeta } : { proveedor: prov, etiqueta, carpeta_id: carpeta, drive_id: drive, tenant_id: tenant };
     const v = validarFuentesDocs([...guardadas, nueva]);     // misma validación que el servidor
     if ("errores" in v) { setErrores(v.errores); return; }
     setErrores([]);
     enviar(v.fuentes, `Fuente «${etiqueta.trim()}» guardada. El agente la podrá leer desde su próxima tarea.`);
-    setEtiqueta(""); setCarpeta(""); setDrive(""); setTenant("");
+    setEtiqueta(""); setCarpeta(""); setDrive(""); setTenant(""); setDbxCarpeta(""); setDbxFiltro("");
   };
   const quitar = (e: string) => { setOk(null); enviar(guardadas.filter((f) => f.etiqueta !== e), `Fuente «${e}» quitada.`); };
 
@@ -81,7 +88,7 @@ export function DocumentosAgente({ agentes, agenteInicial }: { agentes: AgenteRe
                 <p className="text-xs font-medium text-muted-foreground">Fuentes de {nombreAgente(agente)}</p>
                 {guardadas.length === 0 ? <p className="text-sm text-muted-foreground">Ninguna todavía.</p> : guardadas.map((f) => (
                   <div key={f.etiqueta} className="flex items-center justify-between gap-2 rounded-xl border border-border/50 p-2 text-sm" data-testid={`fuente-${f.etiqueta}`}>
-                    <span><strong>{f.etiqueta}</strong> · {f.proveedor === "google" ? "Google Drive" : f.proveedor === "dropbox" ? "Dropbox" : `Microsoft (${f.tenant_id})`} · {f.proveedor === "dropbox" && f.carpeta_id === "raiz" ? "todas las carpetas de clientes" : `carpeta ${corto(f.carpeta_id)}`}</span>
+                    <span><strong>{f.etiqueta}</strong> · {f.proveedor === "google" ? "Google Drive" : f.proveedor === "dropbox" ? "Dropbox" : `Microsoft (${f.tenant_id})`} · {f.proveedor === "dropbox" && f.carpeta_id === "raiz" ? "todas las carpetas de clientes" : `carpeta ${(f.proveedor === "dropbox" && nombreCarpeta(f.carpeta_id)) || corto(f.carpeta_id)}`}</span>
                     <Button size="sm" variant="outline" onClick={() => quitar(f.etiqueta)} disabled={guardar.isPending} aria-label={`Quitar ${f.etiqueta}`} data-testid={`quitar-${f.etiqueta}`}><Trash2 className="h-4 w-4" /></Button>
                   </div>
                 ))}
@@ -96,7 +103,25 @@ export function DocumentosAgente({ agentes, agenteInicial }: { agentes: AgenteRe
                 </div>
                 <label className="block space-y-1 text-sm">Nombre de la fuente<Input value={etiqueta} onChange={(e) => setEtiqueta(e.target.value)} placeholder="Drive Vizum" data-testid="documentos-etiqueta" /></label>
                 {prov === "dropbox" ? (
-                  <p className="text-xs text-muted-foreground" data-testid="documentos-dropbox-aviso">Dropbox ya está conectado a Kawiil Central. El agente podrá leer, en solo lectura y incluyendo el contenido de los documentos, todo lo que cuelga de la carpeta de clientes (/Kawiil Mx/CLIENTES). Nada fuera de ella.</p>
+                  <div className="space-y-2" data-testid="documentos-dropbox">
+                    <p className="text-xs text-muted-foreground" data-testid="documentos-dropbox-aviso">Dropbox ya está conectado a Kawiil Central. El agente podrá leer, en solo lectura y incluyendo el contenido de los documentos, lo que cuelga de la carpeta que elijas aquí, y nada fuera de ella. Para un agente de un solo cliente elige la carpeta de ese cliente.</p>
+                    {carpetasDbx.isLoading && <p className="text-sm text-muted-foreground">Leyendo las carpetas de clientes…</p>}
+                    {carpetasDbx.isError && <p role="alert" className="text-sm text-destructive">{(carpetasDbx.error as Error).message}</p>}
+                    {carpetasDbx.data && (
+                      <>
+                        {carpetasDbx.data.carpetas.length > 12 && <Input value={dbxFiltro} onChange={(e) => setDbxFiltro(e.target.value)} placeholder="Buscar cliente…" aria-label="Buscar carpeta de cliente" data-testid="documentos-dbx-filtro" />}
+                        <label className="block space-y-1 text-sm">Carpeta del cliente
+                          <select className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={dbxCarpeta} onChange={(e) => { setDbxCarpeta(e.target.value); if (!etiqueta.trim() && e.target.value && e.target.value !== TODAS) setEtiqueta(`Dropbox · ${nombreCarpeta(e.target.value) ?? ""}`.trim()); }} data-testid="documentos-dbx-carpeta">
+                            <option value="">Elige una carpeta…</option>
+                            {carpetasDbx.data.carpetas.filter((c) => c.nombre.toLowerCase().includes(dbxFiltro.trim().toLowerCase())).map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                            <option value={TODAS}>Todas las carpetas de clientes (solo para agentes que revisan a todos)</option>
+                          </select>
+                        </label>
+                        {carpetasDbx.data.hayMas && <p className="text-xs text-muted-foreground">Hay más carpetas de las que caben en la lista; usa el buscador.</p>}
+                      </>
+                    )}
+                    {dbxCarpeta === TODAS && <p role="note" className="text-sm text-amber-700" data-testid="documentos-dbx-todas">Este agente podrá leer los expedientes de TODOS los clientes. Úsalo solo si su trabajo es revisar a todos.</p>}
+                  </div>
                 ) : (
                 <label className="block space-y-1 text-sm">{prov === "google" ? "Enlace o id de la carpeta de Drive" : "Id de la carpeta (carpeta_id)"}
                   <Input value={carpeta} onChange={(e) => setCarpeta(e.target.value)} placeholder={prov === "google" ? "https://drive.google.com/drive/folders/…" : "01ABCDEF…"} data-testid="documentos-carpeta" /></label>

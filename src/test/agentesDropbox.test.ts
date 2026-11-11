@@ -48,3 +48,28 @@ describe("lo que sale hacia la VM", () => {
     expect(mimePorNombre("a.exe")).toBeNull(); expect(mimePorNombre("sin_extension")).toBeNull();
   });
 });
+
+import { limiteValido, raicesEfectivas } from "../../supabase/functions/_shared/dropboxEquipo";
+describe("límite por fuente (la carpeta de un solo cliente)", () => {
+  const AUT = ["/kawiil mx/clientes"];
+  it("solo ids de Dropbox: nunca rutas ni basura", () => {
+    expect(limiteValido("id:AAAAAAAAAAAAAAAAAAAAAB")).toBe(true);
+    for (const x of ["/Kawiil Mx/CLIENTES/Vizum", "raiz", "id:", "id:../x", "id:a b c d e", "", null, 5, undefined]) expect(limiteValido(x)).toBe(false);
+  });
+  it("sin límite se usan las raíces autorizadas", () => { expect(raicesEfectivas(AUT, null)).toBe(AUT); });
+  it("con límite, SOLO esa carpeta cuenta (las demás de clientes quedan fuera)", () => {
+    const r = raicesEfectivas(AUT, "/Kawiil Mx/CLIENTES/VIZUM")!;
+    expect(r).toEqual(["/kawiil mx/clientes/vizum"]);
+    expect(dentroDeRaices("/kawiil mx/clientes/vizum/kyc/lista.pdf", r)).toBe(true);
+    expect(dentroDeRaices("/kawiil mx/clientes/vizum", r)).toBe(true);
+    expect(dentroDeRaices("/kawiil mx/clientes/otro cliente/acta.pdf", r)).toBe(false);
+    expect(dentroDeRaices("/kawiil mx/clientes/vizum-sa/acta.pdf", r)).toBe(false);      // por segmentos: «vizum-sa» NO es «vizum»
+    expect(dentroDeRaices("/kawiil mx/clientes", r)).toBe(false);                         // la carpeta de todos los clientes tampoco
+  });
+  it("un límite fuera de las autorizadas se rechaza (null)", () => {
+    expect(raicesEfectivas(AUT, "/Kawiil Mx/Finanzas/2026")).toBeNull();
+    expect(raicesEfectivas(AUT, "/Kawiil Mx/CLIENTES-VIEJOS/x")).toBeNull();
+    expect(raicesEfectivas(AUT, "/")).toBeNull();
+    expect(raicesEfectivas(AUT, "/Kawiil Mx/CLIENTES/../Finanzas")).toBeNull();
+  });
+});

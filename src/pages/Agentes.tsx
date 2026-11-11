@@ -14,7 +14,8 @@ import { DocumentosAgente } from "@/components/agentes/DocumentosAgente";
 import { SeguimientoAgentes } from "@/components/agentes/SeguimientoAgentes";
 import { TrabajosAgente } from "@/components/agentes/TrabajosAgente";
 import { agentesDelModulo, esAgenteLegal, resumenServicio } from "@/lib/agentes/registro";
-import { datosDemo, figurasOficina, filtrarAmbito, type AmbitoOficina } from "@/lib/agentes/oficina";
+import { datosDemo, esAgenteDelEquipo, figurasDeLaBanda, figurasOficina, filtrarAmbito, type AmbitoOficina } from "@/lib/agentes/oficina";
+import { BandaEquipo, FigurasContext } from "@/components/agentes/BandaEquipo";
 import { useAgentesRegistro, useErroresAgentes, useTareasAgentes } from "@/hooks/useAgentesRegistro";
 
 // Módulo Agentes: oficina y tablas (solo lectura) + Constructor de agentes y envío de instrucciones (solo Dirección, vía funciones).
@@ -34,14 +35,20 @@ export default function Agentes() {
   const servicio = useMemo(() => resumenServicio(reales, reloj), [reales, reloj]);
   const fuente = useMemo(() => (demo ? datosDemo(reloj) : { agentes: reales, tareas: tareas.data ?? [] }), [demo, reales, tareas.data, reloj]);
   const figuras = useMemo(() => figurasOficina(demo ? fuente.agentes : filtrarAmbito(fuente.agentes, ambito), fuente.tareas, reloj), [fuente, reloj, demo, ambito]);
+  // Siempre a la vista: todos los agentes reales (sin filtro de ámbito), con quien trabaja primero.
+  const figurasReales = useMemo(() => figurasOficina(reales, tareas.data ?? [], reloj), [reales, tareas.data, reloj]);
+  const banda = useMemo(() => figurasDeLaBanda(figurasReales, new Set(reales.filter(esAgenteDelEquipo).map((a) => a.id))), [figurasReales, reales]);
+  const [verEnOficina, setVerEnOficina] = useState<string | null>(null);
   const cargando = !demo && agentes.isLoading;
   return (
     <AppLayout>
+     <FigurasContext.Provider value={figurasReales}>
       <div className="space-y-6 p-4 md:p-6">
         <PageHeader title="Agentes" description="Quién está activo, qué hizo y si falló. Crea agentes y dales instrucciones." icon={<Bot className="h-5 w-5" />} />
         <p className="text-xs text-muted-foreground">
           Los agentes de Marketing se ven en <Link className="underline" to="/marketing">Marketing → Agentes</Link>.
         </p>
+        {!demo && <BandaEquipo figuras={banda} onElegir={(id) => { setVerEnOficina(id); setAmbito("todos"); setPestana("oficina"); }} />}
         <Tabs value={pestana} onValueChange={setPestana}>
           <TabsList>
             <TabsTrigger value="oficina">Oficina</TabsTrigger>
@@ -72,7 +79,7 @@ export default function Agentes() {
             <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={demo} onChange={(e) => setDemo(e.target.checked)} /> Ver demostración con datos de ejemplo</label>
             {cargando ? <p className="text-sm text-muted-foreground">Leyendo el registro de agentes…</p>
               : agentes.isError && !demo ? <p className="text-sm text-muted-foreground">No pudimos leer el registro de agentes. Inténtalo de nuevo.</p>
-              : <Oficina figuras={figuras} ahora={reloj} demo={demo} detalleExtra={demo ? undefined : (f) => <TrabajosAgente agentId={f.id} nombre={f.nombre} ahora={reloj} />} />}
+              : <Oficina key={verEnOficina ?? "oficina"} seleccionInicial={verEnOficina} figuras={figuras} ahora={reloj} demo={demo} detalleExtra={demo ? undefined : (f) => <TrabajosAgente agentId={f.id} nombre={f.nombre} ahora={reloj} />} />}
           </TabsContent>
           <TabsContent value="tablas" className="mt-4">
             <AgentesRegistro sinMarketing errores={errores.data ?? []} agentes={agentes.data ?? []} tareas={tareas.data ?? []}
@@ -87,6 +94,7 @@ export default function Agentes() {
           <TabsContent value="programar" className="mt-4"><ProgramarAgente key={conectar ?? "prog"} agenteInicial={conectar ?? undefined} agentes={reales} /></TabsContent>
         </Tabs>
       </div>
+     </FigurasContext.Provider>
     </AppLayout>
   );
 }

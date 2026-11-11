@@ -34,6 +34,17 @@ export function referenciaValida(v: unknown): v is string {
   return v.startsWith("/") && v.length <= 500 && !v.includes("..") && !/[\u0000-\u001f]/.test(v);
 }
 
+// Límite por fuente: la VM puede acotar TODA la consulta a una carpeta (p. ej. la de un cliente). Solo ids de Dropbox: nunca rutas escritas a mano.
+export const limiteValido = (v: unknown): v is string => typeof v === "string" && /^id:[A-Za-z0-9_\-]{5,200}$/.test(v);
+
+// Raíces con las que se decide una consulta: las autorizadas, o SOLO la carpeta límite si trae una y ésta cuelga de las autorizadas.
+// `pathLowerDelLimite` es el path_lower que Dropbox devolvió para el id del límite (no uno que mande quien pregunta).
+export function raicesEfectivas(raices: string[], pathLowerDelLimite: string | null): string[] | null {
+  if (pathLowerDelLimite === null) return raices;
+  if (!dentroDeRaices(pathLowerDelLimite, raices)) return null;
+  return [normalizarRaices(pathLowerDelLimite)[0]];
+}
+
 // Comparación de tokens en tiempo constante (el puente se protege con un secreto compartido con la VM).
 export function tokensIguales(a: unknown, b: unknown): boolean {
   if (typeof a !== "string" || typeof b !== "string" || a.length === 0 || b.length === 0) return false;
