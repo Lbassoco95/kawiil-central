@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { MarkdownAgente } from "@/components/agentes/MarkdownAgente";
 import { Loader2, Send, Sparkles, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -89,7 +90,9 @@ export function ConstructorAgentes({ onCreado }: { onCreado?: (a: AgenteCreado) 
         <div className="max-h-[50vh] space-y-3 overflow-y-auto" aria-live="polite">
           <p className="rounded-2xl bg-muted/50 p-3 text-sm">{SALUDO}</p>
           {mensajes.map((m, i) => (
-            <p key={i} data-testid={`constructor-msg-${m.role}`} className={`whitespace-pre-wrap rounded-2xl p-3 text-sm ${m.role === "user" ? "ml-8 bg-primary/10" : "mr-8 bg-muted/50"}`}>{m.content}</p>
+            m.role === "user"
+              ? <p key={i} data-testid={`constructor-msg-${m.role}`} className="ml-8 whitespace-pre-wrap rounded-2xl bg-primary/10 p-3 text-sm">{m.content}</p>
+              : <div key={i} data-testid={`constructor-msg-${m.role}`} className="mr-8 rounded-2xl bg-muted/50 p-3 text-sm"><MarkdownAgente texto={m.content} /></div>
           ))}
           {chat.isPending && <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Pensando…</p>}
           <div ref={fin} />
