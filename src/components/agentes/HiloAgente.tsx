@@ -10,6 +10,9 @@ import { INSTRUCCION_REVISION, MAX_VECES, REPETICIONES, type MensajeHilo } from 
 import { ETIQUETA_ESTADO, tamano } from "@/lib/agentes/etiquetas";
 import { MarkdownAgente } from "@/components/agentes/MarkdownAgente";
 import { AvanceTarea } from "@/components/agentes/AvanceTarea";
+import { EscritorioAgente, EstilosOficina } from "@/components/agentes/escritorio";
+import { useFiguraDe } from "@/components/agentes/BandaEquipo";
+import { ESTADO_OFICINA } from "@/lib/agentes/oficina";
 import { PlanEncargo } from "@/components/agentes/PlanEncargo";
 
 // Una solicitud con su conversación: lo que se le pidió al agente, lo que respondió y entregó, y lo que se le sigue pidiendo en el mismo
@@ -123,6 +126,7 @@ export function HiloAgente({ taskId, ahora }: { taskId: string; ahora: Date }) {
   const instruir = useInstruirAgente();
   const qc = useQueryClient();
   const [texto, setTexto] = useState("");
+  const figura = useFiguraDe(q.data?.hilo.agent_id);
   if (q.isLoading) return <p className="text-sm text-muted-foreground">Leyendo la solicitud…</p>;
   if (q.isError || !q.data) return <p role="alert" className="text-sm text-destructive">{(q.error as Error | null)?.message ?? "No se pudo leer la solicitud."}</p>;
   const { hilo, mensajes, revisiones, en_curso } = q.data;
@@ -135,7 +139,13 @@ export function HiloAgente({ taskId, ahora }: { taskId: string; ahora: Date }) {
   };
   return (
     <div className="space-y-3" data-testid="hilo">
-      <p className="text-base font-medium">{hilo.titulo || "Solicitud"} <span className="text-sm font-normal text-muted-foreground">· {hilo.agente}</span></p>
+      <div className="flex items-center gap-3" data-testid="hilo-encabezado">
+        {figura && <><EstilosOficina /><EscritorioAgente f={figura} compacto /></>}
+        <div className="min-w-0">
+          <p className="text-base font-medium">{hilo.titulo || "Solicitud"} <span className="text-sm font-normal text-muted-foreground">· {hilo.agente}</span></p>
+          {figura && <p className="text-sm text-muted-foreground" data-testid="hilo-estado-agente">{en_curso ? (figura.estado === "trabajando" ? "En su escritorio, trabajando en esto ahora." : "Esperando su turno: empieza en cuanto esté libre.") : ESTADO_OFICINA[figura.estado].frase}</p>}
+        </div>
+      </div>
       <div className="max-h-[32rem] space-y-2 overflow-auto rounded-2xl border border-border/50 p-3" aria-live="polite" data-testid="hilo-mensajes">
         {mensajes.map((m, i) => <Burbuja key={`${m.task_id}-${m.rol}-${i}`} m={m} ahora={ahora} />)}
       </div>

@@ -83,3 +83,10 @@ export function datosDemo(ahora: Date): { agentes: AgenteRegistro[]; tareas: Tar
   ];
   return { agentes, tareas };
 }
+
+// Banda «Tu equipo en su escritorio»: quién se ve siempre. Primero los que trabajan o necesitan atención, luego el resto del equipo.
+const PRIORIDAD_BANDA: Record<EstadoOficina, number> = { trabajando: 0, atascado: 1, con_error: 2, celebrando: 3, sentado: 4, descansando: 5, apagado: 6 };
+export function figurasDeLaBanda(figuras: FiguraOficina[], idsEquipo: ReadonlySet<string>, max = 8): FiguraOficina[] {
+  const visibles = figuras.filter((f) => idsEquipo.has(f.id) || f.estado === "trabajando" || f.estado === "atascado" || f.estado === "con_error");
+  return visibles.sort((a, b) => PRIORIDAD_BANDA[a.estado] - PRIORIDAD_BANDA[b.estado] || a.nombre.localeCompare(b.nombre, "es")).slice(0, max);
+}
