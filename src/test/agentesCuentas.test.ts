@@ -87,3 +87,42 @@ describe("interruptor por agente", () => {
     expect(capacidadesAgente({ config: {} } as never)).not.toContain("Correo y calendario");
   });
 });
+
+import { dentroDeCarpeta, entradaDrive, idDriveValido, tipoLegibleDrive, MIME_CARPETA } from "../../supabase/functions/_shared/cuentasAgentes";
+describe("Google Drive de una cuenta vinculada", () => {
+  it("tipos: lo nativo de Google se exporta a texto; pdf/docx/xlsx/texto se descargan; lo demás no se lee", () => {
+    expect(tipoLegibleDrive("application/vnd.google-apps.document")).toEqual({ exportar: "text/plain", mime: "text/plain" });
+    expect(tipoLegibleDrive("application/vnd.google-apps.spreadsheet")).toEqual({ exportar: "text/csv", mime: "text/csv" });
+    expect(tipoLegibleDrive("application/pdf")).toEqual({ exportar: null, mime: "application/pdf" });
+    for (const x of ["application/zip", "video/mp4", "application/x-msdownload", "", null, 5]) expect(tipoLegibleDrive(x)).toBeNull();
+  });
+  it("entrada pública: solo lo necesario; descarta ids raros", () => {
+    expect(entradaDrive({ id: "1AbCdEfGh", name: "Acta.pdf", mimeType: "application/pdf", size: "2048", modifiedTime: "2026-10-01T00:00:00Z", parents: ["x"], owners: [{}] }))
+      .toEqual({ id: "1AbCdEfGh", nombre: "Acta.pdf", tipo: "archivo", tamano: 2048, modificado: "2026-10-01T00:00:00Z" });
+    expect(entradaDrive({ id: "1AbCdEfGh", name: "KYC", mimeType: MIME_CARPETA })?.tipo).toBe("carpeta");
+    expect(entradaDrive({ id: "../x", name: "a" })).toBeNull(); expect(entradaDrive(null)).toBeNull();
+    expect(idDriveValido("1AbCdEfGh")).toBe(true); for (const x of ["a/b", "ab", "", null]) expect(idDriveValido(x)).toBe(false);
+  });
+  describe("confinamiento a la carpeta de la fuente", () => {
+    // árbol: raiz → VIZUM → KYC → lista.pdf ; raiz → OTRO → acta.pdf ; un archivo con dos padres (uno de ellos dentro de VIZUM)
+    const padres: Record<string, string[]> = { VIZUM_1: ["RAIZ_1"], KYC_1: ["VIZUM_1"], LISTA_1: ["KYC_1"], OTRO_1: ["RAIZ_1"], ACTA_1: ["OTRO_1"], DOBLE_1: ["OTRO_1", "KYC_1"], CICLO_A: ["CICLO_B"], CICLO_B: ["CICLO_A"] };
+    const de = async (id: string) => padres[id] ?? [];
+    it("la carpeta límite y todo lo que cuelga de ella (a cualquier profundidad)", async () => {
+      expect(await dentroDeCarpeta("VIZUM_1", "VIZUM_1", de)).toBe(true);
+      expect(await dentroDeCarpeta("LISTA_1", "VIZUM_1", de)).toBe(true);
+      expect(await dentroDeCarpeta("DOBLE_1", "VIZUM_1", de)).toBe(true);
+    });
+    it("lo de otro cliente, la raíz y lo desconocido quedan fuera", async () => {
+      expect(await dentroDeCarpeta("ACTA_1", "VIZUM_1", de)).toBe(false);
+      expect(await dentroDeCarpeta("RAIZ_1", "VIZUM_1", de)).toBe(false);
+      expect(await dentroDeCarpeta("DESCONOCIDO_1", "VIZUM_1", de)).toBe(false);
+    });
+    it("ids inválidos, ciclos y árboles enormes no cuelgan ni dejan pasar", async () => {
+      expect(await dentroDeCarpeta("../x", "VIZUM_1", de)).toBe(false);
+      expect(await dentroDeCarpeta("CICLO_A", "VIZUM_1", de)).toBe(false);
+      let n = 0;
+      const infinito = async (id: string) => { n++; return [`${id}x`.slice(-60) + n]; };
+      expect(await dentroDeCarpeta("ABCDEF_1", "VIZUM_1", infinito, 10)).toBe(false); expect(n).toBeLessThanOrEqual(10);
+    });
+  });
+});

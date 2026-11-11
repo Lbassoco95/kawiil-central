@@ -33,6 +33,7 @@ import { validarFuentesDocs } from "../_shared/fuentesDocs.ts";
  *   action "ensenar" → { agent_id, mensajes, task_id? } → { texto, habilidad | null }   (no escribe nada)
  *   action "guardar_habilidad" → { agent_id, habilidad, estado: borrador|aprobada, task_id? } → { habilidades }
  *   action "estado_habilidad" → { agent_id, id, estado: borrador|aprobada|archivada } → { habilidades }
+ *   action "cuentas_drive"      → {} → { cuentas: [{ cuenta, correo, nombre, drive, propia }] }   (cuentas de Google vinculadas y si ya permitieron Drive; sin tokens)
  *   action "cuentas_agente"     → { agent_id, activa } → { activa }   (interruptor: el agente puede leer correo y calendario de las cuentas vinculadas; solo lectura)
  *   action "fuentes_documentos" → { agent_id, fuentes } → { fuentes }   (reemplaza config.fuentes_docs; solo identificadores; cualquier agente consultable activo)
  *   action "programar" → { agent_id, programacion } → { programacion } (fusiona config.programacion; solo agentes del constructor)
@@ -255,9 +256,24 @@ serve(async (req: Request) => {
       if (ag.kind !== "consultable" || ag.status === "archived") return json({ error: "Solo se pueden configurar agentes consultables activos." }, 403);
       const v = validarFuentesDocs(body.fuentes);
       if (!v.ok) return json({ error: "Las fuentes no son válidas.", errores: v.errores }, 422);
+      // Un Drive de cuenta vinculada solo se guarda si esa cuenta existe y YA dio permiso de Drive.
+      const idsCuentas = [...new Set(v.fuentes.filter((f) => f.proveedor === "cuenta_google").map((f) => f.cuenta as string))];
+      if (idsCuentas.length) {
+        const { data: ok } = await admin.from("linked_accounts").select("id").in("id", idsCuentas).eq("provider", "google").eq("status", "connected").eq("drive_enabled", true);
+        const validas = new Set((ok ?? []).map((x: { id: string }) => x.id));
+        const faltan = idsCuentas.filter((i) => !validas.has(i));
+        if (faltan.length) return json({ error: "Esa cuenta de Google todavía no ha permitido Drive. Pídele a su dueño que pulse «Permitir Drive a los agentes» en Agentes → Documentos." }, 422);
+      }
       const { error: errUp } = await admin.from("agent_registry").update({ config: { ...cfg, fuentes_docs: v.fuentes }, updated_at: new Date().toISOString() }).eq("id", agentId);
       if (errUp) { console.error("agente-constructor: fuentes_docs", errUp.message); return json({ error: "No se pudo guardar." }, 500); }
       return json({ fuentes: v.fuentes });
+    }
+
+    // Cuentas de Google vinculadas y si ya permitieron Drive (para elegir de cuál agregar una carpeta). Sin tokens: solo identificación y el booleano.
+    if (body.action === "cuentas_drive") {
+      const { data, error } = await admin.from("linked_accounts").select("id, user_id, email, display_name, drive_enabled, status").eq("provider", "google").eq("status", "connected").order("created_at").limit(100);
+      if (error) { console.error("agente-constructor: cuentas_drive", error.message); return json({ error: "No se pudieron leer las cuentas." }, 500); }
+      return json({ cuentas: (data ?? []).map((c: Record<string, unknown>) => ({ cuenta: c.id, correo: String(c.email ?? "").slice(0, 200), nombre: String(c.display_name ?? "").slice(0, 120), drive: c.drive_enabled === true, propia: c.user_id === userData.user.id })) });
     }
 
     // Cuentas conectadas (correo y calendario de las cuentas vinculadas en Kawiil Central): solo un interruptor por agente. No hay credenciales aquí;

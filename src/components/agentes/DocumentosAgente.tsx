@@ -3,7 +3,7 @@ import { FolderOpen, Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { etiquetaOpcion, nombreAgente, type AgenteRegistro } from "@/lib/agentes/registro";
-import { useCuentasAgente, useFuentesDocs } from "@/hooks/useAgenteConstructor";
+import { useCuentasAgente, useCuentasDrive, useFuentesDocs, usePermitirDrive } from "@/hooks/useAgenteConstructor";
 import { useCarpetasClientes } from "@/hooks/useCarpetasClientes";
 import { ensenable } from "@/components/agentes/EnsenarAgente";
 import { idDeEnlaceGoogle, validarFuentesDocs, type FuenteDocs } from "../../../supabase/functions/_shared/fuentesDocs";
@@ -14,7 +14,7 @@ import { FichaAgente } from "@/components/agentes/FichaAgente";
 // en kawiil-agents). Aquí solo se guardan identificadores, nunca credenciales.
 export const fuentesDe = (a?: AgenteRegistro): FuenteDocs[] => {
   const f = (a?.config as { fuentes_docs?: unknown } | null | undefined)?.fuentes_docs;
-  return Array.isArray(f) ? (f as FuenteDocs[]).filter((x) => x && (x.proveedor === "google" || x.proveedor === "microsoft" || x.proveedor === "dropbox") && typeof x.etiqueta === "string") : [];
+  return Array.isArray(f) ? (f as FuenteDocs[]).filter((x) => x && (x.proveedor === "google" || x.proveedor === "microsoft" || x.proveedor === "dropbox" || x.proveedor === "cuenta_google") && typeof x.etiqueta === "string") : [];
 };
 const TODAS = "__todas__";
 const corto = (s: string) => (s.length > 18 ? `${s.slice(0, 8)}…${s.slice(-6)}` : s);
@@ -30,7 +30,7 @@ export function DocumentosAgente({ agentes, agenteInicial }: { agentes: AgenteRe
   const [agenteId, setAgenteId] = useState(agenteInicial ?? "");
   const agente = lista.find((a) => a.id === agenteId);
   const guardadas = fuentesDe(agente);
-  const [prov, setProv] = useState<"google" | "microsoft" | "dropbox">("google");
+  const [prov, setProv] = useState<"google" | "microsoft" | "dropbox" | "cuenta_google">("google");
   const [etiqueta, setEtiqueta] = useState("");
   const [carpeta, setCarpeta] = useState("");
   const [drive, setDrive] = useState("");
@@ -39,6 +39,10 @@ export function DocumentosAgente({ agentes, agenteInicial }: { agentes: AgenteRe
   const [ok, setOk] = useState<string | null>(null);
   const guardar = useFuentesDocs();
   const cuentas = useCuentasAgente();
+  const cuentasDrive = useCuentasDrive(!!agente && (prov === "cuenta_google" || fuentesDe(agente).some((f) => f.proveedor === "cuenta_google")));
+  const permitir = usePermitirDrive();
+  const [cuentaDrive, setCuentaDrive] = useState("");
+  const cuentaDe = (id?: string) => cuentasDrive.data?.find((c) => c.cuenta === id);
   const [dbxCarpeta, setDbxCarpeta] = useState("");          // id de la carpeta del cliente, o TODAS
   const [dbxFiltro, setDbxFiltro] = useState("");
   const carpetasDbx = useCarpetasClientes(prov === "dropbox" && !!agente);
@@ -52,6 +56,14 @@ export function DocumentosAgente({ agentes, agenteInicial }: { agentes: AgenteRe
   const agregar = () => {
     setOk(null);
     if (prov === "dropbox" && !dbxCarpeta) { setErrores(["Elige la carpeta del cliente (o «Todas las carpetas de clientes» solo para un agente que revisa a todos)."]); return; }
+    if (prov === "cuenta_google") {
+      const v = validarFuentesDocs([...guardadas, { proveedor: prov, etiqueta, cuenta: cuentaDrive, carpeta_id: carpeta }]);
+      if ("errores" in v) { setErrores(v.errores); return; }
+      setErrores([]);
+      enviar(v.fuentes, `Fuente «${etiqueta.trim()}» guardada. El agente solo podrá leer dentro de esa carpeta de Drive.`);
+      setEtiqueta(""); setCarpeta(""); setCuentaDrive("");
+      return;
+    }
     const nueva = prov === "dropbox" ? { proveedor: prov, etiqueta, carpeta_id: dbxCarpeta === TODAS ? "raiz" : dbxCarpeta } : prov === "google" ? { proveedor: prov, etiqueta, carpeta_id: carpeta } : { proveedor: prov, etiqueta, carpeta_id: carpeta, drive_id: drive, tenant_id: tenant };
     const v = validarFuentesDocs([...guardadas, nueva]);     // misma validación que el servidor
     if ("errores" in v) { setErrores(v.errores); return; }
@@ -88,7 +100,7 @@ export function DocumentosAgente({ agentes, agenteInicial }: { agentes: AgenteRe
                 <p className="text-xs font-medium text-muted-foreground">Fuentes de {nombreAgente(agente)}</p>
                 {guardadas.length === 0 ? <p className="text-sm text-muted-foreground">Ninguna todavía.</p> : guardadas.map((f) => (
                   <div key={f.etiqueta} className="flex items-center justify-between gap-2 rounded-xl border border-border/50 p-2 text-sm" data-testid={`fuente-${f.etiqueta}`}>
-                    <span><strong>{f.etiqueta}</strong> · {f.proveedor === "google" ? "Google Drive" : f.proveedor === "dropbox" ? "Dropbox" : `Microsoft (${f.tenant_id})`} · {f.proveedor === "dropbox" && f.carpeta_id === "raiz" ? "todas las carpetas de clientes" : `carpeta ${(f.proveedor === "dropbox" && nombreCarpeta(f.carpeta_id)) || corto(f.carpeta_id)}`}</span>
+                    <span><strong>{f.etiqueta}</strong> · {f.proveedor === "google" ? "Google Drive" : f.proveedor === "cuenta_google" ? `Google Drive de ${cuentaDe(f.cuenta)?.correo ?? "una cuenta vinculada"}` : f.proveedor === "dropbox" ? "Dropbox" : `Microsoft (${f.tenant_id})`} · {f.proveedor === "dropbox" && f.carpeta_id === "raiz" ? "todas las carpetas de clientes" : `carpeta ${(f.proveedor === "dropbox" && nombreCarpeta(f.carpeta_id)) || corto(f.carpeta_id)}`}</span>
                     <Button size="sm" variant="outline" onClick={() => quitar(f.etiqueta)} disabled={guardar.isPending} aria-label={`Quitar ${f.etiqueta}`} data-testid={`quitar-${f.etiqueta}`}><Trash2 className="h-4 w-4" /></Button>
                   </div>
                 ))}
@@ -96,12 +108,39 @@ export function DocumentosAgente({ agentes, agenteInicial }: { agentes: AgenteRe
               <div className="zen-glass space-y-3 rounded-3xl p-4">
                 <p className="text-sm font-medium">Agregar una carpeta</p>
                 <div className="flex gap-2 text-xs" role="group" aria-label="Proveedor">
-                  {(["google", "microsoft", "dropbox"] as const).map((p) => (
+                  {(["google", "cuenta_google", "microsoft", "dropbox"] as const).map((p) => (
                     <button key={p} type="button" aria-pressed={prov === p} data-testid={`prov-${p}`} onClick={() => { setProv(p); setErrores([]); }}
-                      className={`rounded-full border px-3 py-1 ${prov === p ? "border-primary/60 bg-primary/10" : "border-border/60"}`}>{p === "google" ? "Google Drive" : p === "dropbox" ? "Dropbox (clientes)" : "Microsoft (SharePoint/OneDrive)"}</button>
+                      className={`rounded-full border px-3 py-1 ${prov === p ? "border-primary/60 bg-primary/10" : "border-border/60"}`}>{p === "google" ? "Google Drive (compartido con la VM)" : p === "cuenta_google" ? "Google Drive (cuenta vinculada)" : p === "dropbox" ? "Dropbox (clientes)" : "Microsoft (SharePoint/OneDrive)"}</button>
                   ))}
                 </div>
                 <label className="block space-y-1 text-sm">Nombre de la fuente<Input value={etiqueta} onChange={(e) => setEtiqueta(e.target.value)} placeholder="Drive Vizum" data-testid="documentos-etiqueta" /></label>
+                {prov === "cuenta_google" && (
+                  <div className="space-y-2" data-testid="documentos-cuenta-drive">
+                    <p className="text-xs text-muted-foreground">Usa el Drive de una cuenta de Google que ya está vinculada en Kawiil Central. Cada persona permite Drive una sola vez (solo lectura) y el agente solo ve la carpeta que elijas aquí, y lo que cuelga de ella.</p>
+                    {cuentasDrive.isLoading && <p className="text-sm text-muted-foreground">Leyendo las cuentas de Google…</p>}
+                    {cuentasDrive.isError && <p role="alert" className="text-sm text-destructive">{(cuentasDrive.error as Error).message}</p>}
+                    {cuentasDrive.data && cuentasDrive.data.length === 0 && <p className="text-sm text-muted-foreground">No hay cuentas de Google vinculadas todavía.</p>}
+                    <ul className="space-y-1">
+                      {(cuentasDrive.data ?? []).map((c) => (
+                        <li key={c.cuenta} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/50 p-2 text-sm" data-testid={`cuenta-drive-${c.cuenta}`}>
+                          <span><strong>{c.correo || c.nombre}</strong> · {c.drive ? "Drive permitido" : "Drive sin permitir"}</span>
+                          {!c.drive && (c.propia
+                            ? <Button size="sm" disabled={permitir.isPending} onClick={() => permitir.mutate(c.correo)} data-testid={`permitir-drive-${c.cuenta}`}>{permitir.isPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}Permitir Drive a los agentes</Button>
+                            : <span className="text-xs text-muted-foreground">Es de otra persona: tiene que permitirlo ella en este mismo lugar.</span>)}
+                        </li>
+                      ))}
+                    </ul>
+                    {permitir.isError && <p role="alert" className="text-sm text-destructive" data-testid="permitir-drive-error">{(permitir.error as Error).message}</p>}
+                    <label className="block space-y-1 text-sm">Cuenta
+                      <select className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={cuentaDrive} onChange={(e) => setCuentaDrive(e.target.value)} data-testid="documentos-cuenta-select">
+                        <option value="">Elige una cuenta…</option>
+                        {(cuentasDrive.data ?? []).filter((c) => c.drive).map((c) => <option key={c.cuenta} value={c.cuenta}>{c.correo || c.nombre}</option>)}
+                      </select>
+                    </label>
+                    <label className="block space-y-1 text-sm">Enlace o id de la carpeta de Drive (obligatoria)
+                      <Input value={carpeta} onChange={(e) => setCarpeta(e.target.value)} placeholder="https://drive.google.com/drive/folders/…" data-testid="documentos-carpeta" /></label>
+                  </div>
+                )}
                 {prov === "dropbox" ? (
                   <div className="space-y-2" data-testid="documentos-dropbox">
                     <p className="text-xs text-muted-foreground" data-testid="documentos-dropbox-aviso">Dropbox ya está conectado a Kawiil Central. El agente podrá leer, en solo lectura y incluyendo el contenido de los documentos, lo que cuelga de la carpeta que elijas aquí, y nada fuera de ella. Para un agente de un solo cliente elige la carpeta de ese cliente.</p>
@@ -122,7 +161,7 @@ export function DocumentosAgente({ agentes, agenteInicial }: { agentes: AgenteRe
                     )}
                     {dbxCarpeta === TODAS && <p role="note" className="text-sm text-amber-700" data-testid="documentos-dbx-todas">Este agente podrá leer los expedientes de TODOS los clientes. Úsalo solo si su trabajo es revisar a todos.</p>}
                   </div>
-                ) : (
+                ) : prov === "cuenta_google" ? null : (
                 <label className="block space-y-1 text-sm">{prov === "google" ? "Enlace o id de la carpeta de Drive" : "Id de la carpeta (carpeta_id)"}
                   <Input value={carpeta} onChange={(e) => setCarpeta(e.target.value)} placeholder={prov === "google" ? "https://drive.google.com/drive/folders/…" : "01ABCDEF…"} data-testid="documentos-carpeta" /></label>
                 )}
