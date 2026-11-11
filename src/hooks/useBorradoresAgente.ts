@@ -5,7 +5,13 @@ import type { MensajeChat, PropuestaAgente } from "../../supabase/functions/_sha
 
 // Borradores de la creación de agentes (tabla propia, solo de la persona y solo Dirección por RLS).
 // La tabla es nueva y aún no está en los tipos generados: se accede sin tipos y cada fila se valida al leerla.
-const tabla = () => (supabase as unknown as { from: (t: string) => any }).from("agent_creation_drafts");
+type Respuesta = Promise<{ data?: unknown; error: unknown }>;
+interface TablaBorradores {
+  select: (c: string) => { order: (c: string, o: { ascending: boolean }) => { limit: (n: number) => Respuesta } };
+  upsert: (f: Record<string, unknown>, o: { onConflict: string }) => Respuesta;
+  delete: () => { eq: (c: string, v: string) => Respuesta };
+}
+const tabla = () => (supabase as unknown as { from: (t: string) => TablaBorradores }).from("agent_creation_drafts");
 const CLAVE = ["agentes-borradores"];
 
 export const useBorradores = () =>
