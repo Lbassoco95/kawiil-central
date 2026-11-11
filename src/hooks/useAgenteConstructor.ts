@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { MensajeChat, Programacion, PropuestaAgente } from "../../supabase/functions/_shared/agenteConstructor";
 import type { EstadoHabilidad, Habilidad, HabilidadBorrador } from "../../supabase/functions/_shared/habilidades";
@@ -100,5 +100,32 @@ export function useCuentasAgente() {
   return useMutation({
     mutationFn: (v: { agent_id: string; activa: boolean }) => invocar<{ activa: boolean }>({ action: "cuentas_agente", ...v }).then((r) => r.activa),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ["agentes-registro"] }); },
+  });
+}
+
+// ── Drive de las cuentas de Google vinculadas (permiso opcional que cada persona concede una vez; solo lectura) ──
+export interface CuentaDrive { cuenta: string; correo: string; nombre: string; drive: boolean; propia: boolean }
+export const useCuentasDrive = (activo: boolean) =>
+  useQuery({ queryKey: ["cuentas-drive"], enabled: activo, staleTime: 15_000, queryFn: () => invocar<{ cuentas: CuentaDrive[] }>({ action: "cuentas_drive" }).then((r) => r.cuentas) });
+
+// Abre la ventana de Google con SOLO el permiso de Drive (se suma a lo ya concedido; el inicio de sesión normal no cambia) y espera el resultado.
+export function usePermitirDrive() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (correo: string) => {
+      const { data, error } = await supabase.functions.invoke("google-auth", { body: { extra: "drive", email: correo } });
+      if (error || !data?.url) throw new Error(data?.error ?? "No se pudo iniciar la autorización de Google. Inténtalo de nuevo.");
+      window.open(data.url, "google-auth", "width=600,height=700");
+      return new Promise<void>((resolve, reject) => {
+        const fin = () => { window.removeEventListener("message", alRecibir); clearTimeout(t); };
+        const alRecibir = (e: MessageEvent) => {
+          if (e.data?.type === "google-auth-success") { fin(); resolve(); }
+          else if (e.data?.type === "google-auth-error") { fin(); reject(new Error("Google no concedió el permiso de Drive.")); }
+        };
+        const t = setTimeout(() => { fin(); reject(new Error("Se agotó el tiempo. Cierra la ventana e inténtalo de nuevo.")); }, 300_000);
+        window.addEventListener("message", alRecibir);
+      });
+    },
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["cuentas-drive"] }); void qc.invalidateQueries({ queryKey: ["linked-accounts"] }); },
   });
 }

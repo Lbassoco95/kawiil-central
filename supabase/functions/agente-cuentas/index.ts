@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { encode as base64 } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { tokensIguales } from "../_shared/dropboxEquipo.ts";
 import {
@@ -20,6 +21,13 @@ import {
   refCuentaValida,
   fechaIso,
   type CuentaPublica,
+  MAX_BYTES_DRIVE,
+  MAX_ENTRADAS_DRIVE,
+  MIME_CARPETA,
+  dentroDeCarpeta,
+  entradaDrive,
+  idDriveValido,
+  tipoLegibleDrive,
 } from "../_shared/cuentasAgentes.ts";
 
 /**
@@ -32,12 +40,16 @@ import {
  *   action "correo_buscar"  → { cuenta, consulta, desde?, hasta?, limite? } → { correos }
  *   action "correo_leer"    → { cuenta, id }                              → { correo, texto, adjuntos }   (adjuntos: solo nombres)
  *   action "eventos"        → { cuenta, consulta?, desde?, hasta?, limite? } → { eventos }
+ *   action "drive_listar"   → { cuenta, limite, ref? } → { carpeta, entradas, truncado }   (Google Drive; `limite` = carpeta de la fuente, obligatoria)
+ *   action "drive_leer"     → { cuenta, limite, ref } → { nombre, mime, tamano, modificado, base64 }   (texto exportado o archivo legible, tope 8 MB)
  *
  * Seguridad:
  *   - Solo la VM: exige `X-Kawiil-Bridge-Token` (KAWIIL_BRIDGE_TOKEN, tiempo constante) además del JWT de la puerta de entrada.
  *   - Solo lectura: Gmail (messages.list/get), Calendar (events.list), Graph (messages, calendarView). Nada de enviar, responder, mover, archivar ni borrar.
  *   - Quién puede usarlo lo decide la VM por agente (config.cuentas.activa), que Dirección activa desde Kawiil Central. Aquí no hay datos de nadie hasta que se pregunta.
  *   - Lo devuelto son datos de terceros acotados (texto plano, sin HTML, con tope); nunca tokens ni credenciales IMAP.
+ *   - Drive: solo lectura (permiso drive.readonly que cada persona concede aparte) y SIEMPRE dentro de la carpeta de la fuente: antes de listar o leer se
+ *     suben los `parents` que Google devuelve hasta llegar a esa carpeta; lo que no llega (o excede el tope de consultas) se rechaza.
  *   - Se registra la acción y la cuenta; nunca el contenido ni las búsquedas.
  *
  * Secrets: KAWIIL_BRIDGE_TOKEN, GOOGLE_CLIENT_ID/SECRET, MICROSOFT_CLIENT_ID/SECRET, MICROSOFT_TENANT_ID, opcional MICROSOFT_LINKED_TENANT_ID.
@@ -139,6 +151,60 @@ serve(async (req: Request) => {
     if (!refCuentaValida(body.cuenta)) return json({ error: "Cuenta no válida." }, 400);
     const ref = body.cuenta;
     const c = await abrirCuenta(admin, ref);
+
+    if (body.action === "drive_listar" || body.action === "drive_leer") {
+      if (c.proveedor !== "google") throw new ErrorPuente(400, "Drive solo está disponible para cuentas de Google.");
+      if (!idDriveValido(body.limite)) return json({ error: "Falta la carpeta autorizada para esta fuente." }, 400);
+      const limite = body.limite;
+      const objetivo = body.ref === undefined || body.ref === "raiz" ? limite : body.ref;
+      if (!idDriveValido(objetivo)) return json({ error: "Referencia no válida." }, 400);
+      const D = "https://www.googleapis.com/drive/v3";
+      const permiso = async <T,>(f: () => Promise<T>): Promise<T> => {
+        try { return await f(); } catch (e) {
+          if (e instanceof ErrorPuente && e.codigo === "REAUTH_REQUIRED") throw new ErrorPuente(409, "Esa cuenta no ha dado permiso de Drive. Hay que permitirlo en Kawiil Central (Agentes → Documentos).", "DRIVE_PERMISO");
+          throw e;
+        }
+      };
+      const cache = new Map<string, any>();
+      const meta = (id: string) => permiso(async () => {
+        if (!cache.has(id)) cache.set(id, await get(c, `${D}/files/${encodeURIComponent(id)}?fields=id,name,mimeType,size,modifiedTime,parents&supportsAllDrives=true`));
+        return cache.get(id);
+      });
+      if (!(await dentroDeCarpeta(objetivo, limite, async (id) => ((await meta(id)).parents ?? []) as string[]))) {
+        throw new ErrorPuente(403, "Ese elemento está fuera de la carpeta autorizada para este agente.");
+      }
+      const m = await meta(objetivo);
+
+      if (body.action === "drive_listar") {
+        if (m.mimeType !== MIME_CARPETA) throw new ErrorPuente(400, "Eso no es una carpeta; usa leer.");
+        const entradas = [];
+        let pagina: string | undefined, paginas = 0;
+        do {
+          const qs = new URLSearchParams({ q: `'${objetivo}' in parents and trashed = false`, fields: "nextPageToken,files(id,name,mimeType,size,modifiedTime)", pageSize: "200", orderBy: "folder,name", supportsAllDrives: "true", includeItemsFromAllDrives: "true" });
+          if (pagina) qs.set("pageToken", pagina);
+          const r = await permiso(() => get(c, `${D}/files?${qs}`));
+          for (const f of r.files ?? []) { const e = entradaDrive(f); if (e) entradas.push(e); }
+          pagina = r.nextPageToken; paginas++;
+        } while (pagina && paginas < 4 && entradas.length < MAX_ENTRADAS_DRIVE);
+        console.log(`agente-cuentas drive_listar ${c.etiqueta} entradas=${entradas.length}`);
+        return json({ carpeta: { id: objetivo, nombre: m.name }, entradas: entradas.slice(0, MAX_ENTRADAS_DRIVE), truncado: !!pagina || entradas.length > MAX_ENTRADAS_DRIVE });
+      }
+
+      if (m.mimeType === MIME_CARPETA) throw new ErrorPuente(400, "Eso es una carpeta; usa listar.");
+      const tipo = tipoLegibleDrive(m.mimeType);
+      if (!tipo) throw new ErrorPuente(415, "Ese tipo de archivo no se puede leer (se aceptan Docs, Sheets, Slides, pdf, docx, xlsx y texto).");
+      if (!tipo.exportar && Number(m.size) > MAX_BYTES_DRIVE) throw new ErrorPuente(413, "El archivo es demasiado grande para leerlo.");
+      const url = tipo.exportar ? `${D}/files/${encodeURIComponent(objetivo)}/export?mimeType=${encodeURIComponent(tipo.exportar)}` : `${D}/files/${encodeURIComponent(objetivo)}?alt=media&supportsAllDrives=true`;
+      const r = await permiso(async () => {
+        const x = await fetch(url, { headers: { Authorization: `Bearer ${c.token}` } });
+        if (x.status === 401 || x.status === 403) throw new ErrorPuente(409, "x", "REAUTH_REQUIRED");
+        if (!x.ok) { console.error("agente-cuentas drive contenido", x.status); throw new ErrorPuente(x.status === 404 ? 404 : 502, x.status === 404 ? "No se encontró ese archivo." : "No se pudo descargar el archivo."); }
+        return new Uint8Array(await x.arrayBuffer());
+      });
+      if (r.length > MAX_BYTES_DRIVE) throw new ErrorPuente(413, "El archivo es demasiado grande para leerlo.");
+      console.log(`agente-cuentas drive_leer ${c.etiqueta} bytes=${r.length}`);
+      return json({ nombre: m.name, mime: tipo.mime, tamano: r.length, modificado: m.modifiedTime ?? null, base64: base64(r) });
+    }
 
     if (body.action === "correo_buscar") {
       if (!c.correo) throw new ErrorPuente(409, "Esa cuenta no tiene el correo activado.");

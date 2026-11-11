@@ -145,3 +145,55 @@ export function cuentaPublica(f: Record<string, unknown>): CuentaPublica | null 
     correo_activo: f.mail_enabled !== false, calendario_activo: f.calendar_enabled !== false,
   };
 }
+
+// ── Google Drive de una cuenta vinculada (solo lectura, acotado a UNA carpeta por fuente) ───────────────────────────────────
+export const MIME_CARPETA = "application/vnd.google-apps.folder";
+export const MAX_BYTES_DRIVE = 8 * 1024 * 1024;
+export const MAX_ENTRADAS_DRIVE = 400;
+export const idDriveValido = (v: unknown): v is string => typeof v === "string" && /^[A-Za-z0-9_\-]{5,200}$/.test(v);
+
+// Archivos nativos de Google: se exportan a texto. Lo demás se descarga tal cual si es de un tipo legible.
+const EXPORTA: Record<string, string> = {
+  "application/vnd.google-apps.document": "text/plain",
+  "application/vnd.google-apps.spreadsheet": "text/csv",
+  "application/vnd.google-apps.presentation": "text/plain",
+};
+const LEIBLES = new Set([
+  "application/pdf", "text/plain", "text/csv", "text/markdown",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+]);
+// null = no se puede leer. Si hay exportación, es el tipo al que se exporta; si no, el propio tipo.
+export function tipoLegibleDrive(mime: unknown): { exportar: string | null; mime: string } | null {
+  if (typeof mime !== "string") return null;
+  if (EXPORTA[mime]) return { exportar: EXPORTA[mime], mime: EXPORTA[mime] };
+  return LEIBLES.has(mime) ? { exportar: null, mime } : null;
+}
+
+export interface EntradaDrive { id: string; nombre: string; tipo: "carpeta" | "archivo"; tamano: number | null; modificado: string | null }
+export function entradaDrive(f: any): EntradaDrive | null {
+  if (!f || typeof f !== "object" || !idDriveValido(f.id)) return null;
+  const size = Number(f.size);
+  return {
+    id: f.id, nombre: recorta(f.name, 200) || "(sin nombre)", tipo: f.mimeType === MIME_CARPETA ? "carpeta" : "archivo",
+    tamano: Number.isFinite(size) && size >= 0 && f.size !== undefined ? size : null, modificado: typeof f.modifiedTime === "string" ? f.modifiedTime : null,
+  };
+}
+
+// ¿`id` es la carpeta límite o cuelga de ella? Sube por los `parents` que Google devuelve para cada elemento (nunca por una ruta que mande
+// quien pregunta). Acota el número de consultas: si no llega al límite dentro del tope, NO está dentro.
+export async function dentroDeCarpeta(id: string, limite: string, padresDe: (id: string) => Promise<string[]>, maxConsultas = 25): Promise<boolean> {
+  if (!idDriveValido(id) || !idDriveValido(limite)) return false;
+  if (id === limite) return true;
+  const vistos = new Set<string>([id]);
+  let pendientes = [id], consultas = 0;
+  while (pendientes.length && consultas < maxConsultas) {
+    const actual = pendientes.shift()!;
+    consultas++;
+    for (const p of await padresDe(actual)) {
+      if (p === limite) return true;
+      if (!vistos.has(p)) { vistos.add(p); pendientes.push(p); }
+    }
+  }
+  return false;
+}

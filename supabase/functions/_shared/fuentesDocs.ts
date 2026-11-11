@@ -3,8 +3,11 @@
 // (kawiil-agents/server/docs_sources.py) lee solo dentro de la carpeta raíz de cada fuente, en solo lectura.
 // Aquí solo se guardan identificadores: ninguna credencial pasa por Kawiil.
 
-export type ProveedorDocs = "google" | "microsoft" | "dropbox";
-export interface FuenteDocs { proveedor: ProveedorDocs; etiqueta: string; carpeta_id: string; drive_id?: string; tenant_id?: string }
+// «cuenta_google»: el Drive de una cuenta de Google VINCULADA en Kawiil Central (la persona lo autorizó); `cuenta` es el id de esa cuenta y `carpeta_id` la
+// carpeta a la que se acota el agente (obligatoria). «google» es el Drive de un cliente compartido con la identidad de la VM.
+export type ProveedorDocs = "google" | "microsoft" | "dropbox" | "cuenta_google";
+export interface FuenteDocs { proveedor: ProveedorDocs; etiqueta: string; carpeta_id: string; drive_id?: string; tenant_id?: string; cuenta?: string }
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export type ResultadoFuentes = { ok: true; fuentes: FuenteDocs[] } | { ok: false; errores: string[] };
 export const MAX_FUENTES_DOCS = 10;
 
@@ -53,6 +56,13 @@ export function validarFuentesDocs(raw: unknown): ResultadoFuentes {
       if (carpetas.has(`dropbox:${carpeta}`)) { errores.push(`«${etiqueta}»: esa carpeta de Dropbox ya está en otra fuente.`); return; }
       etiquetas.add(etiqueta.toLowerCase()); carpetas.add(`dropbox:${carpeta}`);
       fuentes.push({ proveedor: "dropbox", etiqueta, carpeta_id: carpeta });
+    } else if (o.proveedor === "cuenta_google") {
+      const carpeta = idDeEnlaceGoogle(o.carpeta_id), cuenta = typeof o.cuenta === "string" ? o.cuenta.trim().toLowerCase() : "";
+      if (!UUID.test(cuenta)) { errores.push(`«${etiqueta}»: elige la cuenta de Google.`); return; }
+      if (!ID.test(carpeta)) { errores.push(`«${etiqueta}»: el enlace o id de la carpeta de Drive no es válido.`); return; }
+      if (carpetas.has(`cuenta_google:${cuenta}:${carpeta}`)) { errores.push(`«${etiqueta}»: esa carpeta ya está en otra fuente.`); return; }
+      etiquetas.add(etiqueta.toLowerCase()); carpetas.add(`cuenta_google:${cuenta}:${carpeta}`);
+      fuentes.push({ proveedor: "cuenta_google", etiqueta, carpeta_id: carpeta, cuenta });
     } else {
       errores.push(`Fuente ${n}: proveedor no válido.`);
     }
