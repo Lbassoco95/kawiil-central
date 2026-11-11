@@ -223,3 +223,7 @@ project_id = "qppfampapbxdgednkofc"
   # Seguimientos del Analista: se autentica con su propio secreto (x-marketing-secret) y lo invoca pg_cron/pg_net sin JWT.
   [functions.marketing-seguimientos]
     verify_jwt = false
+
+  # Resultados de Metricool (simulacro, solo lectura): se autentica con su propio secreto (x-marketing-secret), sin JWT. No escribe datos.
+  [functions.marketing-resultados]
+    verify_jwt = false
