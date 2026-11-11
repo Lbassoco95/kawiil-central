@@ -1,7 +1,7 @@
 // Oficina de agentes de Marketing (fase 1, solo lectura): qué personaje se dibuja y con qué estado, según los datos reales.
 // Funciones puras: reciben los agentes, sus tareas y la hora; no leen ni escriben nada.
 import {
-  cumplimiento, nombreAgente, senalAgente, ultimaTareaDe,
+  cuandoRelativo, cumplimiento, nombreAgente, senalAgente, ultimaTareaDe,
   type AgenteRegistro, type Cumplimiento, type Senal, type TareaMarketing,
 } from "./agentesRegistroLogica";
 
@@ -9,6 +9,8 @@ export type Animacion = "escribiendo" | "leyendo" | "descansando" | "error" | "s
 export type ColorPastilla = "verde" | "amarillo" | "rojo" | "gris";
 
 // Una corrida de estos agentes dura segundos: durante los 30 minutos siguientes el personaje «acaba de trabajar».
+// Solo cuenta la corrida o respuesta REAL (completed_at de su tarea). El latido no cuenta: significa «sigo vivo» y lo puede refrescar cualquier
+// proceso (el 11 nov los cuatro tenían el mismo latido al microsegundo y todos aparecían «acaba de trabajar» con su última corrida de hace 8 h).
 export const VENTANA_RECIENTE_MS = 30 * 60_000;
 
 // Aspecto de cada personaje (dibujado aparte; no se usa arte de terceros) y su sitio en la oficina.
@@ -32,21 +34,33 @@ export interface EstadoVisual {
 export function estadoVisual(a: AgenteRegistro, ultima: TareaMarketing | undefined, ahora: Date, pensando = false): EstadoVisual {
   const senal = senalAgente(a, ahora);
   const cumple = cumplimiento(a, ultima, ahora);
-  const ref = [ultima?.completed_at, a.last_heartbeat].filter((x): x is string => !!x).sort().at(-1) ?? null;
-  const reciente = ref !== null && ahora.getTime() - new Date(ref).getTime() <= VENTANA_RECIENTE_MS;
+  // Excepción: el Vigía no deja tarea cuando todo está bien, solo actualiza su latido; para él el latido ES la revisión.
+  const marca = a.name === "marketing_vigia" ? [ultima?.completed_at, a.last_heartbeat].filter((x): x is string => !!x).sort().at(-1) : ultima?.completed_at;
+  const reciente = !!marca && ahora.getTime() - new Date(marca).getTime() <= VENTANA_RECIENTE_MS;
+  const cuando = ultima?.completed_at ? `Su última corrida fue ${cuandoRelativo(ultima.completed_at, ahora)}.` : a.last_heartbeat ? `Su último latido fue ${cuandoRelativo(a.last_heartbeat, ahora)}.` : "";
   const base = { senal, cumple };
   if (pensando) return { ...base, animacion: "pensando", etiqueta: "Pensando", color: "amarillo", burbuja: null, detalle: "Está preparando una respuesta." };
 
   if (senal === "disponible") {
     const atencion = cumple.estado === "no_cumple";
-    return { ...base, animacion: reciente ? aspectoDe(a).trabajo : "descansando", etiqueta: reciente ? "Acaba de responder" : atencion ? "Atención" : "Disponible", color: atencion ? "amarillo" : "verde", burbuja: atencion ? "!" : null, detalle: "Responde cuando se le pregunta." };
+    return { ...base, animacion: reciente ? aspectoDe(a).trabajo : "descansando", etiqueta: reciente ? "Acaba de responder" : atencion ? "Atención" : "Disponible", color: atencion ? "amarillo" : "verde", burbuja: atencion ? "!" : null, detalle: reciente ? "Acaba de responder una pregunta." : `Responde cuando se le pregunta.${cuando ? ` Su última respuesta fue ${cuandoRelativo(ultima?.completed_at ?? a.last_heartbeat, ahora)}.` : ""}` };
   }
   if (senal === "sin_latido") return { ...base, animacion: "sin_datos", etiqueta: "Sin datos", color: "gris", burbuja: null, detalle: "Todavía no ha dejado ninguna corrida." };
   if (senal === "con_error") return { ...base, animacion: "error", etiqueta: "Con error", color: "rojo", burbuja: "!", detalle: "Su última corrida terminó con error." };
   if (senal === "atrasado") return { ...base, animacion: "error", etiqueta: "Atrasado", color: "rojo", burbuja: "!", detalle: "Lleva más de 26 horas sin correr." };
   const atencion = cumple.estado === "no_cumple";
   if (reciente) return { ...base, animacion: aspectoDe(a).trabajo, etiqueta: atencion ? "Atención" : "Acaba de trabajar", color: atencion ? "amarillo" : "verde", burbuja: atencion ? "!" : null, detalle: "Corrió hace poco." };
-  return { ...base, animacion: "descansando", etiqueta: atencion ? "Atención" : "Al día", color: atencion ? "amarillo" : "verde", burbuja: atencion ? "!" : null, detalle: "Esperando su próxima corrida." };
+  return { ...base, animacion: "descansando", etiqueta: atencion ? "Atención" : "Al día", color: atencion ? "amarillo" : "verde", burbuja: atencion ? "!" : null, detalle: `Esperando su próxima corrida. ${cuando}`.trim() };
+}
+
+// Los resúmenes guardados antes del 11 nov decían «1 cifras sin verificar; 8 consultas de datos». Se muestran con singular/plural y sin jerga;
+// el resto de los resúmenes (colchón, informe) ya se entienden y pasan tal cual.
+export function resumenLegible(resumen: string | null | undefined): string {
+  if (!resumen) return "";
+  return resumen
+    .replace(/(\d+) cifras? sin verificar/gi, (_m, n: string) => `${n} ${Number(n) === 1 ? "cifra" : "cifras"} sin comprobar`)
+    .replace(/cifras verificadas/gi, "cifras comprobadas contra la base")
+    .replace(/(\d+) consultas? de datos/gi, (_m, n: string) => `consultó ${n} ${Number(n) === 1 ? "fuente" : "fuentes"} de datos`);
 }
 
 export interface PersonajeOficina {

@@ -3,7 +3,7 @@ import type { AccionSeguimiento, ConsultaAnalista, FrecuenciaSeguimiento, Respue
 import { Pastilla, Vacio } from "./marketingUi";
 import { TextoAnalista } from "./TextoAnalista";
 import { cuandoRelativo, ESTADO_TAREA, type AgenteRegistro, type TareaMarketing } from "./agentesRegistroLogica";
-import { ALTO, ANCHO, personajeEn, personajes, type Animacion, type PersonajeOficina } from "./oficinaAgentesLogica";
+import { ALTO, ANCHO, personajeEn, personajes, resumenLegible, type Animacion, type PersonajeOficina } from "./oficinaAgentesLogica";
 
 export type EstadoCarga = "cargando" | "error" | "ok";
 
@@ -120,8 +120,11 @@ export function OficinaAgentes({ agentes, tareasMarketing, estadoAgentes, estado
             <Pastilla color={elegido.estado.color}>{elegido.estado.etiqueta}</Pastilla>
           </div>
           <dl className="space-y-1 text-sm">
-            <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Última corrida</dt><dd data-testid="oficina-ultima">{elegido.ultima?.completed_at ? cuandoRelativo(elegido.ultima.completed_at, now) : "—"}</dd></div>
-            <div className="flex justify-between gap-3"><dt className="shrink-0 text-muted-foreground">Resultado</dt><dd className="text-right" data-testid="oficina-resultado">{elegido.ultima?.result_summary ?? (elegido.estado.senal === "al_dia" ? "Sin novedad" : "—")}</dd></div>
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted-foreground">{elegido.ultima?.completed_at ? "Última corrida" : "Último latido"}</dt>
+              <dd data-testid="oficina-ultima">{elegido.ultima?.completed_at ? cuandoRelativo(elegido.ultima.completed_at, now) : agentes.find((a) => a.id === elegido.id)?.last_heartbeat ? cuandoRelativo(agentes.find((a) => a.id === elegido.id)?.last_heartbeat, now) : "—"}</dd>
+            </div>
+            <div className="flex justify-between gap-3"><dt className="shrink-0 text-muted-foreground">Resultado</dt><dd className="text-right" data-testid="oficina-resultado">{resumenLegible(elegido.ultima?.result_summary) || (elegido.estado.senal === "al_dia" ? "Sin novedad" : "—")}</dd></div>
             <div className="flex justify-between gap-3"><dt className="shrink-0 text-muted-foreground">Objetivo</dt><dd className="text-right">{String(agentes.find((a) => a.id === elegido.id)?.config?.objetivo ?? "—")}</dd></div>
           </dl>
           {elegido.estado.cumple.estado !== "sin_datos" && (
@@ -133,11 +136,11 @@ export function OficinaAgentes({ agentes, tareasMarketing, estadoAgentes, estado
             <p className="mb-1 text-xs font-medium text-muted-foreground">Últimas corridas</p>
             {estadoTareas === "error" ? <p className="text-xs text-muted-foreground">No pudimos leer el historial.</p>
               : estadoTareas === "cargando" ? <p className="text-xs text-muted-foreground">Leyendo historial…</p>
-              : elegido.historial.length === 0 ? <p className="text-xs text-muted-foreground" data-testid="oficina-sin-historial">Todavía no hay corridas registradas.</p> : (
+              : elegido.historial.length === 0 ? <p className="text-xs text-muted-foreground" data-testid="oficina-sin-historial">{elegido.clave === "marketing_vigia" ? "Solo deja registro cuando no encuentra la corrida de las 7:00; si todo está bien, únicamente actualiza su latido." : "Todavía no hay corridas registradas."}</p> : (
                 <ul className="divide-y divide-border/40 text-xs" data-testid="oficina-historial">
                   {elegido.historial.map((t) => (
                     <li key={t.id} className="flex items-start justify-between gap-2 py-1.5">
-                      <span className="min-w-0"><span className="block">{cuandoRelativo(t.completed_at, now)}</span><span className="block text-muted-foreground">{t.result_summary ?? ""}</span></span>
+                      <span className="min-w-0"><span className="block">{cuandoRelativo(t.completed_at, now)}</span><span className="block text-muted-foreground">{resumenLegible(t.result_summary)}</span></span>
                       <Pastilla color={COLOR_TAREA(t.status)}>{ESTADO_TAREA[t.status]?.etiqueta ?? t.status}</Pastilla>
                     </li>
                   ))}
@@ -231,6 +234,7 @@ function PreguntarAnalista({ analista, now, alPensar }: { analista: AnalistaProp
               : <Pastilla color="rojo">Cifras sin verificar</Pastilla>}
             {!resp.verificada && (resp.no_verificadas?.length ?? 0) > 0 && <span className="text-muted-foreground" data-testid="analista-no-verificadas">Revisa: {resp.no_verificadas!.join(", ")}</span>}
           </div>
+          {!resp.verificada && <p className="text-xs text-muted-foreground" data-testid="analista-ayuda-verificar">«Sin verificar» quiere decir que un número del texto no aparece en los datos que leyó el Analista (por ejemplo, un cálculo propio o el periodo consultado). Confirma esos números antes de usarlos.</p>}
           {(resp.fuentes?.length ?? 0) > 0 && (
             <p className="text-xs text-muted-foreground" data-testid="analista-fuentes">
               Fuentes: {resp.fuentes!.map((f) => `${f.herramienta}${f.corte ? ` (corte ${f.corte.slice(0, 10)})` : ""}`).join(" · ")}

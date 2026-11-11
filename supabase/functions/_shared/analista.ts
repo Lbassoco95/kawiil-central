@@ -23,7 +23,7 @@ export const HERRAMIENTAS: Herramienta[] = [
   { name: "semaforo_semanas", description: "Semáforo semanal por red: piezas, promedio calculado, color calculado y del Calendario Maestro, y motivo si está en gris.", input_schema: obj({ semanas: SEMANAS, red: RED }) },
   { name: "casos_abiertos", description: "Casos abiertos del módulo (investigaciones, datos sospechosos, colchón bajo, fallas de monitoreo).", input_schema: obj() },
   { name: "informe_hoy", description: "Último informe diario: cuántas piezas faltan por programar (con su código, fecha, hora y redes), con error o con estado desconocido.", input_schema: obj() },
-  { name: "piezas_proximas", description: "Piezas del Calendario Maestro en los próximos días: código, fecha, pilar, formato y en cuántas redes ya se publicó.", input_schema: obj({ dias: { type: "integer", minimum: 1, maximum: 60, description: "Próximos días (por defecto 14)." } }) },
+  { name: "piezas_proximas", description: "Piezas del Calendario Maestro en los próximos días: código, fecha, pilar, formato y en cuántas redes ya se publicó.", input_schema: obj({ dias: { type: "integer", minimum: 1, maximum: 60, description: "Próximos días (por defecto 60, que es también el máximo)." } }) },
   { name: "reglas_vigentes", description: "Reglas activas del módulo con sus parámetros (por ejemplo, los umbrales del colchón y del semáforo).", input_schema: obj() },
   { name: "cobertura_fuentes", description: "Desde y hasta cuándo hay datos de cada red y fuente. Úsala para avisar de límites antes de comparar periodos.", input_schema: obj() },
 ];
@@ -52,6 +52,21 @@ export interface Fuente { herramienta: string; filas: number | null; corte: stri
 export interface ResultadoConsulta {
   ok: boolean; respuesta: string; verificada: boolean; no_verificadas: string[]; fuentes: Fuente[];
   tokens: { entrada: number; salida: number }; pasos: number; motivo?: string;
+}
+
+// Ventana que la base aplica de verdad aunque el modelo no la pida (valores por defecto y topes de mk_analista_datos). La respuesta puede decir
+// «en los últimos 90 días» o «las últimas 8 semanas»: eso describe la consulta, no es una cifra de resultados y no debe marcarse como sin verificar.
+const acotar = (v: unknown, defecto: number, min: number, max: number): number => {
+  const n = typeof v === "number" && Number.isFinite(v) ? Math.trunc(v) : defecto;
+  return Math.min(Math.max(n, min), max);
+};
+export function ventanaEfectiva(herramienta: string, entrada: Record<string, unknown>): Record<string, number> {
+  switch (herramienta) {
+    case "resultados_por_formato": case "resultados_por_pilar": return { dias: acotar(entrada.dias, 90, 1, 365) };
+    case "piezas_proximas": return { dias: Math.min(acotar(entrada.dias, 90, 1, 365), 60) };
+    case "resultados_semanales": case "semaforo_semanas": return { semanas: acotar(entrada.semanas, 8, 1, 26) };
+    default: return {};
+  }
 }
 
 // ── Validación de la pregunta ───────────────────────────────────────────────────────────────────────────────────────
@@ -143,6 +158,7 @@ export async function correrConsulta(a: { pregunta: string; herramientas: Herram
         if (!fn) { resultados.push({ type: "tool_result", tool_use_id: u.id, content: "Herramienta no permitida.", is_error: true }); continue; }
         try {
           for (const [k, v] of Object.entries(u.input ?? {})) if (typeof v === "number" && Number.isFinite(v)) parametros[`${u.id}_${k}`] = v;
+          for (const [k, v] of Object.entries(ventanaEfectiva(u.name, u.input ?? {}))) parametros[`${u.id}_${k}_efectivo`] = v;
           const salida = await fn(u.input ?? {});
           salidas.push(salida);
           const corte = (salida as { corte?: unknown } | null)?.corte;
@@ -162,6 +178,13 @@ export async function correrConsulta(a: { pregunta: string; herramientas: Herram
   const respuesta = texto.slice(0, MAX_RESPUESTA);
   const no_verificadas = verificarCifras(respuesta, [...salidas, { parametros }]);
   return base({ ok: true, respuesta, verificada: no_verificadas.length === 0, no_verificadas });
+}
+
+// Texto corto que queda en el registro de agentes (agent_tasks.result_summary): lo lee Dirección, no un programador.
+export function resumenCorrida(r: Pick<ResultadoConsulta, "verificada" | "no_verificadas" | "fuentes">): string {
+  const n = r.no_verificadas.length, f = r.fuentes.length;
+  const cifras = r.verificada ? "Cifras comprobadas contra la base" : `${n} ${n === 1 ? "cifra" : "cifras"} sin comprobar`;
+  return `${cifras}; consultó ${f} ${f === 1 ? "fuente" : "fuentes"} de datos`;
 }
 
 // ── Topes de uso ────────────────────────────────────────────────────────────────────────────────────────────────────
