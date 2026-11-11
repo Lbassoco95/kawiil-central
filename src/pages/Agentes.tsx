@@ -27,6 +27,7 @@ export default function Agentes() {
   useEffect(() => { const t = setInterval(() => setReloj(new Date()), 60_000); return () => clearInterval(t); }, []);
   const [demo, setDemo] = useState(false);
   const [pestana, setPestana] = useState("oficina");
+  const [conectar, setConectar] = useState<string | null>(null);   // agente recién creado al que se le abre Documentos / Programar / Instrucciones
   const [seguir, setSeguir] = useState<string | null>(null);   // solicitud que se abre en Seguimiento al venir de Instrucciones
   const [ambito, setAmbito] = useState<AmbitoOficina>("todos");
   const reales = useMemo(() => agentesDelModulo(agentes.data ?? []), [agentes.data]);
@@ -78,12 +79,12 @@ export default function Agentes() {
               estadoAgentes={agentes.isError ? "error" : agentes.isLoading ? "cargando" : "ok"}
               estadoTareas={tareas.isError ? "error" : tareas.isLoading ? "cargando" : "ok"} />
           </TabsContent>
-          <TabsContent value="crear" className="mt-4"><ConstructorAgentes /></TabsContent>
-          <TabsContent value="instrucciones" className="mt-4"><InstruirAgente agentes={reales} onVerSeguimiento={(id) => { setSeguir(id ?? null); setPestana("seguimiento"); }} /></TabsContent>
+          <TabsContent value="crear" className="mt-4"><ConstructorAgentes agentes={reales} onIr={(p, id) => { setConectar(id); setPestana(p); }} /></TabsContent>
+          <TabsContent value="instrucciones" className="mt-4"><InstruirAgente key={conectar ?? "instruir"} agenteInicial={conectar ?? undefined} agentes={reales} onVerSeguimiento={(id) => { setSeguir(id ?? null); setPestana("seguimiento"); }} /></TabsContent>
           <TabsContent value="seguimiento" className="mt-4"><SeguimientoAgentes key={seguir ?? "lista"} ahora={reloj} seleccionInicial={seguir} /></TabsContent>
-          <TabsContent value="documentos" className="mt-4"><DocumentosAgente agentes={reales} /></TabsContent>
+          <TabsContent value="documentos" className="mt-4"><DocumentosAgente key={conectar ?? "docs"} agenteInicial={conectar ?? undefined} agentes={reales} /></TabsContent>
           <TabsContent value="ensenar" className="mt-4"><EnsenarAgente agentes={reales} tareas={tareas.data ?? []} ahora={reloj} /></TabsContent>
-          <TabsContent value="programar" className="mt-4"><ProgramarAgente agentes={reales} /></TabsContent>
+          <TabsContent value="programar" className="mt-4"><ProgramarAgente key={conectar ?? "prog"} agenteInicial={conectar ?? undefined} agentes={reales} /></TabsContent>
         </Tabs>
       </div>
     </AppLayout>

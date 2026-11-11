@@ -24,9 +24,9 @@ export function resumenProgramacion(a: AgenteRegistro): string {
   return "Sin programar";
 }
 
-export function ProgramarAgente({ agentes }: { agentes: AgenteRegistro[] }) {
+export function ProgramarAgente({ agentes, agenteInicial }: { agentes: AgenteRegistro[]; agenteInicial?: string }) {
   const lista = agentes.filter(programable);
-  const [agenteId, setAgenteId] = useState("");
+  const [agenteId, setAgenteId] = useState(agenteInicial ?? "");
   const agente = lista.find((a) => a.id === agenteId);
   const [activa, setActiva] = useState(false);
   const [hora, setHora] = useState("08:00");

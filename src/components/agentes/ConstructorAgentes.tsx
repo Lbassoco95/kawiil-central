@@ -6,7 +6,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { useChatConstructor, useCrearAgente, type AgenteCreado } from "@/hooks/useAgenteConstructor";
 import { useBorradores, useEliminarBorrador, useGuardarBorrador } from "@/hooks/useBorradoresAgente";
 import { guardable, type Borrador } from "@/lib/agentes/borradores";
-import { cuandoRelativo } from "@/lib/agentes/registro";
+import { cuandoRelativo, type AgenteRegistro } from "@/lib/agentes/registro";
+import { useCuentasAgente } from "@/hooks/useAgenteConstructor";
+import { pasosDeConexion } from "@/lib/agentes/conexion";
 import { AVISO_SECRETO, CADENCIAS, FUENTES_KAWIIL, pareceSecreto, type MensajeChat, type PropuestaAgente } from "../../../supabase/functions/_shared/agenteConstructor";
 
 // Chat especializado para crear agentes (solo Dirección). El chat propone; nada se crea hasta que la persona pulsa «Crear agente».
@@ -73,9 +75,32 @@ function Borradores({ lista, onContinuar, onEliminar, eliminando }: { lista: Bor
   );
 }
 
+// Después de crear: lo que le falta al agente para trabajar (lee su configuración real). Cada paso lleva a la pestaña con el agente ya elegido.
+function ConectarAgente({ agente, creado, onIr }: { agente?: AgenteRegistro; creado: AgenteCreado; onIr?: (pestana: string, agenteId: string) => void }) {
+  const cuentas = useCuentasAgente();
+  const pasos = pasosDeConexion(agente);
+  return (
+    <div className="space-y-2" data-testid="conectar-agente">
+      <p className="font-medium">Conecta a {creado.display_name} para que pueda trabajar</p>
+      <p className="text-xs text-muted-foreground">Ahora está en reposo y solo conoce su descripción. Su señal en la Oficina aparece en unos minutos. Cada paso es opcional y puedes volver cuando quieras.</p>
+      <ul className="space-y-2">
+        {pasos.map((p) => (
+          <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/50 p-2" data-testid={`paso-${p.id}`}>
+            <span className="min-w-0 flex-1"><span aria-hidden>{p.hecho ? "✅" : "⬜"} </span><strong>{p.titulo}</strong><span className="block text-xs text-muted-foreground">{p.detalle}</span></span>
+            {p.id === "cuentas"
+              ? <Button size="sm" variant={p.hecho ? "outline" : "default"} disabled={cuentas.isPending || !agente} onClick={() => cuentas.mutate({ agent_id: creado.id, activa: !p.hecho })} data-testid="paso-cuentas-boton">{p.hecho ? "Quitar" : "Activar"}</Button>
+              : <Button size="sm" variant={p.hecho ? "outline" : "default"} onClick={() => onIr?.(p.pestana, creado.id)} data-testid={`ir-${p.id}`}>{p.hecho ? "Revisar" : p.boton}</Button>}
+          </li>
+        ))}
+      </ul>
+      {cuentas.isError && <p role="alert" className="text-sm text-destructive">{(cuentas.error as Error).message}</p>}
+    </div>
+  );
+}
+
 const nuevoId = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (c) => (Number(c) ^ (Math.random() * 16) >> (Number(c) / 4)).toString(16)));
 
-export function ConstructorAgentes({ onCreado }: { onCreado?: (a: AgenteCreado) => void }) {
+export function ConstructorAgentes({ onCreado, agentes = [], onIr }: { onCreado?: (a: AgenteCreado) => void; agentes?: AgenteRegistro[]; onIr?: (pestana: string, agenteId: string) => void }) {
   const [mensajes, setMensajes] = useState<MensajeChat[]>([]);
   const [texto, setTexto] = useState("");
   const [propuesta, setPropuesta] = useState<PropuestaAgente | null>(null);
@@ -160,10 +185,13 @@ export function ConstructorAgentes({ onCreado }: { onCreado?: (a: AgenteCreado) 
       </div>
       {propuesta && <TarjetaPropuesta p={propuesta} onCrear={confirmar} creando={crear.isPending} error={crear.isError ? (crear.error as Error).message : null} />}
       {creado && (
-        <div className="zen-glass flex flex-wrap items-center gap-3 rounded-2xl p-4 text-sm" data-testid="constructor-creado" role="status">
-          <CheckCircle2 className="h-5 w-5 text-primary" />
-          <span><strong>{creado.display_name}</strong> quedó en el registro de agentes, en reposo. Ya puedes darle instrucciones en la pestaña «Instrucciones».</span>
-          <Button variant="outline" size="sm" onClick={nuevo}>Crear otro</Button>
+        <div className="zen-glass space-y-3 rounded-2xl p-4 text-sm" data-testid="constructor-creado" role="status">
+          <div className="flex flex-wrap items-center gap-3">
+            <CheckCircle2 className="h-5 w-5 text-primary" />
+            <span><strong>{creado.display_name}</strong> quedó en el registro de agentes, en reposo.</span>
+            <Button variant="outline" size="sm" onClick={nuevo}>Crear otro</Button>
+          </div>
+          <ConectarAgente agente={agentes.find((a) => a.id === creado.id)} creado={creado} onIr={onIr} />
         </div>
       )}
     </div>
