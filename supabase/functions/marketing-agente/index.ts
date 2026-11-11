@@ -7,7 +7,7 @@
 //   MARKETING_AGENTE_MAX_TOKENS_MES.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import {
-  correrConsulta, evaluarLimites, inicioDiaCDMX, inicioMesCDMX, leerLimites, MODELO_POR_DEFECTO, validarPregunta,
+  correrConsulta, resumenCorrida, evaluarLimites, inicioDiaCDMX, inicioMesCDMX, leerLimites, MODELO_POR_DEFECTO, validarPregunta,
   type ResultadoConsulta,
 } from "../_shared/analista.ts";
 import { herramientasDe, llmAnthropic } from "../_shared/analista_servidor.ts";
@@ -105,7 +105,7 @@ Deno.serve(async (req) => {
   // 6) Tarea y latido en el registro de agentes. Un fallo aquí no tumba la respuesta, pero no se calla: queda en el registro de la función.
   const { error: errRegistro } = await db.rpc("mk_registrar_corrida", {
     p_agente: AGENTE, p_estado: ok ? "completed" : "error", p_titulo: `Pregunta ${inicioDiaCDMX(ahora).slice(0, 10)}`,
-    p_resumen: ok ? `${res!.verificada ? "cifras verificadas" : `${res!.no_verificadas.length} cifras sin verificar`}; ${res!.fuentes.length} consultas de datos` : "no se pudo responder",
+    p_resumen: ok ? resumenCorrida(res!) : "no se pudo responder",
     p_resultado: { herramientas: (res?.fuentes ?? []).map((f) => f.herramienta), tokens: res?.tokens ?? null, verificada: ok ? res!.verificada : null }, p_inicio: inicio,
   });
   if (errRegistro) console.error("marketing-agente: no se pudo registrar la corrida", errRegistro.message);

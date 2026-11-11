@@ -147,3 +147,46 @@ test("un número que el agente pidió como parámetro (ventana de 90 días) no s
   const r = await correrConsulta({ pregunta: "¿Cómo va el colchón?", herramientas: { colchon_actual: async () => COLCHON } as never, llm: llm as never });
   assert.deepEqual(r.no_verificadas, []); assert.equal(r.verificada, true);
 });
+
+// ── Ventana efectiva (la «cifra sin verificar: 90» del 5 nov era la ventana de 90 días que la base usó por defecto) ────────────────
+import { resumenCorrida, ventanaEfectiva } from "./analista.ts";
+
+test("ventanaEfectiva: valores por defecto, topes y herramientas sin ventana", () => {
+  assert.deepEqual(ventanaEfectiva("resultados_por_pilar", {}), { dias: 90 });
+  assert.deepEqual(ventanaEfectiva("resultados_por_formato", { dias: 30 }), { dias: 30 });
+  assert.deepEqual(ventanaEfectiva("resultados_por_formato", { dias: 9999 }), { dias: 365 });
+  assert.deepEqual(ventanaEfectiva("piezas_proximas", {}), { dias: 60 });
+  assert.deepEqual(ventanaEfectiva("resultados_semanales", {}), { semanas: 8 });
+  assert.deepEqual(ventanaEfectiva("semaforo_semanas", { semanas: 100 }), { semanas: 26 });
+  assert.deepEqual(ventanaEfectiva("colchon_actual", {}), {});
+});
+
+test("«últimos 90 días» sin pedir ventana ya no se marca como cifra sin verificar", async () => {
+  const herr: Herramientas = { resultados_por_pilar: async () => ({ herramienta: "resultados_por_pilar", corte: "2026-11-05T17:00:00Z", datos: [{ red: "facebook", grupo: "Identidad", piezas: 3, valor_promedio: 44.3 }] }) };
+  const { llm } = guion(usa(["resultados_por_pilar", {}]), texto("Por pilar (resultados_por_pilar, últimos 90 días), Identidad tiene alcance promedio de 44.3 con 3 piezas."));
+  const r = await correrConsulta({ pregunta: "¿cómo van los pilares?", herramientas: herr, llm });
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.no_verificadas, []);
+  assert.equal(r.verificada, true);
+});
+
+test("una cifra inventada SIGUE marcándose aunque la ventana por defecto esté permitida", async () => {
+  const herr: Herramientas = { resultados_por_pilar: async () => ({ herramienta: "resultados_por_pilar", corte: "2026-11-05T17:00:00Z", datos: [{ piezas: 3, valor_promedio: 44.3 }] }) };
+  const { llm } = guion(usa(["resultados_por_pilar", {}]), texto("En los últimos 90 días el alcance promedio fue de 51.7."));
+  const r = await correrConsulta({ pregunta: "¿y el alcance?", herramientas: herr, llm });
+  assert.deepEqual(r.no_verificadas, ["51.7"]);
+  assert.equal(r.verificada, false);
+});
+
+test("una ventana que NO es la efectiva se sigue marcando (no se abre un hueco)", async () => {
+  const herr: Herramientas = { resultados_por_pilar: async () => ({ herramienta: "resultados_por_pilar", corte: "2026-11-05T17:00:00Z", datos: [{ piezas: 3, valor_promedio: 44.3 }] }) };
+  const { llm } = guion(usa(["resultados_por_pilar", { dias: 30 }]), texto("En los últimos 90 días el alcance fue 44.3."));
+  const r = await correrConsulta({ pregunta: "¿y el alcance?", herramientas: herr, llm });
+  assert.deepEqual(r.no_verificadas, ["90"]);
+});
+
+test("resumenCorrida: singular, plural y sin jerga", () => {
+  assert.equal(resumenCorrida({ verificada: false, no_verificadas: ["90"], fuentes: [{ herramienta: "a", filas: 1, corte: null }] }), "1 cifra sin comprobar; consultó 1 fuente de datos");
+  assert.equal(resumenCorrida({ verificada: false, no_verificadas: ["1", "2"], fuentes: Array(8).fill({ herramienta: "a", filas: 1, corte: null }) }), "2 cifras sin comprobar; consultó 8 fuentes de datos");
+  assert.equal(resumenCorrida({ verificada: true, no_verificadas: [], fuentes: Array(3).fill({ herramienta: "a", filas: 1, corte: null }) }), "Cifras comprobadas contra la base; consultó 3 fuentes de datos");
+});

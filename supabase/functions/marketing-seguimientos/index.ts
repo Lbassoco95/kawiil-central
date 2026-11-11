@@ -6,7 +6,7 @@
 //   con su seguimiento_id. Cuenta para el tope mensual de tokens. Solo panel: sin correo, Slack ni WhatsApp.
 // - No habla con Metricool ni conoce su token. Secretos por nombre: MARKETING_CONNECTOR_SECRET, ANTHROPIC_API_KEY.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
-import { correrConsulta, evaluarLimites, inicioDiaCDMX, inicioMesCDMX, leerLimites, MODELO_POR_DEFECTO, type ResultadoConsulta } from "../_shared/analista.ts";
+import { correrConsulta, resumenCorrida, evaluarLimites, inicioDiaCDMX, inicioMesCDMX, leerLimites, MODELO_POR_DEFECTO, type ResultadoConsulta } from "../_shared/analista.ts";
 import { herramientasDe, llmAnthropic } from "../_shared/analista_servidor.ts";
 
 const AGENTE = "marketing_analista";
@@ -71,7 +71,7 @@ Deno.serve(async (req) => {
     });
     const { error: errRegistro } = await db.rpc("mk_registrar_corrida", {
       p_agente: AGENTE, p_estado: ok ? "completed" : "error", p_titulo: `Seguimiento ${inicioDiaCDMX(ahora).slice(0, 10)}`,
-      p_resumen: ok ? `${res!.verificada ? "cifras verificadas" : `${res!.no_verificadas.length} cifras sin verificar`}; ${res!.fuentes.length} consultas de datos` : "no se pudo responder",
+      p_resumen: ok ? resumenCorrida(res!) : "no se pudo responder",
       p_resultado: { seguimiento: true, herramientas: (res?.fuentes ?? []).map((f) => f.herramienta), tokens: res?.tokens ?? null, verificada: ok ? res!.verificada : null }, p_inicio: inicio,
     });
     if (errGuardar) console.error("marketing-seguimientos: no se pudo guardar la consulta", errGuardar.message);
