@@ -14,8 +14,8 @@ export function etiquetasAccesos(a: AgenteRegistro | undefined): { etiqueta: str
 }
 
 // Darle una instrucción a un agente: crea una tarea por el despacho que ya existe. No modifica al agente ni guarda datos de expedientes aquí.
-export function InstruirAgente({ agentes, onVerSeguimiento }: { agentes: AgenteRegistro[]; onVerSeguimiento?: (taskId?: string) => void }) {
-  const [agenteId, setAgenteId] = useState("");
+export function InstruirAgente({ agentes, onVerSeguimiento, agenteInicial }: { agentes: AgenteRegistro[]; onVerSeguimiento?: (taskId?: string) => void; agenteInicial?: string }) {
+  const [agenteId, setAgenteId] = useState(agenteInicial ?? "");
   const [titulo, setTitulo] = useState("");
   const [instruccion, setInstruccion] = useState("");
   const [enviado, setEnviado] = useState<string | null>(null);

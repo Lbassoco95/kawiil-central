@@ -23,9 +23,9 @@ export const cuentasActivas = (a?: AgenteRegistro): boolean => (a?.config as { c
 
 export const documentable = (a: AgenteRegistro) => a.status !== "archived" && a.kind !== "system";
 
-export function DocumentosAgente({ agentes }: { agentes: AgenteRegistro[] }) {
+export function DocumentosAgente({ agentes, agenteInicial }: { agentes: AgenteRegistro[]; agenteInicial?: string }) {
   const lista = agentes.filter(documentable);
-  const [agenteId, setAgenteId] = useState("");
+  const [agenteId, setAgenteId] = useState(agenteInicial ?? "");
   const agente = lista.find((a) => a.id === agenteId);
   const guardadas = fuentesDe(agente);
   const [prov, setProv] = useState<"google" | "microsoft" | "dropbox">("google");
