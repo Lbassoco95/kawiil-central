@@ -41,6 +41,7 @@ import {
 } from "@/lib/lawsuits";
 import { UserOrTextSingle, UserOrTextMulti } from "@/components/projects/UserOrTextInput";
 import { useOrgProfiles } from "@/hooks/useClients";
+import { deleteLawsuitCalendarEvents, syncLawsuitCalendarEvents } from "@/lib/lawsuitCalendarSync";
 import type { Database } from "@/integrations/supabase/types";
 
 type LawsuitRow = Database["public"]["Tables"]["project_lawsuits"]["Row"];
@@ -171,6 +172,8 @@ export function ProjectLawsuitsTab({ projectId, organizationId, clientId, dropbo
     queryClient.invalidateQueries({ queryKey: ["dashboard-lawsuits"] });
     queryClient.invalidateQueries({ queryKey: ["assigned-steps"] });
     queryClient.invalidateQueries({ queryKey: ["calendar-lawsuits"] });
+    queryClient.invalidateQueries({ queryKey: ["lawsuit-date-history"] });
+    queryClient.invalidateQueries({ queryKey: ["calendar-events"] });
   };
 
   const { data: lawsuits = [], isLoading } = useQuery({
@@ -207,23 +210,35 @@ export function ProjectLawsuitsTab({ projectId, organizationId, clientId, dropbo
         authorized_persons: form.authorized_persons.map((a) => a.trim()).filter(Boolean),
         notes: orNull(form.notes),
       };
+      const previous = editingId ? lawsuits.find((l) => l.id === editingId) ?? null : null;
+      let saved: LawsuitRow;
       if (editingId) {
-        const { error } = await supabase.from("project_lawsuits").update(payload).eq("id", editingId);
+        const { data, error } = await supabase
+          .from("project_lawsuits")
+          .update(payload)
+          .eq("id", editingId)
+          .select("*")
+          .single();
         if (error) throw error;
+        saved = data as LawsuitRow;
       } else {
-        const { error } = await supabase.from("project_lawsuits").insert({
+        const { data, error } = await supabase.from("project_lawsuits").insert({
           ...payload,
           stages: defaultStagesForType(payload.lawsuit_type) as unknown as Database["public"]["Tables"]["project_lawsuits"]["Insert"]["stages"],
           project_id: projectId,
           organization_id: organizationId,
           created_by: user?.id ?? null,
-        });
+        }).select("*").single();
         if (error) throw error;
+        saved = data as LawsuitRow;
       }
+      return user ? syncLawsuitCalendarEvents(saved, previous, user.id) : { done: [], warnings: [] };
     },
-    onSuccess: () => {
+    onSuccess: ({ done, warnings }) => {
       invalidate();
-      toast.success(editingId ? "Registro actualizado" : "Agregado al control");
+      const base = editingId ? "Registro actualizado" : "Agregado al control";
+      toast.success(done.length ? `${base} · ${done.join(", ")}` : base);
+      warnings.forEach((w) => toast.warning(w, { duration: 10000 }));
       setDialogOpen(false);
     },
     onError: (e: Error) => toast.error("No se pudo guardar: " + e.message),
@@ -240,6 +255,8 @@ export function ProjectLawsuitsTab({ projectId, organizationId, clientId, dropbo
 
   const remove = useMutation({
     mutationFn: async (id: string) => {
+      const target = lawsuits.find((l) => l.id === id);
+      if (target && user) await deleteLawsuitCalendarEvents(target, user.id);
       const { error } = await supabase.from("project_lawsuits").delete().eq("id", id);
       if (error) throw error;
     },

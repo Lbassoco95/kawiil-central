@@ -1113,7 +1113,7 @@ export type CreateReplyDraftResult =
   | { unsupported: true; message: string };
 
 /** Con HTTP ≠ 2xx el detalle a veces solo está en el body del Response (context/response), no en `data`. */
-async function readSupabaseFunctionErrorBody(error: unknown): Promise<string> {
+export async function readSupabaseFunctionErrorBody(error: unknown): Promise<string> {
   if (error instanceof FunctionsHttpError) {
     try {
       return await error.context.clone().text();

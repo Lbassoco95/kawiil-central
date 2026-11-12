@@ -54,6 +54,7 @@ import { LawsuitCommentsPanel } from "@/components/projects/LawsuitCommentsPanel
 import { LawsuitDocumentsPanel } from "@/components/projects/LawsuitDocumentsPanel";
 import { LawsuitClientVisibilityPanel } from "@/components/projects/LawsuitClientVisibilityPanel";
 import { LawsuitClientMessagesPanel } from "@/components/projects/LawsuitClientMessagesPanel";
+import { LawsuitDatesHistoryPanel } from "@/components/projects/LawsuitDatesHistoryPanel";
 import { TaskFormDialog } from "@/components/tasks/TaskFormDialog";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -113,8 +114,9 @@ export function LawsuitWorkspaceSheet({ lawsuit, clientId, dropboxPath, lockDrop
             </SheetHeader>
 
             <Tabs defaultValue="etapas" className="mt-4">
-              <TabsList className="grid grid-cols-6 w-full">
+              <TabsList className="grid grid-cols-7 w-full">
                 <TabsTrigger value="etapas" className="px-1 text-xs sm:text-sm">Etapas</TabsTrigger>
+                <TabsTrigger value="fechas" className="px-1 text-xs sm:text-sm">Fechas</TabsTrigger>
                 <TabsTrigger value="actuaciones" className="px-1 text-xs sm:text-sm">Actuaciones</TabsTrigger>
                 <TabsTrigger value="tareas" className="px-1 text-xs sm:text-sm">Tareas</TabsTrigger>
                 <TabsTrigger value="comentarios" className="px-1 text-xs sm:text-sm">Comentarios</TabsTrigger>
@@ -125,6 +127,9 @@ export function LawsuitWorkspaceSheet({ lawsuit, clientId, dropboxPath, lockDrop
               </TabsList>
               <TabsContent value="etapas" className="mt-4">
                 <StagesPanel lawsuit={lawsuit} />
+              </TabsContent>
+              <TabsContent value="fechas" className="mt-4">
+                <LawsuitDatesHistoryPanel lawsuit={lawsuit} />
               </TabsContent>
               <TabsContent value="actuaciones" className="mt-4">
                 <EntriesPanel lawsuit={lawsuit} />
