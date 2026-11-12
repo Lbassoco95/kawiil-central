@@ -31,6 +31,7 @@ Las siguientes funciones DEBEN desplegarse con `--no-verify-jwt`:
 - slack-user-callback (redirect OAuth de Slack; sin JWT)
 - slack-user-auth, slack-api, push-subscribe (verify_jwt false en config; validan sesión con getUser + Authorization en código, igual que microsoft-api)
 - satgo-query, satgo-monthly (auth JWT o x-cron-secret en código)
+- gather-sync (auth JWT de usuario o x-cron-secret; cifra bindings con GATHER_BINDING_SECRET ≥32 o fallback MOFFIN_FIEL_SECRET)
 
 Otras con JWT en gateway (por defecto):
 - savio-api-health, savio-finance-api, moffin-fiel, moffin-sat-ciec, moffin-health, index-chat-attachment, etc. según `supabase/config.toml`

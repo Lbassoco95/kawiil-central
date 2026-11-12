@@ -197,12 +197,36 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Hook Gather Smart Objects (Kawiil → Gather). Fire-and-forget; no bloquea el digest.
+    let gatherSyncTriggered = false;
+    try {
+      const gatherUrl = `${supabaseUrl.replace(/\/$/, "")}/functions/v1/gather-sync`;
+      const gatherRes = await fetch(gatherUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-cron-secret": cronSecret,
+        },
+        body: JSON.stringify({ action: "sync_all" }),
+      });
+      gatherSyncTriggered = gatherRes.ok;
+      if (!gatherRes.ok) {
+        console.warn("notification-digest: gather-sync status", gatherRes.status);
+      }
+    } catch (ge) {
+      console.warn(
+        "notification-digest: gather-sync hook failed",
+        ge instanceof Error ? ge.message : String(ge),
+      );
+    }
+
     return new Response(
       JSON.stringify({
         ok: true,
         inserted,
         overdueScanned: overdue.length,
         dueTomorrowScanned: dueTomorrow.length,
+        gatherSyncTriggered,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
