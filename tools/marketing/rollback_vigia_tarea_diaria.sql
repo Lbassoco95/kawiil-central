@@ -1,4 +1,4 @@
--- Reversa de 20261113200000_marketing_vigia_tarea_diaria.sql: vuelve a la rama «todo bien» solo con latido (definición de 20261104165612).
+-- Reversa de 20261113160240_marketing_vigia_tarea_diaria.sql: vuelve a la rama «todo bien» solo con latido (definición de 20261104165612).
 CREATE OR REPLACE FUNCTION public.mk_vigia_colchon(p_ahora timestamptz DEFAULT now())
 RETURNS text
 LANGUAGE plpgsql

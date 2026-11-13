@@ -1,4 +1,4 @@
--- Marketing: el CMO y el Analista pueden ver el estado real del equipo (herramienta «estado_equipo»). NO SE APLICA sin confirmación de Dirección.
+-- Marketing: el CMO y el Analista pueden ver el estado real del equipo (herramienta «estado_equipo»). APLICADA en producción el 13 nov 2026 (14:42 CDMX) con confirmación de Dirección.
 -- Requiere antes 20261105191631_marketing_analista_datos.sql (ya aplicada). Es la misma función con UNA herramienta más; las demás no cambian.
 -- Reversa: tools/marketing/rollback_estado_equipo.sql (vuelve a la definición de 20261105191631).
 

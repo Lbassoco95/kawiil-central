@@ -9,7 +9,7 @@ const sqlRegistro = leer("supabase/migrations/20261105194055_marketing_analista_
 const sqlAgentes = leer("supabase/migrations/20261104015632_marketing_registrar_agentes.sql");
 const sqlRegistrar = leer("supabase/migrations/20261104165545_marketing_registrar_corrida.sql");
 const sqlRb1 = leer("tools/marketing/rollback_analista_datos.sql"), sqlRb2 = leer("tools/marketing/rollback_analista_registro.sql");
-const sqlEquipo = leer("supabase/pendientes/20261113200100_marketing_estado_equipo.sql"), sqlRbEquipo = leer("tools/marketing/rollback_estado_equipo.sql");
+const sqlEquipo = leer("supabase/migrations/20261113204250_marketing_estado_equipo.sql"), sqlRbEquipo = leer("tools/marketing/rollback_estado_equipo.sql");
 const sqlCmo = leer("supabase/migrations/20261113015847_marketing_cmo_registro.sql"), sqlRbCmo = leer("tools/marketing/rollback_cmo_registro.sql");
 const ORG = "a0000000-0000-0000-0000-000000000001", OTRA = "b0000000-0000-0000-0000-000000000002", GLOBAL = "00000000-0000-0000-0000-000000000001";
 let fallos = 0; const prueba = async (n, f) => { try { await f(); console.log("  ok  ", n); } catch (e) { fallos++; console.log("  FALLA", n, "\n       ", e.message); } };

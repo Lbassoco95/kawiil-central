@@ -1,4 +1,4 @@
--- Marketing: el Vigía deja una tarea completada por día cuando todo está bien. NO SE APLICA sin confirmación de Dirección.
+-- Marketing: el Vigía deja una tarea completada por día cuando todo está bien. APLICADA en producción el 13 nov 2026 (10:02 CDMX) con confirmación de Dirección.
 -- Requiere antes 20261104165612_marketing_vigia_registra.sql y 20261104165545_marketing_registrar_corrida.sql (ya aplicadas).
 -- Misma decisión de «corrió / no corrió», mismos casos y bitácora; cambia SOLO la rama «todo bien» (antes: solo latido; ahora: una tarea completada del día).
 -- Una corrida repetida el mismo día no duplica la tarea. Si registrar falla, queda una fila en la bitácora y el vigía sigue.

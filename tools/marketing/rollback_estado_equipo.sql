@@ -1,4 +1,4 @@
--- Reversa de 20261113200100_marketing_estado_equipo.sql: vuelve a la definición de mk_analista_datos de 20261105191631 (sin la herramienta estado_equipo).
+-- Reversa de 20261113204250_marketing_estado_equipo.sql: vuelve a la definición de mk_analista_datos de 20261105191631 (sin la herramienta estado_equipo).
 CREATE OR REPLACE FUNCTION public.mk_analista_datos(p_org uuid, p_herramienta text, p_entrada jsonb DEFAULT '{}'::jsonb)
 RETURNS jsonb
 LANGUAGE plpgsql

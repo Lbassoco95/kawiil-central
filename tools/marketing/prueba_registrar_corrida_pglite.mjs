@@ -10,7 +10,7 @@ const sqlViejoVigia = leer("supabase/migrations/20261102033958_marketing_vigia_c
 const sqlRegistrar = leer("supabase/migrations/20261104165545_marketing_registrar_corrida.sql");
 const sqlVigiaNuevo = leer("supabase/migrations/20261104165612_marketing_vigia_registra.sql");
 const sqlRollback1 = leer("tools/marketing/rollback_registrar_corrida.sql");
-const sqlVigiaTarea = leer("supabase/pendientes/20261113200000_marketing_vigia_tarea_diaria.sql"), sqlRbVigiaTarea = leer("tools/marketing/rollback_vigia_tarea_diaria.sql");
+const sqlVigiaTarea = leer("supabase/migrations/20261113160240_marketing_vigia_tarea_diaria.sql"), sqlRbVigiaTarea = leer("tools/marketing/rollback_vigia_tarea_diaria.sql");
 let fallos = 0; const ok = (n) => console.log("  ok  ", n);
 const prueba = async (nombre, fn) => { try { await fn(); ok(nombre); } catch (e) { fallos++; console.log("  FALLA", nombre, "\n       ", e.message); } };
 
