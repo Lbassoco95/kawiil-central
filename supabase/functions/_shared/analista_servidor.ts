@@ -1,15 +1,20 @@
 // Piezas del Analista que comparten marketing-agente (preguntas directas) y marketing-seguimientos (preguntas programadas).
 // Solo lectura: la llamada al modelo y las herramientas de lista cerrada (mk_analista_datos). No conoce Metricool.
-import type { Herramienta, Herramientas, Llm, Mensaje } from "./analista.ts";
+import type { Esfuerzo, Herramienta, Herramientas, Llm, Mensaje } from "./analista.ts";
+
+// El modelo siempre razona antes de responder, y ese razonamiento cuenta dentro de max_tokens: con 1024 se agotaba pensando y no llegaba a escribir
+// (13 nov 2026, CMO: stop=max_tokens, bloques=thinking). 8000 deja espacio de sobra para razonar y redactar (~250 palabras).
+export const MAX_TOKENS_SALIDA = 8000;
+export const TIEMPO_MAX_LLAMADA_MS = 60_000;
 
 // Llamada a la API de mensajes de Anthropic con herramientas. Devuelve el formato que espera correrConsulta.
 export function llmAnthropic(apiKey: string, modelo: string): Llm {
-  return async ({ system, mensajes, herramientas, sinHerramientas }: { system: string; mensajes: Mensaje[]; herramientas: Herramienta[]; sinHerramientas?: boolean }) => {
+  return async ({ system, mensajes, herramientas, sinHerramientas, esfuerzo }: { system: string; mensajes: Mensaje[]; herramientas: Herramienta[]; sinHerramientas?: boolean; esfuerzo?: Esfuerzo }) => {
     const r = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-      body: JSON.stringify({ model: modelo, max_tokens: 1024, system, messages: mensajes, tools: herramientas.map((h) => ({ name: h.name, description: h.description, input_schema: h.input_schema })), ...(sinHerramientas ? { tool_choice: { type: "none" } } : {}) }),
-      signal: AbortSignal.timeout(45_000),
+      body: JSON.stringify({ model: modelo, max_tokens: MAX_TOKENS_SALIDA, ...(esfuerzo ? { output_config: { effort: esfuerzo } } : {}), system, messages: mensajes, tools: herramientas.map((h) => ({ name: h.name, description: h.description, input_schema: h.input_schema })), ...(sinHerramientas ? { tool_choice: { type: "none" } } : {}) }),
+      signal: AbortSignal.timeout(TIEMPO_MAX_LLAMADA_MS),
     });
     if (!r.ok) throw new Error(`anthropic ${r.status}`);
     const d = await r.json();
