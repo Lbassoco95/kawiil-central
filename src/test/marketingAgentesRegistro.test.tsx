@@ -3,7 +3,7 @@ import { render, screen, within, fireEvent } from "@testing-library/react";
 import { AgentesRegistro } from "@/components/marketing/AgentesRegistro";
 import {
   cuandoRelativo, duracionLegible, ordenarAgentes, resumenServicio, senalAgente, tareasRecientes, tasaExito,
-  cumplimiento, ultimaTareaDe, type AgenteRegistro, type TareaAgente, type TareaMarketing,
+  cumplimiento, ultimaTareaDe, conLatidoPropio, type AgenteRegistro, type TareaAgente, type TareaMarketing,
 } from "@/components/marketing/agentesRegistroLogica";
 
 const AHORA = new Date("2026-11-03T16:00:00Z");
@@ -221,5 +221,31 @@ describe("soloMarketing: la pestaña de Marketing no mezcla agentes de Cerebro /
   it("sin soloMarketing (módulo general) sigue mostrando todo, incluida la banda del servicio", () => {
     render(<AgentesRegistro agentes={[...AGENTES, ...MK]} tareas={TAREAS} estadoAgentes="ok" estadoTareas="ok" ahora={AHORA} />);
     expect(screen.getByTestId("registro-servicio")).toBeTruthy(); expect(screen.getByTestId("registro-nelli")).toBeTruthy();
+  });
+});
+
+describe("conLatidoPropio: el latido compartido de la VM no cuenta como corrida de un agente de sistema", () => {
+  const mk = (name: string, kind: string, hb: string | null, task: string | null): AgenteRegistro => ({
+    id: name, name, display_name: name, description: null, role: null, status: "idle", kind, last_heartbeat: hb, last_task_at: task, tasks_completed: 0, tasks_failed: 0, config: {},
+  } as AgenteRegistro);
+  const PING = "2026-11-13T01:05:47.785Z";
+  it("con el mismo latido en ≥3 agentes (alguno consultable), los de sistema usan la hora de su última tarea", () => {
+    const l = conLatidoPropio([mk("coyolli", "consultable", PING, null), mk("amatl", "consultable", PING, null), mk("marketing_vigilante", "system", PING, "2026-11-12T13:00:03Z"), mk("marketing_vigia", "system", PING, null)]);
+    expect(l.find((a) => a.name === "marketing_vigilante")!.last_heartbeat).toBe("2026-11-12T13:00:03Z");
+    expect(l.find((a) => a.name === "marketing_vigia")!.last_heartbeat).toBeNull();
+    expect(l.find((a) => a.name === "coyolli")!.last_heartbeat).toBe(PING);
+  });
+  it("un latido propio (que nadie más comparte) se conserva; y si solo coinciden agentes de sistema, también", () => {
+    const l = conLatidoPropio([mk("coyolli", "consultable", PING, null), mk("marketing_vigilante", "system", "2026-11-13T13:00:03Z", "2026-11-13T13:00:03Z")]);
+    expect(l[1].last_heartbeat).toBe("2026-11-13T13:00:03Z");
+    const solo = conLatidoPropio([mk("marketing_a", "system", PING, null), mk("marketing_b", "system", PING, null), mk("marketing_c", "system", PING, null)]);
+    expect(solo.every((a) => a.last_heartbeat === PING)).toBe(true);
+  });
+  it("sin la corrección un agente que dejó de correr se vería «al día»; con ella, «atrasado»", () => {
+    const ahora = new Date("2026-11-13T01:10:00Z");
+    const viejo = mk("marketing_vigilante", "system", PING, "2026-11-10T13:00:03Z");
+    expect(senalAgente(viejo, ahora)).toBe("al_dia");
+    const corregido = conLatidoPropio([mk("coyolli", "consultable", PING, null), mk("amatl", "consultable", PING, null), viejo]).find((a) => a.name === "marketing_vigilante")!;
+    expect(senalAgente(corregido, ahora)).toBe("atrasado");
   });
 });

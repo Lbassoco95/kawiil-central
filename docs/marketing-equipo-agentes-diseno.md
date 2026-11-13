@@ -142,5 +142,5 @@ La carpeta de Cerebro ya tiene antecedentes (por ejemplo el Calendario Maestro y
 - **Qué es:** una pregunta que el Analista responde solo, una vez, a diario o cada semana. Solo lectura; el resultado se ve en el panel (sin correo, Slack ni WhatsApp).
 - **Datos:** `mk_seguimiento` (aplicada el 5 nov 2026, migración `20261106003827`); cada respuesta queda en `mk_consulta` con `seguimiento_id`. Tope: 5 seguimientos por usuario, 5 corridas por ejecución y el tope mensual de tokens compartido con las preguntas directas.
 - **Código:** `marketing-agente` (acciones `crear_seguimiento` y `cambiar_seguimiento`, con sesión y permiso de Marketing), `marketing-seguimientos` (trabajo diario, secreto propio, reclama con `mk_seguimiento_reclamar` y responde con el mismo Analista) y `_shared/analista_servidor.ts` (modelo y herramientas compartidas).
-- **Horario:** 7:45 CDMX, después del Vigía (cron preparado en `tools/marketing/cron_analista_seguimientos_0745.sql`; no programado hasta confirmación de Dirección).
+- **Horario:** 7:45 CDMX, después del Vigía (cron programado el 5 nov 2026, jobid 39; registro en `tools/marketing/cron_analista_seguimientos_0745.sql`).
 - **Si una corrida falla:** la fecha ya se adelantó al reclamar, así que no se repite hasta el siguiente periodo; el fallo queda visible en el historial («Sin respuesta») y en el registro del agente.

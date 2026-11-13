@@ -1,5 +1,5 @@
--- PREPARADO, NO PROGRAMADO. Trabajo diario de los seguimientos del Analista a las 7:45 de Ciudad de México (13:45 UTC), después del Vigía de las 7:30.
--- Invoca marketing-seguimientos (función aún por escribir y desplegar). El secreto se lee de Vault por nombre exacto en cada ejecución:
+-- YA PROGRAMADO en producción el 5 nov 2026 (19:10 CDMX, jobid 39, confirmado por Dirección); este archivo es solo el registro. Trabajo diario de los seguimientos del Analista a las 7:45 de Ciudad de México (13:45 UTC), después del Vigía de las 7:30.
+-- Invoca marketing-seguimientos (desplegada en la v1). El secreto se lee de Vault por nombre exacto en cada ejecución:
 -- el texto guardado en cron.job contiene solo la subconsulta, nunca el valor.
 select cron.schedule(
   'marketing-analista-seguimientos-0745-cdmx', '45 13 * * *',
