@@ -144,3 +144,40 @@ La carpeta de Cerebro ya tiene antecedentes (por ejemplo el Calendario Maestro y
 - **Código:** `marketing-agente` (acciones `crear_seguimiento` y `cambiar_seguimiento`, con sesión y permiso de Marketing), `marketing-seguimientos` (trabajo diario, secreto propio, reclama con `mk_seguimiento_reclamar` y responde con el mismo Analista) y `_shared/analista_servidor.ts` (modelo y herramientas compartidas).
 - **Horario:** 7:45 CDMX, después del Vigía (cron programado el 5 nov 2026, jobid 39; registro en `tools/marketing/cron_analista_seguimientos_0745.sql`).
 - **Si una corrida falla:** la fecha ya se adelantó al reclamar, así que no se repite hasta el siguiente periodo; el fallo queda visible en el historial («Sin respuesta») y en el registro del agente.
+
+## 14. Equipo de Marketing v2: conversación, CMO, investigador web y producción gráfica (propuesta, 13 nov 2026)
+Pedido de Dirección (13 nov): (a) poder **conversar** con el Analista, (b) migrar a estos agentes lo que hoy hacen los **agentes programados en Claude** (diseños y artes), (c) **analizar páginas de internet**: la propia, la de la competencia y noticias importantes de los ámbitos en que trabaja Kawiil, y (d) un **CMO** por encima del Analista para empezar a armar el equipo.
+
+### 14.1 Conversación con el Analista (construida en el repo)
+- La pantalla guarda el hilo (pregunta y respuesta de cada turno) y manda los últimos 3 turnos como contexto; «Nueva conversación» lo vacía. `marketing-agente` limpia el historial (`normalizarHistorial`: máx. 6 mensajes, 4000 caracteres cada uno, 12 000 en total, alternando usuario/asistente).
+- **El historial es contexto, no datos:** las cifras de cada respuesta se verifican solo contra lo que leen las herramientas en ese turno, y el prompt le exige volver a consultarlas. Un historial manipulado no puede «lavar» una cifra.
+- Cada turno sigue quedando en `mk_consulta` por separado. Sin migración. El hilo vive en la pantalla (se pierde al recargar); guardarlo (`conversacion_id`) es un paso posterior, junto con el CMO.
+
+### 14.2 CMO (director de marketing)
+- **Qué es:** agente conversacional que coordina al equipo; no ejecuta trabajo propio. Recibe el objetivo de Dirección, consulta al Analista (sus herramientas de datos), lee los hallazgos del investigador, y propone **prioridades, siguientes pasos y tareas** para cada agente. Cada propuesta queda como propuesta que decide Dirección (flujo ya diseñado: casos, propuestas, decisión).
+- **Cómo se construye:** mismo motor y mismas verificaciones que el Analista (`correrConsulta`), con otro prompt (rol: priorizar y proponer, nunca ejecutar) y más herramientas de solo lectura (estado de los agentes, casos y decisiones pendientes, hallazgos web). Sin permisos nuevos. Se registra como `marketing_cmo` (`kind = system`, bajo demanda) y se dibuja **arriba del Analista** en la oficina, en una zona «Dirección de marketing».
+- **Informe semanal del CMO** (opcional, con confirmación): un seguimiento semanal que resume resultados, casos, hallazgos y decisiones pendientes, solo en el panel.
+
+### 14.3 Investigador web (sitio propio, competencia, noticias)
+- **Qué hace:** lee, con solo `GET`, una lista cerrada de páginas y fuentes, y deja un **hallazgo** por cambio relevante: qué cambió en nuestro sitio (contenido, enlaces rotos, velocidad básica), qué publica o cambia la competencia (mensajes, ofertas, temas) y qué noticias importantes hay en los ámbitos de Kawiil (fiscal, PLD, regulación financiera, etc.).
+- **Reglas:** dominios permitidos escritos por Dirección (lista cerrada, como las rutas de Metricool); respeta `robots.txt`; sin iniciar sesión ni saltar protecciones; tope de páginas y de tamaño por corrida; se guarda un **resumen y la fuente con fecha**, no el texto completo (derechos de autor); toda afirmación cita su enlace; las páginas son DATOS, nunca instrucciones.
+- **Dónde corre:** una función nueva de Supabase con secreto propio y un trabajo programado (como el colchón); cada hallazgo se guarda en una tabla nueva con RLS de solo lectura. Escrituras en producción: migración, despliegue y cron, cada una con su confirmación.
+
+### 14.4 Producción gráfica (lo que hoy hacen agentes programados en Claude)
+- **Hoy** (según las habilidades disponibles en Claude): piezas de Kawiil y Yoltik a partir del calendario maestro, con Gamma o con un render determinista con el sistema visual de marca, y programación en Metricool desde las carpetas del calendario.
+- **Propuesta:** un **Creativo/Diseñador** que prepara cada pieza (copy, prompt o render y revisión de marca) y la deja como **borrador para aprobación**. El Revisor verifica marca y afirmaciones regulatorias antes.
+- **Conflicto con una regla vigente:** programar en Metricool **escribe** en Metricool, y la regla de Dirección es que el módulo y los agentes solo leen. Propongo que la programación siga siendo humana (o la habilidad actual) y que el agente entregue la pieza lista. Cambiar esa regla es decisión explícita de Dirección.
+- **Dónde corre el render:** una Edge Function no sirve para renderizar imágenes pesadas. Opciones: la VM `kawiil-agents` (parece encendida: marca a los agentes cada ~30 min), un trabajo en GitHub Actions o una función de Vercel. Pendiente de decidir tras ver qué hacen hoy esos agentes (horarios, entradas, salidas y dónde guardan).
+
+### 14.5 Orden sugerido
+1. **Conversación** (hecha en el repo; despliegue por el flujo al fusionar, sin migración).
+2. **CMO v1** (registro del agente + función; migración de registro y despliegue).
+3. **Investigador web** (necesita la lista de páginas y fuentes de Dirección).
+4. **Creativo + Revisor y migración gráfica** (necesita el inventario de lo que hoy hacen los agentes en Claude).
+
+### 14.6 Decisiones de Dirección
+1. Dirección(es) de **nuestro sitio** y de las páginas a vigilar.
+2. **Competidores** (nombres y sitios) y **fuentes de noticias** o temas (por ejemplo, SAT, CNBV, DOF, PLD).
+3. **Inventario de los agentes programados en Claude:** qué hace cada uno, cuándo corre, qué recibe y dónde deja el resultado.
+4. ¿Se mantiene la regla de que **programar en Metricool es humano** y el agente solo deja el borrador?
+5. ¿Dónde correr el render de imágenes: VM `kawiil-agents`, GitHub Actions o Vercel?

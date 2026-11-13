@@ -49,7 +49,8 @@ const vista = (analista: AnalistaProps | undefined, o: Partial<Parameters<typeof
   render(<OficinaAgentes agentes={AGENTES} tareasMarketing={[]} estadoAgentes="ok" estadoTareas="ok" ahora={AHORA} analista={analista} {...o} />);
 const props = (preguntar: AnalistaProps["preguntar"], consultas: ConsultaAnalista[] = [], estadoConsultas: AnalistaProps["estadoConsultas"] = "ok"): AnalistaProps => ({ consultas, estadoConsultas, preguntar });
 const elegirAnalista = () => fireEvent.click(screen.getByTestId("oficina-agente-Analista"));
-const escribir = (t: string) => fireEvent.change(screen.getByLabelText("Pregúntale cómo van tus resultados"), { target: { value: t } });
+const caja = () => screen.getByTestId("analista-caja") as HTMLTextAreaElement;
+const escribir = (t: string) => fireEvent.change(caja(), { target: { value: t } });
 
 describe("panel Preguntar del Analista", () => {
   it("aparece solo al elegir al Analista y solo si hay propiedades del agente; los demás agentes conservan el aviso de 'siguiente fase'", () => {
@@ -88,7 +89,7 @@ describe("panel Preguntar del Analista", () => {
     const r = await screen.findByTestId("analista-respuesta");
     expect(r.textContent).toContain("El colchón es de 23 días."); expect(r.textContent).toContain("Cifras verificadas"); expect(r.textContent).toContain("Te quedan 28 preguntas hoy");
     expect(screen.getByTestId("analista-fuentes").textContent).toContain("colchon_actual (corte 2026-11-05)");
-    expect((screen.getByLabelText("Pregúntale cómo van tus resultados") as HTMLTextAreaElement).value).toBe("");
+    expect(caja().value).toBe("");
   });
   it("respuesta con cifras sin verificar: se avisa en rojo y se listan las cifras para revisar", async () => {
     vista(props(vi.fn(async () => ({ ok: true, respuesta: "Subió 312.", verificada: false, no_verificadas: ["312"], fuentes: [] }))));
@@ -110,7 +111,7 @@ describe("panel Preguntar del Analista", () => {
     vista(props(vi.fn(async () => { throw new Error("red caída"); }))); elegirAnalista(); escribir("tercera"); fireEvent.click(screen.getByTestId("analista-enviar"));
     expect((await screen.findByTestId("analista-error")).textContent).toContain("No pudimos hablar con el Analista");
     // si la respuesta falla, la pregunta escrita se conserva y se puede reintentar
-    expect((screen.getByLabelText("Pregúntale cómo van tus resultados") as HTMLTextAreaElement).value).toBe("tercera");
+    expect(caja().value).toBe("tercera");
     await waitFor(() => expect((screen.getByTestId("analista-enviar") as HTMLButtonElement).disabled).toBe(false));
   });
   it("historial: muestra las preguntas con su estado, abre la respuesta al pulsar y marca las que tenían cifras sin verificar", () => {
@@ -169,13 +170,13 @@ describe("seguimientos del Analista", () => {
     expect(boton.disabled).toBe(false); fireEvent.click(boton);
     await waitFor(() => expect(g).toHaveBeenCalledWith({ accion: "crear_seguimiento", pregunta: "¿Cómo va el alcance de Facebook?", frecuencia: "diaria" }));
     await waitFor(() => expect(screen.getByTestId("analista-aviso-seguimiento").textContent).toContain("7:45"));
-    expect((screen.getByLabelText("Pregúntale cómo van tus resultados") as HTMLTextAreaElement).value).toBe("");
+    expect(caja().value).toBe("");
   });
   it("si falla (por ejemplo el tope de 5), muestra el mensaje y conserva la pregunta", async () => {
     const g = vi.fn().mockResolvedValue({ ok: false, error: "Ya tienes 5 seguimientos. Termina alguno para agregar otro." }); vista(conSeg(g)); elegirAnalista();
     escribir("¿Cómo va Instagram esta semana?"); fireEvent.click(screen.getByTestId("analista-dar-seguimiento"));
     await waitFor(() => expect(screen.getByTestId("analista-aviso-seguimiento").textContent).toContain("Ya tienes 5"));
-    expect((screen.getByLabelText("Pregúntale cómo van tus resultados") as HTMLTextAreaElement).value).toContain("Instagram");
+    expect(caja().value).toContain("Instagram");
   });
   it("pausar, reanudar y terminar envían la acción correcta; un seguimiento en pausa ofrece Reanudar", async () => {
     const g = vi.fn().mockResolvedValue({ ok: true }); vista(conSeg(g, [seg("s1"), seg("s2", { estado: "pausado" })])); elegirAnalista();
@@ -190,5 +191,43 @@ describe("seguimientos del Analista", () => {
   it("las respuestas de un seguimiento se marcan en el historial", () => {
     vista({ ...conSeg(vi.fn()), consultas: [consulta("c1", "Pregunta repetida", { seguimiento_id: "s1" })] }); elegirAnalista();
     expect(within(screen.getByTestId("analista-historial")).getByText(/· seguimiento/)).toBeTruthy();
+  });
+});
+
+describe("conversación con el Analista", () => {
+  const ok = (respuesta: string): RespuestaAnalista => ({ ok: true, respuesta, verificada: true, no_verificadas: [], fuentes: [{ herramienta: "colchon_actual", filas: 3, corte: "2026-11-13T01:00:00Z" }], restantes_hoy: 20 });
+  it("la primera pregunta se manda sin historial; la segunda lleva la pregunta y la respuesta anteriores como contexto", async () => {
+    const preguntar = vi.fn().mockResolvedValueOnce(ok("Colchón verde en las tres redes.")).mockResolvedValueOnce(ok("LinkedIn también: 19 días."));
+    vista(props(preguntar)); elegirAnalista();
+    escribir("¿Cómo va el colchón?"); fireEvent.click(screen.getByTestId("analista-enviar"));
+    await waitFor(() => expect(screen.getByTestId("analista-hilo")).toBeTruthy());
+    expect(preguntar).toHaveBeenNthCalledWith(1, "¿Cómo va el colchón?");
+    expect(screen.getByText("Sigue la conversación")).toBeTruthy();
+    escribir("¿Y LinkedIn?"); fireEvent.click(screen.getByTestId("analista-enviar"));
+    await waitFor(() => expect(screen.getAllByTestId("analista-pregunta-hecha").length).toBe(2));
+    expect(preguntar).toHaveBeenNthCalledWith(2, "¿Y LinkedIn?", [{ rol: "user", texto: "¿Cómo va el colchón?" }, { rol: "assistant", texto: "Colchón verde en las tres redes." }]);
+    expect(screen.getAllByTestId("analista-respuesta")).toHaveLength(1); expect(screen.getAllByTestId("analista-respuesta-previa")).toHaveLength(1);
+  });
+  it("solo manda los últimos 3 turnos como contexto", async () => {
+    const preguntar = vi.fn().mockImplementation(async (p: string) => ok(`resp ${p}`));
+    vista(props(preguntar)); elegirAnalista();
+    const preguntas = ["pregunta uno", "pregunta dos", "pregunta tres", "pregunta cuatro", "pregunta cinco"];
+    for (const [i, q] of preguntas.entries()) {
+      escribir(q); fireEvent.click(screen.getByTestId("analista-enviar"));
+      await waitFor(() => expect(screen.getAllByTestId("analista-pregunta-hecha")).toHaveLength(i + 1));
+    }
+    const ultima = preguntar.mock.calls.at(-1)!; expect(ultima[0]).toBe("pregunta cinco"); expect(ultima[1]).toHaveLength(6); expect(ultima[1][0].texto).toBe("pregunta dos");
+  });
+  it("«Nueva conversación» vacía el hilo y la siguiente pregunta va sin historial", async () => {
+    const preguntar = vi.fn().mockResolvedValue(ok("Listo.")); vista(props(preguntar)); elegirAnalista();
+    escribir("¿Cómo vamos?"); fireEvent.click(screen.getByTestId("analista-enviar")); await waitFor(() => expect(screen.getByTestId("analista-hilo")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("analista-nueva-conversacion")); expect(screen.queryByTestId("analista-hilo")).toBeNull();
+    escribir("¿Otra cosa distinta?"); fireEvent.click(screen.getByTestId("analista-enviar")); await waitFor(() => expect(preguntar).toHaveBeenCalledTimes(2));
+    expect(preguntar).toHaveBeenNthCalledWith(2, "¿Otra cosa distinta?");
+  });
+  it("una respuesta con error no entra al hilo (se conserva la pregunta para reintentar)", async () => {
+    const preguntar = vi.fn().mockResolvedValue({ ok: false, error: "No pudimos responder." }); vista(props(preguntar)); elegirAnalista();
+    escribir("¿Cómo vamos?"); fireEvent.click(screen.getByTestId("analista-enviar")); await waitFor(() => expect(screen.getByTestId("analista-error")).toBeTruthy());
+    expect(screen.queryByTestId("analista-hilo")).toBeNull(); expect(caja().value).toBe("¿Cómo vamos?");
   });
 });

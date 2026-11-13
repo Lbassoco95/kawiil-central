@@ -81,7 +81,7 @@ export default function Marketing() {
                 estadoTareas={tareasMk.isError ? "error" : tareasMk.isLoading ? "cargando" : "ok"}
                 analista={{
                   consultas: consultas.data ?? [], estadoConsultas: consultas.isError ? "error" : consultas.isLoading ? "cargando" : "ok",
-                  preguntar: async (p) => { const r = await preguntarAlAnalista(p); await Promise.all([qc.invalidateQueries({ queryKey: ["analista"] }), qc.invalidateQueries({ queryKey: ["agentes-registro"] })]); return r; },
+                  preguntar: async (p, h) => { const r = await preguntarAlAnalista(p, h); await Promise.all([qc.invalidateQueries({ queryKey: ["analista"] }), qc.invalidateQueries({ queryKey: ["agentes-registro"] })]); return r; },
                   seguimientos: seguimientos.data ?? [], estadoSeguimientos: seguimientos.isError ? "error" : seguimientos.isLoading ? "cargando" : "ok",
                   gestionarSeguimiento: async (c) => { const r = await gestionarSeguimiento(c); await qc.invalidateQueries({ queryKey: ["analista", "seguimientos"] }); return r; },
                 }} />

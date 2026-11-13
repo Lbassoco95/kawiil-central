@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  correrConsulta, evaluarLimites, HERRAMIENTAS, inicioDiaCDMX, inicioMesCDMX, leerLimites, LIMITES_POR_DEFECTO, MAX_PREGUNTA, SYSTEM, validarPregunta, verificarCifras,
+  correrConsulta, evaluarLimites, HERRAMIENTAS, normalizarHistorial, inicioDiaCDMX, inicioMesCDMX, leerLimites, LIMITES_POR_DEFECTO, MAX_PREGUNTA, SYSTEM, validarPregunta, verificarCifras,
   type Bloque, type Herramientas, type Llm, type RespuestaLlm,
 } from "./analista.ts";
 
@@ -147,3 +147,27 @@ test("un número que el agente pidió como parámetro (ventana de 90 días) no s
   const r = await correrConsulta({ pregunta: "¿Cómo va el colchón?", herramientas: { colchon_actual: async () => COLCHON } as never, llm: llm as never });
   assert.deepEqual(r.no_verificadas, []); assert.equal(r.verificada, true);
 });
+
+test("historial: se limpia, alterna usuario/asistente, empieza por el usuario y termina en el asistente", () => {
+  const h = normalizarHistorial([
+    { rol: "assistant", texto: "huérfano al inicio" }, { rol: "user", texto: "  ¿Cómo va el colchón?  " }, { rol: "user", texto: "repetido" },
+    { rol: "assistant", texto: "Verde en las tres redes." }, { rol: "sistema", texto: "ignorar" }, { rol: "user", texto: "¿Y LinkedIn?" },
+  ]);
+  assert.deepEqual(h, [{ role: "user", content: "¿Cómo va el colchón?" }, { role: "assistant", content: "Verde en las tres redes." }]);
+  assert.deepEqual(normalizarHistorial("no es lista"), []); assert.deepEqual(normalizarHistorial(null), []);
+  assert.deepEqual(normalizarHistorial([{ rol: "user", texto: 5 }, { texto: "sin rol" }, { rol: "user", texto: "   " }]), []);
+});
+test("historial: máximo de turnos y de tamaño (se descarta lo más viejo)", () => {
+  const muchos = Array.from({ length: 20 }, (_, i) => ({ rol: i % 2 === 0 ? "user" : "assistant", texto: `mensaje ${i}` }));
+  assert.ok(normalizarHistorial(muchos).length <= 12);
+  const grandes = Array.from({ length: 12 }, (_, i) => ({ rol: i % 2 === 0 ? "user" : "assistant", texto: "x".repeat(5000) }));
+  const h = normalizarHistorial(grandes); assert.ok(h.reduce((s, m) => s + (m.content as string).length, 0) <= 12000); assert.ok(h.every((m) => (m.content as string).length <= 4000));
+});
+test("conversación: el modelo recibe el historial antes de la pregunta nueva, y una cifra solo del historial NO se da por verificada", async () => {
+  let vistos: unknown[] = [];
+  const llm = async (a: { mensajes: unknown[] }) => { vistos = a.mensajes; return { stop_reason: "end_turn", uso: { entrada: 1, salida: 1 }, contenido: [{ type: "text", text: "Como dije, el alcance fue de 312." }] }; };
+  const r = await correrConsulta({ pregunta: "¿Y la semana anterior?", herramientas: {} as never, llm: llm as never, historial: normalizarHistorial([{ rol: "user", texto: "¿Alcance?" }, { rol: "assistant", texto: "El alcance fue de 312." }]) });
+  assert.equal(vistos.length, 3); assert.deepEqual((vistos[2] as { role: string }).role, "user");
+  assert.equal(r.verificada, false); assert.deepEqual(r.no_verificadas, ["312"]);
+});
+test("el prompt pide volver a consultar las herramientas en cada turno de la conversación", () => { assert.match(SYSTEM, /Vuelve a consultar las herramientas/); assert.match(SYSTEM, /nunca repitas cifras del historial/); });
