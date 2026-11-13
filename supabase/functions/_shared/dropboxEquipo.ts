@@ -45,6 +45,24 @@ export function raicesEfectivas(raices: string[], pathLowerDelLimite: string | n
   return [normalizarRaices(pathLowerDelLimite)[0]];
 }
 
+// ── Guardar archivos (solo agregar) ──────────────────────────────────────────────────────────────────────────────────────
+// La VM puede dejar en la carpeta de UNA fuente los archivos que descargó (p. ej. un oficio). Nunca sobrescribe ni borra: el destino se
+// decide con la ruta que Dropbox devuelve para la carpeta, y si el nombre ya existe Dropbox renombra (autorename).
+export const MAX_BYTES_SUBIR = 8 * 1024 * 1024;
+const EXT_SUBIR = new Set(["pdf", "docx", "doc", "xlsx", "xls", "csv", "txt", "xml", "png", "jpg", "jpeg"]);
+
+// Nombre de archivo seguro: sin rutas, sin caracteres de control ni reservados, con extensión permitida. null = no se acepta.
+export function nombreArchivoSeguro(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const limpio = v.normalize("NFC").replace(/[\u0000-\u001f\u007f<>:"|?*\\/]/g, " ").replace(/\s+/g, " ").replace(/^[.\s]+/, "").trim();
+  const punto = limpio.lastIndexOf(".");
+  if (limpio.length < 3 || limpio.length > 150 || punto < 1) return null;
+  return EXT_SUBIR.has(limpio.slice(punto + 1).toLowerCase()) ? limpio : null;
+}
+
+// Dropbox exige que la cabecera Dropbox-API-Arg sea ASCII: los caracteres no ASCII van escapados (\uXXXX).
+export const argAscii = (o: unknown): string => JSON.stringify(o).replace(/[\u007f-\uffff]/g, (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"));
+
 // Comparación de tokens en tiempo constante (el puente se protege con un secreto compartido con la VM).
 export function tokensIguales(a: unknown, b: unknown): boolean {
   if (typeof a !== "string" || typeof b !== "string" || a.length === 0 || b.length === 0) return false;
