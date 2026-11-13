@@ -72,7 +72,7 @@ export type Herramientas = Record<string, (entrada: Record<string, unknown>) => 
 export interface Fuente { herramienta: string; filas: number | null; corte: string | null }
 export interface ResultadoConsulta {
   ok: boolean; respuesta: string; verificada: boolean; no_verificadas: string[]; fuentes: Fuente[];
-  tokens: { entrada: number; salida: number }; pasos: number; motivo?: string;
+  tokens: { entrada: number; salida: number }; pasos: number; motivo?: string; detalle?: string;
 }
 
 // ── Historial de la conversación ────────────────────────────────────────────────────────────────────────────────────
@@ -173,13 +173,14 @@ export async function correrConsulta(a: { pregunta: string; herramientas: Herram
   // Números que el propio agente pidió como parámetro (p. ej. «últimos 90 días»): son la ventana de la consulta, no una cifra de resultados.
   const parametros: Record<string, number> = {};
   const tokens = { entrada: 0, salida: 0 };
-  let texto = "", pasos = 0, ultimoFueUso = false;
+  let texto = "", pasos = 0, ultimoFueUso = false, diagnostico = "";
   const base = (o: Partial<ResultadoConsulta>): ResultadoConsulta => ({ ok: false, respuesta: "", verificada: false, no_verificadas: [], fuentes, tokens, pasos, ...o });
 
   while (pasos < maxPasos) {
     pasos++;
     const r = await a.llm({ system: a.system ?? SYSTEM, mensajes, herramientas: HERRAMIENTAS });
     tokens.entrada += r.uso.entrada; tokens.salida += r.uso.salida;
+    diagnostico = `stop=${r.stop_reason} bloques=${r.contenido.map((b) => b.type).join(",") || "ninguno"}`;
     const usos = r.contenido.filter((b): b is BloqueUso => b.type === "tool_use");
     if (r.stop_reason === "tool_use" && usos.length > 0) {
       const resultados: BloqueResultado[] = [];
@@ -212,9 +213,10 @@ export async function correrConsulta(a: { pregunta: string; herramientas: Herram
     pasos++;
     const r = await a.llm({ system: a.system ?? SYSTEM, mensajes, herramientas: HERRAMIENTAS, sinHerramientas: true });
     tokens.entrada += r.uso.entrada; tokens.salida += r.uso.salida;
+    diagnostico = `cierre stop=${r.stop_reason} bloques=${r.contenido.map((b) => b.type).join(",") || "ninguno"}`;
     texto = r.contenido.filter((b): b is BloqueTexto => b.type === "text").map((b) => b.text).join("\n").trim();
   }
-  if (!texto) return base({ motivo: "sin_respuesta" });
+  if (!texto) return base({ motivo: "sin_respuesta", detalle: diagnostico });
   const respuesta = texto.slice(0, MAX_RESPUESTA);
   const no_verificadas = verificarCifras(respuesta, [...salidas, { parametros }]);
   return base({ ok: true, respuesta, verificada: no_verificadas.length === 0, no_verificadas });

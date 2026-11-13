@@ -210,3 +210,9 @@ test("si el modelo no devuelve texto y no estaba pidiendo datos, sigue siendo «
   assert.equal(r.ok, false); assert.equal(r.motivo, "sin_respuesta"); assert.equal(llamadas, 1);
 });
 test("el CMO pide las herramientas todas a la vez (tiene pocas rondas)", () => assert.match(SYSTEM_CMO, /todas a la vez, en una sola ronda/));
+
+test("sin respuesta: queda un diagnóstico (último stop_reason y tipos de bloque) para saber por qué", async () => {
+  const llm = async () => ({ stop_reason: "refusal", uso: { entrada: 1, salida: 1 }, contenido: [] });
+  const r = await correrConsulta({ pregunta: "¿Cómo va el colchón?", herramientas: {} as never, llm: llm as never });
+  assert.equal(r.ok, false); assert.match(r.detalle ?? "", /stop=refusal bloques=ninguno/);
+});
