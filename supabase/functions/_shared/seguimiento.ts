@@ -262,3 +262,14 @@ export function validarRevision(raw: unknown, ahoraMs: number): ResultadoRevisio
 export function contextoRevision(hiloId: string, r: RevisionValida, userId: string): Record<string, unknown> {
   return { hilo_id: hiloId, ejecutar_en: r.cuando, repetir: r.repetir, ...(r.veces !== null ? { veces_restantes: r.veces } : {}), fallas: 0, programada_por: userId };
 }
+
+// ── Navegador de los agentes: sitios donde Dirección habilitó ESCRIBIR (config.navegador.escritura) ─────────────────────────────────
+// Para cada tarea la persona autoriza (casilla) en cuáles puede escribir el agente; la VM exige esa autorización y nunca amplía lo configurado.
+const DOMINIO = /^(?=.{4,100}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}$/;
+export function dominiosEscritura(config: unknown): string[] {
+  const n = (config as { navegador?: { activo?: unknown; escritura?: unknown } } | null | undefined)?.navegador;
+  if (!n || n.activo !== true || !Array.isArray(n.escritura)) return [];
+  const out: string[] = [];
+  for (const d of n.escritura) { const x = typeof d === "string" ? d.trim().toLowerCase() : ""; if (DOMINIO.test(x) && !out.includes(x)) out.push(x); }
+  return out;
+}
