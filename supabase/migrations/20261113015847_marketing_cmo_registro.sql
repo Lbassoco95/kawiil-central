@@ -1,4 +1,4 @@
--- Marketing: registrar al CMO (director de marketing). NO SE APLICA sin confirmación de Dirección.
+-- Marketing: registrar al CMO (director de marketing). APLICADA en producción el 12 nov 2026 (19:58 CDMX) con confirmación de Dirección.
 -- Requiere antes 20261105194055_marketing_analista_registro.sql (ya aplicada).
 --
 -- 1) Agente `marketing_cmo` en agent_registry (kind 'system', bajo demanda, solo lectura y propone: lo que sugiere lo decide una persona).

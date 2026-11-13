@@ -1,4 +1,4 @@
--- Reversa de 20261113120000_marketing_cmo_registro.sql: quita al CMO (y sus consultas), y devuelve las funciones y la restricción a como estaban con el Analista.
+-- Reversa de 20261113015847_marketing_cmo_registro.sql: quita al CMO (y sus consultas), y devuelve las funciones y la restricción a como estaban con el Analista.
 DELETE FROM public.mk_consulta WHERE agente = 'marketing_cmo';
 ALTER TABLE public.mk_consulta DROP CONSTRAINT IF EXISTS mk_consulta_agente_check;
 ALTER TABLE public.mk_consulta ADD CONSTRAINT mk_consulta_agente_check CHECK (agente = 'marketing_analista');
