@@ -18,6 +18,8 @@ export const ASPECTO: Record<string, Aspecto> = {
   marketing_informe_diario: { corto: "Informe", pelo: "#222222", ropa: "#6d9bc3", x: 215, y: 84, trabajo: "leyendo" },
   marketing_vigia: { corto: "Vigía", pelo: "#b07a3a", ropa: "#b8a98a", x: 350, y: 84, trabajo: "leyendo" },
   marketing_analista: { corto: "Analista", pelo: "#3a2a1a", ropa: "#9b7b4f", x: 520, y: 84, trabajo: "escribiendo" },
+  // El CMO se sienta en su propia franja «Dirección», encima del Analista; el resto del equipo baja DESPLAZA_CMO píxeles (ver personajes()).
+  marketing_cmo: { corto: "CMO", pelo: "#2a1f3a", ropa: "#6b5b95", x: 520, y: 48, trabajo: "escribiendo" },
 };
 const ASPECTO_POR_DEFECTO: Aspecto = { corto: "Agente", pelo: "#444444", ropa: "#999999", x: 300, y: 84, trabajo: "leyendo" };
 export const aspectoDe = (a: Pick<AgenteRegistro, "name">): Aspecto => ASPECTO[a.name] ?? ASPECTO_POR_DEFECTO;
@@ -53,22 +55,27 @@ export interface PersonajeOficina {
   id: string; clave: string; nombre: string; aspecto: Aspecto; estado: EstadoVisual; ultima: TareaMarketing | undefined; historial: TareaMarketing[];
 }
 
-const ORDEN = ["marketing_vigilante", "marketing_informe_diario", "marketing_vigia", "marketing_analista"];
+const ORDEN = ["marketing_cmo", "marketing_vigilante", "marketing_informe_diario", "marketing_vigia", "marketing_analista"];
 
 // Los agentes de Marketing, en orden fijo, con su estado. No se inventan agentes que no están en el registro.
 export function personajes(agentes: AgenteRegistro[], tareas: TareaMarketing[], ahora: Date, pensandoId: string | null = null): PersonajeOficina[] {
   return agentes
     .filter((a) => a.name.startsWith("marketing_") && a.kind === "system" && a.status !== "archived")
     .sort((x, y) => (ORDEN.indexOf(x.name) + 99) % 99 - (ORDEN.indexOf(y.name) + 99) % 99 || x.name.localeCompare(y.name))
-    .map((a) => {
+    .map((a, _i, todos) => {
+      const hayCmo = todos.some((x) => x.name === "marketing_cmo");
       const propias = tareas.filter((t) => t.agent_id === a.id).sort((p, q) => (q.completed_at ?? "").localeCompare(p.completed_at ?? ""));
       const ultima = ultimaTareaDe(a, tareas);
-      return { id: a.id, clave: a.name, nombre: nombreAgente(a), aspecto: aspectoDe(a), estado: estadoVisual(a, ultima, ahora, a.id === pensandoId), ultima, historial: propias.slice(0, 5) };
+      const base = aspectoDe(a), aspecto = hayCmo && a.name !== "marketing_cmo" ? { ...base, y: base.y + DESPLAZA_CMO } : base;
+      return { id: a.id, clave: a.name, nombre: nombreAgente(a), aspecto, estado: estadoVisual(a, ultima, ahora, a.id === pensandoId), ultima, historial: propias.slice(0, 5) };
     });
 }
 
 // ¿Qué personaje está bajo el clic? (coordenadas del lienzo lógico)
-export const ANCHO = 640, ALTO = 210;
+export const ANCHO = 640, ALTO = 210, DESPLAZA_CMO = 90;
+// Con el CMO la oficina gana una franja arriba («Dirección»): el lienzo es DESPLAZA_CMO píxeles más alto.
+export const hayCmo = (lista: Array<Pick<PersonajeOficina, "clave">>): boolean => lista.some((p) => p.clave === "marketing_cmo");
+export const altoOficina = (lista: Array<Pick<PersonajeOficina, "clave">>): number => ALTO + (hayCmo(lista) ? DESPLAZA_CMO : 0);
 export function personajeEn(x: number, y: number, lista: PersonajeOficina[]): PersonajeOficina | undefined {
   return lista.find((p) => x >= p.aspecto.x - 22 && x <= p.aspecto.x + 38 && y >= p.aspecto.y - 34 && y <= p.aspecto.y + 62);
 }

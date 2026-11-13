@@ -3,7 +3,7 @@ import type { AccionSeguimiento, ConsultaAnalista, FrecuenciaSeguimiento, Respue
 import { Pastilla, Vacio } from "./marketingUi";
 import { TextoAnalista } from "./TextoAnalista";
 import { cuandoRelativo, ESTADO_TAREA, type AgenteRegistro, type TareaMarketing } from "./agentesRegistroLogica";
-import { ALTO, ANCHO, personajeEn, personajes, type Animacion, type PersonajeOficina } from "./oficinaAgentesLogica";
+import { ALTO, ANCHO, DESPLAZA_CMO, altoOficina, hayCmo, personajeEn, personajes, type Animacion, type PersonajeOficina } from "./oficinaAgentesLogica";
 
 export type EstadoCarga = "cargando" | "error" | "ok";
 
@@ -11,6 +11,8 @@ export type EstadoCarga = "cargando" | "error" | "ok";
 export interface AnalistaProps {
   consultas: ConsultaAnalista[]; estadoConsultas: EstadoCarga; preguntar: (pregunta: string, historial?: TurnoHistorial[]) => Promise<RespuestaAnalista>;
   // Seguimientos (opcionales: sin ellos no aparece la sección).
+  // Panel del CMO (opcional: sin él, o sin el agente en el registro, no aparece la caja de preguntas del CMO).
+  cmo?: { consultas: ConsultaAnalista[]; estadoConsultas: EstadoCarga; preguntar: (pregunta: string, historial?: TurnoHistorial[]) => Promise<RespuestaAnalista> };
   seguimientos?: SeguimientoAnalista[]; estadoSeguimientos?: EstadoCarga; gestionarSeguimiento?: (c: AccionSeguimiento) => Promise<{ ok: boolean; error?: string }>;
 }
 
@@ -19,11 +21,21 @@ function rect(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: n
 
 function pintar(g: CanvasRenderingContext2D, lista: PersonajeOficina[], elegido: string | null, cuadro: number, oscuro: boolean, quieto: boolean) {
   const c1 = oscuro ? "#2e2820" : "#efe3cf", c2 = oscuro ? "#332c23" : "#e9dcc5", tinta = oscuro ? "#efe6d6" : "#3b3226", suave = oscuro ? "#cdbf9f" : "#7b6f5d";
-  for (let y = 0; y < ALTO; y += 16) for (let x = 0; x < ANCHO; x += 16) rect(g, x, y, 16, 16, ((x + y) / 16) % 2 ? c1 : c2);
-  g.strokeStyle = oscuro ? "rgba(220,200,160,.25)" : "rgba(120,100,70,.35)"; g.setLineDash([4, 4]); g.strokeRect(6, 6, ANCHO - 12, ALTO - 12); g.setLineDash([]);
-  g.fillStyle = suave; g.font = "bold 10px monospace"; g.fillText("MONITOREO", 14, 20);
-  if (lista.some((p) => p.clave === "marketing_analista")) { g.setLineDash([4, 4]); g.beginPath(); g.moveTo(436, 12); g.lineTo(436, ALTO - 12); g.stroke(); g.setLineDash([]); g.fillText("ANÁLISIS", 446, 20); }
-  [[16, 176], [ANCHO - 28, 176]].forEach(([x, y]) => { rect(g, x, y + 8, 10, 8, "#a9744a"); rect(g, x + 1, y, 8, 8, "#6f9d7a"); rect(g, x + 3, y - 4, 4, 6, "#7fb58c"); });
+  const dy = hayCmo(lista) ? DESPLAZA_CMO : 0, alto = ALTO + dy;
+  for (let y = 0; y < alto; y += 16) for (let x = 0; x < ANCHO; x += 16) rect(g, x, y, 16, 16, ((x + y) / 16) % 2 ? c1 : c2);
+  g.strokeStyle = oscuro ? "rgba(220,200,160,.25)" : "rgba(120,100,70,.35)"; g.setLineDash([4, 4]); g.strokeRect(6, 6, ANCHO - 12, alto - 12); g.setLineDash([]);
+  g.fillStyle = suave; g.font = "bold 10px monospace";
+  if (dy) {
+    g.fillText("DIRECCIÓN", 14, 20);
+    g.setLineDash([4, 4]); g.beginPath(); g.moveTo(12, dy + 4); g.lineTo(ANCHO - 12, dy + 4); g.stroke(); g.setLineDash([]);
+    // pizarrón de la franja de dirección
+    rect(g, 70, 30, 150, 52, "#8a6a43"); rect(g, 73, 33, 144, 46, oscuro ? "#3a4a45" : "#f7f3ea");
+    for (const [x, y, w] of [[82, 44, 90], [82, 54, 120], [82, 64, 70]]) rect(g, x, y, w, 2, oscuro ? "#9fb8ad" : "#b9a98c");
+    g.fillStyle = suave;
+  }
+  g.fillText("MONITOREO", 14, 20 + dy);
+  if (lista.some((p) => p.clave === "marketing_analista")) { g.setLineDash([4, 4]); g.beginPath(); g.moveTo(436, dy + 12); g.lineTo(436, alto - 12); g.stroke(); g.setLineDash([]); g.fillText("ANÁLISIS", 446, 20 + dy); }
+  [[16, 176 + dy], [ANCHO - 28, 176 + dy]].forEach(([x, y]) => { rect(g, x, y + 8, 10, 8, "#a9744a"); rect(g, x + 1, y, 8, 8, "#6f9d7a"); rect(g, x + 3, y - 4, 4, 6, "#7fb58c"); });
 
   for (const p of lista) {
     const { x, y } = p.aspecto, an: Animacion = p.estado.animacion, gris = an === "sin_datos";
@@ -88,7 +100,7 @@ export function OficinaAgentes({ agentes, tareasMarketing, estadoAgentes, estado
 
   const clic = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const r = e.currentTarget.getBoundingClientRect();
-    const p = personajeEn((e.clientX - r.left) * ANCHO / r.width, (e.clientY - r.top) * ALTO / r.height, datos.current.lista);
+    const p = personajeEn((e.clientX - r.left) * ANCHO / r.width, (e.clientY - r.top) * altoOficina(datos.current.lista) / r.height, datos.current.lista);
     if (p) setElegidoId(p.id);
   }, []);
 
@@ -99,7 +111,7 @@ export function OficinaAgentes({ agentes, tareasMarketing, estadoAgentes, estado
   return (
     <div className="grid gap-4 md:grid-cols-[minmax(0,1.5fr)_minmax(280px,1fr)]" data-testid="oficina-agentes">
       <div className="zen-glass rounded-2xl p-3">
-        <canvas ref={ref} width={ANCHO} height={ALTO} onClick={clic} className="block h-auto w-full rounded-xl" style={{ imageRendering: "pixelated" }}
+        <canvas ref={ref} width={ANCHO} height={altoOficina(lista)} onClick={clic} className="block h-auto w-full rounded-xl" style={{ imageRendering: "pixelated" }}
           role="img" aria-label={`Oficina de Marketing: ${lista.map((p) => `${p.nombre}, ${p.estado.etiqueta}`).join("; ")}`} data-testid="oficina-lienzo" />
         <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Agentes de Marketing">
           {lista.map((p) => (
@@ -145,7 +157,9 @@ export function OficinaAgentes({ agentes, tareasMarketing, estadoAgentes, estado
               )}
           </div>
           {elegido.clave === "marketing_analista" && analista ? (
-            <PreguntarAnalista analista={analista} now={now} alPensar={(p) => setPensandoId(p ? elegido.id : null)} />
+            <PreguntarAnalista key="analista" analista={analista} datos={analista} agente="marketing_analista" now={now} alPensar={(p) => setPensandoId(p ? elegido.id : null)} />
+          ) : elegido.clave === "marketing_cmo" && analista?.cmo ? (
+            <PreguntarAnalista key="cmo" analista={analista} datos={analista.cmo} agente="marketing_cmo" now={now} alPensar={(p) => setPensandoId(p ? elegido.id : null)} />
           ) : (
             <p className="border-t border-border/40 pt-2 text-xs text-muted-foreground" data-testid="oficina-proximamente">
               Preguntarles cómo van y dejarles tareas llegará en una siguiente fase. Por ahora esta vista es solo de lectura.
@@ -163,7 +177,10 @@ const ETIQUETA_CONSULTA: Record<ConsultaAnalista["estado"], { etiqueta: string; 
   respondida: { etiqueta: "Respondida", color: "verde" }, error: { etiqueta: "Sin respuesta", color: "rojo" }, rechazada_limite: { etiqueta: "Tope de uso", color: "amarillo" },
 };
 
-function PreguntarAnalista({ analista, now, alPensar }: { analista: AnalistaProps; now: Date; alPensar: (pensando: boolean) => void }) {
+type DatosAgente = { consultas: ConsultaAnalista[]; estadoConsultas: EstadoCarga; preguntar: (pregunta: string, historial?: TurnoHistorial[]) => Promise<RespuestaAnalista> };
+// Caja de preguntas y conversación de un agente consultable: el Analista (con seguimientos) o el CMO (solo conversación, de momento).
+function PreguntarAnalista({ analista, datos, agente, now, alPensar }: { analista: AnalistaProps; datos: DatosAgente; agente: "marketing_analista" | "marketing_cmo"; now: Date; alPensar: (pensando: boolean) => void }) {
+  const esCmo = agente === "marketing_cmo";
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
   // Conversación: cada turno guarda la pregunta y su respuesta. Al preguntar de nuevo se mandan los últimos turnos como contexto.
@@ -181,7 +198,7 @@ function PreguntarAnalista({ analista, now, alPensar }: { analista: AnalistaProp
     setEnviando(true); setResp(null); alPensar(true);
     const contexto: TurnoHistorial[] = hilo.slice(-3).flatMap((t) => [{ rol: "user" as const, texto: t.pregunta }, { rol: "assistant" as const, texto: t.resp.respuesta ?? "" }]);
     try {
-      const r = await (contexto.length > 0 ? analista.preguntar(limpia, contexto) : analista.preguntar(limpia));
+      const r = await (contexto.length > 0 ? datos.preguntar(limpia, contexto) : datos.preguntar(limpia));
       if (r.ok) { setHilo((h) => [...h, { pregunta: limpia, resp: r }]); setTexto(""); } else setResp(r); /* si falló, se conserva la pregunta para reintentar */
     } catch { setResp({ ok: false, error: "No pudimos hablar con el Analista. Inténtalo de nuevo." }); }
     finally { setEnviando(false); alPensar(false); }
@@ -201,16 +218,16 @@ function PreguntarAnalista({ analista, now, alPensar }: { analista: AnalistaProp
 
   return (
     <div className="space-y-3 border-t border-border/40 pt-3" data-testid="analista-preguntar">
-      <label htmlFor="pregunta-analista" className="block text-xs font-medium text-muted-foreground">{hilo.length > 0 ? "Sigue la conversación" : "Pregúntale cómo van tus resultados"}</label>
+      <label htmlFor="pregunta-analista" className="block text-xs font-medium text-muted-foreground">{hilo.length > 0 ? "Sigue la conversación" : esCmo ? "Pídele al CMO un panorama o qué priorizar" : "Pregúntale cómo van tus resultados"}</label>
       <textarea id="pregunta-analista" data-testid="analista-caja" value={texto} onChange={(e) => setTexto(e.target.value)} rows={2} maxLength={MAX_PREGUNTA + 50} disabled={enviando}
-        placeholder={hilo.length > 0 ? "Ej.: ¿y en Facebook?" : "Ej.: ¿cómo va el alcance de los carruseles en Instagram este mes?"} className="w-full rounded-lg border border-border bg-background p-2 text-sm"
+        placeholder={hilo.length > 0 ? (esCmo ? "Ej.: ¿y qué necesitas de mí?" : "Ej.: ¿y en Facebook?") : esCmo ? "Ej.: ¿qué debería priorizar esta semana?" : "Ej.: ¿cómo va el alcance de los carruseles en Instagram este mes?"} className="w-full rounded-lg border border-border bg-background p-2 text-sm"
         onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void enviar(); } }} />
       <div className="flex items-center justify-between gap-2">
         <span className={`text-xs ${limpia.length > MAX_PREGUNTA ? "text-red-600" : "text-muted-foreground"}`} data-testid="analista-contador">{limpia.length}/{MAX_PREGUNTA}</span>
         <button type="button" onClick={() => void enviar()} disabled={!puede} data-testid="analista-enviar"
           className="rounded-full bg-[#9b7b4f] px-4 py-1.5 text-xs text-white disabled:opacity-50">{enviando ? "Pensando…" : "Preguntar"}</button>
       </div>
-      {analista.gestionarSeguimiento && (
+      {!esCmo && analista.gestionarSeguimiento && (
         <div className="flex flex-wrap items-center gap-2 text-xs" data-testid="analista-nuevo-seguimiento">
           <span className="text-muted-foreground">O pídele que lo repita:</span>
           <select value={frecuencia} onChange={(e) => setFrecuencia(e.target.value as FrecuenciaSeguimiento)} aria-label="Frecuencia del seguimiento" disabled={guardando}
@@ -245,15 +262,15 @@ function PreguntarAnalista({ analista, now, alPensar }: { analista: AnalistaProp
         </div>
       )}
 
-      {analista.gestionarSeguimiento && <SeguimientosLista analista={analista} now={now} />}
+      {!esCmo && analista.gestionarSeguimiento && <SeguimientosLista analista={analista} now={now} />}
 
       <div>
         <p className="mb-1 text-xs font-medium text-muted-foreground">Preguntas recientes</p>
-        {analista.estadoConsultas === "error" ? <p className="text-xs text-muted-foreground" data-testid="analista-historial-error">No pudimos leer el historial de preguntas.</p>
-          : analista.estadoConsultas === "cargando" ? <p className="text-xs text-muted-foreground">Leyendo historial…</p>
-          : analista.consultas.length === 0 ? <p className="text-xs text-muted-foreground" data-testid="analista-sin-historial">Todavía no hay preguntas.</p> : (
+        {datos.estadoConsultas === "error" ? <p className="text-xs text-muted-foreground" data-testid="analista-historial-error">No pudimos leer el historial de preguntas.</p>
+          : datos.estadoConsultas === "cargando" ? <p className="text-xs text-muted-foreground">Leyendo historial…</p>
+          : datos.consultas.length === 0 ? <p className="text-xs text-muted-foreground" data-testid="analista-sin-historial">Todavía no hay preguntas.</p> : (
             <ul className="divide-y divide-border/40 text-xs" data-testid="analista-historial">
-              {analista.consultas.map((c) => (
+              {datos.consultas.map((c) => (
                 <li key={c.id} className="py-1.5">
                   <button type="button" className="flex w-full items-start justify-between gap-2 text-left" aria-expanded={abierta === c.id} onClick={() => setAbierta(abierta === c.id ? null : c.id)}>
                     <span className="min-w-0"><span className="block">{c.pregunta}</span><span className="block text-muted-foreground">{cuandoRelativo(c.created_at, now)}{c.seguimiento_id ? " · seguimiento" : ""}</span></span>
@@ -269,7 +286,7 @@ function PreguntarAnalista({ analista, now, alPensar }: { analista: AnalistaProp
             </ul>
           )}
       </div>
-      <p className="text-xs text-muted-foreground">El Analista solo lee y explica: no publica ni cambia nada. Sus cifras salen de la base y se verifican antes de mostrarlas.</p>
+      <p className="text-xs text-muted-foreground">{esCmo ? "El CMO solo lee y propone: no publica ni cambia nada, y cada propuesta la decide una persona. Sus cifras salen de la base y se verifican antes de mostrarlas." : "El Analista solo lee y explica: no publica ni cambia nada. Sus cifras salen de la base y se verifican antes de mostrarlas."}</p>
     </div>
   );
 }

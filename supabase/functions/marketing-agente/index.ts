@@ -7,8 +7,8 @@
 //   MARKETING_AGENTE_MAX_TOKENS_MES.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import {
-  correrConsulta, evaluarLimites, inicioDiaCDMX, inicioMesCDMX, leerLimites, MODELO_POR_DEFECTO, normalizarHistorial, validarPregunta,
-  type ResultadoConsulta,
+  AGENTES_CONSULTABLES, correrConsulta, evaluarLimites, inicioDiaCDMX, inicioMesCDMX, leerLimites, MODELO_POR_DEFECTO, normalizarHistorial, SYSTEM_DE, validarPregunta,
+  type AgenteConsultable, type ResultadoConsulta,
 } from "../_shared/analista.ts";
 import { herramientasDe, llmAnthropic } from "../_shared/analista_servidor.ts";
 
@@ -18,7 +18,6 @@ const CORS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 const json = (o: unknown, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { ...CORS, "Content-Type": "application/json" } });
-const AGENTE = "marketing_analista";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
@@ -39,7 +38,7 @@ Deno.serve(async (req) => {
   if (!org) return json({ ok: false, error: "No se pudo identificar tu organización." }, 403);
 
   // 2) La pregunta.
-  let cuerpo: { pregunta?: unknown; historial?: unknown; accion?: unknown; frecuencia?: unknown; id?: unknown; estado?: unknown } = {};
+  let cuerpo: { agente?: unknown; pregunta?: unknown; historial?: unknown; accion?: unknown; frecuencia?: unknown; id?: unknown; estado?: unknown } = {};
   try { cuerpo = await req.json(); } catch { return json({ ok: false, error: "Solicitud no válida." }, 400); }
 
   // 2b) Seguimientos: crear, pausar, reanudar o terminar. Solo guardan la pregunta y su frecuencia; el Analista las responde después, en solo lectura.
@@ -63,6 +62,9 @@ Deno.serve(async (req) => {
     return json({ ok: true });
   }
 
+  // Con quién se habla: el Analista (por defecto) o el CMO. Lista cerrada.
+  if (cuerpo.agente !== undefined && !(AGENTES_CONSULTABLES as readonly unknown[]).includes(cuerpo.agente)) return json({ ok: false, error: "Agente no válido." }, 400);
+  const AGENTE: AgenteConsultable = (cuerpo.agente as AgenteConsultable | undefined) ?? "marketing_analista";
   const v = validarPregunta(cuerpo.pregunta);
   if (!v.ok) return json({ ok: false, error: v.error }, 400);
 
@@ -80,7 +82,7 @@ Deno.serve(async (req) => {
   const tokensMes = (mes ?? []).reduce((s: number, f: { tokens_entrada: number; tokens_salida: number }) => s + f.tokens_entrada + f.tokens_salida, 0);
   const limite = evaluarLimites({ consultasHoyUsuario: hoy ?? 0, tokensMes }, leerLimites((k) => Deno.env.get(k)));
   if (!limite.permitido) {
-    await db.from("mk_consulta").insert({ organization_id: org, user_id: u.user.id, pregunta: v.pregunta, estado: "rechazada_limite", modelo });
+    await db.from("mk_consulta").insert({ organization_id: org, user_id: u.user.id, pregunta: v.pregunta, estado: "rechazada_limite", modelo, agente: AGENTE });
     return json({ ok: false, error: limite.mensaje, limite: limite.motivo }, 429);
   }
 
@@ -90,13 +92,13 @@ Deno.serve(async (req) => {
   // 5) Consulta.
   const inicio = new Date().toISOString();
   let res: ResultadoConsulta | null = null, fallo = false;
-  try { res = await correrConsulta({ pregunta: v.pregunta, herramientas, llm: llmAnthropic(apiKey, modelo), historial: normalizarHistorial(cuerpo.historial) }); } catch (e) {
+  try { res = await correrConsulta({ pregunta: v.pregunta, herramientas, llm: llmAnthropic(apiKey, modelo), historial: normalizarHistorial(cuerpo.historial), system: SYSTEM_DE[AGENTE] }); } catch (e) {
     fallo = true; console.error("marketing-agente: falla del modelo", e instanceof Error ? e.message : "error");
   }
   const ok = !fallo && !!res?.ok;
 
   const { data: fila, error: errGuardar } = await db.from("mk_consulta").insert({
-    organization_id: org, user_id: u.user.id, pregunta: v.pregunta, respuesta: ok ? res!.respuesta : null, estado: ok ? "respondida" : "error",
+    organization_id: org, user_id: u.user.id, agente: AGENTE, pregunta: v.pregunta, respuesta: ok ? res!.respuesta : null, estado: ok ? "respondida" : "error",
     verificada: ok ? res!.verificada : null, no_verificadas: ok ? res!.no_verificadas : [],
     herramientas: (res?.fuentes ?? []).map((f) => ({ herramienta: f.herramienta, filas: f.filas })), modelo,
     tokens_entrada: res?.tokens.entrada ?? 0, tokens_salida: res?.tokens.salida ?? 0, duracion_ms: Date.now() - t0,
@@ -104,7 +106,7 @@ Deno.serve(async (req) => {
 
   // 6) Tarea y latido en el registro de agentes. Un fallo aquí no tumba la respuesta, pero no se calla: queda en el registro de la función.
   const { error: errRegistro } = await db.rpc("mk_registrar_corrida", {
-    p_agente: AGENTE, p_estado: ok ? "completed" : "error", p_titulo: `Pregunta ${inicioDiaCDMX(ahora).slice(0, 10)}`,
+    p_agente: AGENTE, p_estado: ok ? "completed" : "error", p_titulo: `${AGENTE === "marketing_cmo" ? "Consulta al CMO" : "Pregunta"} ${inicioDiaCDMX(ahora).slice(0, 10)}`,
     p_resumen: ok ? `${res!.verificada ? "cifras verificadas" : `${res!.no_verificadas.length} cifras sin verificar`}; ${res!.fuentes.length} consultas de datos` : "no se pudo responder",
     p_resultado: { herramientas: (res?.fuentes ?? []).map((f) => f.herramienta), tokens: res?.tokens ?? null, verificada: ok ? res!.verificada : null }, p_inicio: inicio,
   });

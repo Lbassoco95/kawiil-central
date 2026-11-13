@@ -9,6 +9,7 @@ const sqlRegistro = leer("supabase/migrations/20261105194055_marketing_analista_
 const sqlAgentes = leer("supabase/migrations/20261104015632_marketing_registrar_agentes.sql");
 const sqlRegistrar = leer("supabase/migrations/20261104165545_marketing_registrar_corrida.sql");
 const sqlRb1 = leer("tools/marketing/rollback_analista_datos.sql"), sqlRb2 = leer("tools/marketing/rollback_analista_registro.sql");
+const sqlCmo = leer("supabase/migrations/20261113015847_marketing_cmo_registro.sql"), sqlRbCmo = leer("tools/marketing/rollback_cmo_registro.sql");
 const ORG = "a0000000-0000-0000-0000-000000000001", OTRA = "b0000000-0000-0000-0000-000000000002", GLOBAL = "00000000-0000-0000-0000-000000000001";
 let fallos = 0; const prueba = async (n, f) => { try { await f(); console.log("  ok  ", n); } catch (e) { fallos++; console.log("  FALLA", n, "\n       ", e.message); } };
 
@@ -154,6 +155,39 @@ await prueba("reversas: borran las funciones y el registro del Analista sin toca
   assert.equal((await q(db, "select count(*)::int n from agent_registry where kind='system'"))[0].n, 3);
   assert.equal((await q(db, "select count(*)::int n from agent_tasks"))[0].n, 0);
   assert.equal((await q(db, "select count(*)::int n from pg_class where relname='mk_consulta'"))[0].n, 0);
+});
+await prueba("CMO: se registra como agente de sistema; las funciones lo aceptan; mk_consulta guarda con qué agente se habló; idempotente", async () => {
+  const db = await base(); await db.exec(sqlRegistro); await db.exec(sqlCmo); await db.exec(sqlCmo);
+  const a = (await q(db, "select kind,status,model,config from agent_registry where name='marketing_cmo'"))[0];
+  assert.deepEqual([a.kind, a.status, a.model], ["system", "idle", null]); assert.equal(a.config.solo_lectura, true); assert.equal(a.config.cadencia, "bajo_demanda");
+  assert.equal((await q(db, "select count(*)::int n from agent_registry where name='marketing_cmo'"))[0].n, 1);
+  await db.query("select public.mk_registrar_corrida('marketing_cmo','completed','Consulta al CMO','cifras citadas')"); await db.query("select public.mk_latido_agente('marketing_cmo')");
+  assert.equal((await q(db, "select tasks_completed from agent_registry where name='marketing_cmo'"))[0].tasks_completed, 1);
+  const ins = (ag) => db.query("insert into mk_consulta (organization_id,user_id,agente,pregunta,estado) values ($1,gen_random_uuid(),$2,'¿qué priorizamos?','respondida')", [ORG, ag]);
+  await ins("marketing_cmo"); await ins("marketing_analista"); await assert.rejects(() => ins("otro_agente"), /check/);
+  assert.equal((await q(db, "select agente from mk_consulta where agente='marketing_cmo'")).length, 1);
+});
+await prueba("CMO: los demás agentes y rechazos siguen igual; permisos de las funciones intactos", async () => {
+  const db = await base(); await db.exec(sqlRegistro); await db.exec(sqlCmo);
+  for (const n of ["marketing_vigilante", "marketing_informe_diario", "marketing_vigia", "marketing_analista"]) await db.query("select public.mk_registrar_corrida($1,'completed','x','y')", [n]);
+  await assert.rejects(() => db.query("select public.mk_registrar_corrida('coyolli','completed','x','y')"), /no permitido/);
+  await assert.rejects(() => db.query("select public.mk_latido_agente('marketing_otro')"), /no permitido/);
+  for (const f of ["mk_registrar_corrida(text,text,text,text,jsonb,timestamptz)", "mk_latido_agente(text)"])
+    for (const rol of ["anon", "authenticated", "service_role"]) assert.equal((await q(db, `select has_function_privilege('${rol}','public.${f}','execute') p`))[0].p, rol === "service_role", `${f} ${rol}`);
+  const t = (rol, p) => q(db, `select has_table_privilege('${rol}','public.mk_consulta','${p}') x`).then((r) => r[0].x);
+  assert.equal(await t("anon", "select"), false); assert.equal(await t("authenticated", "insert"), false);
+});
+await prueba("CMO: la reversa lo quita (con sus consultas y tareas) y deja al Analista y a los otros tres como estaban", async () => {
+  const db = await base(); await db.exec(sqlRegistro); await db.exec(sqlCmo);
+  await db.query("select public.mk_registrar_corrida('marketing_cmo','completed','t','r')"); await db.query("select public.mk_registrar_corrida('marketing_analista','completed','t','r')");
+  await db.query("insert into mk_consulta (organization_id,user_id,agente,pregunta,estado) values ($1,gen_random_uuid(),'marketing_cmo','¿qué priorizamos?','respondida'),($1,gen_random_uuid(),'marketing_analista','¿cómo vamos?','respondida')", [ORG]);
+  await db.exec(sqlRbCmo);
+  assert.equal((await q(db, "select count(*)::int n from agent_registry where name='marketing_cmo'"))[0].n, 0);
+  assert.equal((await q(db, "select count(*)::int n from agent_registry where kind='system'"))[0].n, 4);
+  assert.equal((await q(db, "select count(*)::int n from mk_consulta"))[0].n, 1); assert.equal((await q(db, "select count(*)::int n from agent_tasks"))[0].n, 1);
+  await assert.rejects(() => db.query("select public.mk_registrar_corrida('marketing_cmo','completed','t','r')"), /no permitido/);
+  await db.query("select public.mk_registrar_corrida('marketing_analista','completed','t','r')");
+  await assert.rejects(() => db.query("insert into mk_consulta (organization_id,user_id,agente,pregunta,estado) values ($1,gen_random_uuid(),'marketing_cmo','¿qué priorizamos?','respondida')", [ORG]), /check/);
 });
 if (fallos) { console.log(`\n${fallos} prueba(s) fallaron`); process.exit(1); }
 console.log("\nTodas las pruebas del Analista (SQL) pasaron");

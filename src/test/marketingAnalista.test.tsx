@@ -231,3 +231,47 @@ describe("conversación con el Analista", () => {
     expect(screen.queryByTestId("analista-hilo")).toBeNull(); expect(caja().value).toBe("¿Cómo vamos?");
   });
 });
+
+describe("CMO (director de marketing)", () => {
+  const CMO = ag("marketing_cmo", { display_name: "Director de marketing (CMO)", config: { objetivo: "Priorizar y proponer", cadencia: "bajo_demanda" } });
+  const CON_CMO = [...AGENTES, CMO];
+  const vistaCmo = (a: AnalistaProps) => render(<OficinaAgentes agentes={CON_CMO} tareasMarketing={[]} estadoAgentes="ok" estadoTareas="ok" ahora={AHORA} analista={a} />);
+  const ok = (respuesta: string): RespuestaAnalista => ({ ok: true, respuesta, verificada: true, no_verificadas: [], fuentes: [], restantes_hoy: 10 });
+  const elegirCmo = () => fireEvent.click(screen.getByTestId("oficina-agente-CMO"));
+
+  it("la oficina pone al CMO primero y arriba (franja de dirección); los demás bajan; sin CMO nada cambia", async () => {
+    const { altoOficina, hayCmo, ALTO, DESPLAZA_CMO } = await import("@/components/marketing/oficinaAgentesLogica");
+    const con = personajes(CON_CMO, [], AHORA), sin = personajes(AGENTES, [], AHORA);
+    expect(con.map((p) => p.aspecto.corto)).toEqual(["CMO", "Vigilante", "Informe", "Vigía", "Analista"]);
+    expect(con[0].aspecto).toMatchObject({ x: 520, y: 48 });
+    expect(con[4].aspecto.y).toBe(sin[3].aspecto.y + DESPLAZA_CMO);
+    expect(altoOficina(con)).toBe(ALTO + DESPLAZA_CMO); expect(altoOficina(sin)).toBe(ALTO); expect(hayCmo(sin)).toBe(false);
+    expect(con[0].aspecto.x).toBe(con[4].aspecto.x); expect(con[0].aspecto.y).toBeLessThan(con[4].aspecto.y);
+  });
+  it("el CMO es un agente bajo demanda: «Disponible» y su cumplimiento sigue las cifras verificadas", () => {
+    expect(senalAgente(CMO, AHORA)).toBe("disponible");
+    expect(cumplimiento(CMO, tm("c1", "marketing_cmo", "completed", "2026-11-05T16:00:00Z", { verificada: true }), AHORA).estado).toBe("cumple");
+    expect(cumplimiento(CMO, tm("c1", "marketing_cmo", "completed", "2026-11-05T16:00:00Z", { verificada: false }), AHORA).estado).toBe("no_cumple");
+  });
+  it("al elegir al CMO aparece su caja (sin seguimientos) y pregunta por su propio canal, no por el del Analista", async () => {
+    const pAnalista = vi.fn(), pCmo = vi.fn().mockResolvedValue(ok("Qué veo: colchón verde."));
+    vistaCmo({ ...props(pAnalista), cmo: { consultas: [], estadoConsultas: "ok", preguntar: pCmo }, seguimientos: [], estadoSeguimientos: "ok", gestionarSeguimiento: vi.fn() });
+    elegirCmo();
+    expect(screen.getByText("Pídele al CMO un panorama o qué priorizar")).toBeTruthy();
+    expect(screen.queryByTestId("analista-nuevo-seguimiento")).toBeNull(); expect(screen.queryByTestId("analista-seguimientos")).toBeNull();
+    escribir("¿Qué debería priorizar esta semana?"); fireEvent.click(screen.getByTestId("analista-enviar"));
+    await waitFor(() => expect(pCmo).toHaveBeenCalledWith("¿Qué debería priorizar esta semana?")); expect(pAnalista).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByTestId("analista-respuesta")).toBeTruthy());
+    expect(screen.getByText(/El CMO solo lee y propone/)).toBeTruthy();
+  });
+  it("cada agente conserva su propia conversación: el hilo del CMO no aparece en el del Analista", async () => {
+    const pCmo = vi.fn().mockResolvedValue(ok("Respuesta del CMO.")); vistaCmo({ ...props(vi.fn()), cmo: { consultas: [], estadoConsultas: "ok", preguntar: pCmo } });
+    elegirCmo(); escribir("¿Qué priorizamos?"); fireEvent.click(screen.getByTestId("analista-enviar")); await waitFor(() => expect(screen.getByTestId("analista-hilo")).toBeTruthy());
+    elegirAnalista(); expect(screen.queryByTestId("analista-hilo")).toBeNull(); expect(screen.getByText("Pregúntale cómo van tus resultados")).toBeTruthy();
+  });
+  it("el historial de cada agente solo muestra sus preguntas; sin el panel del CMO se ve el aviso de «siguiente fase»", () => {
+    const { unmount } = vistaCmo({ ...props(vi.fn(), [consulta("a1", "Pregunta al analista")]), cmo: { consultas: [consulta("c1", "Pregunta al CMO", { agente: "marketing_cmo" })], estadoConsultas: "ok", preguntar: vi.fn() } });
+    elegirCmo(); expect(within(screen.getByTestId("analista-historial")).getByText("Pregunta al CMO")).toBeTruthy(); expect(screen.queryByText("Pregunta al analista")).toBeNull();
+    unmount(); vistaCmo(props(vi.fn())); elegirCmo(); expect(screen.getByTestId("oficina-proximamente")).toBeTruthy();
+  });
+});
