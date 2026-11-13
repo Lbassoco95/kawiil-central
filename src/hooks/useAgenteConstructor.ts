@@ -34,12 +34,14 @@ export function useCrearAgente() {
 // Darle una instrucción a un agente: usa el despacho que ya existe (dispatch-to-agent → VM). Crea una tarea; no cambia al agente.
 export const useInstruirAgente = () =>
   useMutation({
-    mutationFn: async (v: { agent_id: string; title: string; instructions: string; accesos_aprobados?: string[]; hilo_id?: string }) => {
+    mutationFn: async (v: { agent_id: string; title: string; instructions: string; accesos_aprobados?: string[]; escrituras_aprobadas?: string[]; hilo_id?: string }) => {
       const { data, error } = await supabase.functions.invoke("dispatch-to-agent", {
         body: { agent_id: v.agent_id, title: v.title, instructions: v.instructions, description: v.instructions, task_type: "manual", priority: "normal",
           // Accesos de 1Password que la persona autoriza SOLO para esta tarea (la VM exige esta lista para iniciar sesión).
           // `hilo_id` = la solicitud original: la VM le da al agente lo ya hablado en ella (seguimiento dentro de un hilo).
-          ...(v.accesos_aprobados?.length || v.hilo_id ? { input_context: { ...(v.accesos_aprobados?.length ? { accesos_aprobados: v.accesos_aprobados } : {}), ...(v.hilo_id ? { hilo_id: v.hilo_id } : {}) } } : {}) },
+          ...(v.accesos_aprobados?.length || v.escrituras_aprobadas?.length || v.hilo_id ? { input_context: { ...(v.accesos_aprobados?.length ? { accesos_aprobados: v.accesos_aprobados } : {}),
+            // Sitios donde la persona autoriza ESCRIBIR solo en esta tarea (la VM la exige y nunca amplía lo que Dirección habilitó).
+            ...(v.escrituras_aprobadas?.length ? { escrituras_aprobadas: v.escrituras_aprobadas } : {}), ...(v.hilo_id ? { hilo_id: v.hilo_id } : {}) } } : {}) },
       });
       if (error) throw new Error("No se pudo enviar la instrucción. Revisa que el servicio de agentes esté encendido.");
       return data as { task_id?: string };
