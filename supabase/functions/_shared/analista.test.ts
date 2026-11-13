@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  correrConsulta, evaluarLimites, HERRAMIENTAS, normalizarHistorial, AGENTES_CONSULTABLES, SYSTEM_CMO, SYSTEM_DE, inicioDiaCDMX, inicioMesCDMX, leerLimites, LIMITES_POR_DEFECTO, MAX_PREGUNTA, SYSTEM, validarPregunta, verificarCifras,
+  correrConsulta, evaluarLimites, HERRAMIENTAS, normalizarHistorial, AGENTES_CONSULTABLES, ESFUERZO_DE, SYSTEM_CMO, SYSTEM_DE, inicioDiaCDMX, inicioMesCDMX, leerLimites, LIMITES_POR_DEFECTO, MAX_PREGUNTA, SYSTEM, validarPregunta, verificarCifras,
   type Bloque, type Herramientas, type Llm, type RespuestaLlm,
 } from "./analista.ts";
 
@@ -215,4 +215,16 @@ test("sin respuesta: queda un diagnóstico (último stop_reason y tipos de bloqu
   const llm = async () => ({ stop_reason: "refusal", uso: { entrada: 1, salida: 1 }, contenido: [] });
   const r = await correrConsulta({ pregunta: "¿Cómo va el colchón?", herramientas: {} as never, llm: llm as never });
   assert.equal(r.ok, false); assert.match(r.detalle ?? "", /stop=refusal bloques=ninguno/);
+});
+
+test("el esfuerzo de razonamiento llega al modelo en cada llamada, también en la final; el CMO usa «medium» y el Analista el valor por defecto", async () => {
+  const vistos: Array<string | undefined> = [];
+  const llm = async (a: { esfuerzo?: string; sinHerramientas?: boolean }) => {
+    vistos.push(a.esfuerzo);
+    return a.sinHerramientas ? { stop_reason: "end_turn", uso: { entrada: 1, salida: 1 }, contenido: [{ type: "text", text: "Listo." }] }
+      : { stop_reason: "tool_use", uso: { entrada: 1, salida: 1 }, contenido: [{ type: "tool_use", id: "t", name: "colchon_actual", input: {} }] };
+  };
+  await correrConsulta({ pregunta: "¿Qué priorizamos?", herramientas: { colchon_actual: async () => COLCHON } as never, llm: llm as never, maxPasos: 2, esfuerzo: "medium" });
+  assert.deepEqual(vistos, ["medium", "medium", "medium"]);
+  assert.equal(ESFUERZO_DE.marketing_cmo, "medium"); assert.equal(ESFUERZO_DE.marketing_analista, undefined);
 });
