@@ -234,7 +234,7 @@ export function cumplimiento(a: AgenteRegistro, ultima: TareaMarketing | undefin
     return hora <= limite ? { estado: "cumple", texto: `Último informe entregado a las ${hora}, antes de las ${limite}.` }
       : { estado: "no_cumple", texto: `Último informe entregado a las ${hora}, después de las ${limite}.` };
   }
-  if (a.name === "marketing_analista") {
+  if (a.name === "marketing_analista" || a.name === "marketing_cmo") {
     if (!ultima) return { estado: "sin_datos", texto: "Todavía no ha respondido ninguna pregunta." };
     if (ultima.status === "error") return { estado: "no_cumple", texto: "La última pregunta no se pudo responder." };
     if (ultima.result?.verificada === true) return { estado: "cumple", texto: "Su última respuesta tuvo todas las cifras verificadas contra la base." };

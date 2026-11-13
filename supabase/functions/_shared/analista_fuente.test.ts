@@ -64,3 +64,9 @@ test("marketing-agente: las acciones de seguimiento van después de comprobar se
   const i = codigo.indexOf('"crear_seguimiento"');
   assert.ok(i > codigo.indexOf('rpc("mk_can_view")') && i > codigo.indexOf('rpc("mk_org_id")'));
 });
+
+test("marketing-agente: el agente con el que se habla es de lista cerrada y se guarda en cada consulta", () => {
+  assert.match(codigo, /AGENTES_CONSULTABLES as readonly unknown\[\]\)\.includes\(cuerpo\.agente\)/); assert.match(codigo, /Agente no válido/);
+  assert.ok((codigo.match(/agente: AGENTE/g) ?? []).length >= 2, "toda inserción en mk_consulta lleva el agente");
+  assert.match(codigo, /system: SYSTEM_DE\[AGENTE\]/);
+});

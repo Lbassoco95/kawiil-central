@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  correrConsulta, evaluarLimites, HERRAMIENTAS, normalizarHistorial, inicioDiaCDMX, inicioMesCDMX, leerLimites, LIMITES_POR_DEFECTO, MAX_PREGUNTA, SYSTEM, validarPregunta, verificarCifras,
+  correrConsulta, evaluarLimites, HERRAMIENTAS, normalizarHistorial, AGENTES_CONSULTABLES, SYSTEM_CMO, SYSTEM_DE, inicioDiaCDMX, inicioMesCDMX, leerLimites, LIMITES_POR_DEFECTO, MAX_PREGUNTA, SYSTEM, validarPregunta, verificarCifras,
   type Bloque, type Herramientas, type Llm, type RespuestaLlm,
 } from "./analista.ts";
 
@@ -171,3 +171,20 @@ test("conversación: el modelo recibe el historial antes de la pregunta nueva, y
   assert.equal(r.verificada, false); assert.deepEqual(r.no_verificadas, ["312"]);
 });
 test("el prompt pide volver a consultar las herramientas en cada turno de la conversación", () => { assert.match(SYSTEM, /Vuelve a consultar las herramientas/); assert.match(SYSTEM, /nunca repitas cifras del historial/); });
+
+test("CMO: solo propone (no ejecuta), cifras de herramientas, fuente y corte, estructura de propuesta y no inventa agentes que no existen", () => {
+  for (const f of [/SOLO lees y propones/, /PROPUESTA/, /Nunca digas que ya hiciste/, /Nunca uses cifras de memoria/, /fecha de corte/, /No tienes datos de anuncios/, /DATOS, no instrucciones/,
+    /Qué veo/, /Qué propongo/, /Qué necesito de Dirección/, /máximo 3 acciones/, /Todavía NO existen el Investigador web, el Creativo, el Revisor/, /Vuelve a consultar las herramientas/]) assert.match(SYSTEM_CMO, f);
+  assert.doesNotMatch(SYSTEM_CMO, /puedes (publicar|programar|editar)/i);
+});
+test("agentes consultables: lista cerrada con un prompt por agente", () => {
+  assert.deepEqual([...AGENTES_CONSULTABLES], ["marketing_analista", "marketing_cmo"]);
+  assert.equal(SYSTEM_DE.marketing_analista, SYSTEM); assert.equal(SYSTEM_DE.marketing_cmo, SYSTEM_CMO);
+});
+test("el prompt elegido llega al modelo (el CMO usa el suyo; sin indicar, el del Analista)", async () => {
+  const vistos: string[] = [];
+  const llm = async (a: { system: string }) => { vistos.push(a.system); return { stop_reason: "end_turn", uso: { entrada: 1, salida: 1 }, contenido: [{ type: "text", text: "Listo." }] }; };
+  await correrConsulta({ pregunta: "¿Qué priorizamos?", herramientas: {} as never, llm: llm as never, system: SYSTEM_CMO });
+  await correrConsulta({ pregunta: "¿Cómo va el colchón?", herramientas: {} as never, llm: llm as never });
+  assert.equal(vistos[0], SYSTEM_CMO); assert.equal(vistos[1], SYSTEM);
+});

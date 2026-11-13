@@ -80,8 +80,12 @@ export default function Marketing() {
                 estadoAgentes={agentesReg.isError ? "error" : agentesReg.isLoading ? "cargando" : "ok"}
                 estadoTareas={tareasMk.isError ? "error" : tareasMk.isLoading ? "cargando" : "ok"}
                 analista={{
-                  consultas: consultas.data ?? [], estadoConsultas: consultas.isError ? "error" : consultas.isLoading ? "cargando" : "ok",
+                  consultas: (consultas.data ?? []).filter((c) => (c.agente ?? "marketing_analista") === "marketing_analista").slice(0, 10), estadoConsultas: consultas.isError ? "error" : consultas.isLoading ? "cargando" : "ok",
                   preguntar: async (p, h) => { const r = await preguntarAlAnalista(p, h); await Promise.all([qc.invalidateQueries({ queryKey: ["analista"] }), qc.invalidateQueries({ queryKey: ["agentes-registro"] })]); return r; },
+                  cmo: {
+                    consultas: (consultas.data ?? []).filter((c) => c.agente === "marketing_cmo").slice(0, 10), estadoConsultas: consultas.isError ? "error" : consultas.isLoading ? "cargando" : "ok",
+                    preguntar: async (p, h) => { const r = await preguntarAlAnalista(p, h, "marketing_cmo"); await Promise.all([qc.invalidateQueries({ queryKey: ["analista"] }), qc.invalidateQueries({ queryKey: ["agentes-registro"] })]); return r; },
+                  },
                   seguimientos: seguimientos.data ?? [], estadoSeguimientos: seguimientos.isError ? "error" : seguimientos.isLoading ? "cargando" : "ok",
                   gestionarSeguimiento: async (c) => { const r = await gestionarSeguimiento(c); await qc.invalidateQueries({ queryKey: ["analista", "seguimientos"] }); return r; },
                 }} />

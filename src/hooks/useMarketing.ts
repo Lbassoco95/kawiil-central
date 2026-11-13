@@ -168,7 +168,7 @@ export const useTareasMarketingAgentes = () =>
   });
 
 // ── Analista de resultados (agente con IA, solo lectura) ─────────────────────────────────────────────────────────────
-export interface ConsultaAnalista { id: string; pregunta: string; respuesta: string | null; estado: "respondida" | "error" | "rechazada_limite"; verificada: boolean | null; no_verificadas: string[]; created_at: string; seguimiento_id?: string | null }
+export interface ConsultaAnalista { id: string; pregunta: string; respuesta: string | null; estado: "respondida" | "error" | "rechazada_limite"; verificada: boolean | null; no_verificadas: string[]; created_at: string; seguimiento_id?: string | null; agente?: string | null }
 export interface RespuestaAnalista {
   ok: boolean; respuesta?: string; verificada?: boolean; no_verificadas?: string[]; fuentes?: Array<{ herramienta: string; filas: number | null; corte: string | null }>;
   restantes_hoy?: number; error?: string; limite?: "dia" | "mes";
@@ -180,7 +180,7 @@ export const useConsultasAnalista = () =>
     queryKey: ["analista", "consultas"],
     queryFn: async (): Promise<ConsultaAnalista[]> => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any).from("mk_consulta").select("id, pregunta, respuesta, estado, verificada, no_verificadas, created_at, seguimiento_id").order("created_at", { ascending: false }).limit(10);
+      const { data, error } = await (supabase as any).from("mk_consulta").select("id, pregunta, respuesta, estado, verificada, no_verificadas, created_at, seguimiento_id, agente").order("created_at", { ascending: false }).limit(30);
       if (error) throw error;
       return data ?? [];
     },
@@ -200,12 +200,13 @@ const SIN_RESPUESTA = { ok: false, error: "El Analista tardó demasiado en respo
 
 // Pregunta al Analista por la función marketing-agente. Devuelve siempre un objeto (nunca lanza): los errores llegan con un mensaje para mostrar.
 export interface TurnoHistorial { rol: "user" | "assistant"; texto: string }
-export function preguntarAlAnalista(pregunta: string, historial?: TurnoHistorial[]): Promise<RespuestaAnalista> {
-  return conTope(preguntarSinTope(pregunta, historial), SIN_RESPUESTA);
+export type AgenteConsultable = "marketing_analista" | "marketing_cmo";
+export function preguntarAlAnalista(pregunta: string, historial?: TurnoHistorial[], agente: AgenteConsultable = "marketing_analista"): Promise<RespuestaAnalista> {
+  return conTope(preguntarSinTope(pregunta, historial, agente), SIN_RESPUESTA);
 }
-async function preguntarSinTope(pregunta: string, historial?: TurnoHistorial[]): Promise<RespuestaAnalista> {
+async function preguntarSinTope(pregunta: string, historial: TurnoHistorial[] | undefined, agente: AgenteConsultable): Promise<RespuestaAnalista> {
   try {
-    const { data, error } = await supabase.functions.invoke("marketing-agente", { body: historial && historial.length > 0 ? { pregunta, historial } : { pregunta } });
+    const { data, error } = await supabase.functions.invoke("marketing-agente", { body: { pregunta, ...(historial && historial.length > 0 ? { historial } : {}), ...(agente === "marketing_cmo" ? { agente } : {}) } });
     if (!error) return data as RespuestaAnalista;
     const ctx = (error as { context?: Response }).context;
     if (ctx && typeof ctx.json === "function") { try { return (await ctx.json()) as RespuestaAnalista; } catch { /* sin cuerpo */ } }
