@@ -9,6 +9,7 @@ const sqlRegistro = leer("supabase/migrations/20261105194055_marketing_analista_
 const sqlAgentes = leer("supabase/migrations/20261104015632_marketing_registrar_agentes.sql");
 const sqlRegistrar = leer("supabase/migrations/20261104165545_marketing_registrar_corrida.sql");
 const sqlRb1 = leer("tools/marketing/rollback_analista_datos.sql"), sqlRb2 = leer("tools/marketing/rollback_analista_registro.sql");
+const sqlEquipo = leer("supabase/migrations/20261113204250_marketing_estado_equipo.sql"), sqlRbEquipo = leer("tools/marketing/rollback_estado_equipo.sql");
 const sqlCmo = leer("supabase/migrations/20261113015847_marketing_cmo_registro.sql"), sqlRbCmo = leer("tools/marketing/rollback_cmo_registro.sql");
 const ORG = "a0000000-0000-0000-0000-000000000001", OTRA = "b0000000-0000-0000-0000-000000000002", GLOBAL = "00000000-0000-0000-0000-000000000001";
 let fallos = 0; const prueba = async (n, f) => { try { await f(); console.log("  ok  ", n); } catch (e) { fallos++; console.log("  FALLA", n, "\n       ", e.message); } };
@@ -188,6 +189,25 @@ await prueba("CMO: la reversa lo quita (con sus consultas y tareas) y deja al An
   await assert.rejects(() => db.query("select public.mk_registrar_corrida('marketing_cmo','completed','t','r')"), /no permitido/);
   await db.query("select public.mk_registrar_corrida('marketing_analista','completed','t','r')");
   await assert.rejects(() => db.query("insert into mk_consulta (organization_id,user_id,agente,pregunta,estado) values ($1,gen_random_uuid(),'marketing_cmo','¿qué priorizamos?','respondida')", [ORG]), /check/);
+});
+await prueba("estado_equipo: solo agentes de Marketing, por sus propias tareas; sin latido ni textos de tareas; el resto de herramientas igual", async () => {
+  const db = await base(); await db.exec(sqlRegistro); await db.exec(sqlCmo); await db.exec(sqlEquipo);
+  await db.query("insert into agent_registry (organization_id, name, display_name, role, kind) values ($1,'coyolli','Coyolli','coyolli','consultable')", [GLOBAL]);
+  await db.query("update agent_registry set last_heartbeat = now()"); // latido compartido de la VM: no debe verse
+  await db.query("select public.mk_registrar_corrida('marketing_vigilante','completed','Colchón 2026-11-12 SECRETO','instagram 19 verde','{}'::jsonb)");
+  await db.query("select public.mk_registrar_corrida('marketing_vigilante','error','Colchón x','no se pudo leer Metricool','{}'::jsonb)");
+  const r = await herr(db, "estado_equipo"); const filas = r.datos;
+  assert.deepEqual(filas.map((f) => f.clave), ["marketing_vigilante", "marketing_informe_diario", "marketing_vigia", "marketing_analista", "marketing_cmo"]);
+  const v = filas[0]; assert.equal(v.agente, "Vigilante del colchón"); assert.equal(v.tareas_completadas, 1); assert.equal(v.tareas_con_error, 1);
+  assert.equal(v.completadas_7_dias, 1); assert.equal(v.con_error_7_dias, 1); assert.equal(v.ultima_tarea_estado, "error"); assert.match(v.ultima_tarea_resumen, /Metricool/);
+  assert.equal(filas.find((f) => f.clave === "marketing_cmo").cadencia, "bajo_demanda"); assert.equal(filas[0].cadencia, "programado");
+  const txt = JSON.stringify(r); assert.doesNotMatch(txt, /last_heartbeat|latido_en|ultimo_latido|SECRETO|coyolli|Coyolli|instructions|title|titulo/i);
+  assert.equal((await herr(db, "colchon_actual")).herramienta, "colchon_actual"); assert.equal(r.herramienta, "estado_equipo");
+});
+await prueba("estado_equipo: permisos intactos (solo service_role) y la reversa la quita sin tocar las demás herramientas", async () => {
+  const db = await base(); await db.exec(sqlEquipo);
+  for (const rol of ["anon", "authenticated", "service_role"]) assert.equal((await q(db, `select has_function_privilege('${rol}','public.mk_analista_datos(uuid,text,jsonb)','execute') p`))[0].p, rol === "service_role", rol);
+  await db.exec(sqlRbEquipo); await assert.rejects(() => herr(db, "estado_equipo"), /herramienta no permitida/); assert.equal((await herr(db, "casos_abiertos")).herramienta, "casos_abiertos");
 });
 if (fallos) { console.log(`\n${fallos} prueba(s) fallaron`); process.exit(1); }
 console.log("\nTodas las pruebas del Analista (SQL) pasaron");

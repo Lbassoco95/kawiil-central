@@ -23,7 +23,7 @@ export function llmAnthropic(apiKey: string, modelo: string): Llm {
 }
 
 // Herramientas: cada una llama a la función SQL de lista cerrada con la organización indicada.
-export const NOMBRES_HERRAMIENTAS = ["colchon_actual", "resultados_semanales", "resultados_por_formato", "resultados_por_pilar", "semaforo_semanas", "casos_abiertos", "informe_hoy", "piezas_proximas", "reglas_vigentes", "cobertura_fuentes"];
+export const NOMBRES_HERRAMIENTAS = ["colchon_actual", "resultados_semanales", "resultados_por_formato", "resultados_por_pilar", "semaforo_semanas", "casos_abiertos", "informe_hoy", "piezas_proximas", "reglas_vigentes", "cobertura_fuentes", "estado_equipo"];
 
 // deno-lint-ignore no-explicit-any
 export function herramientasDe(db: { rpc: (fn: string, args: Record<string, unknown>) => any }, org: string): Herramientas {
