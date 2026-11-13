@@ -14,6 +14,7 @@ import { EscritorioAgente, EstilosOficina } from "@/components/agentes/escritori
 import { useFiguraDe } from "@/components/agentes/BandaEquipo";
 import { ESTADO_OFICINA } from "@/lib/agentes/oficina";
 import { PlanEncargo } from "@/components/agentes/PlanEncargo";
+import { AutorizarEscritura } from "@/components/agentes/InstruirAgente";
 
 // Una solicitud con su conversación: lo que se le pidió al agente, lo que respondió y entregó, y lo que se le sigue pidiendo en el mismo
 // hilo (el agente recuerda lo ya hablado). Desde aquí también se programan revisiones («revísalo el lunes», «cada semana»).
@@ -126,6 +127,7 @@ export function HiloAgente({ taskId, ahora }: { taskId: string; ahora: Date }) {
   const instruir = useInstruirAgente();
   const qc = useQueryClient();
   const [texto, setTexto] = useState("");
+  const [escribir, setEscribir] = useState<string[]>([]);
   const figura = useFiguraDe(q.data?.hilo.agent_id);
   if (q.isLoading) return <p className="text-sm text-muted-foreground">Leyendo la solicitud…</p>;
   if (q.isError || !q.data) return <p role="alert" className="text-sm text-destructive">{(q.error as Error | null)?.message ?? "No se pudo leer la solicitud."}</p>;
@@ -134,8 +136,8 @@ export function HiloAgente({ taskId, ahora }: { taskId: string; ahora: Date }) {
   const enviar = () => {
     const t = texto.trim();
     if (!t) return;
-    instruir.mutate({ agent_id: hilo.agent_id, title: `Seguimiento: ${t.slice(0, 60)}`, instructions: t, hilo_id: hilo.id },
-      { onSuccess: () => { setTexto(""); void qc.invalidateQueries({ queryKey: ["agentes-seguimiento"] }); } });
+    instruir.mutate({ agent_id: hilo.agent_id, title: `Seguimiento: ${t.slice(0, 60)}`, instructions: t, hilo_id: hilo.id, escrituras_aprobadas: escribir.filter((d) => (q.data?.escritura_dominios ?? []).includes(d)) },
+      { onSuccess: () => { setTexto(""); setEscribir([]); void qc.invalidateQueries({ queryKey: ["agentes-seguimiento"] }); } });
   };
   return (
     <div className="space-y-3" data-testid="hilo">
@@ -158,6 +160,7 @@ export function HiloAgente({ taskId, ahora }: { taskId: string; ahora: Date }) {
       <div className="space-y-2">
         <Textarea rows={2} value={texto} onChange={(e) => setTexto(e.target.value)} placeholder={en_curso ? "Espera a que termine para escribirle de nuevo…" : `Escríbele a ${hilo.agente}: pídele un cambio, otro documento o que siga con el tema…`}
           disabled={en_curso} data-testid="hilo-texto" />
+        <AutorizarEscritura sitios={q.data?.escritura_dominios ?? []} marcados={escribir} onCambio={setEscribir} />
         {instruir.isError && <p role="alert" className="text-sm text-destructive">{(instruir.error as Error).message}</p>}
         <Button onClick={enviar} disabled={!texto.trim() || instruir.isPending || en_curso} data-testid="hilo-enviar">
           {instruir.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}Enviar

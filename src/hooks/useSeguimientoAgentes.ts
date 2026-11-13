@@ -51,6 +51,7 @@ export const useDescargarEntregable = () =>
 export interface RespuestaHilo {
   hilo: { id: string; titulo: string; agent_id: string; agente: string };
   mensajes: MensajeHilo[]; revisiones: RevisionPendiente[]; en_curso: boolean;
+  escritura_dominios?: string[];   // sitios donde Dirección habilitó escribir para este agente (se autoriza por tarea)
 }
 
 // Mientras el agente trabaja se actualiza cada pocos segundos; si no, solo cuando hay un cambio.

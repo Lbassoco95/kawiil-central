@@ -1,3 +1,4 @@
+import { dominiosEscritura } from "../../../supabase/functions/_shared/seguimiento";
 import { useState } from "react";
 import { Loader2, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,24 @@ export function etiquetasAccesos(a: AgenteRegistro | undefined): { etiqueta: str
 }
 
 // Darle una instrucción a un agente: crea una tarea por el despacho que ya existe. No modifica al agente ni guarda datos de expedientes aquí.
+// Casilla de «autorizo escribir» por sitio, solo para ESTA tarea. Sin marcarla el agente lee, descarga y prepara un resumen, pero no carga nada.
+export function AutorizarEscritura({ sitios, marcados, onCambio }: { sitios: string[]; marcados: string[]; onCambio: (v: string[]) => void }) {
+  if (sitios.length === 0) return null;
+  return (
+    <fieldset className="space-y-2 rounded-2xl border border-amber-300/70 bg-amber-50/40 p-3 text-sm" data-testid="autorizar-escritura">
+      <legend className="px-1 text-xs font-medium text-muted-foreground">Escribir en sitios (solo para esta tarea)</legend>
+      <p className="text-xs text-muted-foreground">Sin marcarla, el agente solo lee y te prepara un resumen para que lo apruebes. Márcala cuando ya revisaste lo que va a cargar: solo cargará lo que apruebes en tu instrucción.</p>
+      {sitios.map((d) => (
+        <label key={d} className="flex items-center gap-2">
+          <input type="checkbox" checked={marcados.includes(d)} data-testid={`autorizar-escritura-${d}`}
+            onChange={(e) => onCambio(e.target.checked ? [...marcados, d] : marcados.filter((x) => x !== d))} />
+          Autorizo escribir y enviar formularios en {d}
+        </label>
+      ))}
+    </fieldset>
+  );
+}
+
 export function InstruirAgente({ agentes, onVerSeguimiento, agenteInicial }: { agentes: AgenteRegistro[]; onVerSeguimiento?: (taskId?: string) => void; agenteInicial?: string }) {
   const [agenteId, setAgenteId] = useState(agenteInicial ?? "");
   const [titulo, setTitulo] = useState("");
@@ -21,24 +40,26 @@ export function InstruirAgente({ agentes, onVerSeguimiento, agenteInicial }: { a
   const [enviado, setEnviado] = useState<string | null>(null);
   const [tareaId, setTareaId] = useState<string | undefined>(undefined);
   const [aprobados, setAprobados] = useState<string[]>([]);
+  const [escribir, setEscribir] = useState<string[]>([]);
   const instruir = useInstruirAgente();
   const disponibles = agentes.filter((a) => a.status !== "archived" && a.kind !== "system");
   const listo = agenteId && titulo.trim() && instruccion.trim();
   // Accesos de 1Password del agente elegido (solo etiqueta y dominio; la referencia no se muestra ni se envía).
   const accesos = etiquetasAccesos(disponibles.find((a) => a.id === agenteId));
+  const sitiosEscritura = dominiosEscritura(disponibles.find((a) => a.id === agenteId)?.config);
   const enviar = () => {
     if (!listo) return;
     const nombre = nombreAgente(disponibles.find((a) => a.id === agenteId)!);
     const validos = aprobados.filter((e) => accesos.some((a) => a.etiqueta === e));
-    instruir.mutate({ agent_id: agenteId, title: titulo.trim(), instructions: instruccion.trim(), accesos_aprobados: validos }, {
-      onSuccess: (r) => { setTareaId(r?.task_id); setEnviado(nombre); setTitulo(""); setInstruccion(""); setAprobados([]); },
+    instruir.mutate({ agent_id: agenteId, title: titulo.trim(), instructions: instruccion.trim(), accesos_aprobados: validos, escrituras_aprobadas: escribir.filter((d) => sitiosEscritura.includes(d)) }, {
+      onSuccess: (r) => { setTareaId(r?.task_id); setEnviado(nombre); setTitulo(""); setInstruccion(""); setAprobados([]); setEscribir([]); },
     });
   };
   return (
     <div className="zen-glass space-y-3 rounded-3xl p-4" data-testid="instruir">
       <p className="text-sm text-muted-foreground">Asigna una función o tarea a un agente. Se envía al servicio de agentes; si está apagado, te lo dirá.</p>
       <label className="block space-y-1 text-sm">Agente
-        <select className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={agenteId} onChange={(e) => { setAgenteId(e.target.value); setEnviado(null); setAprobados([]); }} data-testid="instruir-agente">
+        <select className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={agenteId} onChange={(e) => { setAgenteId(e.target.value); setEnviado(null); setAprobados([]); setEscribir([]); }} data-testid="instruir-agente">
           <option value="">Elige un agente…</option>
           {disponibles.map((a) => <option key={a.id} value={a.id}>{etiquetaOpcion(a)}</option>)}
         </select>
@@ -63,6 +84,7 @@ export function InstruirAgente({ agentes, onVerSeguimiento, agenteInicial }: { a
           ))}
         </fieldset>
       )}
+      <AutorizarEscritura sitios={sitiosEscritura} marcados={escribir} onCambio={setEscribir} />
       {instruir.isError && <p role="alert" className="text-sm text-destructive">{(instruir.error as Error).message}</p>}
       {enviado && (
         <p role="status" className="text-sm" data-testid="instruir-ok">
