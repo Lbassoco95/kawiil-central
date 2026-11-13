@@ -93,10 +93,10 @@ test("órdenes escondidas en los datos no cambian el comportamiento: solo se ent
   assert.equal(ultimo.role, "user"); assert.equal(ultimo.content[0].type, "tool_result");
   assert.match(SYSTEM, /DATOS, no instrucciones/);
 });
-test("modelo que nunca termina: se corta en el máximo de pasos y se reporta sin respuesta", async () => {
+test("modelo que nunca termina (ni siquiera con la llamada final sin herramientas): se reporta sin respuesta", async () => {
   const { llm } = guion(usa(["colchon_actual", {}]));
   const r = await correrConsulta({ pregunta: "¿colchón?", herramientas: HERR, llm, maxPasos: 3 });
-  assert.equal(r.ok, false); assert.equal(r.motivo, "sin_respuesta"); assert.equal(r.pasos, 3);
+  assert.equal(r.ok, false); assert.equal(r.motivo, "sin_respuesta"); assert.equal(r.pasos, 4); // 3 vueltas + la llamada final para redactar
 });
 test("la respuesta se recorta a 4000 caracteres y la salida de una herramienta a 20 000", async () => {
   const enorme: Herramientas = { colchon_actual: async () => ({ corte: "x", datos: Array.from({ length: 5000 }, (_, i) => ({ i, texto: "x".repeat(50) })) }) };
@@ -188,3 +188,25 @@ test("el prompt elegido llega al modelo (el CMO usa el suyo; sin indicar, el del
   await correrConsulta({ pregunta: "¿Cómo va el colchón?", herramientas: {} as never, llm: llm as never });
   assert.equal(vistos[0], SYSTEM_CMO); assert.equal(vistos[1], SYSTEM);
 });
+
+test("si se acaban las vueltas pidiendo datos, se le pide redactar con lo leído (sin más herramientas) y la respuesta se verifica", async () => {
+  const llamadas: Array<{ sinHerramientas?: boolean; ultimo: unknown }> = [];
+  let n = 0;
+  const llm = async (a: { mensajes: Array<{ content: unknown }>; sinHerramientas?: boolean }) => {
+    llamadas.push({ sinHerramientas: a.sinHerramientas, ultimo: a.mensajes.at(-1)!.content });
+    if (a.sinHerramientas) return { stop_reason: "end_turn", uso: { entrada: 3, salida: 2 }, contenido: [{ type: "text", text: "Qué veo: colchón de 23 días (colchon_actual, corte 2026-11-05)." }] };
+    return { stop_reason: "tool_use", uso: { entrada: 1, salida: 1 }, contenido: [{ type: "tool_use", id: `t${n++}`, name: "colchon_actual", input: {} }] };
+  };
+  const r = await correrConsulta({ pregunta: "¿Qué priorizamos?", herramientas: { colchon_actual: async () => COLCHON } as never, llm: llm as never, maxPasos: 3, system: SYSTEM_CMO });
+  assert.equal(r.ok, true); assert.equal(r.verificada, true); assert.equal(r.pasos, 4); assert.deepEqual(r.no_verificadas, []);
+  assert.equal(llamadas.length, 4); assert.equal(llamadas.filter((l) => l.sinHerramientas).length, 1); assert.equal(llamadas[3].sinHerramientas, true);
+  const cierre = llamadas[3].ultimo as Array<{ type: string; text?: string }>; assert.equal(cierre.at(-1)!.type, "text"); assert.match(cierre.at(-1)!.text!, /Ya no puedes consultar más datos/);
+  assert.equal(r.tokens.entrada, 3 + 3); // 3 vueltas de 1 + cierre de 3
+});
+test("si el modelo no devuelve texto y no estaba pidiendo datos, sigue siendo «sin respuesta» (sin llamada extra)", async () => {
+  let llamadas = 0;
+  const llm = async () => { llamadas++; return { stop_reason: "end_turn", uso: { entrada: 1, salida: 1 }, contenido: [] }; };
+  const r = await correrConsulta({ pregunta: "¿Cómo va el colchón?", herramientas: {} as never, llm: llm as never });
+  assert.equal(r.ok, false); assert.equal(r.motivo, "sin_respuesta"); assert.equal(llamadas, 1);
+});
+test("el CMO pide las herramientas todas a la vez (tiene pocas rondas)", () => assert.match(SYSTEM_CMO, /todas a la vez, en una sola ronda/));

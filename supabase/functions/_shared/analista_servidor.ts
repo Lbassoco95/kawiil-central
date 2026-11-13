@@ -4,11 +4,11 @@ import type { Herramienta, Herramientas, Llm, Mensaje } from "./analista.ts";
 
 // Llamada a la API de mensajes de Anthropic con herramientas. Devuelve el formato que espera correrConsulta.
 export function llmAnthropic(apiKey: string, modelo: string): Llm {
-  return async ({ system, mensajes, herramientas }: { system: string; mensajes: Mensaje[]; herramientas: Herramienta[] }) => {
+  return async ({ system, mensajes, herramientas, sinHerramientas }: { system: string; mensajes: Mensaje[]; herramientas: Herramienta[]; sinHerramientas?: boolean }) => {
     const r = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-      body: JSON.stringify({ model: modelo, max_tokens: 1024, system, messages: mensajes, tools: herramientas.map((h) => ({ name: h.name, description: h.description, input_schema: h.input_schema })) }),
+      body: JSON.stringify({ model: modelo, max_tokens: 1024, system, messages: mensajes, tools: herramientas.map((h) => ({ name: h.name, description: h.description, input_schema: h.input_schema })), ...(sinHerramientas ? { tool_choice: { type: "none" } } : {}) }),
       signal: AbortSignal.timeout(45_000),
     });
     if (!r.ok) throw new Error(`anthropic ${r.status}`);
