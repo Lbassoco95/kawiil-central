@@ -10,6 +10,7 @@ const sqlViejoVigia = leer("supabase/migrations/20261102033958_marketing_vigia_c
 const sqlRegistrar = leer("supabase/migrations/20261104165545_marketing_registrar_corrida.sql");
 const sqlVigiaNuevo = leer("supabase/migrations/20261104165612_marketing_vigia_registra.sql");
 const sqlRollback1 = leer("tools/marketing/rollback_registrar_corrida.sql");
+const sqlVigiaTarea = leer("supabase/pendientes/20261113200000_marketing_vigia_tarea_diaria.sql"), sqlRbVigiaTarea = leer("tools/marketing/rollback_vigia_tarea_diaria.sql");
 let fallos = 0; const ok = (n) => console.log("  ok  ", n);
 const prueba = async (nombre, fn) => { try { await fn(); ok(nombre); } catch (e) { fallos++; console.log("  FALLA", nombre, "\n       ", e.message); } };
 
@@ -155,6 +156,38 @@ await prueba("el vigía nuevo decide igual que el anterior en los mismos escenar
 await prueba("la reversa elimina las funciones", async () => {
   const db = await nuevaBase({ vigiaNuevo: false }); await db.exec(sqlRollback1);
   assert.equal(await N(db, "select count(*) n from pg_proc where proname in ('mk_registrar_corrida','mk_latido_agente')"), 0);
+});
+await prueba("vigía con tarea diaria, todo bien: deja UNA tarea completada del día (con latido y contadores); sin bitácora ni caso", async () => {
+  const db = await nuevaBase(); await db.exec(sqlVigiaTarea); await corridaHoy(db, "2026-11-02T13:00:05Z");
+  const antes = await N(db, "select (select count(*) from mk_bitacora)+(select count(*) from mk_caso) n");
+  assert.match((await q(db, "select public.mk_vigia_colchon($1::timestamptz) r", [H0730]))[0].r, /^ok: hay registro/);
+  assert.equal(await N(db, "select (select count(*) from mk_bitacora)+(select count(*) from mk_caso) n"), antes);
+  const t = (await q(db, "select t.status, t.title, t.result_summary, t.result, a.tasks_completed, a.tasks_failed, a.last_task_at, a.last_heartbeat from agent_tasks t join agent_registry a on a.id=t.agent_id"));
+  assert.equal(t.length, 1); assert.deepEqual([t[0].status, t[0].title, t[0].tasks_completed, t[0].tasks_failed], ["completed", "Vigía 2026-11-02", 1, 0]);
+  assert.match(t[0].result_summary, /^Sin novedad/); assert.equal(t[0].result.fecha, "2026-11-02"); assert.ok(t[0].last_task_at && t[0].last_heartbeat);
+});
+await prueba("vigía con tarea diaria: una corrida repetida el mismo día NO duplica la tarea (solo latido); al día siguiente sí hay otra", async () => {
+  const db = await nuevaBase(); await db.exec(sqlVigiaTarea); await corridaHoy(db, "2026-11-02T13:00:05Z"); await corridaHoy(db, "2026-11-03T13:00:05Z");
+  await db.query("select public.mk_vigia_colchon($1::timestamptz)", [H0730]); await db.query("select public.mk_vigia_colchon($1::timestamptz)", [H0730]);
+  assert.equal(await N(db, "select count(*) n from agent_tasks"), 1);
+  await db.query("select public.mk_vigia_colchon($1::timestamptz)", ["2026-11-03T13:30:00Z"]);
+  assert.equal(await N(db, "select count(*) n from agent_tasks"), 2); assert.equal((await ag(db, "marketing_vigia")).tasks_completed, 2);
+});
+await prueba("vigía con tarea diaria, no corrió: igual que antes (caso + bitácora + tarea con error); y si registrar falla, bitácora y sigue", async () => {
+  const db = await nuevaBase(); await db.exec(sqlVigiaTarea);
+  assert.match((await q(db, "select public.mk_vigia_colchon($1::timestamptz) r", [H0730]))[0].r, /SIN CORRIDA: caso #1 abierto/);
+  const t = (await q(db, "select t.status, t.title from agent_tasks t"))[0]; assert.deepEqual([t.status, t.title], ["error", "Vigía 2026-11-02"]);
+  const db2 = await nuevaBase({ agentes: false }); await db2.exec(sqlVigiaTarea); await corridaHoy(db2, "2026-11-02T13:00:05Z");
+  assert.match((await q(db2, "select public.mk_vigia_colchon($1::timestamptz) r", [H0730]))[0].r, /^ok:/);
+  assert.equal(await N(db2, "select count(*) n from mk_bitacora where resultado like 'no se pudo registrar la corrida del vigía%'"), 1);
+});
+await prueba("vigía con tarea diaria decide igual que el anterior (ayer no cuenta; simulada no cuenta) y la reversa vuelve a «solo latido»", async () => {
+  for (const [nombre, prep] of [["ayer", (d) => corridaHoy(d, "2026-11-01T13:00:05Z")], ["hoy", (d) => corridaHoy(d, "2026-11-02T13:00:05Z")]]) {
+    const nuevo = await nuevaBase(); await nuevo.exec(sqlVigiaTarea); await prep(nuevo); const viejo = await nuevaBase(); await prep(viejo);
+    assert.equal((await q(nuevo, "select public.mk_vigia_colchon($1::timestamptz) r", [H0730]))[0].r, (await q(viejo, "select public.mk_vigia_colchon($1::timestamptz) r", [H0730]))[0].r, nombre);
+  }
+  const db = await nuevaBase(); await db.exec(sqlVigiaTarea); await db.exec(sqlRbVigiaTarea); await corridaHoy(db, "2026-11-02T13:00:05Z");
+  await db.query("select public.mk_vigia_colchon($1::timestamptz)", [H0730]); assert.equal(await N(db, "select count(*) n from agent_tasks"), 0); assert.ok((await ag(db, "marketing_vigia")).last_heartbeat);
 });
 if (fallos) { console.log(`\n${fallos} prueba(s) fallaron`); process.exit(1); }
 console.log("\nTodas las pruebas de registrar corridas pasaron");
