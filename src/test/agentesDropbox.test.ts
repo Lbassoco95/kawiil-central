@@ -73,3 +73,26 @@ describe("límite por fuente (la carpeta de un solo cliente)", () => {
     expect(raicesEfectivas(AUT, "/Kawiil Mx/CLIENTES/../Finanzas")).toBeNull();
   });
 });
+
+import { MAX_BYTES_SUBIR, argAscii, nombreArchivoSeguro } from "../../supabase/functions/_shared/dropboxEquipo";
+describe("guardar archivos en Dropbox (solo agregar)", () => {
+  it("acepta nombres normales con extensión permitida y los deja limpios", () => {
+    expect(nombreArchivoSeguro("Oficio 2026-1234.pdf")).toBe("Oficio 2026-1234.pdf");
+    expect(nombreArchivoSeguro("  Oficio   CNBV  número 5.PDF ")).toBe("Oficio CNBV número 5.PDF");
+    expect(nombreArchivoSeguro("lista.xlsx")).toBe("lista.xlsx");
+  });
+  it("quita rutas y caracteres peligrosos; nunca deja salir de la carpeta", () => {
+    expect(nombreArchivoSeguro("../../etc/passwd.txt")).toBe("etc passwd.txt");
+    expect(nombreArchivoSeguro("a\\b/c:d*e?.pdf")).toBe("a b c d e .pdf");
+    expect(nombreArchivoSeguro(".hidden.pdf")).toBe("hidden.pdf");
+  });
+  it.each(["", "ab", "sinextension", "virus.exe", "script.js", "archivo.pdf.exe", "x".repeat(200) + ".pdf", null, 5, ".pdf"])("rechaza %j", (v) => {
+    expect(nombreArchivoSeguro(v)).toBeNull();
+  });
+  it("la cabecera de Dropbox va en ASCII aunque el nombre lleve acentos", () => {
+    const h = argAscii({ path: "/Kawiil Mx/CLIENTES/VIZUM/Oficios/Oficio número 5 – año.pdf", mode: "add" });
+    expect(/^[\x20-\x7e]*$/.test(h)).toBe(true);
+    expect(JSON.parse(h).path).toBe("/Kawiil Mx/CLIENTES/VIZUM/Oficios/Oficio número 5 – año.pdf");     // al decodificarlo vuelve igual
+  });
+  it("tope de tamaño", () => { expect(MAX_BYTES_SUBIR).toBe(8 * 1024 * 1024); });
+});

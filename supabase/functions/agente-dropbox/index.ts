@@ -7,7 +7,10 @@ import {
   MAX_PAGINAS,
   dentroDeRaices,
   entradaPublica,
+  MAX_BYTES_SUBIR,
+  argAscii,
   limiteValido,
+  nombreArchivoSeguro,
   mimePorNombre,
   normalizarRaices,
   recortar,
@@ -23,13 +26,15 @@ import {
  * Así la VM no guarda ninguna credencial de Dropbox: el token, el contexto de equipo y la app viven solo aquí.
  *
  *   action "probar"  → {}                          → { ok, raices, en_la_raiz }    (diagnóstico de la conexión)
+ *   action "subir"   → { limite, ref?, nombre, base64 } → { id, nombre, tamano }   (SOLO AGREGAR; apagado salvo AGENTES_DROPBOX_ESCRITURA=1; `limite` obligatorio)
  *   Todas las acciones aceptan `limite` (un id de Dropbox «id:…»): acota la consulta a ESA carpeta (la de un cliente). "raiz" pasa a ser el límite.
  *   action "listar"  → { ref: "raiz"|id|ruta }     → { carpeta, entradas, truncado }
  *   action "leer"    → { ref: id }                 → { nombre, mime, tamano, modificado, base64 }
  *
  * Seguridad:
  *   - Solo la VM puede llamarla: exige `X-Kawiil-Bridge-Token` (secreto KAWIIL_BRIDGE_TOKEN, comparado en tiempo constante) además del JWT de la puerta de entrada.
- *   - Solo lectura: únicamente get_metadata, list_folder y download. Nada de subir, mover, borrar ni compartir.
+ *   - Lectura: get_metadata, list_folder y download. Escritura: ÚNICAMENTE `subir` (agregar un archivo nuevo dentro de la carpeta límite de la fuente; nunca sobrescribe,
+ *     mueve, borra ni comparte) y solo si el secreto AGENTES_DROPBOX_ESCRITURA vale «1». Tipos permitidos pdf/docx/xlsx/csv/txt/xml/imágenes, tope 8 MB.
  *   - Alcance: solo carpetas raíz autorizadas (DROPBOX_AGENTES_RAICES, por defecto /Kawiil Mx/CLIENTES). Antes de listar o leer se pide a Dropbox
  *     la metadata del elemento y se decide con SU path_lower; lo que quede fuera (o no traiga ruta) se rechaza. Aquí no se confía en la ruta que manda quien pregunta.
  *   - El contenido tiene tope de 8 MB y solo de tipos legibles (pdf, docx, xlsx, texto, imágenes). No se guarda nada ni se escribe en la base.
@@ -158,6 +163,31 @@ serve(async (req: Request) => {
       const m = await metadata("raiz");
       const l = await api(h, "files/list_folder", { path: m.path_lower, recursive: false, limit: 50 });
       return json({ ok: true, raices, en_la_raiz: (l.entries ?? []).length, hay_mas: !!l.has_more, equipo: !!ctx.raiz });
+    }
+
+    if (body.action === "subir") {
+      if (Deno.env.get("AGENTES_DROPBOX_ESCRITURA") !== "1") throw new ErrorPuente(403, "Guardar archivos en Dropbox está apagado para los agentes.");
+      if (typeof body.limite !== "string") return json({ error: "Para guardar un archivo hace falta la carpeta de la fuente." }, 400);   // nunca en toda la carpeta de clientes
+      const destino = body.ref === undefined ? "raiz" : body.ref;
+      if (!referenciaValida(destino)) return json({ error: "Referencia no válida." }, 400);
+      const nombre = nombreArchivoSeguro(body.nombre);
+      if (!nombre) return json({ error: "Nombre de archivo no válido (se aceptan pdf, docx, xlsx, csv, txt, xml e imágenes)." }, 400);
+      if (typeof body.base64 !== "string" || body.base64.length > Math.ceil(MAX_BYTES_SUBIR * 4 / 3) + 8) throw new ErrorPuente(413, "El archivo es demasiado grande para guardarlo.");
+      let bytes: Uint8Array;
+      try { bytes = Uint8Array.from(atob(body.base64), (c) => c.charCodeAt(0)); } catch { return json({ error: "El archivo llegó dañado." }, 400); }
+      if (bytes.length === 0 || bytes.length > MAX_BYTES_SUBIR) throw new ErrorPuente(413, "El archivo es demasiado grande para guardarlo.");
+      const carpeta = await metadata(destino as string);
+      if (carpeta[".tag"] !== "folder") throw new ErrorPuente(400, "El destino no es una carpeta.");
+      const ruta = `${carpeta.path_display}/${nombre}`;
+      if (!dentroDeRaices(ruta.toLowerCase(), raices)) throw new ErrorPuente(403, "Ese destino está fuera de la carpeta autorizada para este agente.");
+      const hu = cabeceras(token, ctx, false);
+      hu["Dropbox-API-Arg"] = argAscii({ path: ruta, mode: "add", autorename: true, mute: true });
+      hu["Content-Type"] = "application/octet-stream";
+      const r = await fetch("https://content.dropboxapi.com/2/files/upload", { method: "POST", headers: hu, body: bytes });
+      if (!r.ok) { console.error("agente-dropbox: upload", r.status); throw new ErrorPuente(502, "No se pudo guardar el archivo en Dropbox."); }
+      const d = await r.json();
+      console.log(`agente-dropbox subir ${carpeta.id} bytes=${bytes.length}`);
+      return json({ id: d.id, nombre: recortar(d.name, 200), tamano: bytes.length });
     }
 
     if (!referenciaValida(body.ref)) return json({ error: "Referencia no válida." }, 400);
