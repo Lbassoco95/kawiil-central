@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import type { AgenteRegistro, ErrorTarea, TareaAgente } from "@/lib/agentes/registro";
+import { conLatidoPropio, type AgenteRegistro, type ErrorTarea, type TareaAgente } from "@/lib/agentes/registro";
 
 // ── Registro de agentes de kawiil-central (solo lectura) ────────────────────────────────────────────────────────────
 // Tablas agent_registry / agent_tasks: las escribe la VM kawiil-agents; aquí solo se leen con la sesión del usuario (RLS de lectura
@@ -13,7 +13,7 @@ export const useAgentesRegistro = () =>
       const { data, error } = await (supabase as any).from("agent_registry")
         .select("id, name, display_name, description, role, status, kind, last_heartbeat, last_task_at, tasks_completed, tasks_failed, config").order("name");
       if (error) throw error;
-      return data ?? [];
+      return conLatidoPropio(data ?? []);
     },
     staleTime: 60_000,
   });

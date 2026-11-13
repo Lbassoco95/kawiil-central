@@ -188,8 +188,21 @@ export const useConsultasAnalista = () =>
     retry: false,
   });
 
+// Tope de espera: si la función no contesta, la pantalla no se queda en «Pensando…» para siempre.
+const ESPERA_MAX_MS = 100_000;
+function conTope<T>(trabajo: Promise<T>, vacio: T): Promise<T> {
+  return new Promise<T>((resolver) => {
+    const reloj = setTimeout(() => resolver(vacio), ESPERA_MAX_MS);
+    trabajo.then((v) => { clearTimeout(reloj); resolver(v); }, () => { clearTimeout(reloj); resolver(vacio); });
+  });
+}
+const SIN_RESPUESTA = { ok: false, error: "El Analista tardó demasiado en responder. Inténtalo de nuevo en un momento." };
+
 // Pregunta al Analista por la función marketing-agente. Devuelve siempre un objeto (nunca lanza): los errores llegan con un mensaje para mostrar.
-export async function preguntarAlAnalista(pregunta: string): Promise<RespuestaAnalista> {
+export function preguntarAlAnalista(pregunta: string): Promise<RespuestaAnalista> {
+  return conTope(preguntarSinTope(pregunta), SIN_RESPUESTA);
+}
+async function preguntarSinTope(pregunta: string): Promise<RespuestaAnalista> {
   try {
     const { data, error } = await supabase.functions.invoke("marketing-agente", { body: { pregunta } });
     if (!error) return data as RespuestaAnalista;
@@ -225,7 +238,10 @@ export type AccionSeguimiento =
   | { accion: "cambiar_seguimiento"; id: string; estado: "activo" | "pausado" | "terminado" };
 
 // Crear, pausar, reanudar o terminar un seguimiento por marketing-agente. Devuelve siempre un objeto (nunca lanza).
-export async function gestionarSeguimiento(cuerpo: AccionSeguimiento): Promise<{ ok: boolean; error?: string }> {
+export function gestionarSeguimiento(cuerpo: AccionSeguimiento): Promise<{ ok: boolean; error?: string }> {
+  return conTope(gestionarSinTope(cuerpo), SIN_RESPUESTA);
+}
+async function gestionarSinTope(cuerpo: AccionSeguimiento): Promise<{ ok: boolean; error?: string }> {
   const generico = { ok: false, error: "No pudimos hablar con el Analista. Inténtalo de nuevo." };
   try {
     const { data, error } = await supabase.functions.invoke("marketing-agente", { body: cuerpo });

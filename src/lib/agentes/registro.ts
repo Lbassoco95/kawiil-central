@@ -66,6 +66,23 @@ export function rolCorto(a: Pick<AgenteRegistro, "name" | "description" | "role"
 // Opción del selector: «Nelli · Prevención de lavado de dinero». Si no hay rol, solo el nombre.
 export const etiquetaOpcion = (a: AgenteRegistro): string => { const r = rolCorto(a); return r ? `${nombreAgente(a)} · ${r}` : nombreAgente(a); };
 
+// El servicio kawiil-agents marca a TODOS los agentes con el mismo latido cada ~30 min (13 nov 2026: 25 agentes, mismo instante, también los de
+// Marketing). Ese latido no dice si un trabajo programado corrió, y hacía ver «Al día» a un agente que hubiera dejado de correr. Para los agentes de
+// sistema, un latido que comparte el instante con ≥ 3 agentes (alguno de ellos no de sistema) se sustituye por la hora de su última tarea propia.
+export function conLatidoPropio(agentes: AgenteRegistro[]): AgenteRegistro[] {
+  const cuenta = new Map<string, { total: number; ajenos: number }>();
+  for (const a of agentes) {
+    if (!a.last_heartbeat) continue;
+    const c = cuenta.get(a.last_heartbeat) ?? { total: 0, ajenos: 0 };
+    c.total++; if (a.kind !== "system") c.ajenos++;
+    cuenta.set(a.last_heartbeat, c);
+  }
+  return agentes.map((a) => {
+    const c = a.last_heartbeat ? cuenta.get(a.last_heartbeat) : undefined;
+    return a.kind === "system" && c && c.total >= 3 && c.ajenos >= 1 ? { ...a, last_heartbeat: a.last_task_at ?? null } : a;
+  });
+}
+
 export function senalAgente(a: AgenteRegistro, ahora: Date): Senal {
   if (a.status === "archived") return "archivado";
   if (esSistema(a) && esBajoDemanda(a)) return a.status === "error" ? "con_error" : "disponible";
