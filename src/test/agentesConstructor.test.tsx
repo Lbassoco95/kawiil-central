@@ -282,3 +282,11 @@ describe("ProgramarAgente", () => {
     expect(screen.getByTestId("programar-error").textContent).toMatch(/1Password/);
   });
 });
+
+describe("referencias de 1Password con espacios", () => {
+  it("acepta nombres con espacios internos y sigue rechazando lo raro", () => {
+    expect(esReferencia1Password("op://Cumplimiento/SITI PLD - CNBV - VIZUM")).toBe(true);
+    expect(esReferencia1Password("op://Cumplimiento/SITI PLD - CNBV - VIZUM/password")).toBe(true);
+    for (const m of ["op://Cumplimiento/ SITI", "op://Cumplimiento//x", "op://Cumplimiento/x?attribute=otp", "op://Cumplimiento/con\nsalto", "op://Cumplimiento/" + "x".repeat(81), "op://Cumplimiento", "op://a/b/c/d/e"]) expect(esReferencia1Password(m)).toBe(false);
+  });
+});
