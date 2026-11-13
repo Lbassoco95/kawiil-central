@@ -199,12 +199,13 @@ function conTope<T>(trabajo: Promise<T>, vacio: T): Promise<T> {
 const SIN_RESPUESTA = { ok: false, error: "El Analista tardó demasiado en responder. Inténtalo de nuevo en un momento." };
 
 // Pregunta al Analista por la función marketing-agente. Devuelve siempre un objeto (nunca lanza): los errores llegan con un mensaje para mostrar.
-export function preguntarAlAnalista(pregunta: string): Promise<RespuestaAnalista> {
-  return conTope(preguntarSinTope(pregunta), SIN_RESPUESTA);
+export interface TurnoHistorial { rol: "user" | "assistant"; texto: string }
+export function preguntarAlAnalista(pregunta: string, historial?: TurnoHistorial[]): Promise<RespuestaAnalista> {
+  return conTope(preguntarSinTope(pregunta, historial), SIN_RESPUESTA);
 }
-async function preguntarSinTope(pregunta: string): Promise<RespuestaAnalista> {
+async function preguntarSinTope(pregunta: string, historial?: TurnoHistorial[]): Promise<RespuestaAnalista> {
   try {
-    const { data, error } = await supabase.functions.invoke("marketing-agente", { body: { pregunta } });
+    const { data, error } = await supabase.functions.invoke("marketing-agente", { body: historial && historial.length > 0 ? { pregunta, historial } : { pregunta } });
     if (!error) return data as RespuestaAnalista;
     const ctx = (error as { context?: Response }).context;
     if (ctx && typeof ctx.json === "function") { try { return (await ctx.json()) as RespuestaAnalista; } catch { /* sin cuerpo */ } }

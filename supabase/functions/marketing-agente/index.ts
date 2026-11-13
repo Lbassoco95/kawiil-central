@@ -7,7 +7,7 @@
 //   MARKETING_AGENTE_MAX_TOKENS_MES.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import {
-  correrConsulta, evaluarLimites, inicioDiaCDMX, inicioMesCDMX, leerLimites, MODELO_POR_DEFECTO, validarPregunta,
+  correrConsulta, evaluarLimites, inicioDiaCDMX, inicioMesCDMX, leerLimites, MODELO_POR_DEFECTO, normalizarHistorial, validarPregunta,
   type ResultadoConsulta,
 } from "../_shared/analista.ts";
 import { herramientasDe, llmAnthropic } from "../_shared/analista_servidor.ts";
@@ -39,7 +39,7 @@ Deno.serve(async (req) => {
   if (!org) return json({ ok: false, error: "No se pudo identificar tu organización." }, 403);
 
   // 2) La pregunta.
-  let cuerpo: { pregunta?: unknown; accion?: unknown; frecuencia?: unknown; id?: unknown; estado?: unknown } = {};
+  let cuerpo: { pregunta?: unknown; historial?: unknown; accion?: unknown; frecuencia?: unknown; id?: unknown; estado?: unknown } = {};
   try { cuerpo = await req.json(); } catch { return json({ ok: false, error: "Solicitud no válida." }, 400); }
 
   // 2b) Seguimientos: crear, pausar, reanudar o terminar. Solo guardan la pregunta y su frecuencia; el Analista las responde después, en solo lectura.
@@ -90,7 +90,7 @@ Deno.serve(async (req) => {
   // 5) Consulta.
   const inicio = new Date().toISOString();
   let res: ResultadoConsulta | null = null, fallo = false;
-  try { res = await correrConsulta({ pregunta: v.pregunta, herramientas, llm: llmAnthropic(apiKey, modelo) }); } catch (e) {
+  try { res = await correrConsulta({ pregunta: v.pregunta, herramientas, llm: llmAnthropic(apiKey, modelo), historial: normalizarHistorial(cuerpo.historial) }); } catch (e) {
     fallo = true; console.error("marketing-agente: falla del modelo", e instanceof Error ? e.message : "error");
   }
   const ok = !fallo && !!res?.ok;

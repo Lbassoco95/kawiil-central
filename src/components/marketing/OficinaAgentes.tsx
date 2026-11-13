@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AccionSeguimiento, ConsultaAnalista, FrecuenciaSeguimiento, RespuestaAnalista, SeguimientoAnalista } from "@/hooks/useMarketing";
+import type { AccionSeguimiento, ConsultaAnalista, FrecuenciaSeguimiento, RespuestaAnalista, SeguimientoAnalista, TurnoHistorial } from "@/hooks/useMarketing";
 import { Pastilla, Vacio } from "./marketingUi";
 import { TextoAnalista } from "./TextoAnalista";
 import { cuandoRelativo, ESTADO_TAREA, type AgenteRegistro, type TareaMarketing } from "./agentesRegistroLogica";
@@ -9,7 +9,7 @@ export type EstadoCarga = "cargando" | "error" | "ok";
 
 // Lo que necesita el panel «Preguntar» del Analista. Sin esta propiedad (o sin el agente en el registro) no aparece.
 export interface AnalistaProps {
-  consultas: ConsultaAnalista[]; estadoConsultas: EstadoCarga; preguntar: (pregunta: string) => Promise<RespuestaAnalista>;
+  consultas: ConsultaAnalista[]; estadoConsultas: EstadoCarga; preguntar: (pregunta: string, historial?: TurnoHistorial[]) => Promise<RespuestaAnalista>;
   // Seguimientos (opcionales: sin ellos no aparece la sección).
   seguimientos?: SeguimientoAnalista[]; estadoSeguimientos?: EstadoCarga; gestionarSeguimiento?: (c: AccionSeguimiento) => Promise<{ ok: boolean; error?: string }>;
 }
@@ -166,7 +166,9 @@ const ETIQUETA_CONSULTA: Record<ConsultaAnalista["estado"], { etiqueta: string; 
 function PreguntarAnalista({ analista, now, alPensar }: { analista: AnalistaProps; now: Date; alPensar: (pensando: boolean) => void }) {
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
-  const [resp, setResp] = useState<RespuestaAnalista | null>(null);
+  // Conversación: cada turno guarda la pregunta y su respuesta. Al preguntar de nuevo se mandan los últimos turnos como contexto.
+  const [hilo, setHilo] = useState<Array<{ pregunta: string; resp: RespuestaAnalista }>>([]);
+  const [resp, setResp] = useState<RespuestaAnalista | null>(null); // última respuesta con error (las buenas viven en el hilo)
   const [abierta, setAbierta] = useState<string | null>(null);
   const [frecuencia, setFrecuencia] = useState<FrecuenciaSeguimiento>("semanal");
   const [guardando, setGuardando] = useState(false);
@@ -177,9 +179,14 @@ function PreguntarAnalista({ analista, now, alPensar }: { analista: AnalistaProp
   const enviar = async () => {
     if (!puede) return;
     setEnviando(true); setResp(null); alPensar(true);
-    try { const r = await analista.preguntar(limpia); setResp(r); if (r.ok) setTexto(""); /* si falló, se conserva la pregunta para reintentar */ } catch { setResp({ ok: false, error: "No pudimos hablar con el Analista. Inténtalo de nuevo." }); }
+    const contexto: TurnoHistorial[] = hilo.slice(-3).flatMap((t) => [{ rol: "user" as const, texto: t.pregunta }, { rol: "assistant" as const, texto: t.resp.respuesta ?? "" }]);
+    try {
+      const r = await (contexto.length > 0 ? analista.preguntar(limpia, contexto) : analista.preguntar(limpia));
+      if (r.ok) { setHilo((h) => [...h, { pregunta: limpia, resp: r }]); setTexto(""); } else setResp(r); /* si falló, se conserva la pregunta para reintentar */
+    } catch { setResp({ ok: false, error: "No pudimos hablar con el Analista. Inténtalo de nuevo." }); }
     finally { setEnviando(false); alPensar(false); }
   };
+  const nuevaConversacion = () => { setHilo([]); setResp(null); setTexto(""); setAvisoSeg(null); };
 
   const darSeguimiento = async () => {
     if (!puede || guardando || !analista.gestionarSeguimiento) return;
@@ -194,9 +201,9 @@ function PreguntarAnalista({ analista, now, alPensar }: { analista: AnalistaProp
 
   return (
     <div className="space-y-3 border-t border-border/40 pt-3" data-testid="analista-preguntar">
-      <label htmlFor="pregunta-analista" className="block text-xs font-medium text-muted-foreground">Pregúntale cómo van tus resultados</label>
-      <textarea id="pregunta-analista" value={texto} onChange={(e) => setTexto(e.target.value)} rows={2} maxLength={MAX_PREGUNTA + 50} disabled={enviando}
-        placeholder="Ej.: ¿cómo va el alcance de los carruseles en Instagram este mes?" className="w-full rounded-lg border border-border bg-background p-2 text-sm"
+      <label htmlFor="pregunta-analista" className="block text-xs font-medium text-muted-foreground">{hilo.length > 0 ? "Sigue la conversación" : "Pregúntale cómo van tus resultados"}</label>
+      <textarea id="pregunta-analista" data-testid="analista-caja" value={texto} onChange={(e) => setTexto(e.target.value)} rows={2} maxLength={MAX_PREGUNTA + 50} disabled={enviando}
+        placeholder={hilo.length > 0 ? "Ej.: ¿y en Facebook?" : "Ej.: ¿cómo va el alcance de los carruseles en Instagram este mes?"} className="w-full rounded-lg border border-border bg-background p-2 text-sm"
         onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void enviar(); } }} />
       <div className="flex items-center justify-between gap-2">
         <span className={`text-xs ${limpia.length > MAX_PREGUNTA ? "text-red-600" : "text-muted-foreground"}`} data-testid="analista-contador">{limpia.length}/{MAX_PREGUNTA}</span>
@@ -222,21 +229,19 @@ function PreguntarAnalista({ analista, now, alPensar }: { analista: AnalistaProp
           {resp.limite && <p className="mt-1 text-xs text-muted-foreground">{resp.limite === "dia" ? "El tope se reinicia a medianoche (hora de Ciudad de México)." : "Dirección puede ampliar el tope mensual."}</p>}
         </div>
       )}
-      {resp?.ok && (
-        <div className="space-y-2 rounded-lg border border-border p-3" data-testid="analista-respuesta">
-          <TextoAnalista texto={resp.respuesta} className="text-sm leading-relaxed" />
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            {resp.verificada
-              ? <Pastilla color="verde">Cifras verificadas</Pastilla>
-              : <Pastilla color="rojo">Cifras sin verificar</Pastilla>}
-            {!resp.verificada && (resp.no_verificadas?.length ?? 0) > 0 && <span className="text-muted-foreground" data-testid="analista-no-verificadas">Revisa: {resp.no_verificadas!.join(", ")}</span>}
+      {hilo.length > 0 && (
+        <div className="space-y-3" data-testid="analista-hilo">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-medium text-muted-foreground">Conversación ({hilo.length} {hilo.length === 1 ? "pregunta" : "preguntas"})</p>
+            <button type="button" onClick={nuevaConversacion} disabled={enviando} data-testid="analista-nueva-conversacion"
+              className="rounded-full border border-border px-3 py-0.5 text-xs disabled:opacity-50">Nueva conversación</button>
           </div>
-          {(resp.fuentes?.length ?? 0) > 0 && (
-            <p className="text-xs text-muted-foreground" data-testid="analista-fuentes">
-              Fuentes: {resp.fuentes!.map((f) => `${f.herramienta}${f.corte ? ` (corte ${f.corte.slice(0, 10)})` : ""}`).join(" · ")}
-            </p>
-          )}
-          {typeof resp.restantes_hoy === "number" && <p className="text-xs text-muted-foreground">Te quedan {resp.restantes_hoy} preguntas hoy.</p>}
+          {hilo.map((turno, i) => (
+            <div key={i} className="space-y-2">
+              <p className="ml-auto max-w-[90%] rounded-2xl rounded-br-sm bg-[#9b7b4f]/15 px-3 py-1.5 text-sm" data-testid="analista-pregunta-hecha">{turno.pregunta}</p>
+              <TarjetaRespuesta resp={turno.resp} ultima={i === hilo.length - 1} />
+            </div>
+          ))}
         </div>
       )}
 
@@ -314,6 +319,27 @@ function SeguimientosLista({ analista, now }: { analista: AnalistaProps; now: Da
           </ul>
         )}
       {error && <p className="mt-1 text-xs text-red-600" role="alert" data-testid="analista-seguimientos-fallo">{error}</p>}
+    </div>
+  );
+}
+
+// Una respuesta del Analista: texto limpio, si se verificaron las cifras y sus fuentes con fecha de corte.
+function TarjetaRespuesta({ resp, ultima }: { resp: RespuestaAnalista; ultima: boolean }) {
+  return (
+    <div className="space-y-2 rounded-lg border border-border p-3" data-testid={ultima ? "analista-respuesta" : "analista-respuesta-previa"}>
+      <TextoAnalista texto={resp.respuesta ?? ""} className="text-sm leading-relaxed" />
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        {resp.verificada
+          ? <Pastilla color="verde">Cifras verificadas</Pastilla>
+          : <Pastilla color="rojo">Cifras sin verificar</Pastilla>}
+        {!resp.verificada && (resp.no_verificadas?.length ?? 0) > 0 && <span className="text-muted-foreground" data-testid={ultima ? "analista-no-verificadas" : undefined}>Revisa: {resp.no_verificadas!.join(", ")}</span>}
+      </div>
+      {(resp.fuentes?.length ?? 0) > 0 && (
+        <p className="text-xs text-muted-foreground" data-testid={ultima ? "analista-fuentes" : undefined}>
+          Fuentes: {resp.fuentes!.map((f) => `${f.herramienta}${f.corte ? ` (corte ${f.corte.slice(0, 10)})` : ""}`).join(" · ")}
+        </p>
+      )}
+      {ultima && typeof resp.restantes_hoy === "number" && <p className="text-xs text-muted-foreground">Te quedan {resp.restantes_hoy} preguntas hoy.</p>}
     </div>
   );
 }
