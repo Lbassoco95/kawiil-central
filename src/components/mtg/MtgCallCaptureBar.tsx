@@ -8,7 +8,7 @@
 
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
-import { ExternalLink, Link2, Bot, Loader2, Video } from "lucide-react";
+import { ExternalLink, Link2, Bot, Loader2, Video, DownloadCloud, LogOut } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -22,6 +22,8 @@ export function MtgCallCaptureBar(props: {
 }) {
   const [busy, setBusy] = useState(false);
   const [mediaBusy, setMediaBusy] = useState(false);
+  const [syncBusy, setSyncBusy] = useState(false);
+  const [leaveBusy, setLeaveBusy] = useState(false);
   const [media, setMedia] = useState<{ video_url: string | null; audio_url: string | null } | null>(
     null,
   );
@@ -54,6 +56,76 @@ export function MtgCallCaptureBar(props: {
       });
     } finally {
       setMediaBusy(false);
+    }
+  };
+
+  // Se ofrece sacarlo mientras no conste que ya salió (también con estados viejos o vacíos).
+  const botInCall =
+    !!props.meeting.recall_bot_id &&
+    !["call_ended", "done", "fatal", "leaving"].includes(props.meeting.recall_bot_status ?? "");
+
+  const onLeaveBot = async () => {
+    if (
+      !window.confirm(
+        "¿Sacar a Kawiilito de la llamada? Dejará de grabar y empezará a armar la transcripción y la minuta. No se puede deshacer.",
+      )
+    ) {
+      return;
+    }
+    setLeaveBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("mtg-recall-sync", {
+        body: { meeting_id: props.meeting.id, leave: true },
+      });
+      if (error) {
+        const ctx = (error as { context?: Response }).context;
+        const detail = ctx ? await ctx.json().catch(() => null) : null;
+        throw new Error(detail?.error ?? error.message);
+      }
+      if (data?.error) throw new Error(data.error);
+      if (data?.transcript_saved) {
+        toast.success("Kawiilito salió, la junta se cerró y ya se trajo la transcripción con hablantes");
+      } else {
+        toast.success(
+          "Kawiilito salió y la junta se cerró. La transcripción tarda unos minutos: pulsa Traer grabación para bajarla.",
+        );
+      }
+      props.onBotSent?.();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo sacar a Kawiilito");
+    } finally {
+      setLeaveBusy(false);
+    }
+  };
+
+  const onSyncRecall = async () => {
+    setSyncBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("mtg-recall-sync", {
+        body: { meeting_id: props.meeting.id },
+      });
+      if (error) {
+        const ctx = (error as { context?: Response }).context;
+        const detail = ctx ? await ctx.json().catch(() => null) : null;
+        throw new Error(detail?.error ?? error.message);
+      }
+      if (data?.error) throw new Error(data.error);
+      if (data.transcript_saved) {
+        toast.success("Listo: se trajo la transcripción con hablantes y se está armando la minuta");
+      } else if (!data.bot_left) {
+        toast.message(
+          `Kawiilito sigue en la llamada${data.bot_status ? ` (${data.bot_status})` : ""}. Si la junta ya terminó, usa Sacar a Kawiilito; si no, vuelve a pulsar Traer grabación al terminar.`,
+        );
+      } else if (!data.has_transcript) {
+        toast.message("La llamada terminó, pero Recall todavía no tiene la transcripción. Intenta en unos minutos.");
+      } else {
+        toast.message("La transcripción ya estaba guardada.");
+      }
+      props.onBotSent?.();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo traer la grabación");
+    } finally {
+      setSyncBusy(false);
     }
   };
 
@@ -135,6 +207,40 @@ export function MtgCallCaptureBar(props: {
             </span>
           )}
         </Button>
+        {props.meeting.recall_bot_id && (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={onSyncRecall}
+            disabled={syncBusy}
+            title="Actualiza el estado del bot y trae de Recall la transcripción con hablantes"
+          >
+            {syncBusy ? (
+              <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+            ) : (
+              <DownloadCloud className="h-3.5 w-3.5 mr-1" />
+            )}
+            Traer grabación
+          </Button>
+        )}
+        {props.meeting.recall_bot_id && botInCall && (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={onLeaveBot}
+            disabled={leaveBusy}
+            title="Saca a Kawiilito de la llamada, cierra la junta y trae la transcripción si ya está lista"
+          >
+            {leaveBusy ? (
+              <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+            ) : (
+              <LogOut className="h-3.5 w-3.5 mr-1" />
+            )}
+            Sacar a Kawiilito
+          </Button>
+        )}
         {props.meeting.recall_bot_id && (
           <Button
             type="button"

@@ -194,6 +194,8 @@ export interface ImportResult {
   confirmed: number;
   /** Solo estado de cuenta: el banco trae movimientos que nadie había registrado. */
   newFromBank: number;
+  /** Solo estado de cuenta: cuántos movimientos registrados (no del banco) había en el periodo para comparar. */
+  registeredBefore: number;
   /** Solo estado de cuenta: registrados del periodo que el banco NO confirma. */
   unconfirmed: { count: number; debit: number; credit: number };
   /** Solo registros: ya los tenía el banco y se les pasó la clasificación. */
@@ -365,6 +367,7 @@ export function useImportMovements() {
       return {
         total: p.movements.length, added: rows.length, duplicates: alreadyLoaded, pending: rows.filter((r) => !r.category).length,
         confirmed: confirmItems.length, newFromBank: isBank ? rows.length : 0, unconfirmed, linkedToBank: links.length,
+        registeredBefore: pool.filter((e) => e.hasRecord).length,
       };
     },
     onSuccess: () => {
@@ -569,5 +572,20 @@ export function useDeleteMovements() {
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: financeBankKeys.movements }),
     onError: (e: Error) => toast.error(`No se pudo eliminar: ${e.message}`),
+  });
+}
+
+/** Da por registrados movimientos que solo trajo el banco (los acepta tal cual; luego se clasifican). */
+export function useMarkRegistered() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (ids: string[]) => {
+      for (const part of chunk(ids, 200)) {
+        const { error } = await db.from("finance_movements").update({ has_record: true }).in("id", part);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: financeBankKeys.movements }),
+    onError: (e: Error) => toast.error(`No se pudo registrar: ${e.message}`),
   });
 }

@@ -112,3 +112,28 @@ Conector v6 desplegado; 5 invocaciones (scheduler, Instagram, Facebook, LinkedIn
 | `facebook_posts` | **47 publicaciones** (como el archivo). La respuesta es una lista (`$[]`), no `{data:[]}`; la fecha viene como número (`created`/`timestamp`, época). Tipos: 24 `album`, 23 `photo`. `impressionsUnique` media 18.72, mediana 12 (consistente con el umbral actual de Facebook); `impressions` = `impressionsOrganic` (sin pauta); comentarios y videoViews todos 0; no existe `saved` |
 | `linkedin_posts` | **0 elementos, con las dos formas de fecha** (`yyyyMMdd` e ISO). Pendiente de resolver |
 Consecuencias para el diseño: convertir horas de Instagram de Madrid a Ciudad de México; leer fechas de Facebook como época; Facebook usa `impressionsUnique` como alcance (a validar contra el archivo); LinkedIn requiere otra vía (ver abajo).
+
+## 13. Estado de los pasos 1 y 2 (12 nov 2026)
+**Paso 1, sondeo: hecho el 3 nov** (sección 12). No se repite: cada llamada deja una fila en `mk_api_log` y ya sabemos la forma de Instagram, Facebook y el calendario. Queda pendiente solo LinkedIn (0 elementos).
+
+**Paso 2, simulacro: construido y probado, sin desplegar.**
+- Lógica: `supabase/functions/_shared/resultados.ts` (pura, con conector y base inyectados). Pruebas: `_shared/resultados.test.ts` (27).
+- Función: `supabase/functions/marketing-resultados/` (solo lee; `verify_jwt = false` y autenticación `x-marketing-secret`, igual que el conector y el colchón). Una prueba falla si el código llega a contener una escritura a la base.
+- Qué hace: lee Instagram, Facebook y LinkedIn por el conector (para Facebook y LinkedIn prueba `yyyyMMdd` y luego ISO, y usa el primero que devuelva datos), convierte las horas a Ciudad de México con la zona que declara cada fecha (Instagram trae Europe/Madrid), empareja con las piezas del archivo por red + día + hora más cercana y devuelve, por red y semana: piezas del archivo vs. de la API, promedios, diferencia %, colores con la regla vigente y piezas con diferencia (API menor que el archivo, o más de 25 %).
+- Criterio de carga (por red): todas emparejadas, colores semanales iguales y ninguna diferencia por revisar. Una red sin publicaciones (LinkedIn el 3 nov) se avisa y **no se contrasta** contra una lista vacía.
+- Privacidad: de cada publicación solo salen red, identificador, fecha, hora y números. Ningún texto, enlace, hashtag, imagen ni nombre; hay una prueba con textos «marcados» que verifica que no pasan.
+
+**Lado del archivo hoy (producción, solo lectura):**
+| Red | Piezas | Promedio | Con valor 0 | Periodo |
+|---|---|---|---|---|
+| Instagram | 26 | 35.7 | 0 | 8 sep – 29 oct |
+| Facebook | 47 | 18.1 | 0 | 31 jul – 29 oct |
+| LinkedIn | 48 | 17.4 | 5 | 31 jul – 29 oct |
+La API devolvió 44 publicaciones de Instagram (17 anteriores al 8 sep, que no tienen pieza en `mk_pieza_red` y saldrán «sin pareja» hasta que se vinculen) y 47 de Facebook.
+
+**Para correrlo (requiere confirmación de Dirección, por separado):**
+1. Desplegar `marketing-resultados` (al fusionar este cambio el flujo de despliegue de Supabase lo publica). No agrega tablas ni cambia datos.
+2. Invocarla una vez con la cabecera `x-marketing-secret` (valor del secreto `MARKETING_CONNECTOR_SECRET`, que no pasa por chat): `POST /functions/v1/marketing-resultados` con cuerpo `{}` (periodo 30 jul – 30 oct) o `{"desde":"2026-09-08","hasta":"2026-10-30"}`. Escribe como máximo 6 filas en `mk_api_log` (las llamadas del conector).
+3. Revisar el reporte y decidir la carga (paso 5 del diseño).
+
+**Decisión pendiente de Dirección sobre LinkedIn:** el conector solo permite `/stats/linkedin/posts`, que devolvió 0 elementos. La alternativa del swagger (`/v2/analytics/posts/linkedin`, devuelve CSV) no está en la lista cerrada; añadirla requiere su aprobación, una prueba de que sigue siendo solo lectura y el cambio del conector (v8).

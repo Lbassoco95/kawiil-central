@@ -116,7 +116,8 @@ export function providerCategoryLabel(value?: string | null): string {
 }
 
 // ─── Estatus de proveedor ────────────────────────────────────────────────────
-export type ProviderStatus = "cotizacion" | "elegido" | "apartado" | "pagado" | "descartado";
+export type ProviderStatus =
+  | "cotizacion" | "elegido" | "apartado" | "pagado" | "descartado" | "no_disponible";
 
 export const PROVIDER_STATUS_LABELS: Record<ProviderStatus, string> = {
   cotizacion: "Cotización",
@@ -124,6 +125,7 @@ export const PROVIDER_STATUS_LABELS: Record<ProviderStatus, string> = {
   apartado: "Apartado",
   pagado: "Pagado",
   descartado: "Descartado",
+  no_disponible: "No disponible",
 };
 
 export const PROVIDER_STATUS_STYLES: Record<ProviderStatus, string> = {
@@ -132,6 +134,7 @@ export const PROVIDER_STATUS_STYLES: Record<ProviderStatus, string> = {
   apartado: "bg-amber-100 text-amber-800 border-amber-200",
   pagado: "bg-emerald-100 text-emerald-800 border-emerald-200",
   descartado: "bg-rose-100 text-rose-800 border-rose-200",
+  no_disponible: "bg-orange-100 text-orange-800 border-orange-200",
 };
 
 export const PROVIDER_STATUS_OPTIONS = (
@@ -201,4 +204,15 @@ export function pendienteSuggestions(rubro?: string | null): string[] {
 /** Texto de la sede a partir del proveedor: nombre y, si hay, dirección/datos. */
 export function venueText(p: { name: string; description?: string | null }): string {
   return [p.name, p.description?.trim()].filter(Boolean).join(" — ");
+}
+
+/**
+ * ¿El título del pendiente es el de "confirmar la sede"? ("Sede confirmada", "Confirmar sede",
+ * "Sede confirmada con los invitados"…). No incluye otros pasos de la sede como "Visitar sede",
+ * "Apartar fecha" o "Pagar anticipo".
+ */
+export function isVenueConfirmationTitle(title?: string | null): boolean {
+  const t = (title ?? "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  return /\bsede\b.*\bconfirm\w*|\bconfirm\w*\b.*\bsede\b/.test(t);
 }

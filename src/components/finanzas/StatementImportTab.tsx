@@ -203,9 +203,11 @@ export function StatementImportTab() {
           <p className="text-xs">✓ <b>{result.confirmed}</b> movimientos del banco coinciden con lo que ya estaba registrado.</p>
           {result.newFromBank > 0 && <p className="text-xs">➕ <b>{result.newFromBank}</b> movimientos del banco no estaban registrados: se crearon{result.pending > 0 ? ` (${result.pending} por clasificar)` : ""}.</p>}
           {result.duplicates > 0 && <p className="text-xs text-muted-foreground">{result.duplicates} ya estaban cargados del banco.</p>}
-          {result.unconfirmed.count > 0
-            ? <p className="text-xs text-amber-700">⚠ <b>{result.unconfirmed.count}</b> movimientos registrados en este periodo el banco no los confirma ({money(result.unconfirmed.debit)} en cargos, {money(result.unconfirmed.credit)} en abonos). Revísalos en la pestaña «Conciliación».</p>
-            : <p className="text-xs text-green-700">Todo lo registrado en este periodo quedó confirmado por el banco.</p>}
+          {result.registeredBefore === 0 && result.confirmed === 0 && result.duplicates === 0
+            ? <p className="text-xs text-amber-700">ℹ No había nada registrado en este periodo con qué comparar, por eso nada quedó conciliado. Carga ahora tu Excel contable (o tus capturas) de este periodo: se ligarán a estos movimientos del banco y les pasarán su clasificación.</p>
+            : result.unconfirmed.count > 0
+              ? <p className="text-xs text-amber-700">⚠ <b>{result.unconfirmed.count}</b> movimientos registrados en este periodo el banco no los confirma ({money(result.unconfirmed.debit)} en cargos, {money(result.unconfirmed.credit)} en abonos). Revísalos en la pestaña «Conciliación».</p>
+              : <p className="text-xs text-green-700">Todo lo registrado en este periodo quedó confirmado por el banco.</p>}
         </div>
       )}
       <AccountDialog open={accountOpen} onOpenChange={setAccountOpen} onCreated={(a) => setAccountId(a.id)} />

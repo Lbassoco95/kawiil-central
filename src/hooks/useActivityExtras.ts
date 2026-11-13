@@ -5,6 +5,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useUpdateTask } from "@/hooks/useTasks";
+import { isVenueConfirmationTitle, venueText } from "@/lib/activityTypes";
 import { toast } from "sonner";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 
@@ -273,9 +275,12 @@ export function useCreateAttendeeConfirmationTasks() {
  * - Con `provider`: la sede pasa a ser ese proveedor (Sede / Lugar = nombre y dirección) y,
  *   si seguía en cotización, queda como "Elegido".
  * - Sin `provider`: solo cambia la confirmación de la sede que ya está escrita.
+ * - Al CONFIRMAR, se cierran los pendientes abiertos de "confirmar la sede" (rubro Casas / Sede),
+ *   con el mismo flujo que al completarlos a mano. Al quitar la confirmación no se reabre nada.
  */
 export function useConfirmVenue() {
   const queryClient = useQueryClient();
+  const updateTask = useUpdateTask();
   return useMutation({
     mutationFn: async ({ activityId, provider, confirmed }: {
       activityId: string; provider?: ActivityProvider | null; confirmed: boolean;
@@ -295,14 +300,104 @@ export function useConfirmVenue() {
           .from("activity_providers").update({ status: "elegido" }).eq("id", provider.id);
         if (e2) throw e2;
       }
-      return { activityId, confirmed };
+
+      // Cierra el pendiente de confirmar la sede. Si falla, la sede ya quedó confirmada.
+      let closed = 0;
+      let failed = 0;
+      if (confirmed) {
+        const { data: open } = await supabase
+          .from("tasks")
+          .select("id, title")
+          .eq("activity_id", activityId)
+          .eq("activity_category", "casas")
+          .not("status", "in", "(completada,cancelada)");
+        for (const t of (open ?? []).filter((x) => isVenueConfirmationTitle(x.title))) {
+          try {
+            await updateTask.mutateAsync({ id: t.id, status: "completada" });
+            closed += 1;
+          } catch {
+            failed += 1;
+          }
+        }
+      }
+      return { activityId, confirmed, closed, failed };
     },
-    onSuccess: ({ activityId, confirmed }) => {
+    onSuccess: ({ activityId, confirmed, closed, failed }) => {
       queryClient.invalidateQueries({ queryKey: ["activity", activityId] });
       queryClient.invalidateQueries({ queryKey: ["activities"] });
       queryClient.invalidateQueries({ queryKey: ["activity-providers", activityId] });
-      toast.success(confirmed ? "Sede confirmada" : "Se quitó la confirmación de la sede");
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      if (!confirmed) toast.success("Se quitó la confirmación de la sede");
+      else if (closed > 0) toast.success(`Sede confirmada · ${closed === 1 ? "pendiente cerrado" : `${closed} pendientes cerrados`}`);
+      else toast.success("Sede confirmada");
+      if (failed > 0) toast.warning("No se pudo cerrar el pendiente de la sede. Márcalo como hecho a mano.");
     },
     onError: (e: Error) => toast.error("Error al actualizar la sede: " + e.message),
+  });
+}
+
+// ─── Proveedor / sede no disponible ─────────────────────────────────────────
+/**
+ * Marca un proveedor (o sede) como "No disponible" y deja constancia en su bitácora.
+ * Si era la sede confirmada de la actividad: se quita como sede (y su texto de Sede / Lugar),
+ * y se reabre el pendiente de "confirmar la sede" que se cerró al confirmarla.
+ */
+export function useMarkProviderUnavailable() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const updateTask = useUpdateTask();
+  return useMutation({
+    mutationFn: async ({ provider, activity }: {
+      provider: ActivityProvider;
+      activity?: { id: string; location: string | null; venue_provider_id: string | null } | null;
+    }) => {
+      const { error } = await supabase
+        .from("activity_providers").update({ status: "no_disponible" }).eq("id", provider.id);
+      if (error) throw error;
+
+      // Constancia en la bitácora del proveedor (si falla, el estatus ya cambió).
+      try {
+        const organization_id = await getOrgId(user!.id);
+        await supabase.from("activity_provider_comments").insert({
+          provider_id: provider.id, organization_id, user_id: user!.id,
+          content: "Marcada como no disponible.",
+        });
+      } catch { /* la bitácora es secundaria */ }
+
+      const wasVenue = !!activity && activity.venue_provider_id === provider.id;
+      let reopened = 0;
+      if (wasVenue && activity) {
+        const clearsText = (activity.location ?? "").trim() === venueText(provider);
+        const { error: e2 } = await supabase.from("activities").update({
+          venue_confirmed: false, venue_provider_id: null,
+          ...(clearsText ? { location: null } : {}),
+        }).eq("id", activity.id);
+        if (e2) throw e2;
+
+        const { data: done } = await supabase
+          .from("tasks").select("id, title")
+          .eq("activity_id", activity.id).eq("activity_category", "casas").eq("status", "completada");
+        for (const t of (done ?? []).filter((x) => isVenueConfirmationTitle(x.title))) {
+          try {
+            await updateTask.mutateAsync({ id: t.id, status: "pendiente" });
+            reopened += 1;
+          } catch { /* se puede reabrir a mano */ }
+        }
+      }
+      return { provider, wasVenue, reopened };
+    },
+    onSuccess: ({ provider, wasVenue, reopened }) => {
+      queryClient.invalidateQueries({ queryKey: ["activity-providers", provider.activity_id] });
+      queryClient.invalidateQueries({ queryKey: ["activity-provider-comments", provider.id] });
+      queryClient.invalidateQueries({ queryKey: ["activity", provider.activity_id] });
+      queryClient.invalidateQueries({ queryKey: ["activities"] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      toast.success(
+        wasVenue
+          ? `“${provider.name}” no está disponible: se quitó como sede${reopened > 0 ? " y se reabrió el pendiente" : ""}`
+          : `“${provider.name}” marcada como no disponible`,
+      );
+    },
+    onError: (e: Error) => toast.error("Error al marcar como no disponible: " + e.message),
   });
 }

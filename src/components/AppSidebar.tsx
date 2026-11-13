@@ -94,7 +94,7 @@ const NAV_GROUPS: NavGroup[] = [
       { title: "Firmas", url: "/firmas", icon: PenTool, view: "documentos", tooltip: "Firma electrónica simple: bandeja por firmar, enviados y mi firma" },
       { title: "Finanzas", url: "/finanzas", icon: Wallet, view: "finanzas", moduleKey: "finanzas" },
       { title: "Marketing", url: "/marketing", icon: Megaphone, view: "marketing", moduleKey: "marketing", estricto: true, tooltip: "Monitoreo de campañas: panel, calendario, casos, semáforo y reglas" },
-      { title: "Agentes", url: "/agentes", icon: Bot, view: "agentes", moduleKey: "admin", estricto: true, tooltip: "Agentes de Cerebro / kawiil-agents: estado y tareas (solo lectura)" },
+      { title: "Agentes", url: "/agentes", icon: Bot, view: "agentes", moduleKey: "admin", estricto: true, tooltip: "Agentes de Cerebro / kawiil-agents: estado, tareas, creación e instrucciones (Dirección)" },
     ],
   },
   {

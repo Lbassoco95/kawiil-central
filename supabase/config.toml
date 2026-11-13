@@ -163,6 +163,14 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = true
   [functions.list-agents]
     verify_jwt = true
+  [functions.agente-constructor]
+    verify_jwt = true
+  [functions.agente-seguimiento]
+    verify_jwt = true
+  [functions.agente-dropbox]
+    verify_jwt = true
+  [functions.agente-cuentas]
+    verify_jwt = true
   [functions.analyze-candidate-fit]
     verify_jwt = true
   [functions.extract-cv-data]
@@ -192,6 +200,8 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = false
   [functions.mtg-recall-media]
     verify_jwt = true
+  [functions.mtg-recall-sync]
+    verify_jwt = true
   [functions.mtg-summarize-meeting]
     verify_jwt = true
 
@@ -212,4 +222,8 @@ project_id = "qppfampapbxdgednkofc"
 
   # Seguimientos del Analista: se autentica con su propio secreto (x-marketing-secret) y lo invoca pg_cron/pg_net sin JWT.
   [functions.marketing-seguimientos]
+    verify_jwt = false
+
+  # Resultados de Metricool (simulacro, solo lectura): se autentica con su propio secreto (x-marketing-secret), sin JWT. No escribe datos.
+  [functions.marketing-resultados]
     verify_jwt = false

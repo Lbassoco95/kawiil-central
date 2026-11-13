@@ -146,7 +146,7 @@ serve(async (req) => {
 
     const { data: meeting, error: mErr } = await admin
       .from("mtg_meetings")
-      .select("id, organization_id, series_id, teams_join_url, recall_bot_id, recall_bot_status, transcript_path")
+      .select("id, organization_id, series_id, status, teams_join_url, recall_bot_id, recall_bot_status, transcript_path")
       .eq("id", meetingId)
       .single();
     if (mErr || !meeting) return json({ error: "junta no encontrada" }, 404);
@@ -174,7 +174,18 @@ serve(async (req) => {
         bot_name: "Kawiilito",
         // Strings de nivel superior: regresan en data.bot.metadata de cada webhook.
         metadata: { meeting_id: meeting.id, organization_id: meeting.organization_id },
-        automatic_leave: { waiting_room_timeout: WAITING_ROOM_TIMEOUT_SEC },
+        automatic_leave: {
+          waiting_room_timeout: WAITING_ROOM_TIMEOUT_SEC,
+          // Otter, Fireflies, read.ai… cuentan como participantes y mantenían a Kawiilito
+          // en una llamada ya terminada. Si solo quedan bots (por nombre), sale a los 2 min.
+          bot_detection: {
+            using_participant_names: {
+              timeout: 120,
+              activate_after: 120,
+              matches: ["notetaker", "recorder", "assistant", "otter", "fireflies", "read.ai", "fathom"],
+            },
+          },
+        },
         automatic_video_output: {
           in_call_recording: { kind: "jpeg", b64_data: BOT_AVATAR_JPEG_B64 },
         },
@@ -212,6 +223,10 @@ serve(async (req) => {
       .update({
         recall_bot_id: bot.id,
         recall_bot_status: "joining_call",
+        // Al mandar a Kawiilito la junta arranca; termina sola cuando el bot sale de la llamada.
+        ...(meeting.status === "planned"
+          ? { status: "in_progress", started_at: new Date().toISOString() }
+          : {}),
         // No pisar una transcripción ya recibida (p. ej. al reenviar el bot).
         ...(meeting.transcript_path
           ? {}

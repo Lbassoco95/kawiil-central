@@ -15,7 +15,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
-import { Plus, Pencil, Trash2, ListChecks, Images, UserCheck } from "lucide-react";
+import { Plus, Pencil, Trash2, ListChecks, Images, UserCheck, CheckCircle2, RotateCcw } from "lucide-react";
 import { formatDateMX } from "@/lib/dateUtils";
 import { TASK_STATUS_CONFIG, PRIORITY_CONFIG } from "@/lib/statusStyles";
 import { useProfiles, useCreateTask, useUpdateTask, useDeleteTask } from "@/hooks/useTasks";
@@ -28,7 +28,9 @@ import {
   useCreateActivityProvider, useConfirmVenue,
   type ActivityProvider, type ActivityAttendee,
 } from "@/hooks/useActivityExtras";
-import { buildRubroOptions, rubroLabel, providerStatusLabel, pendienteSuggestions, venueText } from "@/lib/activityTypes";
+import {
+  buildRubroOptions, rubroLabel, providerStatusLabel, pendienteSuggestions, venueText, isVenueConfirmationTitle,
+} from "@/lib/activityTypes";
 
 type TaskStatus = keyof typeof TASK_STATUS_CONFIG;
 
@@ -144,6 +146,12 @@ function TaskDialog({
     confirmVenue.mutate({ activityId, provider: selectedProvider, confirmed: true });
   };
 
+  // Si este mismo pendiente es el de "confirmar la sede" y se enciende "Es la sede del evento",
+  // al guardar queda hecho (si no, el formulario lo reabriría con su estado anterior).
+  const confirmsVenueNow = scope === "rubro" && isCasas && isVenue && !!selectedProvider
+    && isVenueConfirmationTitle(title);
+  const effectiveStatus = confirmsVenueNow ? "completada" : status;
+
   const profileOptions = (profiles || []).map((p) => ({ value: p.user_id, label: p.full_name }));
   const isPending = createTask.isPending || updateTask.isPending;
 
@@ -157,7 +165,7 @@ function TaskDialog({
           assigned_to: assignedTo || null,
           due_date: dueDate || null,
           priority,
-          status,
+          status: effectiveStatus,
           activity_category: scope === "rubro" ? category || null : null,
           activity_provider_id: scope === "rubro" ? providerId || null : null,
           activity_attendee_id: scope === "asistentes" ? attendeeId || null : null,
@@ -171,7 +179,7 @@ function TaskDialog({
           assigned_to: assignedTo || undefined,
           due_date: dueDate || undefined,
           priority,
-          status,
+          status: effectiveStatus,
           activity_id: activityId,
           activity_category: scope === "rubro" ? category || null : null,
           activity_provider_id: scope === "rubro" ? providerId || null : null,
@@ -562,6 +570,22 @@ export function ActivityTasksCard({ activityId }: { activityId: string }) {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center justify-end gap-1">
+                          {t.status !== "cancelada" && (
+                            <Button
+                              size="icon" variant="ghost"
+                              className={`h-7 w-7 ${t.status === "completada" ? "text-muted-foreground" : "text-emerald-700"}`}
+                              title={t.status === "completada" ? "Reabrir pendiente" : "Marcar como hecho"}
+                              disabled={updateTask.isPending}
+                              onClick={() =>
+                                updateTask.mutate({
+                                  id: t.id, status: t.status === "completada" ? "pendiente" : "completada",
+                                })}
+                            >
+                              {t.status === "completada"
+                                ? <RotateCcw className="h-3.5 w-3.5" />
+                                : <CheckCircle2 className="h-3.5 w-3.5" />}
+                            </Button>
+                          )}
                           <TaskDialog
                             activityId={activityId}
                             task={t}

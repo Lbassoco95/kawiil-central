@@ -37,14 +37,25 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Google credentials not configured" }), { status: 500, headers: corsHeaders });
     }
 
-    const scopes = [
-      "openid",
-      "email",
-      "profile",
-      "https://www.googleapis.com/auth/calendar",
-      "https://www.googleapis.com/auth/gmail.modify",
-      "https://www.googleapis.com/auth/gmail.send",
-    ].join(" ");
+    // Permiso OPCIONAL de Drive para los agentes: una autorización aparte (solo lectura) que se SUMA a lo ya concedido (include_granted_scopes).
+    // El flujo normal de conexión no cambia: sin `extra` se piden los mismos permisos de siempre.
+    let extra = "";
+    let loginHint = "";
+    if (req.method === "POST") {
+      const b = await req.json().catch(() => ({}));
+      extra = b?.extra === "drive" ? "drive" : "";
+      loginHint = typeof b?.email === "string" && /^[^\s@<>]{1,64}@[^\s@<>]{1,255}$/.test(b.email) ? b.email : "";
+    }
+    const scopes = (extra === "drive"
+      ? ["openid", "email", "profile", "https://www.googleapis.com/auth/drive.readonly"]
+      : [
+        "openid",
+        "email",
+        "profile",
+        "https://www.googleapis.com/auth/calendar",
+        "https://www.googleapis.com/auth/gmail.modify",
+        "https://www.googleapis.com/auth/gmail.send",
+      ]).join(" ");
 
     const authUrl = "https://accounts.google.com/o/oauth2/v2/auth?" +
       new URLSearchParams({
@@ -56,6 +67,7 @@ Deno.serve(async (req) => {
         access_type: "offline",
         include_granted_scopes: "true",
         prompt: "consent",
+        ...(loginHint ? { login_hint: loginHint } : {}),
       }).toString();
 
     return new Response(JSON.stringify({ url: authUrl }), {
