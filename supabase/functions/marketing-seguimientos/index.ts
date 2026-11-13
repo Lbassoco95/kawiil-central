@@ -59,6 +59,7 @@ Deno.serve(async (req) => {
       fallo = true; console.error("marketing-seguimientos: falla del modelo", e instanceof Error ? e.message : "error");
     }
     const ok = !fallo && !!res?.ok;
+    if (!ok && !fallo) console.error("marketing-seguimientos: el modelo no redactó respuesta", res?.motivo, "pasos", res?.pasos, res?.detalle ?? "");
     if (ok) resumen.respondidos++; else resumen.con_error++;
     const usados = (res?.tokens.entrada ?? 0) + (res?.tokens.salida ?? 0);
     tokensPorOrg.set(s.organization_id, (await tokensMes(s.organization_id)) + usados);

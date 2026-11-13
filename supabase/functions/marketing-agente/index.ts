@@ -96,6 +96,7 @@ Deno.serve(async (req) => {
     fallo = true; console.error("marketing-agente: falla del modelo", e instanceof Error ? e.message : "error");
   }
   const ok = !fallo && !!res?.ok;
+  if (!ok && !fallo) console.error("marketing-agente: el modelo no redactó respuesta", res?.motivo, "pasos", res?.pasos, "herramientas", res?.fuentes.length, res?.detalle ?? "");
 
   const { data: fila, error: errGuardar } = await db.from("mk_consulta").insert({
     organization_id: org, user_id: u.user.id, agente: AGENTE, pregunta: v.pregunta, respuesta: ok ? res!.respuesta : null, estado: ok ? "respondida" : "error",
