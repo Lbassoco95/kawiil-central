@@ -1,9 +1,10 @@
+import { SelectorAgentes } from "@/components/agentes/SelectorAgentes";
 import { useEffect, useState } from "react";
 import { CalendarClock, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { etiquetaOpcion, nombreAgente, type AgenteRegistro } from "@/lib/agentes/registro";
+import { nombreAgente, type AgenteRegistro } from "@/lib/agentes/registro";
 import { useProgramarAgente } from "@/hooks/useAgenteConstructor";
 import { etiquetasAccesos } from "@/components/agentes/InstruirAgente";
 import { DIAS_SEMANA, pareceSecreto, AVISO_SECRETO, type Programacion } from "../../../supabase/functions/_shared/agenteConstructor";
@@ -58,12 +59,7 @@ export function ProgramarAgente({ agentes, agenteInicial }: { agentes: AgenteReg
       <p className="flex items-center gap-2 text-sm text-muted-foreground"><CalendarClock className="h-4 w-4" />Haz que un agente ejecute una instrucción solo, cada día o cada semana. Guardar no ejecuta nada en ese momento.</p>
       {lista.length === 0 ? <p className="text-sm text-muted-foreground" data-testid="programar-vacio">Aún no hay agentes con cadencia diaria o semanal creados desde el constructor.</p> : (
         <>
-          <label className="block space-y-1 text-sm">Agente
-            <select className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={agenteId} onChange={(e) => setAgenteId(e.target.value)} data-testid="programar-agente">
-              <option value="">Elige un agente…</option>
-              {lista.map((a) => <option key={a.id} value={a.id}>{etiquetaOpcion(a)} — {resumenProgramacion(a)}</option>)}
-            </select>
-          </label>
+          <SelectorAgentes agentes={lista} valor={agenteId} testid="programar-agente" onCambio={setAgenteId} detalle={(a) => resumenProgramacion(a)} />
           <FichaAgente agente={agente} />
           {agente && (
             <div className="space-y-3">
