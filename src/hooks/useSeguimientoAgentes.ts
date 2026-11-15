@@ -51,6 +51,7 @@ export const useDescargarEntregable = () =>
 export interface RespuestaHilo {
   hilo: { id: string; titulo: string; agent_id: string; agente: string };
   mensajes: MensajeHilo[]; revisiones: RevisionPendiente[]; en_curso: boolean;
+  accesos?: { etiqueta: string; dominio: string }[];   // accesos de 1Password del agente (solo etiqueta y dominio) para autorizarlos por tarea
   escritura_dominios?: string[];   // sitios donde Dirección habilitó escribir para este agente (se autoriza por tarea)
 }
 

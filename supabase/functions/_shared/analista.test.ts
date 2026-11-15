@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import {
-  correrConsulta, evaluarLimites, HERRAMIENTAS, normalizarHistorial, AGENTES_CONSULTABLES, ESFUERZO_DE, SYSTEM_CMO, SYSTEM_DE, inicioDiaCDMX, inicioMesCDMX, leerLimites, LIMITES_POR_DEFECTO, MAX_PREGUNTA, SYSTEM, validarPregunta, verificarCifras,
+  correrConsulta, evaluarLimites, HERRAMIENTAS, normalizarHistorial, AGENTES_CONSULTABLES, SYSTEM_CMO, SYSTEM_DE, inicioDiaCDMX, inicioMesCDMX, leerLimites, LIMITES_POR_DEFECTO, MAX_PREGUNTA, SYSTEM, validarPregunta, verificarCifras,
   type Bloque, type Herramientas, type Llm, type RespuestaLlm,
 } from "./analista.ts";
 
@@ -130,11 +130,7 @@ test("inicio del día y del mes en Ciudad de México (UTC-6)", () => {
   assert.equal(inicioMesCDMX(new Date("2026-12-01T03:00:00Z")), "2026-11-01T00:00:00-06:00");
 });
 test("las herramientas del modelo coinciden EXACTAMENTE con las de la función SQL mk_analista_datos (lista cerrada)", () => {
-  // La definición vigente de mk_analista_datos es la más reciente entre las migraciones aplicadas y las pendientes que la redefinen.
-  const dirs = [new URL("../../migrations/", import.meta.url), new URL("../../pendientes/", import.meta.url)];
-  const candidatas = dirs.flatMap((d) => (existsSync(d) ? readdirSync(d).filter((f) => /^\d{14}_.*\.sql$/.test(f)).map((f) => ({ f, ruta: new URL(f, d) })) : []))
-    .filter((c) => /CREATE OR REPLACE FUNCTION public\.mk_analista_datos/.test(readFileSync(c.ruta, "utf8"))).sort((a, b) => a.f.localeCompare(b.f));
-  const sql = readFileSync(candidatas.at(-1)!.ruta, "utf8");
+  const sql = readFileSync(new URL("../../migrations/20261105191631_marketing_analista_datos.sql", import.meta.url), "utf8");
   const enSql = [...sql.matchAll(/p_herramienta (?:=|IN \()\s*'([a-z_]+)'(?:, '([a-z_]+)')?/g)].flatMap((m) => [m[1], m[2]]).filter(Boolean).sort();
   assert.deepEqual(HERRAMIENTAS.map((h) => h.name).sort(), [...new Set(enSql)].sort());
   for (const h of HERRAMIENTAS) { assert.ok(h.description.length > 20); assert.equal((h.input_schema as { additionalProperties: boolean }).additionalProperties, false); }
@@ -219,36 +215,4 @@ test("sin respuesta: queda un diagnóstico (último stop_reason y tipos de bloqu
   const llm = async () => ({ stop_reason: "refusal", uso: { entrada: 1, salida: 1 }, contenido: [] });
   const r = await correrConsulta({ pregunta: "¿Cómo va el colchón?", herramientas: {} as never, llm: llm as never });
   assert.equal(r.ok, false); assert.match(r.detalle ?? "", /stop=refusal bloques=ninguno/);
-});
-
-test("el esfuerzo de razonamiento llega al modelo en cada llamada, también en la final; el CMO usa «medium» y el Analista el valor por defecto", async () => {
-  const vistos: Array<string | undefined> = [];
-  const llm = async (a: { esfuerzo?: string; sinHerramientas?: boolean }) => {
-    vistos.push(a.esfuerzo);
-    return a.sinHerramientas ? { stop_reason: "end_turn", uso: { entrada: 1, salida: 1 }, contenido: [{ type: "text", text: "Listo." }] }
-      : { stop_reason: "tool_use", uso: { entrada: 1, salida: 1 }, contenido: [{ type: "tool_use", id: "t", name: "colchon_actual", input: {} }] };
-  };
-  await correrConsulta({ pregunta: "¿Qué priorizamos?", herramientas: { colchon_actual: async () => COLCHON } as never, llm: llm as never, maxPasos: 2, esfuerzo: "medium" });
-  assert.deepEqual(vistos, ["medium", "medium", "medium"]);
-  assert.equal(ESFUERZO_DE.marketing_cmo, "medium"); assert.equal(ESFUERZO_DE.marketing_analista, undefined);
-});
-
-test("estado_equipo: el CMO la tiene, y su prompt no atribuye la falta de datos a un agente ni promete encender o crear agentes", () => {
-  const h = HERRAMIENTAS.find((x) => x.name === "estado_equipo"); assert.ok(h); assert.match(h!.description, /No incluye el latido/);
-  assert.equal(HERRAMIENTAS.length, 11);
-  assert.match(SYSTEM_CMO, /usa estado_equipo/); assert.match(SYSTEM_CMO, /no de que un agente esté apagado/); assert.match(SYSTEM_CMO, /No puedes encender, configurar ni crear agentes/);
-});
-
-test("la ventana por defecto de la herramienta («por defecto 90») no se marca como cifra sin verificar cuando el modelo no la mandó; un 90 inventado en otro contexto sí", async () => {
-  const guion = (texto: string) => { let n = 0; return async () => n++ === 0
-    ? { stop_reason: "tool_use", uso: { entrada: 1, salida: 1 }, contenido: [{ type: "tool_use", id: "t1", name: "resultados_por_pilar", input: {} }] }
-    : { stop_reason: "end_turn", uso: { entrada: 1, salida: 1 }, contenido: [{ type: "text", text: texto }] }; };
-  const herr = { resultados_por_pilar: async () => ({ corte: "2026-11-15T18:00:00Z", datos: [{ grupo: "PLD", piezas: 3, valor_promedio: 36.9 }] }) } as never;
-  const bien = await correrConsulta({ pregunta: "¿Qué rinde?", herramientas: herr, llm: guion("En los últimos 90 días, PLD promedia 36.9 con 3 piezas.") as never });
-  assert.deepEqual(bien.no_verificadas, []); assert.equal(bien.verificada, true);
-  const mal = await correrConsulta({ pregunta: "¿Qué rinde?", herramientas: herr, llm: guion("PLD promedia 36.9 y cayó 77 %.") as never });
-  assert.deepEqual(mal.no_verificadas, ["77%"]);
-  // 365 no es el valor por defecto de esa herramienta: sigue sin verificarse
-  const otro = await correrConsulta({ pregunta: "¿Qué rinde?", herramientas: herr, llm: guion("En los últimos 365 días, PLD promedia 36.9.") as never });
-  assert.deepEqual(otro.no_verificadas, ["365"]);
 });

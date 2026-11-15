@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { ArrowDown, CalendarClock, Download, Loader2, Send, X } from "lucide-react";
+import { useState } from "react";
+import { CalendarClock, Download, Loader2, Send, X } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,7 +14,7 @@ import { EscritorioAgente, EstilosOficina } from "@/components/agentes/escritori
 import { useFiguraDe } from "@/components/agentes/BandaEquipo";
 import { ESTADO_OFICINA } from "@/lib/agentes/oficina";
 import { PlanEncargo } from "@/components/agentes/PlanEncargo";
-import { AutorizarEscritura } from "@/components/agentes/InstruirAgente";
+import { AutorizarAccesos, AutorizarEscritura } from "@/components/agentes/InstruirAgente";
 
 // Una solicitud con su conversación: lo que se le pidió al agente, lo que respondió y entregó, y lo que se le sigue pidiendo en el mismo
 // hilo (el agente recuerda lo ya hablado). Desde aquí también se programan revisiones («revísalo el lunes», «cada semana»).
@@ -122,85 +122,35 @@ function Revisiones({ taskId, ahora, lista }: { taskId: string; ahora: Date; lis
   );
 }
 
-export function HiloAgente({ taskId, ahora, claseAlto = "h-[min(64vh,42rem)] min-h-[22rem]" }: { taskId: string; ahora: Date; claseAlto?: string }) {
+export function HiloAgente({ taskId, ahora }: { taskId: string; ahora: Date }) {
   const q = useHilo(taskId);
   const instruir = useInstruirAgente();
   const qc = useQueryClient();
   const [texto, setTexto] = useState("");
   const [escribir, setEscribir] = useState<string[]>([]);
+  const [aprobados, setAprobados] = useState<string[]>([]);
   const figura = useFiguraDe(q.data?.hilo.agent_id);
-
-  // Chat de verdad: la lista de mensajes tiene su propio scroll y baja sola al último mensaje (el de la persona, la respuesta, y el avance
-  // mientras el agente trabaja). Si la persona sube a leer, NO se la arrastra al fondo: aparece «Mensajes nuevos» para bajar cuando quiera.
-  const lista = useRef<HTMLDivElement>(null);
-  const alFondo = useRef(true);
-  const vistos = useRef(0);
-  const [nuevos, setNuevos] = useState(0);
-  const mensajes = q.data?.mensajes ?? [];
-  const firma = mensajes.map((m) => `${m.task_id}:${m.rol}:${m.estado}:${m.texto.length}`).join("|");
-  const bajar = () => { const el = lista.current; if (el) el.scrollTop = el.scrollHeight; alFondo.current = true; setNuevos(0); };
-  const alScroll = () => {
-    const el = lista.current;
-    if (!el) return;
-    const cerca = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-    alFondo.current = cerca;
-    if (cerca) setNuevos(0);
-  };
-  useEffect(() => {
-    if (!q.data) return;
-    const n = mensajes.length;
-    if (alFondo.current || vistos.current === 0) { const el = lista.current; if (el) el.scrollTop = el.scrollHeight; }
-    else if (n > vistos.current) { const mas = n - vistos.current; setNuevos((c) => c + mas); }   // `mas` se calcula ya: el actualizador corre después de cambiar `vistos`
-    vistos.current = n;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [firma, !!q.data]);
-
   if (q.isLoading) return <p className="text-sm text-muted-foreground">Leyendo la solicitud…</p>;
   if (q.isError || !q.data) return <p role="alert" className="text-sm text-destructive">{(q.error as Error | null)?.message ?? "No se pudo leer la solicitud."}</p>;
-  const { hilo, revisiones, en_curso } = q.data;
+  const { hilo, mensajes, revisiones, en_curso } = q.data;
   const ultimaTarea = [...mensajes].reverse().find((m) => m.rol === "agente")?.task_id ?? null;   // el avance técnico es el de la última respuesta
   const enviar = () => {
     const t = texto.trim();
-    if (!t || en_curso || instruir.isPending) return;
-    alFondo.current = true;   // lo que escribe y la respuesta deben verse sin tener que bajar
-    instruir.mutate({ agent_id: hilo.agent_id, title: `Seguimiento: ${t.slice(0, 60)}`, instructions: t, hilo_id: hilo.id, escrituras_aprobadas: escribir.filter((d) => (q.data?.escritura_dominios ?? []).includes(d)) },
-      { onSuccess: () => { setTexto(""); setEscribir([]); void qc.invalidateQueries({ queryKey: ["agentes-seguimiento"] }); } });
+    if (!t) return;
+    instruir.mutate({ agent_id: hilo.agent_id, title: `Seguimiento: ${t.slice(0, 60)}`, instructions: t, hilo_id: hilo.id, accesos_aprobados: aprobados.filter((e) => (q.data?.accesos ?? []).some((a) => a.etiqueta === e)), escrituras_aprobadas: escribir.filter((d) => (q.data?.escritura_dominios ?? []).includes(d)) },
+      { onSuccess: () => { setTexto(""); setEscribir([]); setAprobados([]); void qc.invalidateQueries({ queryKey: ["agentes-seguimiento"] }); } });
   };
   return (
     <div className="space-y-3" data-testid="hilo">
-      <div className={`flex ${claseAlto} flex-col overflow-hidden rounded-2xl border border-border/50 bg-background/30`} data-testid="hilo-chat">
-        <div className="flex shrink-0 items-center gap-3 border-b border-border/40 px-3 py-2" data-testid="hilo-encabezado">
-          {figura && <><EstilosOficina /><EscritorioAgente f={figura} compacto mini /></>}
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium">{hilo.titulo || "Solicitud"} <span className="font-normal text-muted-foreground">· {hilo.agente}</span></p>
-            {figura && <p className="truncate text-xs text-muted-foreground" data-testid="hilo-estado-agente">{en_curso ? (figura.estado === "trabajando" ? "En su escritorio, trabajando en esto ahora." : "Esperando su turno: empieza en cuanto esté libre.") : ESTADO_OFICINA[figura.estado].frase}</p>}
-          </div>
+      <div className="flex items-center gap-3" data-testid="hilo-encabezado">
+        {figura && <><EstilosOficina /><EscritorioAgente f={figura} compacto /></>}
+        <div className="min-w-0">
+          <p className="text-base font-medium">{hilo.titulo || "Solicitud"} <span className="text-sm font-normal text-muted-foreground">· {hilo.agente}</span></p>
+          {figura && <p className="text-sm text-muted-foreground" data-testid="hilo-estado-agente">{en_curso ? (figura.estado === "trabajando" ? "En su escritorio, trabajando en esto ahora." : "Esperando su turno: empieza en cuanto esté libre.") : ESTADO_OFICINA[figura.estado].frase}</p>}
         </div>
-        <div className="relative flex min-h-0 flex-1 flex-col">
-          <div ref={lista} onScroll={alScroll} className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain p-3" aria-live="polite" role="log" aria-label="Conversación" data-testid="hilo-mensajes">
-            {mensajes.map((m, i) => <Burbuja key={`${m.task_id}-${m.rol}-${i}`} m={m} ahora={ahora} />)}
-          </div>
-          {nuevos > 0 && (
-            <button type="button" onClick={bajar} data-testid="hilo-nuevos"
-              className="absolute bottom-2 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full border border-primary/50 bg-background px-3 py-1 text-xs shadow">
-              <ArrowDown className="h-3 w-3" aria-hidden />{nuevos === 1 ? "1 mensaje nuevo" : `${nuevos} mensajes nuevos`}
-            </button>
-          )}
-        </div>
-        <div className="shrink-0 space-y-2 border-t border-border/40 p-2">
-          <AutorizarEscritura sitios={q.data?.escritura_dominios ?? []} marcados={escribir} onCambio={setEscribir} />
-          {instruir.isError && <p role="alert" className="text-sm text-destructive">{(instruir.error as Error).message}</p>}
-          <div className="flex items-end gap-2">
-            <Textarea rows={2} value={texto} onChange={(e) => setTexto(e.target.value)} className="max-h-40 min-h-[3.25rem] resize-none"
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); enviar(); } }}
-              placeholder={en_curso ? "Espera a que termine para escribirle de nuevo…" : `Escríbele a ${hilo.agente}: un cambio, otro documento…`}
-              disabled={en_curso} data-testid="hilo-texto" aria-label={`Mensaje para ${hilo.agente}`} />
-            <Button onClick={enviar} disabled={!texto.trim() || instruir.isPending || en_curso} data-testid="hilo-enviar" aria-label="Enviar mensaje">
-              {instruir.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}<span className="ml-2 hidden sm:inline">Enviar</span>
-            </Button>
-          </div>
-          <p className="px-1 text-[11px] text-muted-foreground">Enter envía · Shift+Enter agrega una línea</p>
-        </div>
+      </div>
+      <div className="max-h-[32rem] space-y-2 overflow-auto rounded-2xl border border-border/50 p-3" aria-live="polite" data-testid="hilo-mensajes">
+        {mensajes.map((m, i) => <Burbuja key={`${m.task_id}-${m.rol}-${i}`} m={m} ahora={ahora} />)}
       </div>
       {ultimaTarea && (
         <details className="rounded-2xl border border-border/60 p-3 text-sm" data-testid="hilo-avance">
@@ -208,6 +158,16 @@ export function HiloAgente({ taskId, ahora, claseAlto = "h-[min(64vh,42rem)] min
           <div className="mt-2"><AvanceTarea taskId={ultimaTarea} ahora={ahora} /></div>
         </details>
       )}
+      <div className="space-y-2">
+        <Textarea rows={2} value={texto} onChange={(e) => setTexto(e.target.value)} placeholder={en_curso ? "Espera a que termine para escribirle de nuevo…" : `Escríbele a ${hilo.agente}: pídele un cambio, otro documento o que siga con el tema…`}
+          disabled={en_curso} data-testid="hilo-texto" />
+        <AutorizarAccesos accesos={q.data?.accesos ?? []} marcados={aprobados} onCambio={setAprobados} />
+        <AutorizarEscritura sitios={q.data?.escritura_dominios ?? []} marcados={escribir} onCambio={setEscribir} />
+        {instruir.isError && <p role="alert" className="text-sm text-destructive">{(instruir.error as Error).message}</p>}
+        <Button onClick={enviar} disabled={!texto.trim() || instruir.isPending || en_curso} data-testid="hilo-enviar">
+          {instruir.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}Enviar
+        </Button>
+      </div>
       <Revisiones taskId={hilo.id} ahora={ahora} lista={revisiones} />
     </div>
   );

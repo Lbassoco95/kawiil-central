@@ -37,20 +37,20 @@ export const CSS = `
 export function EstilosOficina() { return <style>{CSS}</style>; }
 
 // Un agente en su escritorio. `compacto` lo hace de unos 110 px de ancho para tiras y encabezados. Es solo lectura; si se pasa `onElegir` es un botón.
-export function EscritorioAgente({ f, compacto = false, mini = false, onElegir, activo = false }: { f: FiguraOficina; compacto?: boolean; mini?: boolean; onElegir?: () => void; activo?: boolean }) {
+export function EscritorioAgente({ f, compacto = false, onElegir, activo = false }: { f: FiguraOficina; compacto?: boolean; onElegir?: () => void; activo?: boolean }) {
   const info = ESTADO_OFICINA[f.estado], c = TONO[info.color] ?? TONO.gris;
   const apagado = f.estado === "apagado";
   const sprite = spriteAgente(f.estado, f.id, c.cuerpo);
   const alto = compacto ? 150 : CH;
   const contenido = (
-    <svg viewBox={`0 0 ${CW} ${alto}`} className={compacto ? (mini ? "h-[60px] w-[76px] shrink-0" : "h-[100px] w-[127px] shrink-0") : "w-full max-w-[190px]"} role="img" aria-label={`${f.nombre}: ${info.etiqueta}`} data-testid={`escritorio-${f.id}`} data-estado={f.estado}>
+    <svg viewBox={`0 0 ${CW} ${alto}`} className={compacto ? "h-[100px] w-[127px] shrink-0" : "w-full max-w-[190px]"} role="img" aria-label={`${f.nombre}: ${info.etiqueta}`} data-testid={`escritorio-${f.id}`} data-estado={f.estado}>
       <g className={`of-${f.estado}`}>
         <rect x={4} y={4} width={CW - 8} height={alto - 8} rx={22} style={{ fill: "var(--of-celda, rgba(255,255,255,.55))" }} stroke={activo ? "#8fb4d9" : "rgba(120,100,70,.18)"} strokeWidth={activo ? 2.5 : 1} />
         <g opacity={apagado ? 0.5 : 1} transform={`translate(${(CW - ANCHO * PX) / 2},${12})`} shapeRendering="crispEdges">
           {sprite.frames.map((fr, k) => <g key={k} className={sprite.frames.length > 1 ? `of-frame of-frame-${k}` : undefined}>{pintar(fr)}</g>)}
           <g className="of-emote">{pintar(sprite.emote)}</g>
         </g>
-        {!mini && <text x={CW / 2} y={compacto ? 130 : 136} textAnchor="middle" fontSize={compacto ? 15 : 13} fontWeight={600} style={{ fill: "var(--of-texto, #4a4033)" }}>{f.nombre.length > 20 ? f.nombre.slice(0, 19) + "…" : f.nombre}</text>}
+        <text x={CW / 2} y={compacto ? 130 : 136} textAnchor="middle" fontSize={compacto ? 15 : 13} fontWeight={600} style={{ fill: "var(--of-texto, #4a4033)" }}>{f.nombre.length > 20 ? f.nombre.slice(0, 19) + "…" : f.nombre}</text>
         {!compacto && <text x={CW / 2} y={170} textAnchor="middle" fontSize={11.5} fontWeight={500} style={{ fill: "var(--of-texto, #4a4033)" }}>{info.etiqueta}</text>}
       </g>
     </svg>
