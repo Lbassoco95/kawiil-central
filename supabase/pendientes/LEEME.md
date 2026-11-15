@@ -13,8 +13,7 @@ explícita de Dirección, escritura por escritura.
 - Carga del Calendario Maestro nov–ene: `tools/marketing/carga_calendario_nov2026_ene2027.sql`.
 
 ## Sigue aquí (Entrega 2, escrituras 2–8, cada una con su confirmación)
-- `20261103000000_marketing_semaforo_corregido.sql`: una fila por pieza (corte `7d` si existe, si no `acumulado`). Corrección preventiva;
-  hoy no cambia ningún promedio ni color. Prueba: `tools/marketing/prueba_semaforo_pglite.mjs`.
+- (Aplicadas el 15 nov y ya movidas a `supabase/migrations/`: `20261115192905_marketing_semaforo_corregido` y `20261115193119_marketing_recalcular_semaforo`.)
 - `20261101130000_marketing_nota_umbral_instagram.sql`: se descartará; Dirección pidió registrar la nota con `mk_cambiar_regla`, con motivo.
 
 ## Analista de resultados (fase 2; ver `docs/marketing-equipo-agentes-diseno.md`, sección 12)
