@@ -238,3 +238,17 @@ test("estado_equipo: el CMO la tiene, y su prompt no atribuye la falta de datos 
   assert.equal(HERRAMIENTAS.length, 11);
   assert.match(SYSTEM_CMO, /usa estado_equipo/); assert.match(SYSTEM_CMO, /no de que un agente esté apagado/); assert.match(SYSTEM_CMO, /No puedes encender, configurar ni crear agentes/);
 });
+
+test("la ventana por defecto de la herramienta («por defecto 90») no se marca como cifra sin verificar cuando el modelo no la mandó; un 90 inventado en otro contexto sí", async () => {
+  const guion = (texto: string) => { let n = 0; return async () => n++ === 0
+    ? { stop_reason: "tool_use", uso: { entrada: 1, salida: 1 }, contenido: [{ type: "tool_use", id: "t1", name: "resultados_por_pilar", input: {} }] }
+    : { stop_reason: "end_turn", uso: { entrada: 1, salida: 1 }, contenido: [{ type: "text", text: texto }] }; };
+  const herr = { resultados_por_pilar: async () => ({ corte: "2026-11-15T18:00:00Z", datos: [{ grupo: "PLD", piezas: 3, valor_promedio: 36.9 }] }) } as never;
+  const bien = await correrConsulta({ pregunta: "¿Qué rinde?", herramientas: herr, llm: guion("En los últimos 90 días, PLD promedia 36.9 con 3 piezas.") as never });
+  assert.deepEqual(bien.no_verificadas, []); assert.equal(bien.verificada, true);
+  const mal = await correrConsulta({ pregunta: "¿Qué rinde?", herramientas: herr, llm: guion("PLD promedia 36.9 y cayó 77 %.") as never });
+  assert.deepEqual(mal.no_verificadas, ["77%"]);
+  // 365 no es el valor por defecto de esa herramienta: sigue sin verificarse
+  const otro = await correrConsulta({ pregunta: "¿Qué rinde?", herramientas: herr, llm: guion("En los últimos 365 días, PLD promedia 36.9.") as never });
+  assert.deepEqual(otro.no_verificadas, ["365"]);
+});
