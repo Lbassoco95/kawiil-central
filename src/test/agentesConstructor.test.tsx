@@ -103,9 +103,9 @@ describe("InstruirAgente", () => {
   it("no ofrece archivados ni de sistema y despacha la tarea", async () => {
     invoke.mockResolvedValue({ data: { ok: true }, error: null });
     envolver(<InstruirAgente agentes={[ag({ id: "a", name: "nelli", display_name: "Nelli" }), ag({ id: "b", name: "viejo", status: "archived" }), ag({ id: "c", name: "marketing_x", kind: "system" })]} />);
-    expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(["Elige un agente…", "Nelli"]);
+    expect(screen.getAllByRole("radio").map((o) => (o.getAttribute("aria-label") ?? "").split(":")[0])).toEqual(["Nelli"]);   // solo el consultable activo
     expect((screen.getByTestId("instruir-enviar") as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.change(screen.getByTestId("instruir-agente"), { target: { value: "a" } });
+    fireEvent.click(screen.getByTestId("instruir-agente-a"));
     fireEvent.change(screen.getByTestId("instruir-titulo"), { target: { value: "Revisar" } });
     fireEvent.change(screen.getByTestId("instruir-texto"), { target: { value: "Revisa los documentos nuevos" } });
     fireEvent.click(screen.getByTestId("instruir-enviar"));
@@ -189,7 +189,7 @@ describe("InstruirAgente: autorizar accesos", () => {
   it("no muestra la referencia, no envía accesos sin marcar y envía los marcados", async () => {
     invoke.mockResolvedValue({ data: { ok: true }, error: null });
     envolver(<InstruirAgente agentes={[conAcceso]} />);
-    fireEvent.change(screen.getByTestId("instruir-agente"), { target: { value: "a" } });
+    fireEvent.click(screen.getByTestId("instruir-agente-a"));
     expect(screen.getByTestId("instruir-accesos").textContent).not.toContain("op://");
     fireEvent.change(screen.getByTestId("instruir-titulo"), { target: { value: "Revisar" } });
     fireEvent.change(screen.getByTestId("instruir-texto"), { target: { value: "Revisa el panel" } });
@@ -261,7 +261,7 @@ describe("ProgramarAgente", () => {
   it("envía la programación con los accesos marcados y no muestra la referencia", async () => {
     invoke.mockResolvedValue({ data: { programacion: { activa: true } }, error: null });
     envolver(<ProgramarAgente agentes={[ag({ config: cfg() })]} />);
-    fireEvent.change(screen.getByTestId("programar-agente"), { target: { value: "a" } });
+    fireEvent.click(screen.getByTestId("programar-agente-a"));
     expect(screen.getByTestId("programar-accesos").textContent).not.toContain("op://");
     fireEvent.click(screen.getByTestId("programar-activa"));
     fireEvent.change(screen.getByTestId("programar-hora"), { target: { value: "09:15" } });
@@ -275,7 +275,7 @@ describe("ProgramarAgente", () => {
   });
   it("no manda al servidor una instrucción con una contraseña", () => {
     envolver(<ProgramarAgente agentes={[ag({ config: cfg() })]} />);
-    fireEvent.change(screen.getByTestId("programar-agente"), { target: { value: "a" } });
+    fireEvent.click(screen.getByTestId("programar-agente-a"));
     fireEvent.change(screen.getByTestId("programar-instruccion"), { target: { value: "Entra con la contraseña es Hunter2!" } });
     fireEvent.click(screen.getByTestId("programar-guardar"));
     expect(invoke).not.toHaveBeenCalled();
