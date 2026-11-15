@@ -44,6 +44,6 @@ Si Dirección prefiere cambiar ya, la opción más defendible es **C (40 / 20)**
 
 ## Cómo se aplicaría (no hecho)
 - `mk_cambiar_regla('semaforo_instagram', {...}, true, motivo)` exige `mk_can_decide()` con la sesión de Dirección (`auth.uid()`); **no se puede llamar desde el servicio ni desde esta herramienta**. Hoy la pantalla no tiene un botón para cambiar reglas.
-- Para **mantener 35 / 15**: solo registrar la nota de `supabase/pendientes/20261101130000_marketing_nota_umbral_instagram.sql`, que habría que actualizar con las 43 piezas y el hallazgo de la mediana (es un `UPDATE` de `descripcion`; no cambia versión ni colores).
+- Para **mantener 35 / 15**: solo registrar la nota de `supabase/pendientes/20261115210000_marketing_nota_umbral_instagram.sql` (`UPDATE` de `descripcion` más una entrada de bitácora; no cambia versión ni colores). **Decisión de Dirección del 15 nov: mantener 35 / 15.**
 - Para **cambiar a otros umbrales**: Dirección lo ejecuta con su sesión (o se agrega una pantalla de reglas con confirmación, trabajo aparte). Después habría que **recalcular el semáforo** con `mk_recalcular_semaforo` y ese recálculo necesita su propia confirmación.
 - Reversa de un cambio de regla: otra llamada a `mk_cambiar_regla` con los parámetros anteriores (queda en `mk_regla_historial`).
