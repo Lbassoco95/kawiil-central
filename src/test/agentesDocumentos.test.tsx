@@ -63,7 +63,7 @@ describe("DocumentosAgente", () => {
   it("ofrece a cualquier agente consultable activo (también los anteriores al constructor), no a archivados ni de sistema", () => {
     envolver(<DocumentosAgente agentes={[ag({}), ag({}, { id: "b", status: "archived" }), ag({}, { id: "c", kind: "system" })]} />);
     expect(screen.queryByTestId("documentos-vacio")).toBeNull();
-    expect(screen.getAllByRole("option").length).toBe(2);                 // «Elige un agente…» + el consultable activo
+    expect(screen.getAllByRole("radio").length).toBe(1);                  // solo el consultable activo
   });
   it("sin agentes disponibles lo dice", () => {
     envolver(<DocumentosAgente agentes={[ag({}, { status: "archived" })]} />);
@@ -79,7 +79,7 @@ describe("DocumentosAgente", () => {
   it("Dropbox: elige la carpeta del cliente de la lista (solo carpetas) y manda su id, no «raiz»", async () => {
     servir();
     envolver(<DocumentosAgente agentes={[ag({})]} />);
-    fireEvent.change(screen.getByTestId("documentos-agente"), { target: { value: "a" } });
+    fireEvent.click(screen.getByTestId("documentos-agente-a"));
     fireEvent.click(screen.getByTestId("prov-dropbox"));
     expect(screen.queryByTestId("documentos-carpeta")).toBeNull();
     expect(screen.getByTestId("documentos-dropbox-aviso").textContent).toContain("solo lectura");
@@ -94,7 +94,7 @@ describe("DocumentosAgente", () => {
   it("Dropbox: sin elegir carpeta no se guarda nada (nunca queda «todas» por descuido)", async () => {
     servir();
     envolver(<DocumentosAgente agentes={[ag({})]} />);
-    fireEvent.change(screen.getByTestId("documentos-agente"), { target: { value: "a" } });
+    fireEvent.click(screen.getByTestId("documentos-agente-a"));
     fireEvent.click(screen.getByTestId("prov-dropbox"));
     await screen.findByTestId("documentos-dbx-carpeta");
     fireEvent.change(screen.getByTestId("documentos-etiqueta"), { target: { value: "Dropbox clientes" } });
@@ -105,7 +105,7 @@ describe("DocumentosAgente", () => {
   it("Dropbox: «Todas las carpetas» es una elección explícita, avisa y manda «raiz»", async () => {
     servir();
     envolver(<DocumentosAgente agentes={[ag({})]} />);
-    fireEvent.change(screen.getByTestId("documentos-agente"), { target: { value: "a" } });
+    fireEvent.click(screen.getByTestId("documentos-agente-a"));
     fireEvent.click(screen.getByTestId("prov-dropbox"));
     fireEvent.change(await screen.findByTestId("documentos-dbx-carpeta"), { target: { value: "__todas__" } });
     expect(screen.getByTestId("documentos-dbx-todas").textContent).toContain("TODOS los clientes");
@@ -117,14 +117,14 @@ describe("DocumentosAgente", () => {
   it("una fuente ya guardada muestra el nombre de la carpeta, no su id", async () => {
     servir();
     envolver(<DocumentosAgente agentes={[ag({ fuentes_docs: [{ proveedor: "dropbox", etiqueta: "Dropbox · VIZUM", carpeta_id: "id:CarpetaVizum_1" }] })]} />);
-    fireEvent.change(screen.getByTestId("documentos-agente"), { target: { value: "a" } });
+    fireEvent.click(screen.getByTestId("documentos-agente-a"));
     fireEvent.click(screen.getByTestId("prov-dropbox"));
     await waitFor(() => expect(screen.getByTestId("fuente-Dropbox · VIZUM").textContent).toContain("carpeta VIZUM"));
   });
   it("agrega una carpeta de Drive desde su enlace y manda la lista completa", async () => {
     invoke.mockResolvedValue({ data: { fuentes: [] }, error: null });
     envolver(<DocumentosAgente agentes={[ag({ origen: "constructor_agentes", fuentes_docs: [M] })]} />);
-    fireEvent.change(screen.getByTestId("documentos-agente"), { target: { value: "a" } });
+    fireEvent.click(screen.getByTestId("documentos-agente-a"));
     fireEvent.change(screen.getByTestId("documentos-etiqueta"), { target: { value: "Drive Vizum" } });
     fireEvent.change(screen.getByTestId("documentos-carpeta"), { target: { value: "https://drive.google.com/drive/folders/1AbCdEfGhIjKlMnOp?usp=sharing" } });
     fireEvent.click(screen.getByTestId("documentos-agregar"));
@@ -134,7 +134,7 @@ describe("DocumentosAgente", () => {
   });
   it("Microsoft pide drive y tenant; sin ellos no llama al servidor y muestra por qué", () => {
     envolver(<DocumentosAgente agentes={[ag({ origen: "constructor_agentes" })]} />);
-    fireEvent.change(screen.getByTestId("documentos-agente"), { target: { value: "a" } });
+    fireEvent.click(screen.getByTestId("documentos-agente-a"));
     fireEvent.click(screen.getByTestId("prov-microsoft"));
     fireEvent.change(screen.getByTestId("documentos-etiqueta"), { target: { value: "SharePoint Acme" } });
     fireEvent.change(screen.getByTestId("documentos-carpeta"), { target: { value: "01ABCDEFGHIJKLMN" } });
@@ -145,7 +145,7 @@ describe("DocumentosAgente", () => {
   it("quitar una fuente manda la lista sin ella", async () => {
     invoke.mockResolvedValue({ data: { fuentes: [] }, error: null });
     envolver(<DocumentosAgente agentes={[ag({ origen: "constructor_agentes", fuentes_docs: [G, M] })]} />);
-    fireEvent.change(screen.getByTestId("documentos-agente"), { target: { value: "a" } });
+    fireEvent.click(screen.getByTestId("documentos-agente-a"));
     fireEvent.click(screen.getByTestId("quitar-Drive Vizum"));
     await waitFor(() => expect(invoke).toHaveBeenCalledTimes(1));
     expect(invoke.mock.calls[0][1].body.fuentes).toEqual([M]);
@@ -154,7 +154,7 @@ describe("DocumentosAgente", () => {
   it("muestra el error del servidor", async () => {
     invoke.mockResolvedValue({ data: null, error: new Error("boom") });
     envolver(<DocumentosAgente agentes={[ag({ origen: "constructor_agentes" })]} />);
-    fireEvent.change(screen.getByTestId("documentos-agente"), { target: { value: "a" } });
+    fireEvent.click(screen.getByTestId("documentos-agente-a"));
     fireEvent.change(screen.getByTestId("documentos-etiqueta"), { target: { value: "Drive Vizum" } });
     fireEvent.change(screen.getByTestId("documentos-carpeta"), { target: { value: "1AbCdEfGhIjKlMnOp" } });
     fireEvent.click(screen.getByTestId("documentos-agregar"));
@@ -201,7 +201,7 @@ describe("DocumentosAgente: Google Drive de una cuenta vinculada", () => {
   const abrir = async (cfg = {}) => {
     servir();
     envolver(<DocumentosAgente agentes={[ag(cfg)]} />);
-    fireEvent.change(screen.getByTestId("documentos-agente"), { target: { value: "a" } });
+    fireEvent.click(screen.getByTestId("documentos-agente-a"));
     fireEvent.click(screen.getByTestId("prov-cuenta_google"));
     await screen.findByTestId(`cuenta-drive-${A}`);
   };
@@ -249,7 +249,7 @@ describe("DocumentosAgente: Google Drive de una cuenta vinculada", () => {
   it("una fuente guardada dice de qué cuenta es", async () => {
     servir();
     envolver(<DocumentosAgente agentes={[ag({ fuentes_docs: [{ proveedor: "cuenta_google", etiqueta: "Drive Vizum", cuenta: A, carpeta_id: "1AbCdEfGhIjKlMnOp" }] })]} />);
-    fireEvent.change(screen.getByTestId("documentos-agente"), { target: { value: "a" } });
+    fireEvent.click(screen.getByTestId("documentos-agente-a"));
     await waitFor(() => expect(screen.getByTestId("fuente-Drive Vizum").textContent).toContain("Google Drive de polo@kawiil.mx"));
   });
 });

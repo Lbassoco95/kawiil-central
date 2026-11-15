@@ -224,6 +224,27 @@ export interface ReporteSimulacro {
   lecturas: LecturaInforme[]; redes: ContrasteRed[]; avisos: string[];
 }
 
+
+/** Lee una red por el conector: prueba los formatos de fecha en orden y usa el primero que devuelva publicaciones. SOLO lectura (la usan el simulacro y la carga). */
+export async function leerRed(red: Red, desde: string, hasta: string,
+  leer: (red: Red, operacion: string, entrada: Record<string, string>) => Promise<LecturaRed>): Promise<{ api: PubApi[]; informe: LecturaInforme; aviso: string | null }> {
+  const intentos: LecturaInforme["intentos"] = [];
+  let api: PubApi[] = [], usado: string | null = null;
+  for (const f of FORMATOS[red]) {
+    const r = await leer(red, OPERACION[red], f.entrada(desde, hasta)).catch((e) => ({ ok: false as const, motivo: e instanceof Error ? e.message : "error" }));
+    if (!r.ok) { intentos.push({ formato: f.nombre, ok: false, publicaciones: 0, motivo: r.motivo }); continue; }
+    const pubs = extraerPublicaciones(red, r.datos);
+    intentos.push({ formato: f.nombre, ok: true, publicaciones: pubs.length });
+    if (pubs.length > 0) { api = pubs; usado = f.nombre; break; }
+  }
+  const zonas: Record<string, number> = {};
+  for (const p of api) zonas[p.zona] = (zonas[p.zona] ?? 0) + 1;
+  const aviso = api.length === 0
+    ? `${red}: Metricool no devolvió publicaciones en el periodo (${intentos.map((i) => `${i.formato}: ${i.ok ? "0 elementos" : i.motivo}`).join("; ")}). No se compara esta red.`
+    : null;
+  return { api, informe: { red, ok: api.length > 0, publicaciones: api.length, formato_fecha: usado, intentos, zonas }, aviso };
+}
+
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 export async function correrSimulacro(d: {
   desde: string; hasta: string; ahora?: Date; almacen: AlmacenSimulacro;
@@ -235,19 +256,9 @@ export async function correrSimulacro(d: {
   const archivoTodo = await d.almacen.piezasArchivo(d.desde, d.hasta);
 
   for (const red of REDES) {
-    const intentos: LecturaInforme["intentos"] = [];
-    let api: PubApi[] = [], usado: string | null = null;
-    for (const f of FORMATOS[red]) {
-      const r = await d.leerMetricool(red, OPERACION[red], f.entrada(d.desde, d.hasta)).catch((e) => ({ ok: false as const, motivo: e instanceof Error ? e.message : "error" }));
-      if (!r.ok) { intentos.push({ formato: f.nombre, ok: false, publicaciones: 0, motivo: r.motivo }); continue; }
-      const pubs = extraerPublicaciones(red, r.datos);
-      intentos.push({ formato: f.nombre, ok: true, publicaciones: pubs.length });
-      if (pubs.length > 0) { api = pubs; usado = f.nombre; break; }
-    }
-    const zonas: Record<string, number> = {};
-    for (const p of api) zonas[p.zona] = (zonas[p.zona] ?? 0) + 1;
-    lecturas.push({ red, ok: api.length > 0, publicaciones: api.length, formato_fecha: usado, intentos, zonas });
-    if (api.length === 0) avisos.push(`${red}: Metricool no devolvió publicaciones en el periodo (${intentos.map((i) => `${i.formato}: ${i.ok ? "0 elementos" : i.motivo}`).join("; ")}). No se compara esta red.`);
+    const { api, informe, aviso } = await leerRed(red, d.desde, d.hasta, d.leerMetricool);
+    lecturas.push(informe);
+    if (aviso) avisos.push(aviso);
     const archivo = archivoTodo.filter((p) => p.red === red);
     // Una red sin lectura no se contrasta: compararla contra una lista vacía haría parecer que todo el archivo «no existe» en Metricool.
     if (api.length > 0) redes.push(contrastarRed(red, archivo, api.filter((p) => p.fecha >= d.desde && p.fecha <= d.hasta), reglas[red] ?? null));

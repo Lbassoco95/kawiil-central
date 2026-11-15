@@ -111,8 +111,8 @@ Abierto por diseño:
 
 ## Pendiente (no aplicado en producción)
 Entrega 2, cada escritura con su confirmación:
-- `supabase/pendientes/20261103000000_marketing_semaforo_corregido.sql`: una fila por pieza (corte `7d` si existe, si no `acumulado`) para no contar doble. Hoy no cambia ningún promedio ni color.
-- Función de lectura de resultados (simulacro), carga histórica de Instagram (44 publicaciones), recálculo de semáforo y cobertura, Vigilante de publicación con su trabajo programado, umbrales de Instagram con `mk_cambiar_regla` y su nota (`supabase/pendientes/20261101130000_marketing_nota_umbral_instagram.sql` se descartará).
+- Hecho el 15 nov: carga de resultados de Instagram y Facebook (90 filas de Metricool) y recálculo del semáforo semanal con esa fuente (`20261115192905_marketing_semaforo_corregido`, `20261115193119_marketing_recalcular_semaforo`). 28 filas de `mk_calibracion` (Instagram y Facebook, 27 jul–26 oct) recalculadas; 7 cambios de color: Instagram 27 jul gris→rojo, 3 ago–31 ago gris→verde (5 semanas), Facebook 12 oct amarillo→verde. LinkedIn sin tocar. Foto previa en `mk_bitacora` (`recalculo_semaforo`); reversa en `tools/marketing/rollback_recalcular_semaforo.sql`.
+- Falta: lecturas diarias de Metricool, cortes de 48 h y 7 días, Vigilante de publicación con su trabajo programado, Vigilante de publicación con su trabajo programado, umbrales de Instagram con `mk_cambiar_regla` y su nota (`supabase/pendientes/20261101130000_marketing_nota_umbral_instagram.sql` se descartará).
 - LinkedIn: la ruta de analíticas devolvió 0 elementos dos veces. Decidir entre aprobar la ruta CSV `/v2/analytics/posts/linkedin` o revisar el tipo de cuenta.
 - ~~Comprobar el registro de corridas~~: hecho (corridas automáticas del 5 al 12 nov registradas; el código con la pantalla de cumplimiento ya está en `main`).
 - Entrega 2, paso 2 (simulacro de resultados): `marketing-resultados` v1 está desplegada (#530) y solo lee; no escribe datos. Falta que Dirección revise su reporte antes de aprobar la carga de resultados en `mk_resultado` y `mk_pieza_red` (`docs/marketing-entrega2-resultados.md`).

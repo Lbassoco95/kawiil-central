@@ -9,7 +9,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, History } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Loader2, History, Download } from "lucide-react";
+import * as XLSX from "xlsx";
+import { toast } from "sonner";
 import { WORK_MODE_EMOJI, WORK_MODE_LABEL, workedDuration } from "@/lib/rh";
 import { useOrgAttendanceRange } from "@/hooks/useRh";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
@@ -78,6 +81,77 @@ export function TeamJornadaHistory() {
     return [...m.entries()];
   }, [rows]);
 
+  /** Descarga el reporte (Excel): hoja de detalle + resumen por colaborador. */
+  const handleDownload = () => {
+    if (rows.length === 0) {
+      toast.error("No hay jornadas para descargar en este rango.");
+      return;
+    }
+    const nameOf = (id: string) => nameByUser.get(id) ?? "—";
+    const dateTime = (iso: string | null) =>
+      iso ? new Date(iso).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" }) : "";
+    const hoursOf = (ms: number) => Math.round((ms / 3600000) * 100) / 100;
+
+    const sorted = [...rows].sort((a, b) =>
+      nameOf(a.user_id).localeCompare(nameOf(b.user_id), "es") ||
+      a.check_in_at.localeCompare(b.check_in_at),
+    );
+
+    const detalle = sorted.map((r) => ({
+      Colaborador: nameOf(r.user_id),
+      Fecha: r.work_date,
+      Modalidad: WORK_MODE_LABEL[r.work_mode] ?? r.work_mode,
+      Entrada: fmtTime(r.check_in_at),
+      Salida: r.check_out_at ? fmtTime(r.check_out_at) : "Sin salida",
+      "Duración": r.check_out_at ? workedDuration(r.check_in_at, r.check_out_at) : "",
+      "Horas trabajadas": r.check_out_at ? hoursOf(grossMs(r.check_in_at, r.check_out_at)) : 0,
+      "Turno extra": r.is_additional_shift ? "Sí" : "No",
+      "Cierre automático": r.auto_closed ? "Sí" : "No",
+      "Dentro de geocerca": r.within_geofence == null ? "" : r.within_geofence ? "Sí" : "No",
+      "Latitud entrada": r.check_in_lat ?? "",
+      "Longitud entrada": r.check_in_lng ?? "",
+      "Latitud salida": r.check_out_lat ?? "",
+      "Longitud salida": r.check_out_lng ?? "",
+      Notas: r.notes ?? "",
+    }));
+
+    const perUser = new Map<string, { jornadas: number; ms: number; modes: Record<string, number> }>();
+    for (const r of rows) {
+      const s = perUser.get(r.user_id) ?? { jornadas: 0, ms: 0, modes: {} };
+      s.jornadas += 1;
+      s.ms += grossMs(r.check_in_at, r.check_out_at);
+      s.modes[r.work_mode] = (s.modes[r.work_mode] ?? 0) + 1;
+      perUser.set(r.user_id, s);
+    }
+    const resumen = [...perUser.entries()]
+      .sort((a, b) => nameOf(a[0]).localeCompare(nameOf(b[0]), "es"))
+      .map(([id, s]) => ({
+        Colaborador: nameOf(id),
+        Jornadas: s.jornadas,
+        "Horas trabajadas": hoursOf(s.ms),
+        "Total (h m)": fmtHours(s.ms),
+        Oficina: s.modes.office ?? 0,
+        "Home office": s.modes.home_office ?? 0,
+        "Comisión": s.modes.commission ?? 0,
+        Cliente: s.modes.client ?? 0,
+      }));
+
+    const wb = XLSX.utils.book_new();
+    const wsResumen = XLSX.utils.json_to_sheet(resumen);
+    const wsDetalle = XLSX.utils.json_to_sheet(detalle);
+    wsResumen["!cols"] = [{ wch: 32 }, { wch: 10 }, { wch: 16 }, { wch: 12 }, { wch: 9 }, { wch: 12 }, { wch: 10 }, { wch: 9 }];
+    wsDetalle["!cols"] = [{ wch: 32 }, { wch: 11 }, { wch: 12 }, { wch: 9 }, { wch: 11 }, { wch: 10 }, { wch: 16 }, { wch: 10 }, { wch: 16 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 30 }];
+    XLSX.utils.book_append_sheet(wb, wsResumen, "Resumen");
+    XLSX.utils.book_append_sheet(wb, wsDetalle, "Detalle de jornadas");
+
+    const who =
+      userId === "all"
+        ? "equipo"
+        : nameOf(userId).normalize("NFD").replace(/[̀-ͯ]/g, "").trim().replace(/\s+/g, "_");
+    XLSX.writeFile(wb, `jornadas_${who}_${from}_a_${to}.xlsx`);
+    toast.success("Reporte descargado");
+  };
+
   return (
     <Card>
       <CardHeader className="space-y-3">
@@ -98,6 +172,17 @@ export function TeamJornadaHistory() {
               ))}
             </SelectContent>
           </Select>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-9 gap-1.5"
+            onClick={handleDownload}
+            disabled={isLoading || rows.length === 0}
+          >
+            <Download className="h-4 w-4" />
+            Descargar
+          </Button>
         </div>
       </CardHeader>
       <CardContent>
