@@ -6,7 +6,7 @@ import { departamentoDe } from "./departamentos";
 export interface Sugerencia { agente: AgenteRegistro; puntos: number; motivo: string }
 
 const SIN_VALOR = new Set(("para por con sin sobre entre desde hasta como cual cuales esto esta este estos estas esos esas que los las del una uno unos unas " +
-  "mas muy pero porque cuando donde quien favor puedes puede podrias necesito necesitamos quiero quieres hacer haz hacerme revisa revisar dame dime nuestro nuestra nuestros nuestras " +
+  "revises revise revisen ayuda ayudame ayudar mas muy pero porque cuando donde quien favor puedes puede podrias necesito necesitamos quiero quieres hacer haz hacerme revisa revisar dame dime nuestro nuestra nuestros nuestras " +
   "todo todos toda todas algo hay son fue ser esta estan tiene tienen hoy ahora").split(" "));
 
 const limpia = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();

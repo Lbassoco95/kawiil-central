@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { AgentesRegistro } from "@/components/marketing/AgentesRegistro";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Oficina } from "@/components/agentes/Oficina";
+import { BarraTareas } from "@/components/agentes/BarraTareas";
 import { PlanoDepartamentos } from "@/components/agentes/PlanoDepartamentos";
 import { ConstructorAgentes } from "@/components/agentes/ConstructorAgentes";
 import { InstruirAgente } from "@/components/agentes/InstruirAgente";
