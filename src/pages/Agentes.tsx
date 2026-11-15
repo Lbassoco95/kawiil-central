@@ -49,6 +49,7 @@ export default function Agentes() {
           Los agentes de Marketing se ven en <Link className="underline" to="/marketing">Marketing → Agentes</Link>.
         </p>
         {!demo && <BandaEquipo figuras={banda} onElegir={(id) => { setVerEnOficina(id); setAmbito("todos"); setPestana("oficina"); }} />}
+        {!demo && <BarraTareas agentes={reales} onVerSeguimiento={(id) => { setSeguir(id ?? null); setPestana("seguimiento"); }} />}
         <Tabs value={pestana} onValueChange={setPestana}>
           <TabsList>
             <TabsTrigger value="oficina">Oficina</TabsTrigger>
