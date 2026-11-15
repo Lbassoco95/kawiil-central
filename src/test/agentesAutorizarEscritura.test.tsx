@@ -24,7 +24,7 @@ describe("sitios donde se puede autorizar escribir", () => {
 describe("Instrucciones: autorizar escribir en esta tarea", () => {
   beforeEach(() => invoke.mockReset());
   const llenar = () => {
-    fireEvent.change(screen.getByTestId("instruir-agente"), { target: { value: "a1" } });
+    fireEvent.click(screen.getByTestId("instruir-agente-a1"));
     fireEvent.change(screen.getByTestId("instruir-titulo"), { target: { value: "Cargar oficios aprobados" } });
     fireEvent.change(screen.getByTestId("instruir-texto"), { target: { value: "Sube al dashboard los nombres que aprobé." } });
   };

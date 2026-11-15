@@ -1,4 +1,4 @@
--- PENDIENTE de confirmación explícita de Dirección. NO aplicada.
+-- APLICADA en producción el 15 nov 2026 (versión 20261115195017), con confirmación de Dirección.
 -- Registra la decisión del 15 nov 2026 (mantener los umbrales de Instagram en 35 / 15) como nota en la descripción de la regla.
 -- NO cambia parámetros, versión ni colores, y no pasa por mk_cambiar_regla (que exige la sesión de Dirección con el permiso marketing_decidir
 -- y solo cambia parámetros). No toca mk_regla_historial. Escribe solo: 1 fila de mk_regla (descripcion) y 1 fila nueva en mk_bitacora.

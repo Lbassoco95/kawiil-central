@@ -12,7 +12,6 @@ import {
   contextoRevision,
   detalleTarea,
   dominiosEscritura,
-  accesosDelAgente,
   entregablesDe,
   esUuid,
   estadosDelGrupo,
@@ -205,7 +204,6 @@ serve(async (req: Request) => {
         const { data: ag } = await admin.from("agent_registry").select("config").eq("id", t0.agent_id).maybeSingle();
         return json({
           escritura_dominios: dominiosEscritura(ag?.config),
-          accesos: accesosDelAgente(ag?.config),
           hilo: { id: raiz, titulo: truncar(original.title, 200), agent_id: t0.agent_id, agente: nombreDe(nombres, t0.agent_id) },
           mensajes, revisiones: revisionesPendientes(lista),
           // Un plan esperando aprobación no es «trabajando»: la persona puede escribir. Un encargo aprobado sí sigue en marcha.

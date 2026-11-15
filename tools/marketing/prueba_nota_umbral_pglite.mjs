@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 const { PGlite } = await import(process.env.PGLITE_PATH);
-const sql = readFileSync(new URL("../../supabase/pendientes/20261115210000_marketing_nota_umbral_instagram.sql", import.meta.url), "utf8");
+const sql = readFileSync(new URL("../../supabase/migrations/20261115195017_marketing_nota_umbral_instagram.sql", import.meta.url), "utf8");
 const rev = readFileSync(new URL("./rollback_nota_umbral_instagram.sql", import.meta.url), "utf8");
 const ORG = "a0000000-0000-0000-0000-000000000001", ANTES = "Promedio simple por pieza de la semana, a 7 días.";
 async function nuevo(desc = ANTES, version = 1) {

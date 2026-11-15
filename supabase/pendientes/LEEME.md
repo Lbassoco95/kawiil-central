@@ -14,7 +14,11 @@ explícita de Dirección, escritura por escritura.
 
 ## Sigue aquí (Entrega 2, escrituras 2–8, cada una con su confirmación)
 - (Aplicadas el 15 nov y ya movidas a `supabase/migrations/`: `20261115192905_marketing_semaforo_corregido` y `20261115193119_marketing_recalcular_semaforo`.)
-- `20261115210000_marketing_nota_umbral_instagram.sql`: nota de la decisión «mantener 35 / 15» en la descripción de la regla (sin cambiar parámetros ni versión). Lista preparada, sin aplicar; reversa y prueba en `tools/marketing/` (`rollback_nota_umbral_instagram.sql`, `prueba_nota_umbral_pglite.mjs`).
+<<<<<<< HEAD
+- (Aplicada el 15 nov y movida a `supabase/migrations/`: `20261115195017_marketing_nota_umbral_instagram`, nota de «mantener 35 / 15» en la regla de Instagram.)
+=======
+- `20261101130000_marketing_nota_umbral_instagram.sql`: se descartará; Dirección pidió registrar la nota con `mk_cambiar_regla`, con motivo.
+>>>>>>> origin/main
 
 ## Analista de resultados (fase 2; ver `docs/marketing-equipo-agentes-diseno.md`, sección 12)
 1. **APLICADA el 5 nov 2026** `marketing_analista_datos` (20261105191631): función de lectura `mk_analista_datos` (solo `service_role`). Reversa: `tools/marketing/rollback_analista_datos.sql`.
@@ -31,3 +35,8 @@ Pruebas: `tools/marketing/prueba_analista_pglite.mjs`; Node `supabase/functions/
 ## CMO (director de marketing)
 - **APLICADA el 12 nov 2026** (19:58 CDMX) `marketing_cmo_registro` (20261113015847, ya en `supabase/migrations/`): agente `marketing_cmo` (bajo demanda, solo lectura y propone), `mk_consulta.agente` admite también `marketing_cmo`, y las dos funciones de registro aceptan al CMO (una línea cambia en cada una). Reversa: `tools/marketing/rollback_cmo_registro.sql`. Pruebas: `tools/marketing/prueba_analista_pglite.mjs`.
 - Código (se despliega al fusionar el PR): `marketing-agente` acepta `agente: "marketing_cmo"` (lista cerrada; prompt `SYSTEM_CMO`; mismas 10 herramientas de solo lectura y misma verificación de cifras) y la oficina muestra al CMO en la franja «Dirección», arriba del Analista, con su propia conversación.
+
+## Estado del equipo para el CMO y Vigía con tarea diaria (13 nov 2026)
+- **APLICADA el 13 nov 2026** `marketing_vigia_tarea_diaria` (20261113160240, ya en `supabase/migrations/`): la rama «todo bien» del Vigía deja una tarea completada por día (antes solo latido, que el servicio `kawiil-agents` sobrescribe para los 25 agentes, y la pantalla lo veía «sin datos»). Una corrida repetida el mismo día no duplica. Se ejecutó una vez a mano para tener la tarea de hoy. Reversa: `tools/marketing/rollback_vigia_tarea_diaria.sql`.
+- **APLICADA el 13 nov 2026** `marketing_estado_equipo` (20261113204250, ya en `supabase/migrations/`): herramienta `estado_equipo` en `mk_analista_datos` (estado real de cada agente de Marketing por sus propias tareas; sin latido ni textos de tareas). Reversa: `tools/marketing/rollback_estado_equipo.sql`.
+- Código (se despliega al fusionar el PR): `estado_equipo` en `HERRAMIENTAS` y `NOMBRES_HERRAMIENTAS`; el CMO la usa y su prompt ya no atribuye la falta de datos de resultados a un agente.
