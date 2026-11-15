@@ -15,6 +15,24 @@ export function etiquetasAccesos(a: AgenteRegistro | undefined): { etiqueta: str
 }
 
 // Darle una instrucción a un agente: crea una tarea por el despacho que ya existe. No modifica al agente ni guarda datos de expedientes aquí.
+// Casilla de «autorizo usar» por acceso de 1Password, solo para ESTA tarea. Sin marcarla el agente no inicia sesión. Solo etiqueta y dominio; nunca la referencia.
+export function AutorizarAccesos({ accesos, marcados, onCambio }: { accesos: { etiqueta: string; dominio: string }[]; marcados: string[]; onCambio: (v: string[]) => void }) {
+  if (accesos.length === 0) return null;
+  return (
+    <fieldset className="space-y-2 rounded-2xl border border-border/60 p-3 text-sm" data-testid="instruir-accesos">
+      <legend className="px-1 text-xs font-medium text-muted-foreground">Accesos de 1Password (solo para esta tarea)</legend>
+      <p className="text-xs text-muted-foreground">Sin tu autorización el agente no puede iniciar sesión. Solo consulta: no envía formularios ni hace trámites, y nunca ve la contraseña.</p>
+      {accesos.map((a) => (
+        <label key={a.etiqueta} className="flex items-center gap-2">
+          <input type="checkbox" checked={marcados.includes(a.etiqueta)} data-testid={`instruir-acceso-${a.etiqueta}`}
+            onChange={(e) => onCambio(e.target.checked ? [...marcados, a.etiqueta] : marcados.filter((x) => x !== a.etiqueta))} />
+          Autorizo usar «{a.etiqueta}» en {a.dominio}
+        </label>
+      ))}
+    </fieldset>
+  );
+}
+
 // Casilla de «autorizo escribir» por sitio, solo para ESTA tarea. Sin marcarla el agente lee, descarga y prepara un resumen, pero no carga nada.
 export function AutorizarEscritura({ sitios, marcados, onCambio }: { sitios: string[]; marcados: string[]; onCambio: (v: string[]) => void }) {
   if (sitios.length === 0) return null;
@@ -71,19 +89,7 @@ export function InstruirAgente({ agentes, onVerSeguimiento, agenteInicial }: { a
       <label className="block space-y-1 text-sm">Instrucción
         <Textarea value={instruccion} onChange={(e) => setInstruccion(e.target.value)} rows={4} placeholder="Qué debe hacer, con qué información y qué debe entregarte." data-testid="instruir-texto" />
       </label>
-      {accesos.length > 0 && (
-        <fieldset className="space-y-2 rounded-2xl border border-border/60 p-3 text-sm" data-testid="instruir-accesos">
-          <legend className="px-1 text-xs font-medium text-muted-foreground">Accesos de 1Password (solo para esta tarea)</legend>
-          <p className="text-xs text-muted-foreground">Sin tu autorización el agente no puede iniciar sesión. Solo consulta: no envía formularios ni hace trámites, y nunca ve la contraseña.</p>
-          {accesos.map((a) => (
-            <label key={a.etiqueta} className="flex items-center gap-2">
-              <input type="checkbox" checked={aprobados.includes(a.etiqueta)} data-testid={`instruir-acceso-${a.etiqueta}`}
-                onChange={(e) => setAprobados((p) => e.target.checked ? [...p, a.etiqueta] : p.filter((x) => x !== a.etiqueta))} />
-              Autorizo usar «{a.etiqueta}» en {a.dominio}
-            </label>
-          ))}
-        </fieldset>
-      )}
+      <AutorizarAccesos accesos={accesos} marcados={aprobados} onCambio={setAprobados} />
       <AutorizarEscritura sitios={sitiosEscritura} marcados={escribir} onCambio={setEscribir} />
       {instruir.isError && <p role="alert" className="text-sm text-destructive">{(instruir.error as Error).message}</p>}
       {enviado && (
