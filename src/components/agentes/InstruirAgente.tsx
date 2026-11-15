@@ -4,7 +4,8 @@ import { Loader2, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { etiquetaOpcion, nombreAgente, type AgenteRegistro } from "@/lib/agentes/registro";
+import { nombreAgente, type AgenteRegistro } from "@/lib/agentes/registro";
+import { SelectorAgentes } from "@/components/agentes/SelectorAgentes";
 import { FichaAgente } from "@/components/agentes/FichaAgente";
 import { useInstruirAgente } from "@/hooks/useAgenteConstructor";
 
@@ -76,12 +77,7 @@ export function InstruirAgente({ agentes, onVerSeguimiento, agenteInicial }: { a
   return (
     <div className="zen-glass space-y-3 rounded-3xl p-4" data-testid="instruir">
       <p className="text-sm text-muted-foreground">Asigna una función o tarea a un agente. Se envía al servicio de agentes; si está apagado, te lo dirá.</p>
-      <label className="block space-y-1 text-sm">Agente
-        <select className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={agenteId} onChange={(e) => { setAgenteId(e.target.value); setEnviado(null); setAprobados([]); setEscribir([]); }} data-testid="instruir-agente">
-          <option value="">Elige un agente…</option>
-          {disponibles.map((a) => <option key={a.id} value={a.id}>{etiquetaOpcion(a)}</option>)}
-        </select>
-      </label>
+      <SelectorAgentes agentes={disponibles} valor={agenteId} testid="instruir-agente" onCambio={(id) => { setAgenteId(id); setEnviado(null); setAprobados([]); setEscribir([]); }} />
       <FichaAgente agente={disponibles.find((a) => a.id === agenteId)} />
       <label className="block space-y-1 text-sm">Título
         <Input value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Revisar los documentos nuevos de Vizum" data-testid="instruir-titulo" />
