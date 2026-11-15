@@ -70,3 +70,12 @@ test("marketing-agente: el agente con el que se habla es de lista cerrada y se g
   assert.ok((codigo.match(/agente: AGENTE/g) ?? []).length >= 2, "toda inserción en mk_consulta lleva el agente");
   assert.match(codigo, /system: SYSTEM_DE\[AGENTE\]/);
 });
+
+test("llamada al modelo: tope de salida amplio (el razonamiento cuenta dentro), esfuerzo opcional, sin desactivar el razonamiento y tool_choice «none» solo en la llamada final", () => {
+  const s = codigoServidor;
+  const m = s.match(/MAX_TOKENS_SALIDA = (\d[\d_]*)/); assert.ok(m && Number(m[1].replace(/_/g, "")) >= 4000, "max_tokens debe dejar espacio al razonamiento");
+  assert.match(s, /max_tokens: MAX_TOKENS_SALIDA/); assert.doesNotMatch(s, /max_tokens: 1024/);
+  assert.match(s, /output_config: \{ effort: esfuerzo \}/);
+  assert.doesNotMatch(s, /thinking:\s*\{\s*type:\s*"disabled"|budget_tokens|temperature|top_p|top_k/); // el modelo los rechaza con 400
+  assert.match(s, /sinHerramientas \? \{ tool_choice: \{ type: "none" \} \}/); assert.doesNotMatch(s, /type: "(any|tool)"/); // tool_choice forzado también da 400
+});
