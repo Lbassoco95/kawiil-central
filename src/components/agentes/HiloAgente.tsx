@@ -14,7 +14,7 @@ import { EscritorioAgente, EstilosOficina } from "@/components/agentes/escritori
 import { useFiguraDe } from "@/components/agentes/BandaEquipo";
 import { ESTADO_OFICINA } from "@/lib/agentes/oficina";
 import { PlanEncargo } from "@/components/agentes/PlanEncargo";
-import { AutorizarEscritura } from "@/components/agentes/InstruirAgente";
+import { AutorizarAccesos, AutorizarEscritura } from "@/components/agentes/InstruirAgente";
 
 // Una solicitud con su conversación: lo que se le pidió al agente, lo que respondió y entregó, y lo que se le sigue pidiendo en el mismo
 // hilo (el agente recuerda lo ya hablado). Desde aquí también se programan revisiones («revísalo el lunes», «cada semana»).
@@ -128,6 +128,7 @@ export function HiloAgente({ taskId, ahora, claseAlto = "h-[min(64vh,42rem)] min
   const qc = useQueryClient();
   const [texto, setTexto] = useState("");
   const [escribir, setEscribir] = useState<string[]>([]);
+  const [aprobados, setAprobados] = useState<string[]>([]);
   const figura = useFiguraDe(q.data?.hilo.agent_id);
 
   // Chat de verdad: la lista de mensajes tiene su propio scroll y baja sola al último mensaje (el de la persona, la respuesta, y el avance
@@ -163,8 +164,8 @@ export function HiloAgente({ taskId, ahora, claseAlto = "h-[min(64vh,42rem)] min
     const t = texto.trim();
     if (!t || en_curso || instruir.isPending) return;
     alFondo.current = true;   // lo que escribe y la respuesta deben verse sin tener que bajar
-    instruir.mutate({ agent_id: hilo.agent_id, title: `Seguimiento: ${t.slice(0, 60)}`, instructions: t, hilo_id: hilo.id, escrituras_aprobadas: escribir.filter((d) => (q.data?.escritura_dominios ?? []).includes(d)) },
-      { onSuccess: () => { setTexto(""); setEscribir([]); void qc.invalidateQueries({ queryKey: ["agentes-seguimiento"] }); } });
+    instruir.mutate({ agent_id: hilo.agent_id, title: `Seguimiento: ${t.slice(0, 60)}`, instructions: t, hilo_id: hilo.id, accesos_aprobados: aprobados.filter((e) => (q.data?.accesos ?? []).some((a) => a.etiqueta === e)), escrituras_aprobadas: escribir.filter((d) => (q.data?.escritura_dominios ?? []).includes(d)) },
+      { onSuccess: () => { setTexto(""); setEscribir([]); setAprobados([]); void qc.invalidateQueries({ queryKey: ["agentes-seguimiento"] }); } });
   };
   return (
     <div className="space-y-3" data-testid="hilo">
@@ -188,6 +189,7 @@ export function HiloAgente({ taskId, ahora, claseAlto = "h-[min(64vh,42rem)] min
           )}
         </div>
         <div className="shrink-0 space-y-2 border-t border-border/40 p-2">
+          <AutorizarAccesos accesos={q.data?.accesos ?? []} marcados={aprobados} onCambio={setAprobados} />
           <AutorizarEscritura sitios={q.data?.escritura_dominios ?? []} marcados={escribir} onCambio={setEscribir} />
           {instruir.isError && <p role="alert" className="text-sm text-destructive">{(instruir.error as Error).message}</p>}
           <div className="flex items-end gap-2">
