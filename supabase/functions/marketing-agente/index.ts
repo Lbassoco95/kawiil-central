@@ -7,7 +7,7 @@
 //   MARKETING_AGENTE_MAX_TOKENS_MES.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import {
-  AGENTES_CONSULTABLES, correrConsulta, evaluarLimites, inicioDiaCDMX, inicioMesCDMX, leerLimites, MODELO_POR_DEFECTO, normalizarHistorial, SYSTEM_DE, validarPregunta,
+  AGENTES_CONSULTABLES, correrConsulta, evaluarLimites, inicioDiaCDMX, inicioMesCDMX, leerLimites, MODELO_POR_DEFECTO, ESFUERZO_DE, normalizarHistorial, SYSTEM_DE, validarPregunta,
   type AgenteConsultable, type ResultadoConsulta,
 } from "../_shared/analista.ts";
 import { herramientasDe, llmAnthropic } from "../_shared/analista_servidor.ts";
@@ -92,7 +92,7 @@ Deno.serve(async (req) => {
   // 5) Consulta.
   const inicio = new Date().toISOString();
   let res: ResultadoConsulta | null = null, fallo = false;
-  try { res = await correrConsulta({ pregunta: v.pregunta, herramientas, llm: llmAnthropic(apiKey, modelo), historial: normalizarHistorial(cuerpo.historial), system: SYSTEM_DE[AGENTE] }); } catch (e) {
+  try { res = await correrConsulta({ pregunta: v.pregunta, herramientas, llm: llmAnthropic(apiKey, modelo), historial: normalizarHistorial(cuerpo.historial), system: SYSTEM_DE[AGENTE], esfuerzo: ESFUERZO_DE[AGENTE] }); } catch (e) {
     fallo = true; console.error("marketing-agente: falla del modelo", e instanceof Error ? e.message : "error");
   }
   const ok = !fallo && !!res?.ok;

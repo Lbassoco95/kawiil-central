@@ -273,15 +273,3 @@ export function dominiosEscritura(config: unknown): string[] {
   for (const d of n.escritura) { const x = typeof d === "string" ? d.trim().toLowerCase() : ""; if (DOMINIO.test(x) && !out.includes(x)) out.push(x); }
   return out;
 }
-
-// Accesos de 1Password del agente para que la persona los autorice por tarea: SOLO etiqueta y dominio (la referencia nunca sale del servidor).
-export function accesosDelAgente(config: unknown): { etiqueta: string; dominio: string }[] {
-  const lista = (config as { credenciales_1password?: unknown } | null | undefined)?.credenciales_1password;
-  if (!Array.isArray(lista)) return [];
-  const out: { etiqueta: string; dominio: string }[] = [];
-  for (const c of lista) {
-    const e = c && typeof c.etiqueta === "string" ? c.etiqueta.trim().slice(0, 80) : "";
-    if (e && !out.some((x) => x.etiqueta === e)) out.push({ etiqueta: e, dominio: typeof c.dominio === "string" ? c.dominio.slice(0, 100) : "su sitio" });
-  }
-  return out;
-}

@@ -61,7 +61,7 @@ describe("Instrucciones: selector con descripción", () => {
   it("al elegir un agente aparece su ficha", () => {
     render(<QueryClientProvider client={new QueryClient()}><InstruirAgente agentes={[NELLI, SOCRATES]} /></QueryClientProvider>);
     expect(screen.queryByTestId("ficha-agente")).toBeNull();
-    fireEvent.change(screen.getByTestId("instruir-agente"), { target: { value: "s" } });
+    fireEvent.click(screen.getByTestId("instruir-agente-s"));
     expect(screen.getByTestId("ficha-descripcion").textContent).toContain("decisiones litigiosas");
   });
 });

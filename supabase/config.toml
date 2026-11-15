@@ -227,3 +227,7 @@ project_id = "qppfampapbxdgednkofc"
   # Resultados de Metricool (simulacro, solo lectura): se autentica con su propio secreto (x-marketing-secret), sin JWT. No escribe datos.
   [functions.marketing-resultados]
     verify_jwt = false
+
+  # Carga de resultados de Metricool (Entrega 2): se autentica con su propio secreto (x-marketing-secret); vista previa por omisión.
+  [functions.marketing-resultados-carga]
+    verify_jwt = false

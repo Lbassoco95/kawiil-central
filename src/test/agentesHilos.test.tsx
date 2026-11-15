@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
-  accesosDelAgente, INSTRUCCION_REVISION, MAX_VECES, contextoRevision, mensajesDelHilo, raizDelHilo, resumirTarea, revisionesPendientes, validarRevision,
+  INSTRUCCION_REVISION, MAX_VECES, contextoRevision, mensajesDelHilo, raizDelHilo, resumirTarea, revisionesPendientes, validarRevision,
 } from "../../supabase/functions/_shared/seguimiento";
 import { ATAJOS, HiloAgente, aLocal } from "@/components/agentes/HiloAgente";
 import { TrabajosAgente } from "@/components/agentes/TrabajosAgente";
@@ -18,16 +18,6 @@ const T2 = "5f1c1c1c-1111-4111-8111-111111111111";
 const R1 = "9a9a9a9a-2222-4222-8222-222222222222";
 const REG = { nombre: "informe-actas.docx", formato: "docx", ruta: `${T}/01-informe-actas.docx`, bytes: 20480, titulo: "Informe", creado: "2026-11-09T05:00:00Z" };
 const AHORA_MS = Date.parse("2026-11-09T12:00:00Z");
-
-describe("accesos del agente para autorizar", () => {
-  it("solo etiqueta y dominio: la referencia de 1Password nunca sale", () => {
-    const r = accesosDelAgente({ credenciales_1password: [{ etiqueta: "SITI PLD", dominio: "websitipld.cnbv.gob.mx", referencia: "op://Cumplimiento/SITI PLD - CNBV - VIZUM" }, { etiqueta: "SITI PLD" }, { dominio: "x.mx" }, null] });
-    expect(r).toEqual([{ etiqueta: "SITI PLD", dominio: "websitipld.cnbv.gob.mx" }]);
-    expect(JSON.stringify(r)).not.toContain("op://");
-    expect(accesosDelAgente(null)).toEqual([]);
-    expect(accesosDelAgente({ credenciales_1password: "x" })).toEqual([]);
-  });
-});
 
 describe("reglas del hilo", () => {
   it("la raíz es el hilo_id (uuid) o la propia tarea", () => {
@@ -160,19 +150,6 @@ describe("<HiloAgente />", () => {
     expect(body.title).toBe("Seguimiento: Agrega una columna de fechas");
     expect("accesos_aprobados" in body.input_context).toBe(false);
     await waitFor(() => expect((screen.getByTestId("hilo-texto") as HTMLTextAreaElement).value).toBe(""));
-  });
-
-  it("un seguimiento puede autorizar un acceso de 1Password del agente, solo el marcado y solo para esa tarea", async () => {
-    simular({ accesos: [{ etiqueta: "SITI PLD", dominio: "websitipld.cnbv.gob.mx" }] });
-    envolver(<HiloAgente taskId={T} ahora={AHORA} />);
-    fireEvent.change(await screen.findByTestId("hilo-texto"), { target: { value: "Entra al SITI" } });
-    fireEvent.click(await screen.findByTestId("instruir-acceso-SITI PLD"));
-    expect(screen.getByTestId("instruir-accesos").textContent).toContain("Autorizo usar «SITI PLD» en websitipld.cnbv.gob.mx");
-    fireEvent.click(screen.getByTestId("hilo-enviar"));
-    await waitFor(() => expect(invoke).toHaveBeenCalledWith("dispatch-to-agent", expect.anything()));
-    const body = invoke.mock.calls.find((c) => c[0] === "dispatch-to-agent")![1].body;
-    expect(body.input_context).toEqual({ accesos_aprobados: ["SITI PLD"], hilo_id: T });
-    await waitFor(() => expect((screen.getByTestId("instruir-acceso-SITI PLD") as HTMLInputElement).checked).toBe(false));   // la autorización no pasa a la siguiente tarea
   });
 
   it("mientras el agente trabaja no se puede escribir encima y se ve «Trabajando…»", async () => {
