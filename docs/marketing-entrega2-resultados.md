@@ -162,3 +162,19 @@ La API devolvió 0 publicaciones de LinkedIn por la única ruta permitida. Opcio
 - **Los colores del semáforo pueden cambiar.** El diseño ya advierte que los valores de la API, leídos semanas después, tienden a ser algo mayores que los del archivo; el contraste del paso 1 muestra cuánto antes de cargar nada.
 - **No resuelve** que los resultados posteriores al 30 de octubre sigan sin cargarse: eso requiere las lecturas diarias (7:10 y 19:10), los cortes de 48 h y 7 días y el Vigilante de publicación, que son escrituras y despliegues posteriores de la Entrega 2 (sección 10, pasos 7 en adelante).
 - No toca el Calendario Maestro (`calendario_maestro`), los casos, las reglas ni los agentes.
+
+## 15. Simulacro corrido y carga construida (15 nov 2026)
+**Simulacro (paso 1), corrido el 15 nov con confirmación de Dirección:** sin escribir datos de resultados (solo 4 filas en `mk_api_log`).
+| Red | Archivo | API | Emparejadas | Sin pareja | Semanas con colores distintos |
+|---|---|---|---|---|---|
+| Instagram | 26 | 44 | 26 | 18 de la API: 17 anteriores al 8 sep (corresponden a las 17 piezas sin fila de Instagram) y 1 del 15 sep 19:20 sin pieza en el calendario | Ninguna entre las 8 semanas con datos en ambos lados (promedios API entre −14 % y +13 %; el −14 % del 14 sep es por esa publicación extra). Las 6 semanas de julio–agosto solo existen en la API |
+| Facebook | 47 | 47 | 47 | ninguna | 1 de 14: semana del 12 oct, amarillo (17.5) en el archivo y verde (18.5) en la API, por 0.5 sobre el umbral de 18. 1 pieza con diferencia de más de 25 % (H-20261024: 3 en el archivo, 4 en la API) |
+| LinkedIn | 48 | 0 | — | — | No se compara: Metricool no devolvió publicaciones (opción A: queda pendiente) |
+La API tiende a dar 0–1 punto más que el archivo en Facebook; en Instagram es casi igual de septiembre en adelante.
+
+**Carga (pasos 3–5): construida.** Función nueva `marketing-resultados-carga` (separada del simulacro, que sigue sin poder escribir), lógica en `_shared/resultados_carga.ts`:
+- **Vista previa por omisión:** sin `escribir: true` devuelve exactamente lo que escribiría y no escribe nada. La lista de redes es obligatoria; solo Instagram y Facebook están aprobadas (LinkedIn no se lee ni se carga).
+- **Escribe solo en:** `mk_resultado` (fuente `metricool`, corte `acumulado`), `mk_pieza_red` (solo las piezas de Instagram anteriores a su primera publicación registrada, sin fila, vinculadas por día y hora más cercana; las ambiguas se reportan y no se crean), `mk_cobertura_fuente` y `mk_bitacora` (con los ids creados). Sin textos de publicaciones.
+- **Idempotente** (repetirla no duplica) y con tope de 200 filas por red.
+- **Reversa:** `tools/marketing/rollback_carga_resultados.sql`.
+- Pruebas: `_shared/resultados_carga.test.ts` (15) y las del simulacro (27, sin cambios).
