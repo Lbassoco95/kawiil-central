@@ -188,6 +188,35 @@ export const useConsultasAnalista = () =>
     retry: false,
   });
 
+// ── Investigador web (solo lectura): lo que vigila y lo que encontró. El texto viene de páginas externas: la pantalla lo muestra siempre como texto. ──
+export interface FuenteWebFila { id: string; tipo: "propio" | "competencia" | "noticias"; formato: "pagina" | "feed"; nombre: string; ultima_lectura_at: string | null; ultimo_estado: string | null }
+export interface HallazgoWeb {
+  id: string; tipo: "cambio_pagina" | "nota_nueva"; titulo: string; resumen: string; enlace: string; publicado_at: string | null; encontrado_at: string;
+  mk_fuente_web: { nombre: string; tipo: string } | null;
+}
+export const useFuentesWeb = () =>
+  useQuery({
+    queryKey: ["investigador", "fuentes"],
+    queryFn: async (): Promise<FuenteWebFila[]> => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any).from("mk_fuente_web").select("id, tipo, formato, nombre, ultima_lectura_at, ultimo_estado").eq("activa", true).order("created_at");
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 60_000, retry: false,
+  });
+export const useHallazgosWeb = () =>
+  useQuery({
+    queryKey: ["investigador", "hallazgos"],
+    queryFn: async (): Promise<HallazgoWeb[]> => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any).from("mk_hallazgo_web").select("id, tipo, titulo, resumen, enlace, publicado_at, encontrado_at, mk_fuente_web(nombre, tipo)").order("encontrado_at", { ascending: false }).limit(30);
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 60_000, retry: false,
+  });
+
 // Tope de espera: si la función no contesta, la pantalla no se queda en «Pensando…» para siempre.
 const ESPERA_MAX_MS = 100_000;
 function conTope<T>(trabajo: Promise<T>, vacio: T): Promise<T> {

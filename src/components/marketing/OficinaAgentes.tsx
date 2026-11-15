@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AccionSeguimiento, ConsultaAnalista, FrecuenciaSeguimiento, RespuestaAnalista, SeguimientoAnalista, TurnoHistorial } from "@/hooks/useMarketing";
+import { useFuentesWeb, useHallazgosWeb } from "@/hooks/useMarketing";
 import { Pastilla, Vacio } from "./marketingUi";
 import { TextoAnalista } from "./TextoAnalista";
 import { cuandoRelativo, ESTADO_TAREA, type AgenteRegistro, type TareaMarketing } from "./agentesRegistroLogica";
@@ -160,6 +161,8 @@ export function OficinaAgentes({ agentes, tareasMarketing, estadoAgentes, estado
             <PreguntarAnalista key="analista" analista={analista} datos={analista} agente="marketing_analista" now={now} alPensar={(p) => setPensandoId(p ? elegido.id : null)} />
           ) : elegido.clave === "marketing_cmo" && analista?.cmo ? (
             <PreguntarAnalista key="cmo" analista={analista} datos={analista.cmo} agente="marketing_cmo" now={now} alPensar={(p) => setPensandoId(p ? elegido.id : null)} />
+          ) : elegido.clave === "marketing_investigador" ? (
+            <HallazgosWeb now={now} />
           ) : (
             <p className="border-t border-border/40 pt-2 text-xs text-muted-foreground" data-testid="oficina-proximamente">
               Preguntarles cómo van y dejarles tareas llegará en una siguiente fase. Por ahora esta vista es solo de lectura.
@@ -357,6 +360,58 @@ function TarjetaRespuesta({ resp, ultima }: { resp: RespuestaAnalista; ultima: b
         </p>
       )}
       {ultima && typeof resp.restantes_hoy === "number" && <p className="text-xs text-muted-foreground">Te quedan {resp.restantes_hoy} preguntas hoy.</p>}
+    </div>
+  );
+}
+
+
+// ── Investigador web: qué vigila y qué encontró ──────────────────────────────────────────────────────────────────────
+const TIPO_FUENTE: Record<string, string> = { propio: "Sitio propio", competencia: "Competencia", noticias: "Noticias" };
+// Todo lo que viene de páginas externas se pinta como texto (nunca como HTML); el enlace solo se abre si es https.
+const enlaceSeguro = (u: string): string | null => { try { const x = new URL(u); return x.protocol === "https:" ? x.toString() : null; } catch { return null; } };
+
+function HallazgosWeb({ now }: { now: Date }) {
+  const fuentes = useFuentesWeb(), hallazgos = useHallazgosWeb();
+  return (
+    <div className="space-y-3 border-t border-border/40 pt-3" data-testid="investigador-panel">
+      <p className="text-xs text-muted-foreground">Solo lee las páginas y noticias que Dirección define. No inicia sesión ni escribe en ningún sitio. Lo que ves es un resumen con su fuente, no el texto de la página.</p>
+      <div>
+        <p className="mb-1 text-xs font-medium text-muted-foreground">Qué vigila</p>
+        {fuentes.isError ? <p className="text-xs text-muted-foreground" data-testid="investigador-fuentes-error">No pudimos leer la lista de fuentes.</p>
+          : fuentes.isLoading ? <p className="text-xs text-muted-foreground">Leyendo…</p>
+          : (fuentes.data ?? []).length === 0 ? <p className="text-xs text-muted-foreground" data-testid="investigador-sin-fuentes">Todavía no hay fuentes. Dirección las define (sitio propio, competencia y noticias) y hasta entonces no lee nada.</p> : (
+            <ul className="divide-y divide-border/40 text-xs" data-testid="investigador-fuentes">
+              {(fuentes.data ?? []).map((f) => (
+                <li key={f.id} className="flex items-start justify-between gap-2 py-1.5">
+                  <span className="min-w-0"><span className="block">{f.nombre}</span><span className="block text-muted-foreground">{TIPO_FUENTE[f.tipo] ?? f.tipo} · {f.ultima_lectura_at ? `leída ${cuandoRelativo(f.ultima_lectura_at, now)}` : "sin leer todavía"}</span></span>
+                  {f.ultimo_estado && <span className="shrink-0 text-muted-foreground">{f.ultimo_estado}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+      </div>
+      <div>
+        <p className="mb-1 text-xs font-medium text-muted-foreground">Qué encontró</p>
+        {hallazgos.isError ? <p className="text-xs text-muted-foreground" data-testid="investigador-hallazgos-error">No pudimos leer los hallazgos.</p>
+          : hallazgos.isLoading ? <p className="text-xs text-muted-foreground">Leyendo…</p>
+          : (hallazgos.data ?? []).length === 0 ? <p className="text-xs text-muted-foreground" data-testid="investigador-sin-hallazgos">Todavía no hay hallazgos.</p> : (
+            <ul className="space-y-2 text-xs" data-testid="investigador-hallazgos">
+              {(hallazgos.data ?? []).map((h) => {
+                const url = enlaceSeguro(h.enlace);
+                return (
+                  <li key={h.id} className="rounded-xl border border-border/40 p-2">
+                    <p className="font-medium">{h.titulo}</p>
+                    {h.resumen && <p className="mt-0.5 text-muted-foreground">{h.resumen}</p>}
+                    <p className="mt-1 flex flex-wrap items-center gap-x-2 text-muted-foreground">
+                      <span>{h.mk_fuente_web?.nombre ?? "Fuente"} · {h.tipo === "cambio_pagina" ? "cambio en la página" : "nota nueva"} · {cuandoRelativo(h.publicado_at ?? h.encontrado_at, now)}</span>
+                      {url && <a href={url} target="_blank" rel="noopener noreferrer nofollow" className="underline underline-offset-2">Abrir fuente</a>}
+                    </p>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+      </div>
     </div>
   );
 }
