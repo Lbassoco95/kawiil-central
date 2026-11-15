@@ -67,7 +67,9 @@ const hostDe = (u: string): string | null => { try { return new URL(u).hostname.
 // El dominio de la página debe estar permitido (o ser subdominio de uno permitido).
 export const dominioPermitido = (host: string, permitidos: string[]): boolean => permitidos.some((d) => host === d || host.endsWith(`.${d}`));
 
-const REF_OP = /^op:\/\/[^/\s]{1,80}\/[^/\s]{1,80}(\/[^/\s]{1,80}){0,2}$/;
+// Un tramo: 1 a 80 caracteres, sin «/» ni «?», sin espacios al inicio ni al final; los espacios internos valen («SITI PLD - CNBV - VIZUM»). Igual que en la VM.
+const SEG = "[^/?\\s](?:[^/?\\x00-\\x1f]{0,78}[^/?\\s])?";
+const REF_OP = new RegExp(`^op://${SEG}/${SEG}(/${SEG}){0,2}$`);
 export const esReferencia1Password = (v: unknown): v is string => typeof v === "string" && REF_OP.test(v.trim());
 
 // Heurística para no mandar secretos al modelo ni guardarlos: «contraseña: xxx», tokens conocidos o cadenas largas sin espacios.

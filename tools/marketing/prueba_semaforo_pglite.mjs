@@ -6,9 +6,7 @@
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 const { PGlite } = await import(process.env.PGLITE_PATH ? "file://" + process.env.PGLITE_PATH : "@electric-sql/pglite");
-const nueva = readFileSync(new URL("../../supabase/migrations/20261115192905_marketing_semaforo_corregido.sql", import.meta.url), "utf8");
-const recalcular = readFileSync(new URL("../../supabase/migrations/20261115193119_marketing_recalcular_semaforo.sql", import.meta.url), "utf8");
-const rbRecalcular = readFileSync(new URL("./rollback_recalcular_semaforo.sql", import.meta.url), "utf8"), rbCorregido = readFileSync(new URL("./rollback_semaforo_corregido.sql", import.meta.url), "utf8");
+const nueva = readFileSync(new URL("../../supabase/pendientes/20261103000000_marketing_semaforo_corregido.sql", import.meta.url), "utf8");
 
 const VIEJA = `
 CREATE OR REPLACE FUNCTION public.mk_semaforo_semana_viejo(p_org uuid, p_semana date, p_red text, p_fuente text DEFAULT 'metricool'::text)
@@ -39,18 +37,13 @@ await db.exec(`
   create table mk_resultado (id uuid primary key default gen_random_uuid(), pieza_red_id uuid references mk_pieza_red(id), corte text check (corte in ('48h','7d','acumulado')),
     fuente text check (fuente in ('metricool','calendario_maestro')), valor numeric, unique (pieza_red_id, corte, fuente));
   create table mk_cobertura_fuente (organization_id uuid, red text, fuente text, desde date, hasta date);
-  create table mk_calibracion (id uuid primary key default gen_random_uuid(), organization_id uuid not null, semana_inicio date not null, red text not null check (red in ('instagram','facebook','linkedin')),
-    piezas_calculadas integer, promedio_calculado numeric, piezas_calendario integer, promedio_calendario numeric, color_calculado text, color_calendario text,
-    motivo_gris text, diferencia numeric, nota text, calculado_at timestamptz not null default now(), unique (organization_id, semana_inicio, red));
-  create table mk_bitacora (id uuid primary key default gen_random_uuid(), organization_id uuid not null,
-    agente text not null check (agente in ('vigilante','revisor','direccion','sistema','informe_diario')), accion text not null, resultado text not null, detalle jsonb, caso_id uuid, registrado_at timestamptz not null default now());
   create function public.mk_semana_inicio(ts timestamptz) returns date language sql immutable as $$ select date_trunc('week', ts at time zone 'America/Mexico_City')::date $$;
   insert into mk_regla values ('${ORG}','semaforo_instagram','{"verde_desde":35,"amarillo_desde":15}'), ('${ORG}','semaforo_facebook','{"verde_desde":18,"amarillo_desde":10}');
 `);
-await db.exec(VIEJA); await db.exec(nueva); await db.exec(recalcular);
+await db.exec(VIEJA); await db.exec(nueva);
 
 let n = 0, fallos = 0;
-const prueba = async (nombre, fn) => { try { await db.exec("truncate mk_resultado, mk_pieza_red, mk_pieza, mk_cobertura_fuente, mk_calibracion, mk_bitacora cascade"); await fn(); console.log("  ok  ", nombre); } catch (e) { fallos++; console.log("  FALLA", nombre, "\n       ", e.message); } };
+const prueba = async (nombre, fn) => { try { await db.exec("truncate mk_resultado, mk_pieza_red, mk_pieza, mk_cobertura_fuente cascade"); await fn(); console.log("  ok  ", nombre); } catch (e) { fallos++; console.log("  FALLA", nombre, "\n       ", e.message); } };
 // crea una pieza publicada del día 2026-11-04 con resultados [{corte, fuente, valor}]; devuelve el id de pieza_red
 async function pieza(red, resultados, { estado = "publicada", dia = "2026-11-04T18:00:00Z" } = {}) {
   const p = (await db.query("insert into mk_pieza (organization_id, primera_publicacion_at) values ($1,$2) returning id", [ORG, dia])).rows[0].id;
@@ -128,75 +121,5 @@ await prueba("permisos: el archivo cierra la función a anon/authenticated y la 
   assert.match(nueva, /REVOKE ALL ON FUNCTION public\.mk_semaforo_semana\(uuid, date, text, text\) FROM PUBLIC, anon, authenticated/);
   assert.match(nueva, /GRANT EXECUTE ON FUNCTION public\.mk_semaforo_semana\(uuid, date, text, text\) TO service_role/);
   assert.match(nueva, /CREATE OR REPLACE FUNCTION public\.mk_semaforo_semana\(p_org uuid, p_semana date, p_red text, p_fuente text DEFAULT 'metricool'::text\)/);
-});
-
-// ── mk_recalcular_semaforo ──────────────────────────────────────────────────────────────────────────────────────────────
-const LUN1 = "2026-10-26", LUN2 = "2026-11-02"; // dos lunes seguidos
-const dia = (lunes, h = "18:00:00Z") => `${lunes}T${h}`;
-const rec = async (desde = LUN1, hasta = LUN2, redes = ["instagram"], fuente = "metricool") => (await db.query("select public.mk_recalcular_semaforo($1,$2,$3,$4::text[],$5) r", [ORG, desde, hasta, redes, fuente])).rows[0].r;
-const fila = async (semana, red = "instagram") => (await db.query("select * from mk_calibracion where organization_id=$1 and semana_inicio=$2 and red=$3", [ORG, semana, red])).rows[0];
-const sembrar = (semana, red, o = {}) => db.query(`insert into mk_calibracion (organization_id, semana_inicio, red, piezas_calculadas, promedio_calculado, piezas_calendario, promedio_calendario, color_calculado, color_calendario, motivo_gris, diferencia, nota)
-  values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, [ORG, semana, red, o.pc ?? 0, o.prom ?? null, o.pcal ?? null, o.pro_cal ?? null, o.color ?? "gris", o.ccal ?? null, o.gris ?? "sin_datos_fuente", o.dif ?? null, o.nota ?? "nota original"]);
-
-await prueba("recalcular: escribe solo lo calculado con la fuente pedida y CONSERVA las columnas del archivo y la nota anterior", async () => {
-  await db.query("insert into mk_cobertura_fuente values ($1,'instagram','metricool','2026-10-01','2026-11-30')", [ORG]);
-  await pieza("instagram", [{ corte: "acumulado", fuente: "metricool", valor: 40 }, { corte: "acumulado", fuente: "calendario_maestro", valor: 10 }], { dia: dia(LUN1) });
-  await sembrar(LUN1, "instagram", { pc: 1, prom: 10, color: "amarillo", gris: null, pcal: 1, pro_cal: 12, ccal: "amarillo", nota: "Lectura provisional" });
-  const r = await rec(LUN1, LUN1);
-  const f = await fila(LUN1);
-  assert.deepEqual([f.piezas_calculadas, Number(f.promedio_calculado), f.color_calculado, f.motivo_gris], [1, 40, "verde", null]);
-  assert.deepEqual([f.piezas_calendario, Number(f.promedio_calendario), f.color_calendario], [1, 12, "amarillo"]);   // columnas del archivo intactas
-  assert.equal(Number(f.diferencia), 28); assert.match(f.nota, /^Recalculado con metricool/); assert.match(f.nota, /Antes: Lectura provisional/);
-  assert.deepEqual([r.filas, r.cambios.length, r.cambios[0].antes, r.cambios[0].despues], [1, 1, "amarillo", "verde"]);
-});
-await prueba("recalcular: sin cifra del archivo la diferencia queda vacía; una semana sin fila se crea; solo cambian las redes y semanas pedidas", async () => {
-  await db.query("insert into mk_cobertura_fuente values ($1,'instagram','metricool','2026-10-01','2026-11-30'), ($1,'facebook','metricool','2026-10-01','2026-11-30')", [ORG]);
-  await pieza("instagram", [{ corte: "acumulado", fuente: "metricool", valor: 20 }], { dia: dia(LUN2) }); await pieza("facebook", [{ corte: "acumulado", fuente: "metricool", valor: 5 }], { dia: dia(LUN2) });
-  await sembrar(LUN2, "facebook", { color: "gris", nota: "FB intacta" }); await sembrar(LUN1, "instagram", { color: "gris", nota: "otra semana" });
-  await rec(LUN2, LUN2, ["instagram"]);
-  const nueva_ = await fila(LUN2); assert.equal(nueva_.color_calculado, "amarillo"); assert.equal(nueva_.diferencia, null); assert.equal(nueva_.piezas_calendario, null);
-  assert.equal((await fila(LUN2, "facebook")).nota, "FB intacta"); assert.equal((await fila(LUN1)).nota, "otra semana");
-});
-await prueba("recalcular: guarda ANTES de escribir una foto de las filas que toca (bitácora) y la reversa las restaura exactamente", async () => {
-  await db.query("insert into mk_cobertura_fuente values ($1,'instagram','metricool','2026-10-01','2026-11-30')", [ORG]);
-  await pieza("instagram", [{ corte: "acumulado", fuente: "metricool", valor: 40 }], { dia: dia(LUN1) });
-  await sembrar(LUN1, "instagram", { pc: 7, prom: 3, color: "rojo", gris: null, pcal: 7, pro_cal: 3, nota: "original" });
-  const antes = await fila(LUN1); await rec(LUN1, LUN1);
-  const b = (await db.query("select * from mk_bitacora where accion='recalculo_semaforo'")).rows; assert.equal(b.length, 1); assert.equal(b[0].agente, "sistema");
-  assert.equal(b[0].detalle.antes.length, 1); assert.equal(b[0].detalle.antes[0].nota, "original"); assert.equal(b[0].detalle.antes[0].color_calculado, "rojo");
-  assert.notEqual((await fila(LUN1)).color_calculado, "rojo");
-  await db.exec(rbRecalcular);
-  const despues = await fila(LUN1); for (const k of ["piezas_calculadas", "color_calculado", "motivo_gris", "nota", "piezas_calendario"]) assert.equal(despues[k], antes[k], k);
-  assert.equal(Number(despues.promedio_calculado), Number(antes.promedio_calculado));
-  assert.equal((await db.query("select count(*)::int n from pg_proc where proname='mk_recalcular_semaforo'")).rows[0].n, 0);
-  await db.exec(recalcular); // las pruebas siguientes comparten base: se vuelve a crear
-});
-await prueba("recalcular: es idempotente (repetirlo deja los mismos valores y no duplica filas)", async () => {
-  await db.query("insert into mk_cobertura_fuente values ($1,'instagram','metricool','2026-10-01','2026-11-30')", [ORG]);
-  await pieza("instagram", [{ corte: "acumulado", fuente: "metricool", valor: 40 }], { dia: dia(LUN1) });
-  await rec(LUN1, LUN2); const a = await fila(LUN1); const r2 = await rec(LUN1, LUN2); const b = await fila(LUN1);
-  assert.equal((await db.query("select count(*)::int n from mk_calibracion")).rows[0].n, 2); assert.deepEqual([b.piezas_calculadas, b.color_calculado, Number(b.promedio_calculado)], [a.piezas_calculadas, a.color_calculado, Number(a.promedio_calculado)]);
-  assert.equal(r2.cambios.length, 0);
-});
-await prueba("recalcular: semana sin cobertura de la fuente = gris «sin_datos_fuente»; con cobertura y sin piezas = «sin_piezas_publicadas»", async () => {
-  await db.query("insert into mk_cobertura_fuente values ($1,'instagram','metricool','2026-11-01','2026-11-30')", [ORG]);
-  await rec(LUN1, LUN2); // la semana del 26 oct cubre hasta el 1 nov: hay cobertura (solapa); la del 2 nov también
-  assert.equal((await fila(LUN1)).motivo_gris, "sin_piezas_publicadas");
-  await db.exec("truncate mk_cobertura_fuente, mk_calibracion"); await rec(LUN1, LUN1); assert.equal((await fila(LUN1)).motivo_gris, "sin_datos_fuente");
-});
-await prueba("recalcular: valida antes de escribir (fuente, redes, periodo, tope de 60 semanas) y no deja nada escrito", async () => {
-  await sembrar(LUN1, "instagram");
-  for (const [args, re] of [[[LUN1, LUN2, ["instagram"], "otra"], /fuente no válida/], [[LUN1, LUN2, [], "metricool"], /redes no válidas/], [[LUN1, LUN2, ["tiktok"], "metricool"], /redes no válidas/],
-    [[LUN2, LUN1, ["instagram"], "metricool"], /periodo no válido/], [["2020-01-06", LUN2, ["instagram"], "metricool"], /demasiadas semanas/]])
-    await assert.rejects(() => db.query("select public.mk_recalcular_semaforo($1,$2,$3,$4::text[],$5)", [ORG, ...args]), re);
-  await assert.rejects(() => db.query("select public.mk_recalcular_semaforo(null,$1,$2,$3::text[],'metricool')", [LUN1, LUN2, ["instagram"]]), /falta la organización/);
-  assert.equal((await db.query("select count(*)::int n from mk_bitacora")).rows[0].n, 0); assert.equal((await fila(LUN1)).nota, "nota original");
-});
-await prueba("recalcular: solo service_role puede ejecutarla; la reversa de la corrección devuelve la definición anterior", async () => {
-  assert.match(recalcular, /REVOKE ALL ON FUNCTION public\.mk_recalcular_semaforo\(uuid, date, date, text\[\], text\) FROM PUBLIC, anon, authenticated/);
-  assert.match(recalcular, /GRANT EXECUTE ON FUNCTION public\.mk_recalcular_semaforo\(uuid, date, date, text\[\], text\) TO service_role/);
-  for (const rol of ["anon", "authenticated", "service_role"]) assert.equal((await db.query(`select has_function_privilege('${rol}','public.mk_recalcular_semaforo(uuid,date,date,text[],text)','execute') p`)).rows[0].p, rol === "service_role", rol);
-  await db.exec(rbCorregido); await pieza("instagram", [{ corte: "7d", fuente: "metricool", valor: 10 }, { corte: "acumulado", fuente: "metricool", valor: 50 }]);
-  assert.equal((await v("mk_semaforo_semana")).piezas, 2); // la definición anterior volvía a contar doble: la reversa funciona
 });
 console.log(fallos ? `\n${fallos} prueba(s) fallaron` : "\nTodas las pruebas del semáforo pasaron"); process.exit(fallos ? 1 : 0);

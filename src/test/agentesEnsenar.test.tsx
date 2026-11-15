@@ -117,7 +117,7 @@ describe("EnsenarAgente", () => {
   it("muestra las habilidades con su estado y las acciones", async () => {
     invoke.mockResolvedValue({ data: { habilidades: [] }, error: null });
     envolver(<EnsenarAgente agentes={[ag({ config: { origen: "constructor_agentes", habilidades: [hab(), hab({ id: "otra", nombre: "Otra", estado: "aprobada" })] } })]} tareas={[]} ahora={AHORA} />);
-    fireEvent.click(screen.getByTestId("ensenar-agente-a"));
+    fireEvent.change(screen.getByTestId("ensenar-agente"), { target: { value: "a" } });
     expect(screen.getByTestId("habilidad-informe-semanal").textContent).toMatch(/Borrador \(no se usa\)/);
     expect(screen.getByTestId("habilidad-otra").textContent).toMatch(/Aprobada \(en uso\)/);
     fireEvent.click(screen.getByTestId("aprobar-informe-semanal"));
@@ -131,7 +131,7 @@ describe("EnsenarAgente", () => {
     invoke.mockResolvedValueOnce({ data: { texto: "Te dejo la habilidad.", habilidad: BUENA, avisos: [] }, error: null });
     invoke.mockResolvedValueOnce({ data: { habilidades: [] }, error: null });
     envolver(<EnsenarAgente agentes={[ag({ config: { origen: "constructor_agentes" } })]} tareas={[tarea(), tarea({ id: "t2", status: "error" }), tarea({ id: "t3", agent_id: "otro" })]} ahora={AHORA} />);
-    fireEvent.click(screen.getByTestId("ensenar-agente-a"));
+    fireEvent.change(screen.getByTestId("ensenar-agente"), { target: { value: "a" } });
     expect(screen.getByTestId("ensenar-tarea").querySelectorAll("option").length).toBe(2);   // «sin ejemplo» + la completada de este agente
     expect(screen.getByTestId("ensenar-tarea").textContent).not.toMatch(/t2|t3/);
     fireEvent.change(screen.getByTestId("ensenar-tarea"), { target: { value: "t1" } });
@@ -150,7 +150,7 @@ describe("EnsenarAgente", () => {
     invoke.mockResolvedValueOnce({ data: { texto: "ok", habilidad: BUENA, avisos: [] }, error: null });
     invoke.mockResolvedValueOnce({ data: { habilidades: [] }, error: null });
     envolver(<EnsenarAgente agentes={[ag({ config: { origen: "constructor_agentes" } })]} tareas={[]} ahora={AHORA} />);
-    fireEvent.click(screen.getByTestId("ensenar-agente-a"));
+    fireEvent.change(screen.getByTestId("ensenar-agente"), { target: { value: "a" } });
     fireEvent.change(screen.getByLabelText(/Maestro de Habilidades/), { target: { value: "Se hace así" } });
     fireEvent.click(screen.getByTestId("ensenar-enviar"));
     await screen.findByTestId("ensenar-propuesta");
@@ -161,7 +161,7 @@ describe("EnsenarAgente", () => {
   });
   it("no manda al servidor un mensaje con una contraseña", () => {
     envolver(<EnsenarAgente agentes={[ag({ config: { origen: "constructor_agentes" } })]} tareas={[]} ahora={AHORA} />);
-    fireEvent.click(screen.getByTestId("ensenar-agente-a"));
+    fireEvent.change(screen.getByTestId("ensenar-agente"), { target: { value: "a" } });
     fireEvent.change(screen.getByLabelText(/Maestro de Habilidades/), { target: { value: "entra con la contraseña es Hunter2!" } });
     fireEvent.click(screen.getByTestId("ensenar-enviar"));
     expect(invoke).not.toHaveBeenCalled();

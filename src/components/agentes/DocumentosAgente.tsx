@@ -1,9 +1,8 @@
-import { SelectorAgentes } from "@/components/agentes/SelectorAgentes";
 import { useEffect, useState } from "react";
 import { FolderOpen, Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { nombreAgente, type AgenteRegistro } from "@/lib/agentes/registro";
+import { etiquetaOpcion, nombreAgente, type AgenteRegistro } from "@/lib/agentes/registro";
 import { useCuentasAgente, useCuentasDrive, useFuentesDocs, usePermitirDrive } from "@/hooks/useAgenteConstructor";
 import { useCarpetasClientes } from "@/hooks/useCarpetasClientes";
 import { ensenable } from "@/components/agentes/EnsenarAgente";
@@ -79,7 +78,12 @@ export function DocumentosAgente({ agentes, agenteInicial }: { agentes: AgenteRe
       <p className="flex items-center gap-2 text-sm text-muted-foreground"><FolderOpen className="h-4 w-4" />Elige qué carpetas puede leer un agente. Solo lectura, solo dentro de cada carpeta. El cliente además debe compartirlas con la identidad de la VM; quitar ese permiso lo revoca.</p>
       {lista.length === 0 ? <p className="zen-glass rounded-2xl p-4 text-sm text-muted-foreground" data-testid="documentos-vacio">Aún no hay agentes disponibles.</p> : (
         <>
-          <SelectorAgentes agentes={lista} valor={agenteId} testid="documentos-agente" onCambio={setAgenteId} detalle={(a) => `${fuentesDe(a).length} fuentes`} />
+          <label className="block space-y-1 text-sm">Agente
+            <select className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={agenteId} onChange={(e) => setAgenteId(e.target.value)} data-testid="documentos-agente">
+              <option value="">Elige un agente…</option>
+              {lista.map((a) => <option key={a.id} value={a.id}>{etiquetaOpcion(a)} — {fuentesDe(a).length} fuentes</option>)}
+            </select>
+          </label>
           <FichaAgente agente={agente} />
           {agente && (
             <>

@@ -1,10 +1,9 @@
-import { SelectorAgentes } from "@/components/agentes/SelectorAgentes";
 import { useEffect, useRef, useState } from "react";
 import { MarkdownAgente } from "@/components/agentes/MarkdownAgente";
 import { GraduationCap, Loader2, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { cuandoRelativo, nombreAgente, type AgenteRegistro, type TareaAgente } from "@/lib/agentes/registro";
+import { cuandoRelativo, etiquetaOpcion, nombreAgente, type AgenteRegistro, type TareaAgente } from "@/lib/agentes/registro";
 import { useEnsenarAgente, useEstadoHabilidad, useGuardarHabilidad } from "@/hooks/useAgenteConstructor";
 import { AVISO_SECRETO, pareceSecreto, type MensajeChat } from "../../../supabase/functions/_shared/agenteConstructor";
 import type { EstadoHabilidad, Habilidad, HabilidadBorrador } from "../../../supabase/functions/_shared/habilidades";
@@ -96,7 +95,12 @@ export function EnsenarAgente({ agentes, tareas, ahora = new Date() }: { agentes
       <p className="flex items-center gap-2 text-sm text-muted-foreground"><GraduationCap className="h-4 w-4" />Cuéntale cómo se hace una tarea, o elige una que ya hizo, y se convierte en una habilidad que tú revisas. El agente no cambia sus habilidades solo.</p>
       {lista.length === 0 ? <p className="zen-glass rounded-2xl p-4 text-sm text-muted-foreground" data-testid="ensenar-vacio">Aún no hay agentes creados desde el constructor.</p> : (
         <>
-          <SelectorAgentes agentes={lista} valor={agenteId} testid="ensenar-agente" onCambio={setAgenteId} detalle={(a) => `${habilidadesDe(a).filter((h) => h.estado === "aprobada").length} habilidades en uso`} />
+          <label className="block space-y-1 text-sm">Agente
+            <select className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={agenteId} onChange={(e) => setAgenteId(e.target.value)} data-testid="ensenar-agente">
+              <option value="">Elige un agente…</option>
+              {lista.map((a) => <option key={a.id} value={a.id}>{etiquetaOpcion(a)} — {habilidadesDe(a).filter((h) => h.estado === "aprobada").length} habilidades en uso</option>)}
+            </select>
+          </label>
           <FichaAgente agente={agente} />
           {agente && (
             <>
