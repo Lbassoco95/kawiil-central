@@ -137,3 +137,28 @@ La API devolvió 44 publicaciones de Instagram (17 anteriores al 8 sep, que no t
 3. Revisar el reporte y decidir la carga (paso 5 del diseño).
 
 **Decisión pendiente de Dirección sobre LinkedIn:** el conector solo permite `/stats/linkedin/posts`, que devolvió 0 elementos. La alternativa del swagger (`/v2/analytics/posts/linkedin`, devuelve CSV) no está en la lista cerrada; añadirla requiere su aprobación, una prueba de que sigue siendo solo lectura y el cambio del conector (v8).
+
+## 14. Lista de la carga de resultados (13 nov 2026; nada de esto está aplicado)
+**Para qué:** hoy `mk_resultado` solo tiene los valores del Calendario Maestro (fuente `calendario_maestro`: 47 Facebook, 26 Instagram, 48 LinkedIn), y la cobertura llega al 29–30 de octubre. Los resultados de Metricool de esas mismas publicaciones no están cargados, y de ahí viene que el Analista y el CMO digan «no tengo lectura de las últimas semanas». Esta lista lleva eso a la base en pasos separados, cada uno con su confirmación.
+
+**Estado de partida (producción, 13 nov, solo lectura):** 94 piezas; 42 filas de semáforo en `mk_calibracion` (14 semanas × 3 redes, del 27 jul al 26 oct, todas con `color_calendario` vacío); 26 llamadas en `mk_api_log` (la última, hoy 7:00). Instagram: 26 piezas publicadas desde el 8 sep + 5 con error; **17 piezas del calendario anteriores al 8 sep sin fila de Instagram** (las 17 publicaciones de Instagram que la API devolvió antes de esa fecha). `marketing-resultados` (simulacro) ya está desplegada y no escribe datos.
+
+### Decisión previa: LinkedIn
+La API devolvió 0 publicaciones de LinkedIn por la única ruta permitida. Opciones: **(A)** cargar Instagram y Facebook ahora y dejar LinkedIn pendiente (recomendada: no bloquea nada); **(B)** aprobar añadir `/v2/analytics/posts/linkedin` (CSV) a la lista cerrada del conector (cambio de conector, despliegue y prueba de que sigue siendo solo lectura); **(C)** revisar primero el tipo de cuenta de LinkedIn (perfil o página de empresa) en Metricool.
+
+### Pasos y escrituras exactas
+| # | Qué | Qué escribe en producción | Cómo se revierte |
+|---|---|---|---|
+| 1 | **Correr el simulacro** una vez, con el secreto leído de Vault por nombre desde la base (como el cron; el valor no pasa por chat) | Hasta ~6 filas en `mk_api_log` (llamadas de solo lectura del conector) y la respuesta temporal de `pg_net`. **Ningún dato de resultados.** | No hace falta (solo bitácora de llamadas) |
+| 2 | **Revisión de Dirección del reporte** (por red y semana: piezas del archivo vs API, promedios, colores, diferencias) | Nada | — |
+| 3 | **Construir la carga** en el repo (modo `cargar` de `marketing-resultados`: idempotente, solo piezas emparejadas, sin ningún texto, tope por red, bitácora con los ids creados) y su prueba en Postgres en memoria | Nada en producción | — |
+| 4 | **Desplegar** la función con el modo `cargar` (por el flujo de despliegue) | Una función desplegada; sin datos | `git revert` del PR |
+| 5 | **Carga** (invocar con `cargar`, solo para las redes aprobadas) | `mk_resultado`: fuente `metricool`, corte `acumulado`, hasta **~44 filas de Instagram y 47 de Facebook** (LinkedIn solo si se aprueba B o C). `mk_pieza_red`: hasta **17 filas nuevas** de Instagram (publicadas, con `publicada_at` y `metricool_id`) para las piezas anteriores al 8 sep, vinculadas por fecha; si hay duda, no se crea nada y se reporta. `mk_cobertura_fuente`: 1 fila por red cargada (fuente `metricool`). `mk_bitacora`: 1 entrada con los ids creados | `DELETE` de `mk_resultado` con `fuente = 'metricool'`, de las `mk_pieza_red` listadas en la bitácora y de la cobertura `metricool` (script `tools/marketing/rollback_carga_resultados.sql`) |
+| 6 | **Recalcular el semáforo histórico:** migración con la corrección de `mk_semaforo_semana` (ya preparada) y `mk_recalcular_semaforo`, y una ejecución | `mk_calibracion`: hasta 42 filas (14 semanas × 3 redes; 28 si LinkedIn queda fuera). Antes de escribir, la ejecución guarda en la bitácora las filas actuales para poder restaurarlas | Restaurar las filas guardadas en la bitácora; la migración tiene reversa |
+| 7 | **Propuesta de umbrales de Instagram** con las 44 publicaciones (media y mediana, igual que en la v1) | Nada: es una propuesta. Cambiar la regla va aparte por `mk_cambiar_regla`, con motivo y tu confirmación | — |
+
+### Efectos que se verán después de cargar
+- **El Analista y el CMO empezarán a citar valores de Metricool** (sus consultas prefieren la fuente `metricool` sobre la del archivo) y `cobertura_fuentes` mostrará esa fuente hasta el 30 de octubre.
+- **Los colores del semáforo pueden cambiar.** El diseño ya advierte que los valores de la API, leídos semanas después, tienden a ser algo mayores que los del archivo; el contraste del paso 1 muestra cuánto antes de cargar nada.
+- **No resuelve** que los resultados posteriores al 30 de octubre sigan sin cargarse: eso requiere las lecturas diarias (7:10 y 19:10), los cortes de 48 h y 7 días y el Vigilante de publicación, que son escrituras y despliegues posteriores de la Entrega 2 (sección 10, pasos 7 en adelante).
+- No toca el Calendario Maestro (`calendario_maestro`), los casos, las reglas ni los agentes.

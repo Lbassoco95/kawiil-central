@@ -194,6 +194,12 @@ export async function correrConsulta(a: { pregunta: string; herramientas: Herram
         if (!fn) { resultados.push({ type: "tool_result", tool_use_id: u.id, content: "Herramienta no permitida.", is_error: true }); continue; }
         try {
           for (const [k, v] of Object.entries(u.input ?? {})) if (typeof v === "number" && Number.isFinite(v)) parametros[`${u.id}_${k}`] = v;
+          // También los valores por defecto de la ventana que la herramienta documenta («por defecto 90») cuando el modelo no los mandó: son la ventana de la consulta.
+          const props = (HERRAMIENTAS.find((h) => h.name === u.name)?.input_schema as { properties?: Record<string, { description?: string }> } | undefined)?.properties ?? {};
+          for (const [k, def] of Object.entries(props)) {
+            const n = /por defecto (\d+)/.exec(def?.description ?? "")?.[1];
+            if (n && !(k in (u.input ?? {}))) parametros[`${u.id}_defecto_${k}`] = Number(n);
+          }
           const salida = await fn(u.input ?? {});
           salidas.push(salida);
           const corte = (salida as { corte?: unknown } | null)?.corte;
