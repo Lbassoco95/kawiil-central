@@ -1,4 +1,4 @@
--- Reversa de 20261116200000_marketing_comunicacion_interna.sql. Borra los avisos guardados, el agente y sus corridas, y devuelve las dos funciones de registro a como estaban.
+-- Reversa de 20261116221332_marketing_comunicacion_interna.sql. Borra los avisos guardados, el agente y sus corridas, y devuelve las dos funciones de registro a como estaban.
 DELETE FROM public.agent_tasks WHERE agent_id IN (SELECT id FROM public.agent_registry WHERE name = 'marketing_comunicacion_interna');
 DELETE FROM public.agent_registry WHERE name = 'marketing_comunicacion_interna';
 DROP TABLE IF EXISTS public.aviso_equipo;

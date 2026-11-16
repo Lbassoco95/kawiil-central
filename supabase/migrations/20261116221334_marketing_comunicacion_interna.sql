@@ -1,6 +1,7 @@
--- Comunicación interna de Kawiil. PENDIENTE: NO aplicada en producción; se aplica solo con la confirmación de Dirección,
--- y el archivo pasa a supabase/migrations/ con la versión real del registro cuando ya esté aplicada.
--- Requiere antes 20261116164704_marketing_investigador.sql (ya aplicada).
+-- Comunicación interna de Kawiil: SEGUNDA aplicación del mismo archivo (versión del registro 20261116221334). Un reinicio de la sesión repitió la llamada y el registro quedó con dos
+-- versiones del mismo nombre. Todo es idempotente (IF NOT EXISTS, ON CONFLICT DO NOTHING, CREATE OR REPLACE): la segunda vez no cambió nada. Se conserva el archivo para que el
+-- historial del repositorio coincida con el registro de producción y `supabase db push` no encuentre una versión remota sin archivo local.
+-- Contenido idéntico a 20261116221332_marketing_comunicacion_interna.sql.
 --
 -- 1) aviso_equipo: avisos internos para el equipo («ese día no se trabaja»). Los LEEN todos los usuarios con sesión (solo los publicados: es información
 --    para todo el equipo, no de clientes); los ESCRIBE únicamente service_role, por la función comunicacion-interna, tras la aprobación de una persona de Dirección.

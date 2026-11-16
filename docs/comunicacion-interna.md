@@ -17,7 +17,7 @@ Solo avisos en pantalla: **no hay correo, Slack ni WhatsApp**.
 - El agente tiene instrucción de no incluir datos de clientes ni confidenciales. Los avisos los lee cualquier usuario autenticado: son para todo el equipo.
 
 ## Piezas
-- Migración (pendiente de aplicar): `supabase/pendientes/20261116200000_marketing_comunicacion_interna.sql` (tabla `aviso_equipo` con RLS de solo lectura de publicados, agente en `agent_registry`, y las dos funciones de registro con el agente permitido). Reversa: `tools/marketing/rollback_comunicacion_interna.sql`. Prueba: `tools/marketing/prueba_comunicacion_interna_pglite.mjs`.
+- Migración (pendiente de aplicar): `supabase/migrations/20261116221332_marketing_comunicacion_interna.sql` (tabla `aviso_equipo` con RLS de solo lectura de publicados, agente en `agent_registry`, y las dos funciones de registro con el agente permitido). Reversa: `tools/marketing/rollback_comunicacion_interna.sql`. Prueba: `tools/marketing/prueba_comunicacion_interna_pglite.mjs`.
 - Función: `supabase/functions/comunicacion-interna` (`redactar`, `publicar`, `cancelar`, `listar`; `verify_jwt = true`, solo `is_admin_or_manager`). Lógica pura y pruebas en `_shared/avisos.ts` y `_shared/avisos.test.ts`.
 - Pantalla: banner `src/components/AvisosEquipo.tsx` (en `AppLayout`) y panel `src/components/agentes/ComunicacionInterna.tsx`.
 

@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 const { PGlite } = await import(process.env.PGLITE_PATH ? "file://" + process.env.PGLITE_PATH : "@electric-sql/pglite");
 const leer = (r) => readFileSync(new URL("../../" + r, import.meta.url), "utf8");
-const sql = leer("supabase/pendientes/20261116200000_marketing_comunicacion_interna.sql"), rb = leer("tools/marketing/rollback_comunicacion_interna.sql");
+const sql = leer("supabase/migrations/20261116221332_marketing_comunicacion_interna.sql"), rb = leer("tools/marketing/rollback_comunicacion_interna.sql");
 const ORG = "00000000-0000-0000-0000-000000000001";
 let fallos = 0; const prueba = async (n, f) => { try { await f(); console.log("  ok  ", n); } catch (e) { fallos++; console.log("  FALLA", n, "\n       ", e.message); } };
 const lanza = async (p, re) => { try { await p; } catch (e) { assert.match(e.message, re); return; } assert.fail("debía fallar"); };
