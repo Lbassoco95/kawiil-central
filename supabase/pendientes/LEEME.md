@@ -43,3 +43,7 @@ Pruebas: `tools/marketing/prueba_analista_pglite.mjs`; Node `supabase/functions/
 ## Seguimientos del CMO
 - **APLICADA el 16 nov 2026** `marketing_cmo_seguimientos` (20261116165640, ya en `supabase/migrations/`): `mk_seguimiento.agente` (analista por defecto o CMO), `mk_seguimiento_crear` con `p_agente` (tope de 5 por usuario y por agente) y `mk_seguimiento_reclamar` que devuelve el agente. Reversa: `tools/marketing/rollback_cmo_seguimientos.sql`. Prueba: `tools/marketing/prueba_cmo_seguimientos_pglite.mjs`.
 - Código (se despliega al fusionar el PR #557): `marketing-agente` y `marketing-seguimientos` con agente de lista cerrada, y «Dar seguimiento» en el panel del CMO.
+
+## Comunicación interna
+- **APLICADA el 16 nov 2026** `marketing_comunicacion_interna` (20261116221332, ya en `supabase/migrations/`; el registro quedó con una segunda versión idéntica, 20261116221334, porque un reinicio de la sesión repitió la llamada; es idempotente y también está en `supabase/migrations/`): tabla `aviso_equipo` (RLS: los usuarios solo leen los publicados; escribe `service_role`), agente `marketing_comunicacion_interna` y alta en `mk_registrar_corrida` / `mk_latido_agente`. Reversa: `tools/marketing/rollback_comunicacion_interna.sql`; prueba: `tools/marketing/prueba_comunicacion_interna_pglite.mjs`. Detalle: `docs/comunicacion-interna.md`.
+- Código (se despliega al fusionar el PR #561): función `comunicacion-interna`, banner de avisos, pestaña Comunicación y el agente en la oficina de Marketing.

@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Oficina } from "@/components/agentes/Oficina";
 import { BarraTareas } from "@/components/agentes/BarraTareas";
 import { MemoriaAgentes } from "@/components/agentes/MemoriaAgentes";
+import { ComunicacionInterna } from "@/components/agentes/ComunicacionInterna";
 import { CalendarioRutinas } from "@/components/agentes/CalendarioRutinas";
 import { PlanoDepartamentos } from "@/components/agentes/PlanoDepartamentos";
 import { ConstructorAgentes } from "@/components/agentes/ConstructorAgentes";
@@ -63,6 +64,7 @@ export default function Agentes() {
             <TabsTrigger value="departamentos">Departamentos</TabsTrigger>
             <TabsTrigger value="rutinas">Rutinas</TabsTrigger>
             <TabsTrigger value="memoria">Memoria</TabsTrigger>
+            <TabsTrigger value="comunicacion">Comunicación</TabsTrigger>
             <TabsTrigger value="tablas">Tablas</TabsTrigger>
             <TabsTrigger value="crear">Crear agente</TabsTrigger>
             <TabsTrigger value="instrucciones">Instrucciones</TabsTrigger>
@@ -101,6 +103,7 @@ export default function Agentes() {
           <TabsContent value="memoria" className="mt-4">
             <MemoriaAgentes agentes={agentes.data ?? []} ahora={reloj} />
           </TabsContent>
+          <TabsContent value="comunicacion" className="mt-4"><ComunicacionInterna /></TabsContent>
           <TabsContent value="tablas" className="mt-4">
             <AgentesRegistro sinMarketing errores={errores.data ?? []} agentes={agentes.data ?? []} tareas={tareas.data ?? []}
               estadoAgentes={agentes.isError ? "error" : agentes.isLoading ? "cargando" : "ok"}
