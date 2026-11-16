@@ -231,3 +231,7 @@ project_id = "qppfampapbxdgednkofc"
   # Carga de resultados de Metricool (Entrega 2): se autentica con su propio secreto (x-marketing-secret); vista previa por omisión.
   [functions.marketing-resultados-carga]
     verify_jwt = false
+
+  # Investigador web (Marketing, solo lectura de internet): se autentica con su propio secreto (x-marketing-secret), sin JWT. Vista previa por omisión.
+  [functions.marketing-investigador]
+    verify_jwt = false

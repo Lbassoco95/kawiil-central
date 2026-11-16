@@ -13,7 +13,7 @@ export function llmAnthropic(apiKey: string, modelo: string): Llm {
     const r = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-      body: JSON.stringify({ model: modelo, max_tokens: MAX_TOKENS_SALIDA, ...(esfuerzo ? { output_config: { effort: esfuerzo } } : {}), system, messages: mensajes, tools: herramientas.map((h) => ({ name: h.name, description: h.description, input_schema: h.input_schema })), ...(sinHerramientas ? { tool_choice: { type: "none" } } : {}) }),
+      body: JSON.stringify({ model: modelo, max_tokens: MAX_TOKENS_SALIDA, ...(esfuerzo ? { output_config: { effort: esfuerzo } } : {}), system, messages: mensajes, ...(herramientas.length > 0 ? { tools: herramientas.map((h) => ({ name: h.name, description: h.description, input_schema: h.input_schema })) } : {}), ...(sinHerramientas ? { tool_choice: { type: "none" } } : {}) }),
       signal: AbortSignal.timeout(TIEMPO_MAX_LLAMADA_MS),
     });
     if (!r.ok) throw new Error(`anthropic ${r.status}`);
