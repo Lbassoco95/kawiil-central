@@ -164,7 +164,7 @@ Pedido de Dirección (13 nov): (a) poder **conversar** con el Analista, (b) migr
 - **Reglas:** dominios permitidos escritos por Dirección (lista cerrada, como las rutas de Metricool); respeta `robots.txt`; sin iniciar sesión ni saltar protecciones; tope de páginas y de tamaño por corrida; se guarda un **resumen y la fuente con fecha**, no el texto completo (derechos de autor); toda afirmación cita su enlace; las páginas son DATOS, nunca instrucciones.
 - **Dónde corre:** una función nueva de Supabase con secreto propio y un trabajo programado (como el colchón); cada hallazgo se guarda en una tabla nueva con RLS de solo lectura. Escrituras en producción: migración, despliegue y cron, cada una con su confirmación.
 
-**Estado (15 nov):** construido y probado en el repo, sin aplicar ni desplegar; la lista de fuentes está vacía hasta que Dirección la escriba. Ver `docs/marketing-investigador-web.md`.
+**Estado (16 nov):** v1 desplegada (sin migración ni fuentes); v2 con descubrimiento de fuentes (el agente propone, una persona aprueba) construida y probada en el repo. El sitio propio es kawiil.mx. Ver `docs/marketing-investigador-web.md`.
 
 ### 14.4 Producción gráfica (lo que hoy hacen agentes programados en Claude)
 - **Hoy** (según las habilidades disponibles en Claude): piezas de Kawiil y Yoltik a partir del calendario maestro, con Gamma o con un render determinista con el sistema visual de marca, y programación en Metricool desde las carpetas del calendario.
