@@ -2,11 +2,11 @@ import { ReactNode, useState, useEffect, useMemo } from "react";
 import { NewTaskModalContext } from "@/contexts/NewTaskModalContext";
 import { TaskFormDialog } from "@/components/tasks/TaskFormDialog";
 import { AppSidebar } from "@/components/AppSidebar";
+import { AvisosEquipo } from "@/components/AvisosEquipo";
 import { FloatingAIChat } from "@/components/FloatingAIChat";
 import { ChatProvider } from "@/hooks/useChat";
 import { AppTopbar } from "@/components/layout/AppTopbar";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
-import { AvisoAlEntrar } from "@/components/shared/AvisoAlEntrar";
 import { GlobalCommandPalette } from "@/components/search/GlobalCommandPalette";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useTasksRealtime } from "@/hooks/useTasksRealtime";
@@ -101,6 +101,7 @@ export function AppLayout({
         }`}
       >
         <AppTopbar isFullWidth={isFullWidth} />
+        <AvisosEquipo />
         <div
           className={`animate-fade-in ${
             isFullWidth
@@ -116,7 +117,6 @@ export function AppLayout({
     </div>
     <TaskFormDialog open={newTaskOpen} onOpenChange={setNewTaskOpen} />
     <GlobalCommandPalette />
-    <AvisoAlEntrar />
     </ChatProvider>
     </NewTaskModalContext.Provider>
   );

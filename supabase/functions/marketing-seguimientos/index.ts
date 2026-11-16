@@ -6,7 +6,7 @@
 //   con su seguimiento_id. Cuenta para el tope mensual de tokens. Solo panel: sin correo, Slack ni WhatsApp.
 // - No habla con Metricool ni conoce su token. Secretos por nombre: MARKETING_CONNECTOR_SECRET, ANTHROPIC_API_KEY.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
-import { AGENTES_CON_SEGUIMIENTO, correrConsulta, ESFUERZO_DE, evaluarLimites, inicioDiaCDMX, inicioMesCDMX, leerLimites, MODELO_POR_DEFECTO, SYSTEM_DE, type AgenteConSeguimiento, type ResultadoConsulta } from "../_shared/analista.ts";
+import { AGENTES_CONSULTABLES, correrConsulta, ESFUERZO_DE, evaluarLimites, inicioDiaCDMX, inicioMesCDMX, leerLimites, MODELO_POR_DEFECTO, SYSTEM_DE, type AgenteConsultable, type ResultadoConsulta } from "../_shared/analista.ts";
 import { herramientasDe, llmAnthropic } from "../_shared/analista_servidor.ts";
 
 const MAX_POR_CORRIDA = 5;
@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
   for (const s of lista) {
     const t0 = Date.now(), inicio = new Date().toISOString();
     // El agente que responde sale del seguimiento (lista cerrada); cualquier otro valor se trata como el Analista.
-    const AGENTE: AgenteConSeguimiento = (AGENTES_CON_SEGUIMIENTO as readonly unknown[]).includes(s.agente) ? (s.agente as AgenteConSeguimiento) : "marketing_analista";
+    const AGENTE: AgenteConsultable = (AGENTES_CONSULTABLES as readonly unknown[]).includes(s.agente) ? (s.agente as AgenteConsultable) : "marketing_analista";
     const limite = evaluarLimites({ consultasHoyUsuario: 0, tokensMes: await tokensMes(s.organization_id) }, limites);
     if (!limite.permitido) {
       resumen.rechazados_por_tope++;

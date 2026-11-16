@@ -19,11 +19,8 @@ import {
   useInternalComunicados,
   useCreateInternalComunicado,
   useDeleteInternalComunicado,
-  useGestionarComunicado,
 } from "@/hooks/useInternalDespacho";
-import { esFechaValida, MAX_DIAS_VIGENCIA } from "@/lib/comunicados";
 import { ProcedureDetailDialog } from "@/components/hub/ProcedureDetailDialog";
-import { ComunicadoItem } from "@/components/hub/ComunicadoItem";
 import { TeamDirectory } from "@/components/hub/TeamDirectory";
 import { RecursosHumanosPanel } from "@/components/rh/RecursosHumanosPanel";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -75,9 +72,6 @@ export default function Hub() {
   const [comunicadoTitle, setComunicadoTitle] = useState("");
   const [comunicadoBody, setComunicadoBody] = useState("");
   const [comunicadoPinned, setComunicadoPinned] = useState(false);
-  const [comunicadoDesde, setComunicadoDesde] = useState("");
-  const [comunicadoHasta, setComunicadoHasta] = useState("");
-  const [comunicadoAvisar, setComunicadoAvisar] = useState(false);
   const [selectedProcedure, setSelectedProcedure] = useState<any>(null);
 
   const { data: procedures = [], isLoading: proceduresLoading } = useInternalProcedures();
@@ -87,10 +81,8 @@ export default function Hub() {
   const deleteProcedure = useDeleteInternalProcedure();
   const createComunicado = useCreateInternalComunicado();
   const deleteComunicado = useDeleteInternalComunicado();
-  const gestionarComunicado = useGestionarComunicado();
 
   const pinnedComunicados = comunicados.filter((c: any) => c.is_pinned).length;
-  const borradoresComunicados = comunicados.filter((c: { estado?: string }) => c.estado === "borrador").length;
   const heroStats: PageHeaderStat[] = [
     {
       label: "Procedimientos",
@@ -100,8 +92,8 @@ export default function Hub() {
     {
       label: "Comunicados",
       value: comunicados.length,
-      sub: comunicadosLoading ? "Cargando..." : `${pinnedComunicados} fijados${borradoresComunicados > 0 ? ` · ${borradoresComunicados} por aprobar` : ""}`,
-      tone: pinnedComunicados > 0 || borradoresComunicados > 0 ? "primary" : "default",
+      sub: comunicadosLoading ? "Cargando..." : `${pinnedComunicados} fijados`,
+      tone: pinnedComunicados > 0 ? "primary" : "default",
     },
     {
       label: "Acceso",
@@ -137,25 +129,11 @@ export default function Hub() {
     }
   };
 
-  // Vigencia opcional: o van las dos fechas (en orden y de a lo más un año) o ninguna; «avisar al entrar» necesita fechas. La base lo vuelve a comprobar.
-  const errorVigencia = (): string | null => {
-    if (!comunicadoDesde && !comunicadoHasta) return comunicadoAvisar ? "Para avisar al abrir el sistema indica desde y hasta cuándo." : null;
-    if (!comunicadoDesde || !comunicadoHasta) return "Indica las dos fechas de la vigencia (desde y hasta).";
-    if (!esFechaValida(comunicadoDesde) || !esFechaValida(comunicadoHasta)) return "Las fechas no son válidas.";
-    if (comunicadoHasta < comunicadoDesde) return "La fecha final no puede ser antes que la inicial.";
-    if ((Date.parse(comunicadoHasta) - Date.parse(comunicadoDesde)) / 86_400_000 > MAX_DIAS_VIGENCIA) return "La vigencia no puede pasar de un año.";
-    return null;
-  };
   const handlePublishComunicado = () => {
     if (!comunicadoTitle.trim()) return;
-    const error = errorVigencia();
-    if (error) { toast.error(error); return; }
     createComunicado.mutate(
-      {
-        title: comunicadoTitle.trim(), body: comunicadoBody.trim() || undefined, is_pinned: comunicadoPinned,
-        ...(comunicadoDesde && comunicadoHasta ? { vigente_desde: comunicadoDesde, vigente_hasta: comunicadoHasta } : {}), ...(comunicadoAvisar ? { avisar_al_entrar: true } : {}),
-      },
-      { onSuccess: () => { setComunicadoDialogOpen(false); setComunicadoTitle(""); setComunicadoBody(""); setComunicadoPinned(false); setComunicadoDesde(""); setComunicadoHasta(""); setComunicadoAvisar(false); } }
+      { title: comunicadoTitle.trim(), body: comunicadoBody.trim() || undefined, is_pinned: comunicadoPinned },
+      { onSuccess: () => { setComunicadoDialogOpen(false); setComunicadoTitle(""); setComunicadoBody(""); setComunicadoPinned(false); } }
     );
   };
 
@@ -311,16 +289,30 @@ export default function Hub() {
             ) : (
               <div className="space-y-2">
                 {comunicados.map((com: any, i: number) => (
-                  <ComunicadoItem
-                    key={com.id}
-                    com={com}
-                    indice={i}
-                    puedeGestionar={isAdminOrManager}
-                    ocupado={gestionarComunicado.isPending}
-                    fecha={formatMX(com.created_at, "dd MMM yyyy, HH:mm")}
-                    onGestionar={(accion) => gestionarComunicado.mutate({ accion, id: com.id })}
-                    onEliminar={() => deleteComunicado.mutate(com.id)}
-                  />
+                  <div key={com.id} className="py-3 px-4 page-list-card group animate-fade-in" style={{ animationDelay: `${Math.min(i, 8) * 40}ms`, animationFillMode: "both" }}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          {com.is_pinned && <Pin className="h-3 w-3 text-primary shrink-0" />}
+                          <h3 className="text-[13px] font-medium text-foreground">{com.title}</h3>
+                        </div>
+                        {com.body && (
+                          <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">{com.body}</p>
+                        )}
+                        <p className="text-[11px] text-muted-foreground mt-1.5">
+                          {formatMX(com.created_at, "dd MMM yyyy, HH:mm")}
+                        </p>
+                      </div>
+                      {isAdminOrManager && (
+                        <button
+                          className="p-1 rounded text-muted-foreground/0 group-hover:text-muted-foreground hover:!text-destructive transition-colors shrink-0"
+                          onClick={() => deleteComunicado.mutate(com.id)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 ))}
               </div>
             )}
@@ -553,20 +545,6 @@ export default function Hub() {
             <label className="flex items-center gap-2 cursor-pointer text-sm">
               <input type="checkbox" checked={comunicadoPinned} onChange={(e) => setComunicadoPinned(e.target.checked)} />
               Fijar al inicio
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs" htmlFor="comunicado-desde">Vigente desde</Label>
-                <Input id="comunicado-desde" type="date" value={comunicadoDesde} onChange={(e) => setComunicadoDesde(e.target.value)} className="h-9 text-sm" />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs" htmlFor="comunicado-hasta">Hasta</Label>
-                <Input id="comunicado-hasta" type="date" value={comunicadoHasta} onChange={(e) => setComunicadoHasta(e.target.value)} className="h-9 text-sm" />
-              </div>
-            </div>
-            <label className="flex items-start gap-2 cursor-pointer text-sm">
-              <input type="checkbox" className="mt-0.5" checked={comunicadoAvisar} onChange={(e) => setComunicadoAvisar(e.target.checked)} />
-              <span>Avisar al abrir el sistema<span className="block text-[11px] text-muted-foreground">Por ejemplo, un día no laborable: el equipo ve el aviso al entrar durante esas fechas (una vez al día).</span></span>
             </label>
           </div>
           <DialogFooter className="px-5 pb-5">

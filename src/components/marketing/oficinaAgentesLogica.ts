@@ -20,10 +20,10 @@ export const ASPECTO: Record<string, Aspecto> = {
   marketing_analista: { corto: "Analista", pelo: "#3a2a1a", ropa: "#9b7b4f", x: 520, y: 84, trabajo: "escribiendo" },
   // El CMO se sienta en su propia franja «Dirección», encima del Analista; el resto del equipo baja DESPLAZA_CMO píxeles (ver personajes()).
   marketing_cmo: { corto: "CMO", pelo: "#2a1f3a", ropa: "#6b5b95", x: 520, y: 48, trabajo: "escribiendo" },
-  // Comunicación interna también se sienta en la franja «Dirección», a la izquierda del CMO.
-  marketing_comunicacion: { corto: "Comunicación", pelo: "#4a2a2a", ropa: "#c27a5b", x: 380, y: 48, trabajo: "escribiendo" },
   // El Investigador web se sienta a la derecha del Analista (zona Análisis).
   marketing_investigador: { corto: "Investigador", pelo: "#1f3a3a", ropa: "#5b8a95", x: 585, y: 84, trabajo: "leyendo" },
+  // Comunicación interna: redacta los avisos para el equipo; se sienta en la segunda fila, a la derecha del Vigía.
+  marketing_comunicacion_interna: { corto: "Comunicación", pelo: "#6b3a2a", ropa: "#c98a5b", x: 450, y: 140, trabajo: "escribiendo" },
 };
 const ASPECTO_POR_DEFECTO: Aspecto = { corto: "Agente", pelo: "#444444", ropa: "#999999", x: 300, y: 84, trabajo: "leyendo" };
 export const aspectoDe = (a: Pick<AgenteRegistro, "name">): Aspecto => ASPECTO[a.name] ?? ASPECTO_POR_DEFECTO;
@@ -59,9 +59,7 @@ export interface PersonajeOficina {
   id: string; clave: string; nombre: string; aspecto: Aspecto; estado: EstadoVisual; ultima: TareaMarketing | undefined; historial: TareaMarketing[];
 }
 
-// Agentes que se sientan en la franja «Dirección» (arriba): hay franja si existe alguno y los demás bajan DESPLAZA_CMO píxeles.
-const ENFRANJA_DIRECCION = ["marketing_cmo", "marketing_comunicacion"];
-const ORDEN = ["marketing_cmo", "marketing_comunicacion", "marketing_vigilante", "marketing_informe_diario", "marketing_vigia", "marketing_analista", "marketing_investigador"];
+const ORDEN = ["marketing_cmo", "marketing_vigilante", "marketing_informe_diario", "marketing_vigia", "marketing_analista", "marketing_investigador", "marketing_comunicacion_interna"];
 
 // Los agentes de Marketing, en orden fijo, con su estado. No se inventan agentes que no están en el registro.
 export function personajes(agentes: AgenteRegistro[], tareas: TareaMarketing[], ahora: Date, pensandoId: string | null = null): PersonajeOficina[] {
@@ -69,10 +67,10 @@ export function personajes(agentes: AgenteRegistro[], tareas: TareaMarketing[], 
     .filter((a) => a.name.startsWith("marketing_") && a.kind === "system" && a.status !== "archived")
     .sort((x, y) => (ORDEN.indexOf(x.name) + 99) % 99 - (ORDEN.indexOf(y.name) + 99) % 99 || x.name.localeCompare(y.name))
     .map((a, _i, todos) => {
-      const hayCmo = todos.some((x) => ENFRANJA_DIRECCION.includes(x.name));
+      const hayCmo = todos.some((x) => x.name === "marketing_cmo");
       const propias = tareas.filter((t) => t.agent_id === a.id).sort((p, q) => (q.completed_at ?? "").localeCompare(p.completed_at ?? ""));
       const ultima = ultimaTareaDe(a, tareas);
-      const base = aspectoDe(a), aspecto = hayCmo && !ENFRANJA_DIRECCION.includes(a.name) ? { ...base, y: base.y + DESPLAZA_CMO } : base;
+      const base = aspectoDe(a), aspecto = hayCmo && a.name !== "marketing_cmo" ? { ...base, y: base.y + DESPLAZA_CMO } : base;
       return { id: a.id, clave: a.name, nombre: nombreAgente(a), aspecto, estado: estadoVisual(a, ultima, ahora, a.id === pensandoId), ultima, historial: propias.slice(0, 5) };
     });
 }
@@ -80,7 +78,7 @@ export function personajes(agentes: AgenteRegistro[], tareas: TareaMarketing[], 
 // ¿Qué personaje está bajo el clic? (coordenadas del lienzo lógico)
 export const ANCHO = 640, ALTO = 210, DESPLAZA_CMO = 90;
 // Con el CMO la oficina gana una franja arriba («Dirección»): el lienzo es DESPLAZA_CMO píxeles más alto.
-export const hayCmo = (lista: Array<Pick<PersonajeOficina, "clave">>): boolean => lista.some((p) => ENFRANJA_DIRECCION.includes(p.clave));
+export const hayCmo = (lista: Array<Pick<PersonajeOficina, "clave">>): boolean => lista.some((p) => p.clave === "marketing_cmo");
 export const altoOficina = (lista: Array<Pick<PersonajeOficina, "clave">>): number => ALTO + (hayCmo(lista) ? DESPLAZA_CMO : 0);
 export function personajeEn(x: number, y: number, lista: PersonajeOficina[]): PersonajeOficina | undefined {
   return lista.find((p) => x >= p.aspecto.x - 22 && x <= p.aspecto.x + 38 && y >= p.aspecto.y - 34 && y <= p.aspecto.y + 62);

@@ -31,11 +31,8 @@ test("el secreto de Claude solo se lee por nombre y no hay llaves escritas en el
 test("las herramientas de la función son exactamente las del módulo del agente", () => {
   const enFuncion = [...codigoServidor.matchAll(/"([a-z_]+)"/g)].map((m) => m[1]);
   const lista = codigoServidor.match(/NOMBRES_HERRAMIENTAS = \[([^\]]+)\]/)![1].match(/"([a-z_]+)"/g)!.map((x) => x.replace(/"/g, "")).sort();
-  // Solo las herramientas de RESULTADOS (las de mk_analista_datos); la de Comunicación interna es aparte y no toca esa función SQL.
-  const bloque = analista.slice(analista.indexOf("export const HERRAMIENTAS: Herramienta[] = ["), analista.indexOf("export const SYSTEM = "));
-  const enModulo = [...bloque.matchAll(/name: "([a-z_]+)"/g)].map((m) => m[1]).sort();
+  const enModulo = [...analista.matchAll(/name: "([a-z_]+)"/g)].map((m) => m[1]).sort();
   assert.deepEqual(lista, enModulo); void enFuncion;
-  assert.ok(!lista.includes("comunicados_recientes"), "la herramienta de comunicados no es de mk_analista_datos");
 });
 test("responde a OPTIONS (CORS) y rechaza otros métodos", () => {
   assert.match(codigo, /req\.method === "OPTIONS"/); assert.match(codigo, /req\.method !== "POST"/);
@@ -71,7 +68,7 @@ test("marketing-agente: las acciones de seguimiento van después de comprobar se
 test("marketing-agente: el agente con el que se habla es de lista cerrada y se guarda en cada consulta", () => {
   assert.match(codigo, /AGENTES_CONSULTABLES as readonly unknown\[\]\)\.includes\(cuerpo\.agente\)/); assert.match(codigo, /Agente no válido/);
   assert.ok((codigo.match(/agente: AGENTE/g) ?? []).length >= 2, "toda inserción en mk_consulta lleva el agente");
-  assert.match(codigo, /system: systemDe\(AGENTE, ahora\)/);
+  assert.match(codigo, /system: SYSTEM_DE\[AGENTE\]/);
 });
 
 test("llamada al modelo: tope de salida amplio (el razonamiento cuenta dentro), esfuerzo opcional, sin desactivar el razonamiento y tool_choice «none» solo en la llamada final", () => {
@@ -88,13 +85,11 @@ test("seguimientos del CMO: marketing-agente valida el agente (lista cerrada) an
   const i = codigo.indexOf('"crear_seguimiento"'), j = codigo.indexOf('rpc("mk_seguimiento_crear"');
   assert.ok(j > i);
   const bloque = codigo.slice(i, j + 400);
-  // Lista cerrada de agentes CON seguimiento (Analista y CMO): Comunicación interna, que también es consultable, no puede tener seguimientos.
-  assert.match(bloque, /AGENTES_CON_SEGUIMIENTO as readonly unknown\[\]\)\.includes\(cuerpo\.agente\)/);
-  assert.doesNotMatch(bloque, /AGENTES_CONSULTABLES/);
+  assert.match(bloque, /AGENTES_CONSULTABLES as readonly unknown\[\]\)\.includes\(cuerpo\.agente\)/);
   assert.match(bloque, /p_agente: agenteSeg/);
 });
 test("seguimientos del CMO: marketing-seguimientos responde con el agente del seguimiento (lista cerrada, por defecto el Analista) y lo registra a su nombre", () => {
-  assert.match(seg, /AGENTES_CON_SEGUIMIENTO as readonly unknown\[\]\)\.includes\(s\.agente\)/); assert.doesNotMatch(seg, /AGENTES_CONSULTABLES/);
+  assert.match(seg, /AGENTES_CONSULTABLES as readonly unknown\[\]\)\.includes\(s\.agente\)/);
   assert.match(seg, /system: SYSTEM_DE\[AGENTE\], esfuerzo: ESFUERZO_DE\[AGENTE\]/);
   assert.ok((seg.match(/agente: AGENTE/g) ?? []).length >= 2, "toda inserción en mk_consulta lleva el agente");
   assert.match(seg, /p_agente: AGENTE/);

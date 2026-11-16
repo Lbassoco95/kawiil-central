@@ -7,10 +7,10 @@
 //   MARKETING_AGENTE_MAX_TOKENS_MES.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import {
-  AGENTES_CON_SEGUIMIENTO, AGENTES_CONSULTABLES, correrConsulta, evaluarLimites, inicioDiaCDMX, inicioMesCDMX, leerLimites, MODELO_POR_DEFECTO, ESFUERZO_DE, DEFS_DE, normalizarHistorial, systemDe, validarPregunta,
-  type AgenteConsultable, type AgenteConSeguimiento, type ResultadoConsulta,
+  AGENTES_CONSULTABLES, correrConsulta, evaluarLimites, inicioDiaCDMX, inicioMesCDMX, leerLimites, MODELO_POR_DEFECTO, ESFUERZO_DE, normalizarHistorial, SYSTEM_DE, validarPregunta,
+  type AgenteConsultable, type ResultadoConsulta,
 } from "../_shared/analista.ts";
-import { herramientasComunicacion, herramientasDe, llmAnthropic } from "../_shared/analista_servidor.ts";
+import { herramientasDe, llmAnthropic } from "../_shared/analista_servidor.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -49,8 +49,8 @@ Deno.serve(async (req) => {
       if (!vs.ok) return json({ ok: false, error: vs.error }, 400);
       if (cuerpo.frecuencia !== "una_vez" && cuerpo.frecuencia !== "diaria" && cuerpo.frecuencia !== "semanal") return json({ ok: false, error: "Elige si se repite una vez, a diario o cada semana." }, 400);
       // Quién responde el seguimiento: el Analista (por defecto) o el CMO. Lista cerrada.
-      if (cuerpo.agente !== undefined && !(AGENTES_CON_SEGUIMIENTO as readonly unknown[]).includes(cuerpo.agente)) return json({ ok: false, error: "Ese agente no tiene seguimientos." }, 400);
-      const agenteSeg: AgenteConSeguimiento = (cuerpo.agente as AgenteConSeguimiento | undefined) ?? "marketing_analista";
+      if (cuerpo.agente !== undefined && !(AGENTES_CONSULTABLES as readonly unknown[]).includes(cuerpo.agente)) return json({ ok: false, error: "Agente no válido." }, 400);
+      const agenteSeg: AgenteConsultable = (cuerpo.agente as AgenteConsultable | undefined) ?? "marketing_analista";
       const { data: id, error } = await dbSeg.rpc("mk_seguimiento_crear", { p_org: org, p_user: u.user.id, p_pregunta: vs.pregunta, p_frecuencia: cuerpo.frecuencia, p_primera: new Date().toISOString(), p_agente: agenteSeg });
       if (error) {
         console.error("marketing-agente: no se pudo crear el seguimiento", error.message);
@@ -90,12 +90,12 @@ Deno.serve(async (req) => {
   }
 
   // 4) Herramientas (lista cerrada, solo lectura).
-  const herramientas = AGENTE === "marketing_comunicacion" ? herramientasComunicacion(db, org, u.user.id) : herramientasDe(db, org);
+  const herramientas = herramientasDe(db, org);
 
   // 5) Consulta.
   const inicio = new Date().toISOString();
   let res: ResultadoConsulta | null = null, fallo = false;
-  try { res = await correrConsulta({ pregunta: v.pregunta, herramientas, llm: llmAnthropic(apiKey, modelo), historial: normalizarHistorial(cuerpo.historial), system: systemDe(AGENTE, ahora), esfuerzo: ESFUERZO_DE[AGENTE], defsHerramientas: DEFS_DE[AGENTE], verificar: AGENTE !== "marketing_comunicacion" }); } catch (e) {
+  try { res = await correrConsulta({ pregunta: v.pregunta, herramientas, llm: llmAnthropic(apiKey, modelo), historial: normalizarHistorial(cuerpo.historial), system: SYSTEM_DE[AGENTE], esfuerzo: ESFUERZO_DE[AGENTE] }); } catch (e) {
     fallo = true; console.error("marketing-agente: falla del modelo", e instanceof Error ? e.message : "error");
   }
   const ok = !fallo && !!res?.ok;
@@ -110,8 +110,8 @@ Deno.serve(async (req) => {
 
   // 6) Tarea y latido en el registro de agentes. Un fallo aquí no tumba la respuesta, pero no se calla: queda en el registro de la función.
   const { error: errRegistro } = await db.rpc("mk_registrar_corrida", {
-    p_agente: AGENTE, p_estado: ok ? "completed" : "error", p_titulo: `${AGENTE === "marketing_cmo" ? "Consulta al CMO" : AGENTE === "marketing_comunicacion" ? "Comunicado" : "Pregunta"} ${inicioDiaCDMX(ahora).slice(0, 10)}`,
-    p_resumen: ok ? `${res!.verificada === null ? "texto para el equipo (sin cifras de la base)" : res!.verificada ? "cifras verificadas" : `${res!.no_verificadas.length} cifras sin verificar`}; ${res!.fuentes.length} consultas de datos` : "no se pudo responder",
+    p_agente: AGENTE, p_estado: ok ? "completed" : "error", p_titulo: `${AGENTE === "marketing_cmo" ? "Consulta al CMO" : "Pregunta"} ${inicioDiaCDMX(ahora).slice(0, 10)}`,
+    p_resumen: ok ? `${res!.verificada ? "cifras verificadas" : `${res!.no_verificadas.length} cifras sin verificar`}; ${res!.fuentes.length} consultas de datos` : "no se pudo responder",
     p_resultado: { herramientas: (res?.fuentes ?? []).map((f) => f.herramienta), tokens: res?.tokens ?? null, verificada: ok ? res!.verificada : null }, p_inicio: inicio,
   });
   if (errRegistro) console.error("marketing-agente: no se pudo registrar la corrida", errRegistro.message);

@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AccionSeguimiento, ConsultaAnalista, FrecuenciaSeguimiento, RespuestaAnalista, SeguimientoAnalista, TurnoHistorial } from "@/hooks/useMarketing";
 import { useFuentesPropuestas, useFuentesWeb, useHallazgosWeb } from "@/hooks/useMarketing";
-import { extraerPropuesta, textoVigencia, type PropuestaComunicado } from "@/lib/comunicados";
-import type { ResultadoComunicado } from "@/lib/comunicadosApi";
 import { Pastilla, Vacio } from "./marketingUi";
 import { TextoAnalista } from "./TextoAnalista";
 import { cuandoRelativo, ESTADO_TAREA, type AgenteRegistro, type TareaMarketing } from "./agentesRegistroLogica";
@@ -16,8 +14,6 @@ export interface AnalistaProps {
   // Seguimientos (opcionales: sin ellos no aparece la sección).
   // Panel del CMO (opcional: sin él, o sin el agente en el registro, no aparece la caja de preguntas del CMO).
   cmo?: { consultas: ConsultaAnalista[]; estadoConsultas: EstadoCarga; preguntar: (pregunta: string, historial?: TurnoHistorial[]) => Promise<RespuestaAnalista> };
-  // Panel de Comunicación interna (opcional). `comunicados` solo se pasa a quien puede decidir: sin él, la tarjeta de propuesta no ofrece guardar ni publicar.
-  comunicacion?: DatosAgente;
   seguimientos?: SeguimientoAnalista[]; estadoSeguimientos?: EstadoCarga; gestionarSeguimiento?: (c: AccionSeguimiento) => Promise<{ ok: boolean; error?: string }>;
 }
 
@@ -165,8 +161,6 @@ export function OficinaAgentes({ agentes, tareasMarketing, estadoAgentes, estado
             <PreguntarAnalista key="analista" analista={analista} datos={analista} agente="marketing_analista" now={now} alPensar={(p) => setPensandoId(p ? elegido.id : null)} />
           ) : elegido.clave === "marketing_cmo" && analista?.cmo ? (
             <PreguntarAnalista key="cmo" analista={analista} datos={analista.cmo} agente="marketing_cmo" now={now} alPensar={(p) => setPensandoId(p ? elegido.id : null)} />
-          ) : elegido.clave === "marketing_comunicacion" && analista?.comunicacion ? (
-            <PreguntarAnalista key="comunicacion" analista={analista} datos={analista.comunicacion} agente="marketing_comunicacion" now={now} alPensar={(p) => setPensandoId(p ? elegido.id : null)} />
           ) : elegido.clave === "marketing_investigador" ? (
             <HallazgosWeb now={now} />
           ) : (
@@ -186,13 +180,10 @@ const ETIQUETA_CONSULTA: Record<ConsultaAnalista["estado"], { etiqueta: string; 
   respondida: { etiqueta: "Respondida", color: "verde" }, error: { etiqueta: "Sin respuesta", color: "rojo" }, rechazada_limite: { etiqueta: "Tope de uso", color: "amarillo" },
 };
 
-type DatosAgente = {
-  consultas: ConsultaAnalista[]; estadoConsultas: EstadoCarga; preguntar: (pregunta: string, historial?: TurnoHistorial[]) => Promise<RespuestaAnalista>;
-  comunicados?: { guardarBorrador: (p: PropuestaComunicado) => Promise<ResultadoComunicado>; publicarPropuesta: (p: PropuestaComunicado) => Promise<ResultadoComunicado> };
-};
-// Caja de preguntas, conversación y seguimientos de un agente consultable: el Analista, el CMO (con seguimientos) o Comunicación interna (solo conversación y propuestas).
-function PreguntarAnalista({ analista, datos, agente, now, alPensar }: { analista: AnalistaProps; datos: DatosAgente; agente: "marketing_analista" | "marketing_cmo" | "marketing_comunicacion"; now: Date; alPensar: (pensando: boolean) => void }) {
-  const esCmo = agente === "marketing_cmo", esCom = agente === "marketing_comunicacion";
+type DatosAgente = { consultas: ConsultaAnalista[]; estadoConsultas: EstadoCarga; preguntar: (pregunta: string, historial?: TurnoHistorial[]) => Promise<RespuestaAnalista> };
+// Caja de preguntas, conversación y seguimientos de un agente consultable: el Analista o el CMO.
+function PreguntarAnalista({ analista, datos, agente, now, alPensar }: { analista: AnalistaProps; datos: DatosAgente; agente: "marketing_analista" | "marketing_cmo"; now: Date; alPensar: (pensando: boolean) => void }) {
+  const esCmo = agente === "marketing_cmo";
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
   // Conversación: cada turno guarda la pregunta y su respuesta. Al preguntar de nuevo se mandan los últimos turnos como contexto.
@@ -218,7 +209,7 @@ function PreguntarAnalista({ analista, datos, agente, now, alPensar }: { analist
   const nuevaConversacion = () => { setHilo([]); setResp(null); setTexto(""); setAvisoSeg(null); };
 
   const darSeguimiento = async () => {
-    if (agente === "marketing_comunicacion" || !puede || guardando || !analista.gestionarSeguimiento) return; // Comunicación interna no tiene seguimientos
+    if (!puede || guardando || !analista.gestionarSeguimiento) return;
     setGuardando(true); setAvisoSeg(null);
     try {
       const r = await analista.gestionarSeguimiento({ accion: "crear_seguimiento", pregunta: limpia, frecuencia, agente });
@@ -230,16 +221,16 @@ function PreguntarAnalista({ analista, datos, agente, now, alPensar }: { analist
 
   return (
     <div className="space-y-3 border-t border-border/40 pt-3" data-testid="analista-preguntar">
-      <label htmlFor="pregunta-analista" className="block text-xs font-medium text-muted-foreground">{hilo.length > 0 ? "Sigue la conversación" : esCom ? "Cuéntale qué hay que comunicar al equipo" : esCmo ? "Pídele al CMO un panorama o qué priorizar" : "Pregúntale cómo van tus resultados"}</label>
+      <label htmlFor="pregunta-analista" className="block text-xs font-medium text-muted-foreground">{hilo.length > 0 ? "Sigue la conversación" : esCmo ? "Pídele al CMO un panorama o qué priorizar" : "Pregúntale cómo van tus resultados"}</label>
       <textarea id="pregunta-analista" data-testid="analista-caja" value={texto} onChange={(e) => setTexto(e.target.value)} rows={2} maxLength={MAX_PREGUNTA + 50} disabled={enviando}
-        placeholder={hilo.length > 0 ? (esCom ? "Ej.: hazlo más breve" : esCmo ? "Ej.: ¿y qué necesitas de mí?" : "Ej.: ¿y en Facebook?") : esCom ? "Ej.: el lunes 16 no se trabaja, avísale al equipo" : esCmo ? "Ej.: ¿qué debería priorizar esta semana?" : "Ej.: ¿cómo va el alcance de los carruseles en Instagram este mes?"} className="w-full rounded-lg border border-border bg-background p-2 text-sm"
+        placeholder={hilo.length > 0 ? (esCmo ? "Ej.: ¿y qué necesitas de mí?" : "Ej.: ¿y en Facebook?") : esCmo ? "Ej.: ¿qué debería priorizar esta semana?" : "Ej.: ¿cómo va el alcance de los carruseles en Instagram este mes?"} className="w-full rounded-lg border border-border bg-background p-2 text-sm"
         onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void enviar(); } }} />
       <div className="flex items-center justify-between gap-2">
         <span className={`text-xs ${limpia.length > MAX_PREGUNTA ? "text-red-600" : "text-muted-foreground"}`} data-testid="analista-contador">{limpia.length}/{MAX_PREGUNTA}</span>
         <button type="button" onClick={() => void enviar()} disabled={!puede} data-testid="analista-enviar"
-          className="rounded-full bg-[#9b7b4f] px-4 py-1.5 text-xs text-white disabled:opacity-50">{enviando ? "Pensando…" : esCom ? "Redactar" : "Preguntar"}</button>
+          className="rounded-full bg-[#9b7b4f] px-4 py-1.5 text-xs text-white disabled:opacity-50">{enviando ? "Pensando…" : "Preguntar"}</button>
       </div>
-      {agente !== "marketing_comunicacion" && analista.gestionarSeguimiento && (
+      {analista.gestionarSeguimiento && (
         <div className="flex flex-wrap items-center gap-2 text-xs" data-testid="analista-nuevo-seguimiento">
           <span className="text-muted-foreground">O pídele que lo repita:</span>
           <select value={frecuencia} onChange={(e) => setFrecuencia(e.target.value as FrecuenciaSeguimiento)} aria-label="Frecuencia del seguimiento" disabled={guardando}
@@ -268,13 +259,13 @@ function PreguntarAnalista({ analista, datos, agente, now, alPensar }: { analist
           {hilo.map((turno, i) => (
             <div key={i} className="space-y-2">
               <p className="ml-auto max-w-[90%] rounded-2xl rounded-br-sm bg-[#9b7b4f]/15 px-3 py-1.5 text-sm" data-testid="analista-pregunta-hecha">{turno.pregunta}</p>
-              <TarjetaRespuesta resp={turno.resp} ultima={i === hilo.length - 1} agente={agente} comunicados={datos.comunicados} />
+              <TarjetaRespuesta resp={turno.resp} ultima={i === hilo.length - 1} />
             </div>
           ))}
         </div>
       )}
 
-      {agente !== "marketing_comunicacion" && analista.gestionarSeguimiento && <SeguimientosLista analista={analista} agente={agente} now={now} />}
+      {analista.gestionarSeguimiento && <SeguimientosLista analista={analista} agente={agente} now={now} />}
 
       <div>
         <p className="mb-1 text-xs font-medium text-muted-foreground">Preguntas recientes</p>
@@ -290,7 +281,7 @@ function PreguntarAnalista({ analista, datos, agente, now, alPensar }: { analist
                   </button>
                   {abierta === c.id && c.respuesta && (
                     <div className="mt-1 rounded bg-background/50 p-2" data-testid={`analista-detalle-${c.id}`}>
-                      <TextoAnalista texto={c.agente === "marketing_comunicacion" ? extraerPropuesta(c.respuesta).texto : c.respuesta} />{c.verificada === false && <span className="mt-1 block text-red-600">Cifras sin verificar{c.no_verificadas.length ? `: ${c.no_verificadas.join(", ")}` : ""}.</span>}
+                      <TextoAnalista texto={c.respuesta} />{c.verificada === false && <span className="mt-1 block text-red-600">Cifras sin verificar{c.no_verificadas.length ? `: ${c.no_verificadas.join(", ")}` : ""}.</span>}
                     </div>
                   )}
                 </li>
@@ -298,7 +289,7 @@ function PreguntarAnalista({ analista, datos, agente, now, alPensar }: { analist
             </ul>
           )}
       </div>
-      <p className="text-xs text-muted-foreground">{esCom ? "Comunicación interna solo redacta y propone: no publica ni envía nada. Cada comunicado lo apruebas tú y el equipo lo ve únicamente dentro del sistema (aviso al abrirlo y Hub → Comunicados)." : esCmo ? "El CMO solo lee y propone: no publica ni cambia nada, y cada propuesta la decide una persona. Sus cifras salen de la base y se verifican antes de mostrarlas." : "El Analista solo lee y explica: no publica ni cambia nada. Sus cifras salen de la base y se verifican antes de mostrarlas."}</p>
+      <p className="text-xs text-muted-foreground">{esCmo ? "El CMO solo lee y propone: no publica ni cambia nada, y cada propuesta la decide una persona. Sus cifras salen de la base y se verifican antes de mostrarlas." : "El Analista solo lee y explica: no publica ni cambia nada. Sus cifras salen de la base y se verifican antes de mostrarlas."}</p>
     </div>
   );
 }
@@ -354,75 +345,22 @@ function SeguimientosLista({ analista, agente, now }: { analista: AnalistaProps;
 }
 
 // Una respuesta del Analista: texto limpio, si se verificaron las cifras y sus fuentes con fecha de corte.
-function TarjetaRespuesta({ resp, ultima, agente, comunicados }: { resp: RespuestaAnalista; ultima: boolean; agente?: string; comunicados?: DatosAgente["comunicados"] }) {
-  // Comunicación interna escribe fechas y no cifras de la base: no lleva insignia de verificación, y su propuesta se muestra como tarjeta (nunca como JSON crudo).
-  const partes = agente === "marketing_comunicacion" ? extraerPropuesta(resp.respuesta ?? "") : null;
+function TarjetaRespuesta({ resp, ultima }: { resp: RespuestaAnalista; ultima: boolean }) {
   return (
     <div className="space-y-2 rounded-lg border border-border p-3" data-testid={ultima ? "analista-respuesta" : "analista-respuesta-previa"}>
-      <TextoAnalista texto={partes ? partes.texto : (resp.respuesta ?? "")} className="text-sm leading-relaxed" />
-      {partes?.propuesta && <PropuestaCard propuesta={partes.propuesta} comunicados={comunicados} />}
-      {partes?.invalida && <p className="text-xs text-muted-foreground" data-testid="propuesta-invalida">No pude armar el comunicado en el formato correcto. Pídemelo otra vez indicando el día o los días.</p>}
-      {!partes && (
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          {resp.verificada
-            ? <Pastilla color="verde">Cifras verificadas</Pastilla>
-            : <Pastilla color="rojo">Cifras sin verificar</Pastilla>}
-          {!resp.verificada && (resp.no_verificadas?.length ?? 0) > 0 && <span className="text-muted-foreground" data-testid={ultima ? "analista-no-verificadas" : undefined}>Revisa: {resp.no_verificadas!.join(", ")}</span>}
-        </div>
-      )}
+      <TextoAnalista texto={resp.respuesta ?? ""} className="text-sm leading-relaxed" />
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        {resp.verificada
+          ? <Pastilla color="verde">Cifras verificadas</Pastilla>
+          : <Pastilla color="rojo">Cifras sin verificar</Pastilla>}
+        {!resp.verificada && (resp.no_verificadas?.length ?? 0) > 0 && <span className="text-muted-foreground" data-testid={ultima ? "analista-no-verificadas" : undefined}>Revisa: {resp.no_verificadas!.join(", ")}</span>}
+      </div>
       {(resp.fuentes?.length ?? 0) > 0 && (
         <p className="text-xs text-muted-foreground" data-testid={ultima ? "analista-fuentes" : undefined}>
           Fuentes: {resp.fuentes!.map((f) => `${f.herramienta}${f.corte ? ` (corte ${f.corte.slice(0, 10)})` : ""}`).join(" · ")}
         </p>
       )}
       {ultima && typeof resp.restantes_hoy === "number" && <p className="text-xs text-muted-foreground">Te quedan {resp.restantes_hoy} preguntas hoy.</p>}
-    </div>
-  );
-}
-
-// ── Propuesta de comunicado: la persona guarda el borrador o lo aprueba (publica); el agente nunca escribe nada ─────────────────
-type FasePropuesta = { fase: "inicio" | "confirmar" | "trabajando" | "publicado" } | { fase: "borrador"; nota?: string } | { fase: "error"; texto: string };
-function PropuestaCard({ propuesta, comunicados }: { propuesta: PropuestaComunicado; comunicados?: DatosAgente["comunicados"] }) {
-  const [estado, setEstado] = useState<FasePropuesta>({ fase: "inicio" });
-  const vigencia = textoVigencia(propuesta.vigente_desde, propuesta.vigente_hasta);
-  const donde = propuesta.avisar_al_entrar ? `Se mostrará al abrir el sistema${vigencia ? ` (${vigencia})` : ""}.` : "Se verá solo en Hub → Comunicados.";
-  const ejecutar = async (accion: "guardar" | "publicar") => {
-    if (!comunicados) return;
-    setEstado({ fase: "trabajando" });
-    try {
-      const r = accion === "guardar" ? await comunicados.guardarBorrador(propuesta) : await comunicados.publicarPropuesta(propuesta);
-      // Si se guardó el borrador pero no se pudo publicar, no se ofrece reintentar aquí (crearía un duplicado): se publica desde el Hub.
-      if (r.ok) setEstado(accion === "guardar" ? { fase: "borrador" } : { fase: "publicado" });
-      else if (r.id) setEstado({ fase: "borrador", nota: r.error });
-      else setEstado({ fase: "error", texto: r.error ?? "No se pudo completar la acción." });
-    } catch { setEstado({ fase: "error", texto: "No se pudo completar la acción." }); }
-  };
-  const ocupado = estado.fase === "trabajando";
-  return (
-    <div className="space-y-2 rounded-xl border border-[#9b7b4f]/40 bg-[#9b7b4f]/5 p-3" data-testid="propuesta-comunicado">
-      <p className="text-xs font-medium text-muted-foreground">Propuesta de comunicado (todavía no se publica)</p>
-      <p className="text-sm font-medium" data-testid="propuesta-titulo">{propuesta.titulo}</p>
-      <p className="whitespace-pre-wrap text-sm" data-testid="propuesta-mensaje">{propuesta.mensaje}</p>
-      <p className="text-xs text-muted-foreground" data-testid="propuesta-donde">{vigencia ? `Vigencia: ${vigencia}. ` : "Sin fechas. "}{donde}</p>
-      {!comunicados ? (
-        <p className="text-xs text-muted-foreground" data-testid="propuesta-sin-permiso">Solo Dirección puede guardar o publicar este comunicado.</p>
-      ) : estado.fase === "inicio" || estado.fase === "trabajando" || estado.fase === "error" ? (
-        <div className="flex flex-wrap gap-2">
-          <button type="button" disabled={ocupado} onClick={() => void ejecutar("guardar")} data-testid="propuesta-guardar" className="rounded-full border border-[#9b7b4f] px-3 py-1 text-xs text-[#9b7b4f] disabled:opacity-50">Guardar como borrador</button>
-          <button type="button" disabled={ocupado} onClick={() => setEstado({ fase: "confirmar" })} data-testid="propuesta-publicar" className="rounded-full bg-[#9b7b4f] px-3 py-1 text-xs text-white disabled:opacity-50">Aprobar y publicar</button>
-        </div>
-      ) : estado.fase === "confirmar" ? (
-        <div className="space-y-2 rounded-lg border border-border bg-background/60 p-2 text-xs" role="group" aria-label="Confirmar publicación" data-testid="propuesta-confirmar">
-          <p>¿Publicarlo para todo el equipo? {donde}</p>
-          <div className="flex gap-2">
-            <button type="button" onClick={() => void ejecutar("publicar")} data-testid="propuesta-confirmar-si" className="rounded-full bg-[#9b7b4f] px-3 py-1 text-white">Sí, publicar</button>
-            <button type="button" onClick={() => setEstado({ fase: "inicio" })} data-testid="propuesta-confirmar-no" className="rounded-full border border-border px-3 py-1">Cancelar</button>
-          </div>
-        </div>
-      ) : null}
-      {estado.fase === "borrador" && <p className="text-xs text-muted-foreground" role="status" data-testid="propuesta-guardada">{estado.nota ? `${estado.nota} ` : ""}Guardado como borrador. Revísalo y publícalo en Hub → Comunicados.</p>}
-      {estado.fase === "publicado" && <p className="text-xs text-muted-foreground" role="status" data-testid="propuesta-publicada">Publicado. El equipo lo verá {propuesta.avisar_al_entrar ? "al abrir el sistema" : "en Hub → Comunicados"}.</p>}
-      {estado.fase === "error" && <p className="text-xs text-red-600" role="alert" data-testid="propuesta-error">{estado.texto}</p>}
     </div>
   );
 }

@@ -14,7 +14,6 @@ import { Agentes } from "@/components/marketing/Agentes";
 import { AgentesRegistro } from "@/components/marketing/AgentesRegistro";
 import { useQueryClient } from "@tanstack/react-query";
 import { OficinaAgentes } from "@/components/marketing/OficinaAgentes";
-import { guardarBorradorComunicado, publicarPropuestaComunicado } from "@/lib/comunicadosApi";
 
 // Marketing · monitoreo (primera versión, solo lectura). No escribe en la base ni llama a Metricool.
 export default function Marketing() {
@@ -86,15 +85,6 @@ export default function Marketing() {
                   cmo: {
                     consultas: (consultas.data ?? []).filter((c) => c.agente === "marketing_cmo").slice(0, 10), estadoConsultas: consultas.isError ? "error" : consultas.isLoading ? "cargando" : "ok",
                     preguntar: async (p, h) => { const r = await preguntarAlAnalista(p, h, "marketing_cmo"); await Promise.all([qc.invalidateQueries({ queryKey: ["analista"] }), qc.invalidateQueries({ queryKey: ["agentes-registro"] })]); return r; },
-                  },
-                  comunicacion: {
-                    consultas: (consultas.data ?? []).filter((c) => c.agente === "marketing_comunicacion").slice(0, 10), estadoConsultas: consultas.isError ? "error" : consultas.isLoading ? "cargando" : "ok",
-                    preguntar: async (p, h) => { const r = await preguntarAlAnalista(p, h, "marketing_comunicacion"); await Promise.all([qc.invalidateQueries({ queryKey: ["analista"] }), qc.invalidateQueries({ queryKey: ["agentes-registro"] })]); return r; },
-                    // Solo Dirección guarda y aprueba; la base lo vuelve a comprobar. Sin permiso, la tarjeta solo muestra la propuesta.
-                    ...(puedeDecidir ? { comunicados: {
-                      guardarBorrador: async (p) => { const r = await guardarBorradorComunicado(p); await qc.invalidateQueries({ queryKey: ["internal-comunicados"] }); return r; },
-                      publicarPropuesta: async (p) => { const r = await publicarPropuestaComunicado(p); await qc.invalidateQueries({ queryKey: ["internal-comunicados"] }); return r; },
-                    } } : {}),
                   },
                   seguimientos: seguimientos.data ?? [], estadoSeguimientos: seguimientos.isError ? "error" : seguimientos.isLoading ? "cargando" : "ok",
                   gestionarSeguimiento: async (c) => { const r = await gestionarSeguimiento(c); await qc.invalidateQueries({ queryKey: ["analista", "seguimientos"] }); return r; },
