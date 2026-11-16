@@ -12,6 +12,7 @@ export interface AgenteRegistro {
 export interface TareaAgente {
   id: string; agent_id: string | null; task_type: string; status: string;
   created_at: string; started_at: string | null; completed_at: string | null;
+  source_task_id?: string | null;   // la tarea que originó a esta (un agente que le pide trabajo a otro)
 }
 
 export type Senal = "en_linea" | "inactivo" | "sin_senal" | "sin_latido" | "atascado" | "archivado" | "al_dia" | "atrasado" | "con_error" | "disponible";

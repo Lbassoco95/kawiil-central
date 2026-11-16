@@ -7,6 +7,7 @@ import {
   type FiltroTareas, type FilaTarea, type GrupoDepartamento,
 } from "@/lib/agentes/departamentos";
 import { CSS, TONO } from "@/components/agentes/escritorio";
+import { DIAS_COLABORACION, llamadasEntreAgentes, origenDeTarea } from "@/lib/agentes/colaboracion";
 
 // Plano por departamentos (Zen + Glass): una isla isométrica por departamento con sus agentes en su escritorio (los mismos dibujos y animaciones de la
 // Oficina), una tarjeta de cifras junto a cada isla y, a la derecha, el estado de las tareas con su filtro. Es solo lectura. Las tareas se cuentan por
@@ -127,6 +128,10 @@ export function PlanoDepartamentos({ figuras, agentes, tareas, ahora, onElegir, 
   const conteo = useMemo(() => contarTareas(visibles), [visibles]);
   const filas = useMemo(() => filasDeTareas(visibles, agentes, filtro), [visibles, agentes, filtro]);
   const posiciones = posicionesIslas(grupos.length);
+  const nombreDe = useMemo(() => new Map(figuras.map((f) => [f.id, f.nombre])), [figuras]);
+  const llamadas = useMemo(() => llamadasEntreAgentes(visibles, ahora).filter((l) => ids.has(l.de) && ids.has(l.a)), [visibles, ahora, ids]);
+  const indiceIsla = useMemo(() => new Map(grupos.flatMap((g, k) => g.figuras.map((f) => [f.id, k] as const))), [grupos]);
+  const origenes = useMemo(() => new Map(visibles.map((t) => [t.id, origenDeTarea(t, visibles)])), [visibles]);
   const idsMarketing = useMemo(() => new Set(grupos.filter((g) => g.depto.clave === "marketing").flatMap((g) => g.figuras.map((f) => f.id))), [grupos]);
   const elegir = onElegir || alAbrirMarketing ? (id: string) => { if (idsMarketing.has(id)) alAbrirMarketing?.(); else onElegir?.(id); } : undefined;
 
@@ -149,6 +154,20 @@ export function PlanoDepartamentos({ figuras, agentes, tareas, ahora, onElegir, 
             <text x={hub.x} y={hub.y - 2} textAnchor="middle" fontSize={11} letterSpacing={2.2} style={{ fill: "#7a6d58" }}>EQUIPO</text>
             <text x={hub.x} y={hub.y + 16} textAnchor="middle" fontSize={15} fontWeight={600} style={{ fill: "#3f362a" }}>{figuras.length} {figuras.length === 1 ? "agente" : "agentes"}</text>
           </g>
+          {llamadas.map((l) => {
+            const i = indiceIsla.get(l.de), j = indiceIsla.get(l.a);
+            if (i === undefined || j === undefined || i === j) return null;
+            const p = posiciones[i], q = posiciones[j], mx = (p.x + q.x) / 2, my = (p.y + q.y) / 2, dx = q.x - p.x, dy = q.y - p.y, d = Math.hypot(dx, dy) || 1;
+            const cx = mx - (dy / d) * 70, cy = my + (dx / d) * 70;   // la curva se abre hacia un lado para no encimarse con los caminos al centro
+            const tx = 0.25 * p.x + 0.5 * cx + 0.25 * q.x, ty = 0.25 * p.y + 0.5 * cy + 0.25 * q.y;
+            return (
+              <g key={`${l.de}>${l.a}`} data-testid={`llamada-${l.de}-${l.a}`}>
+                <path d={`M${p.x},${p.y} Q${cx},${cy} ${q.x},${q.y}`} fill="none" stroke="#7fa6d3" strokeWidth={1.5 + Math.min(3, Math.log2(l.veces + 1))} strokeDasharray="6 5" strokeLinecap="round" opacity={0.85} />
+                <rect x={tx - 16} y={ty - 10} width={32} height={20} rx={10} fill="rgba(255,255,255,.92)" stroke="#7fa6d3" />
+                <text x={tx} y={ty + 4} textAnchor="middle" fontSize={11} fontWeight={600} style={{ fill: "#3f5f86" }}>{l.veces}×</text>
+              </g>
+            );
+          })}
           {grupos.map((g, k) => <Isla key={g.depto.clave} g={g} centro={posiciones[k]} onElegir={elegir} />)}
           {grupos.map((g, k) => {
             const { cols, filas: fl } = celdasDe(g.figuras.length), s = Math.min(1, 350 / ((cols + fl) * TW)), mitad = ((cols + fl) * TH * s) / 2, p = posiciones[k];
@@ -186,7 +205,7 @@ export function PlanoDepartamentos({ figuras, agentes, tareas, ahora, onElegir, 
                       <span className="truncate font-medium">{t.agente}</span>
                       <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] ${e.pastilla}`}>{e.t}</span>
                     </span>
-                    <span className="block truncate text-xs text-muted-foreground">{t.tipo} · {cuandoRelativo(t.fin ?? t.creada, ahora)}</span>
+                    <span className="block truncate text-xs text-muted-foreground">{t.tipo} · {cuandoRelativo(t.fin ?? t.creada, ahora)}{origenes.get(t.id) ? ` · pedida por ${origenes.get(t.id) === "desconocido" ? "otra tarea" : nombreDe.get(origenes.get(t.id)!) ?? "otro agente"}` : ""}</span>
                     <Barra grupo={t.grupo} />
                   </button>
                 </li>
@@ -194,6 +213,18 @@ export function PlanoDepartamentos({ figuras, agentes, tareas, ahora, onElegir, 
             })}
           </ul>
         )}
+        <section className="mt-4 border-t border-border/40 pt-3" aria-label="Colaboración entre agentes" data-testid="plano-colaboracion">
+          <h3 className="text-sm font-medium">Colaboración entre agentes</h3>
+          {llamadas.length === 0 ? (
+            <p className="text-xs text-muted-foreground" data-testid="plano-sin-colaboracion">Aún no hay llamadas entre agentes. Cuando un agente le pida trabajo a otro, aparecerá aquí.</p>
+          ) : (
+            <ul className="mt-1 space-y-1 text-xs" data-testid="plano-llamadas">
+              {llamadas.map((l) => (
+                <li key={`${l.de}>${l.a}`}>{nombreDe.get(l.de)} → {nombreDe.get(l.a)} · {l.veces} {l.veces === 1 ? "vez" : "veces"} en {DIAS_COLABORACION} días{l.conError > 0 ? ` (${l.conError} con error)` : ""}</li>
+              ))}
+            </ul>
+          )}
+        </section>
       </aside>
     </div>
   );
