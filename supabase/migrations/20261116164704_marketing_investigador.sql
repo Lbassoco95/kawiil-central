@@ -1,4 +1,4 @@
--- Marketing: Investigador web (propuesta §14.3). PREPARADA, SIN APLICAR: requiere confirmación explícita de Dirección. No se aplica al fusionar.
+-- Marketing: Investigador web (propuesta §14.3). APLICADA en producción el 16 nov 2026 con confirmación de Dirección (versión 20261116164704).
 -- Requiere antes 20261113015847_marketing_cmo_registro.sql (ya aplicada).
 --
 -- 1) mk_fuente_web: LISTA CERRADA de páginas y fuentes de noticias que el Investigador puede leer. La escribe Dirección (service_role); los usuarios solo leen.

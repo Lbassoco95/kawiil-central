@@ -1,6 +1,6 @@
 # Marketing · Investigador web (preparado) — 15 y 16 nov 2026
 
-Estado: **v1 (lectura) desplegada el 16 nov (PR #551) sin migración, sin fuentes y sin trabajo programado. v2 (descubrimiento de fuentes) construida y probada en el repo, sin desplegar.** Nada del Investigador escribe todavía en producción.
+Estado: **v1 (lectura, PR #551) y v2 (descubrimiento de fuentes, PR #554) desplegadas el 16 nov. Migración aplicada el 16 nov (`20261116164704`): tablas vacías, agente registrado. Todavía sin fuentes cargadas y sin trabajo programado.**
 Diseño de origen: `docs/marketing-equipo-agentes-diseno.md` §14.3. Decisión de Dirección (15 nov): preparar el Investigador como agente que «esté buscando».
 
 ## Qué hace
@@ -25,7 +25,7 @@ Lee, solo con `GET` y por `https`, una **lista cerrada** de páginas y fuentes d
 ## Qué se agregó en el repo
 - `supabase/functions/_shared/investigador.ts` (lógica pura) y `investigador.test.ts` (22 pruebas).
 - `supabase/functions/marketing-investigador/index.ts` (secreto propio `x-marketing-secret`, sin JWT; entrada en `supabase/config.toml`).
-- `supabase/pendientes/20261115220000_marketing_investigador.sql` (tablas `mk_fuente_web` y `mk_hallazgo_web`, RLS de solo lectura, registro del agente `marketing_investigador`, y su alta en `mk_registrar_corrida` / `mk_latido_agente`), reversa `tools/marketing/rollback_investigador.sql` y prueba `tools/marketing/prueba_investigador_pglite.mjs` (5 pruebas).
+- `supabase/migrations/20261116164704_marketing_investigador.sql` (tablas `mk_fuente_web` y `mk_hallazgo_web`, RLS de solo lectura, registro del agente `marketing_investigador`, y su alta en `mk_registrar_corrida` / `mk_latido_agente`), reversa `tools/marketing/rollback_investigador.sql` y prueba `tools/marketing/prueba_investigador_pglite.mjs` (5 pruebas).
 - `tools/marketing/cron_investigador_0800.sql`: el trabajo diario de las 8:00 CDMX, **sin programar**.
 - Pantalla: el Investigador aparece en la oficina (zona Análisis) y su panel muestra «Qué vigila» y «Qué encontró». Si no hay fuentes, lo dice.
 - `llmAnthropic` (`_shared/analista_servidor.ts`) omite `tools` cuando no hay herramientas (la API puede rechazar una lista vacía); con herramientas queda igual que hoy.
@@ -53,8 +53,8 @@ Dirección (16 nov): el sitio de Kawiil es **kawiil.mx**. Queda como fuente de t
 ## Lista de escrituras en producción (cada una con tu confirmación, una por una)
 | # | Qué | Dónde | Reversa |
 |---|---|---|---|
-| 1 | Aplicar `marketing_investigador` (tablas vacías con estado/origen/aprobación, agente, funciones de registro). Guardar el archivo en `supabase/migrations/` con la versión real. | Base de datos | `tools/marketing/rollback_investigador.sql` |
-| 2 | Desplegar `marketing-investigador` v2: lo hace el flujo al fusionar el PR, porque cambia la carpeta de la función (los archivos nuevos de `_shared` viajan con ella; ninguna otra función cambia) | Edge Functions | Redesplegar la v1 (`git revert` del PR) |
+| 1 | ✅ **Hecho el 16 nov** (`20261116164704`): `marketing_investigador` (tablas vacías con estado/origen/aprobación, agente, funciones de registro). | Base de datos | `tools/marketing/rollback_investigador.sql` |
+| 2 | ✅ **Hecha el 16 nov** (PR #554, versión desplegada por el flujo). Desplegar `marketing-investigador` v2: lo hace el flujo al fusionar el PR, porque cambia la carpeta de la función (los archivos nuevos de `_shared` viajan con ella; ninguna otra función cambia) | Edge Functions | Redesplegar la v1 (`git revert` del PR) |
 | 3 | Cargar `https://kawiil.mx/` como fuente propia (activa) | Base de datos | `delete from mk_fuente_web where …` |
 | 4 | **Búsqueda en vista previa** (`modo: descubrir`, no guarda; gasta tokens): ves qué propondría | — | — |
 | 5 | Búsqueda con `escribir: true`: guarda las propuestas (inactivas) | Base de datos | `delete from mk_fuente_web where origen='agente' and estado='propuesta'` |
