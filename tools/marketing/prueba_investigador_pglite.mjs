@@ -1,9 +1,9 @@
-// Prueba de la migración 20261115220000_marketing_investigador.sql y de su reversa contra Postgres en memoria (PGlite).
+// Prueba de la migración 20261116164704_marketing_investigador.sql y de su reversa contra Postgres en memoria (PGlite).
 // Uso: PGLITE_PATH=<ruta a pglite/dist/index.js> node tools/marketing/prueba_investigador_pglite.mjs
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 const { PGlite } = await import(process.env.PGLITE_PATH);
-const sql = readFileSync(new URL("../../supabase/pendientes/20261115220000_marketing_investigador.sql", import.meta.url), "utf8");
+const sql = readFileSync(new URL("../../supabase/migrations/20261116164704_marketing_investigador.sql", import.meta.url), "utf8");
 const rev = readFileSync(new URL("./rollback_investigador.sql", import.meta.url), "utf8");
 const ORG = "a0000000-0000-0000-0000-000000000001", REG = "00000000-0000-0000-0000-000000000001";
 
@@ -95,5 +95,33 @@ await t("la reversa borra tablas, tareas y registro del Investigador, devuelve l
   assert.equal((await db.query(`select count(*)::int n from public.agent_registry`)).rows[0].n, 3);
   await db.exec(sql); // se puede volver a aplicar después de revertir
   assert.equal((await db.query(`select count(*)::int n from public.agent_registry where name='marketing_investigador'`)).rows[0].n, 1);
+});
+
+await t("propuestas del agente: nacen inactivas, solo una persona las aprueba (aprobada_at), las rechazadas se conservan y la lectura solo ve las activas", async () => {
+  const db = await escenario(); await db.exec(sql);
+  const P = (url, cols = "") => `INSERT INTO public.mk_fuente_web (organization_id, tipo, nombre, url, origen, estado, activa, motivo ${cols ? "," + cols.split("=")[0] : ""}) VALUES ('${ORG}','competencia','X','${url}','agente','propuesta',false,'Software PLD' ${cols ? "," + cols.split("=")[1] : ""})`;
+  await db.exec(P("https://p.example.com/")); await db.exec(`INSERT INTO public.mk_fuente_web (organization_id, tipo, nombre, url) VALUES ('${ORG}','propio','Mi sitio','https://kawiil.mx/')`);
+  // por omisión (cargada por Dirección) es activa y de origen «direccion»
+  assert.deepEqual((await db.query(`select estado, origen, activa from public.mk_fuente_web where nombre='Mi sitio'`)).rows[0], { estado: "activa", origen: "direccion", activa: true });
+  // la lectura (estado activa + activa) no ve la propuesta
+  assert.deepEqual((await db.query(`select nombre from public.mk_fuente_web where estado='activa' and activa order by nombre`)).rows.map((r) => r.nombre), ["Mi sitio"]);
+  // el agente no puede dejar una fuente activa sin aprobación registrada, ni activa en una fila que no está en estado activa
+  await rechaza(db, `UPDATE public.mk_fuente_web SET estado='activa', activa=true WHERE url='https://p.example.com/'`, /mk_fuente_web_agente_requiere_aprobacion/);
+  await rechaza(db, `UPDATE public.mk_fuente_web SET activa=true WHERE url='https://p.example.com/'`, /mk_fuente_web_activa_requiere_estado/);
+  // la aprobación de una persona: estado + activa + aprobada_at
+  await db.exec(`UPDATE public.mk_fuente_web SET estado='activa', activa=true, aprobada_at=now() WHERE url='https://p.example.com/'`);
+  assert.equal((await db.query(`select count(*)::int n from public.mk_fuente_web where estado='activa' and activa`)).rows[0].n, 2);
+  // rechazar conserva la fila (no se vuelve a proponer) y la deja inactiva
+  await db.exec(P("https://r.example.com/")); await db.exec(`UPDATE public.mk_fuente_web SET estado='rechazada' WHERE url='https://r.example.com/'`);
+  assert.deepEqual((await db.query(`select estado, activa from public.mk_fuente_web where url='https://r.example.com/'`)).rows[0], { estado: "rechazada", activa: false });
+  // valores fuera de lo permitido y motivo demasiado largo
+  await rechaza(db, `UPDATE public.mk_fuente_web SET estado='aprobada' WHERE url='https://r.example.com/'`, /violates check constraint/);
+  await rechaza(db, `UPDATE public.mk_fuente_web SET origen='robot' WHERE url='https://r.example.com/'`, /violates check constraint/);
+  await rechaza(db, `UPDATE public.mk_fuente_web SET motivo='${"x".repeat(301)}' WHERE url='https://r.example.com/'`, /violates check constraint/);
+  // los usuarios ven las propuestas (solo lectura) pero no pueden aprobarlas
+  await db.exec(`SET ROLE authenticated`);
+  assert.equal((await db.query(`select count(*)::int n from public.mk_fuente_web where estado='propuesta' or estado='rechazada'`)).rows[0].n, 1);
+  await rechaza(db, `UPDATE public.mk_fuente_web SET estado='activa', activa=true, aprobada_at=now()`, /permission denied/);
+  await db.exec(`RESET ROLE`);
 });
 console.log("Todas las pruebas del Investigador pasaron");

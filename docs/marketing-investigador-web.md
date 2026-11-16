@@ -1,6 +1,6 @@
-# Marketing · Investigador web (preparado, sin aplicar ni desplegar) — 15 nov 2026
+# Marketing · Investigador web (preparado) — 15 y 16 nov 2026
 
-Estado: **construido y probado en el repo. No se escribió nada en producción, no se desplegó la función y no hay trabajo programado.**
+Estado: **v1 (lectura, PR #551) y v2 (descubrimiento de fuentes, PR #554) desplegadas el 16 nov. Migración aplicada el 16 nov (`20261116164704`): tablas vacías, agente registrado. Todavía sin fuentes cargadas y sin trabajo programado.**
 Diseño de origen: `docs/marketing-equipo-agentes-diseno.md` §14.3. Decisión de Dirección (15 nov): preparar el Investigador como agente que «esté buscando».
 
 ## Qué hace
@@ -25,31 +25,48 @@ Lee, solo con `GET` y por `https`, una **lista cerrada** de páginas y fuentes d
 ## Qué se agregó en el repo
 - `supabase/functions/_shared/investigador.ts` (lógica pura) y `investigador.test.ts` (22 pruebas).
 - `supabase/functions/marketing-investigador/index.ts` (secreto propio `x-marketing-secret`, sin JWT; entrada en `supabase/config.toml`).
-- `supabase/pendientes/20261115220000_marketing_investigador.sql` (tablas `mk_fuente_web` y `mk_hallazgo_web`, RLS de solo lectura, registro del agente `marketing_investigador`, y su alta en `mk_registrar_corrida` / `mk_latido_agente`), reversa `tools/marketing/rollback_investigador.sql` y prueba `tools/marketing/prueba_investigador_pglite.mjs` (5 pruebas).
+- `supabase/migrations/20261116164704_marketing_investigador.sql` (tablas `mk_fuente_web` y `mk_hallazgo_web`, RLS de solo lectura, registro del agente `marketing_investigador`, y su alta en `mk_registrar_corrida` / `mk_latido_agente`), reversa `tools/marketing/rollback_investigador.sql` y prueba `tools/marketing/prueba_investigador_pglite.mjs` (5 pruebas).
 - `tools/marketing/cron_investigador_0800.sql`: el trabajo diario de las 8:00 CDMX, **sin programar**.
 - Pantalla: el Investigador aparece en la oficina (zona Análisis) y su panel muestra «Qué vigila» y «Qué encontró». Si no hay fuentes, lo dice.
 - `llmAnthropic` (`_shared/analista_servidor.ts`) omite `tools` cuando no hay herramientas (la API puede rechazar una lista vacía); con herramientas queda igual que hoy.
 
+
+## Descubrimiento de fuentes (v2, 16 nov)
+Pedido de Dirección: que el agente **busque y arme** la lista de fuentes. Decisión: **el agente propone, una persona aprueba.**
+- **Qué hace** (`{"modo":"descubrir"}`): usa la búsqueda web de Anthropic para encontrar competidores (software de PLD, cumplimiento y contabilidad para empresas en México) y fuentes de noticias (DOF, SAT, UIF, CNBV, medios del sector). El modelo devuelve candidatos y **cada uno se verifica por separado**: https, sin IP ni direcciones internas, `robots.txt`, un `GET` que responda, que la página tenga texto y, en noticias, que el feed RSS/Atom anunciado exista y traiga notas (si lo trae, se propone el feed).
+- **Qué guarda:** una **propuesta** en `mk_fuente_web` (`estado = 'propuesta'`, `activa = false`, `origen = 'agente'`, con su motivo y la fecha de verificación). Lo que no se pudo verificar se descarta y el reporte dice por qué. No repropone nada que ya exista (activa, propuesta o rechazada); máx. 15 propuestas por búsqueda y 2 por sitio.
+- **Por qué no se activa sola:** si el agente pudiera activar sus fuentes, una página con instrucciones escondidas podría hacerlo leer sitios de un atacante. Está impedido en tres capas: (1) el código nunca escribe `activa`/`estado = 'activa'`/`aprobada_at` (una prueba lo verifica y se comprobó que falla si se cambia), (2) la lectura solo toma `estado = 'activa'`, (3) la base rechaza una fuente del agente activa sin `aprobada_at`, y solo `service_role` puede escribir.
+- **Aprobar o rechazar:** por ahora lo hace Claude con tu confirmación (`UPDATE … SET estado='activa', activa=true, aprobada_at=now()` o `estado='rechazada'`, que conserva la fila para no volver a proponerla). Un botón en el panel queda como paso siguiente.
+- **Vista previa:** `modo: descubrir` sin `escribir: true` busca y verifica, pero no guarda nada. **Sí gasta tokens** (la búsqueda es el trabajo).
+- **La búsqueda es la parte que no se pudo probar contra la API real:** no hay llave ni red en la sesión de desarrollo. Está probada con la API simulada; la primera corrida en vista previa es la prueba real. Si el modelo o la cuenta no tienen habilitada la herramienta de búsqueda web, la función responde error sin escribir nada; la versión de la herramienta se cambia con el secreto opcional `MARKETING_BUSQUEDA_HERRAMIENTA` (por defecto `web_search_20250305`).
+- **Frecuencia:** una búsqueda inicial a mano y, si Dirección lo confirma, una mensual (`tools/marketing/cron_investigador_descubrir_mensual.sql`, sin programar).
+- **Pantalla:** el panel del Investigador muestra «Fuentes que propone (esperan tu aprobación)» con motivo y enlace https.
+
+## Tu sitio
+Dirección (16 nov): el sitio de Kawiil es **kawiil.mx**. Queda como fuente de tipo «sitio propio» (`https://kawiil.mx/`), **por cargar con tu confirmación** junto con la migración; el agente la compara contra la última lectura. Desde la sesión de desarrollo no se puede abrir el sitio (la red lo bloquea), así que no se verificó qué páginas tiene; la primera vista previa de lectura lo dirá. Si quieres vigilar secciones concretas (precios, blog), dime sus direcciones.
+
 ## Lo que necesito de Dirección
-La lista de fuentes empieza **vacía**. Para que lea algo:
-1. **Tu sitio:** dirección(es) exacta(s) de las páginas a vigilar.
-2. **Competidores:** nombre y dirección de las páginas (inicio, precios, blog…).
-3. **Noticias:** fuentes con feed RSS/Atom (por ejemplo DOF, SAT, CNBV; si no tienen feed, se buscan alternativas) y los **temas** para filtrar.
-No inventé ninguna dirección: cada una la escribes tú.
+- **Hecho:** el sitio propio (`kawiil.mx`) y la decisión de que el agente busque las demás fuentes.
+- **Pendiente:** secciones concretas de tu sitio, si quieres vigilar más que la página principal.
+- **Sin pedir a Dirección:** competidores y noticias los busca el agente y tú apruebas.
 
 ## Lista de escrituras en producción (cada una con tu confirmación, una por una)
 | # | Qué | Dónde | Reversa |
 |---|---|---|---|
-| 1 | Aplicar `marketing_investigador` (tablas vacías, agente, funciones de registro). Guardar el archivo en `supabase/migrations/` con la versión real. | Base de datos | `tools/marketing/rollback_investigador.sql` |
-| 2 | Desplegar la función `marketing-investigador` (el flujo lo hace al fusionar el PR, sin tocar `_shared`) | Edge Functions | Borrar la función |
-| 3 | Cargar tus fuentes en `mk_fuente_web` (con tu lista exacta) | Base de datos | `delete from mk_fuente_web where …` |
-| 4 | **Vista previa** (no escribe): lee y dice qué detectaría | — | — |
-| 5 | Primera corrida con `escribir: true` (guarda la base de cada página; las noticias dejan hallazgos) | Base de datos + modelo (tokens) | Borrar hallazgos y limpiar huellas |
-| 6 | Programar el trabajo de las 8:00 (`cron_investigador_0800.sql`) | pg_cron | `cron.unschedule('marketing-investigador-0800-cdmx')` |
+| 1 | ✅ **Hecho el 16 nov** (`20261116164704`): `marketing_investigador` (tablas vacías con estado/origen/aprobación, agente, funciones de registro). | Base de datos | `tools/marketing/rollback_investigador.sql` |
+| 2 | ✅ **Hecha el 16 nov** (PR #554, versión desplegada por el flujo). Desplegar `marketing-investigador` v2: lo hace el flujo al fusionar el PR, porque cambia la carpeta de la función (los archivos nuevos de `_shared` viajan con ella; ninguna otra función cambia) | Edge Functions | Redesplegar la v1 (`git revert` del PR) |
+| 3 | Cargar `https://kawiil.mx/` como fuente propia (activa) | Base de datos | `delete from mk_fuente_web where …` |
+| 4 | **Búsqueda en vista previa** (`modo: descubrir`, no guarda; gasta tokens): ves qué propondría | — | — |
+| 5 | Búsqueda con `escribir: true`: guarda las propuestas (inactivas) | Base de datos | `delete from mk_fuente_web where origen='agente' and estado='propuesta'` |
+| 6 | **Aprobar** las propuestas que elijas (`estado='activa'`, `activa=true`, `aprobada_at`) | Base de datos | volver a `propuesta` |
+| 7 | **Vista previa de lectura** de las fuentes activas (no escribe) | — | — |
+| 8 | Primera lectura con `escribir: true` (base de cada página; las noticias dejan hallazgos; usa el modelo, máx. 10 resúmenes) | Base de datos + modelo | Borrar hallazgos y limpiar huellas |
+| 9 | Programar la lectura diaria de las 8:00 (`cron_investigador_0800.sql`) | pg_cron | `cron.unschedule('marketing-investigador-0800-cdmx')` |
+| 10 | (Opcional) Programar la búsqueda mensual (`cron_investigador_descubrir_mensual.sql`) | pg_cron | `cron.unschedule('marketing-investigador-descubrir-mensual-0830-cdmx')` |
 
 La corrida con `escribir: true` usa el modelo (hasta 10 resúmenes por corrida, de entrada ~12 000 caracteres cada uno).
 
 ## Siguientes pasos (no incluidos)
 - Que el **CMO lea los hallazgos** (nueva herramienta de solo lectura en `mk_analista_datos`; su prompt debe tratarlos como datos, no instrucciones).
-- Pantalla para que Dirección agregue o quite fuentes sin SQL.
+- Botones en el panel para aprobar, rechazar o quitar fuentes sin SQL (hoy lo hace Claude con tu confirmación).
 - Marcar hallazgos como vistos.

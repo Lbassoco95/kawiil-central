@@ -78,7 +78,7 @@ export function TrabajosAgente({ agentId, nombre, ahora, agente }: { agentId: st
         <p className="flex items-center gap-1 text-sm font-medium"><ChevronDown className="h-4 w-4" aria-hidden />Nueva solicitud para {nombre}</p>
         <Input value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Título (por ejemplo: Revisión de libros corporativos)" data-testid="trabajos-titulo" />
         <Textarea rows={3} value={texto} onChange={(e) => setTexto(e.target.value)} placeholder="Qué debe hacer y qué debe entregarte. Después puedes seguir la conversación aquí mismo." data-testid="trabajos-texto" />
-        <AutorizarAccesos accesos={accesos} marcados={aprobados} onCambio={setAprobados} />
+        <AutorizarAccesos accesos={accesos} marcados={aprobados} onCambio={setAprobados} texto={`${titulo} ${texto}`} />
         <AutorizarEscritura sitios={sitiosEscritura} marcados={escribir} onCambio={setEscribir} />
         {instruir.isError && <p role="alert" className="text-sm text-destructive">{(instruir.error as Error).message}</p>}
         <Button onClick={nueva} disabled={!titulo.trim() || !texto.trim() || instruir.isPending} data-testid="trabajos-enviar">
