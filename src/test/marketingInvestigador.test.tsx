@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
 import { render, screen, within, fireEvent, cleanup } from "@testing-library/react";
-import type { FuenteWebFila, HallazgoWeb } from "@/hooks/useMarketing";
+import type { FuentePropuesta, FuenteWebFila, HallazgoWeb } from "@/hooks/useMarketing";
 
 type Q<T> = { data: T[] | undefined; isLoading: boolean; isError: boolean };
-const estado = vi.hoisted(() => ({ fuentes: { data: [], isLoading: false, isError: false } as unknown, hallazgos: { data: [], isLoading: false, isError: false } as unknown }));
-vi.mock("@/hooks/useMarketing", () => ({ useFuentesWeb: () => estado.fuentes, useHallazgosWeb: () => estado.hallazgos }));
+const estado = vi.hoisted(() => ({ fuentes: { data: [], isLoading: false, isError: false } as unknown, hallazgos: { data: [], isLoading: false, isError: false } as unknown, propuestas: { data: [], isLoading: false, isError: false } as unknown }));
+vi.mock("@/hooks/useMarketing", () => ({ useFuentesWeb: () => estado.fuentes, useHallazgosWeb: () => estado.hallazgos, useFuentesPropuestas: () => estado.propuestas }));
 
 import { OficinaAgentes } from "@/components/marketing/OficinaAgentes";
 import { personajes } from "@/components/marketing/oficinaAgentesLogica";
@@ -21,6 +21,7 @@ const AGENTES = [ag("marketing_vigilante"), ag("marketing_analista"), ag("market
 const AHORA = new Date("2026-11-16T15:00:00Z");
 const fuente = (o: Partial<FuenteWebFila> = {}): FuenteWebFila => ({ id: "f1", tipo: "competencia", formato: "pagina", nombre: "Competidor A", ultima_lectura_at: "2026-11-16T14:00:00Z", ultimo_estado: "sin cambios", ...o });
 const hallazgo = (o: Partial<HallazgoWeb> = {}): HallazgoWeb => ({ id: "h1", tipo: "cambio_pagina", titulo: "Inicio", resumen: "Ahora ofrece una promoción.", enlace: "https://a.example.com/", publicado_at: null, encontrado_at: "2026-11-16T14:00:00Z", mk_fuente_web: { nombre: "Competidor A", tipo: "competencia" }, ...o });
+const prop = (o: Partial<FuentePropuesta> = {}): FuentePropuesta => ({ id: "p1", tipo: "competencia", formato: "pagina", nombre: "Competidor B", url: "https://b.example.com/", motivo: "Software PLD para empresas.", verificada_at: "2026-11-16T14:00:00Z", ...o });
 const q = <T,>(o: Partial<Q<T>>): Q<T> => ({ data: [], isLoading: false, isError: false, ...o });
 const abrir = () => { render(<OficinaAgentes agentes={AGENTES} tareasMarketing={[]} estadoAgentes="ok" estadoTareas="ok" ahora={AHORA} />); fireEvent.click(screen.getByTestId("oficina-agente-Investigador")); };
 
@@ -34,9 +35,9 @@ describe("Investigador web en la oficina", () => {
   });
 
   it("sin fuentes lo dice claro; no muestra el aviso de «siguiente fase» y los demás agentes lo conservan", () => {
-    estado.fuentes = q<FuenteWebFila>({}); estado.hallazgos = q<HallazgoWeb>({});
+    estado.fuentes = q<FuenteWebFila>({}); estado.hallazgos = q<HallazgoWeb>({}); estado.propuestas = q<FuentePropuesta>({});
     abrir();
-    expect(screen.getByTestId("investigador-panel")).toBeTruthy(); expect(screen.getByTestId("investigador-sin-fuentes").textContent).toContain("Dirección las define");
+    expect(screen.getByTestId("investigador-panel")).toBeTruthy(); expect(screen.getByTestId("investigador-sin-propuestas").textContent).toContain("hasta que una persona lo apruebe"); expect(screen.getByTestId("investigador-sin-fuentes").textContent).toContain("Dirección las define");
     expect(screen.getByTestId("investigador-sin-hallazgos")).toBeTruthy(); expect(screen.queryByTestId("oficina-proximamente")).toBeNull();
     fireEvent.click(screen.getByTestId("oficina-agente-Vigilante")); expect(screen.queryByTestId("investigador-panel")).toBeNull(); expect(screen.getByTestId("oficina-proximamente")).toBeTruthy();
   });
@@ -76,5 +77,19 @@ describe("Investigador web en la oficina", () => {
     estado.fuentes = q<FuenteWebFila>({ data: undefined, isError: true }); estado.hallazgos = q<HallazgoWeb>({ data: undefined, isError: true });
     abrir();
     expect(screen.getByTestId("investigador-fuentes-error")).toBeTruthy(); expect(screen.getByTestId("investigador-hallazgos-error")).toBeTruthy();
+  });
+
+  it("muestra las propuestas del agente con su motivo, como texto, y solo abre enlaces https; el error de lectura no rompe la pantalla", () => {
+    estado.fuentes = q<FuenteWebFila>({}); estado.hallazgos = q<HallazgoWeb>({});
+    estado.propuestas = q({ data: [prop(), prop({ id: "p2", nombre: "<img src=x onerror=alert(1)>", motivo: "<script>alert(1)</script> motivo", url: "javascript:alert(1)", formato: "feed", tipo: "noticias", verificada_at: null })] });
+    abrir();
+    const lista = screen.getByTestId("investigador-propuestas");
+    expect(lista.querySelector("img")).toBeNull(); expect(lista.querySelector("script")).toBeNull();
+    expect(within(lista).getByText("<img src=x onerror=alert(1)>")).toBeTruthy(); expect(within(lista).getByText(/<script>alert\(1\)<\/script> motivo/)).toBeTruthy();
+    expect(within(lista).getByText(/Competencia · página · verificada/)).toBeTruthy(); expect(within(lista).getByText(/Noticias · feed de noticias$/)).toBeTruthy();
+    expect([...lista.querySelectorAll("a")].map((a) => (a as HTMLAnchorElement).href)).toEqual(["https://b.example.com/"]);
+    cleanup();
+    estado.propuestas = q<FuentePropuesta>({ data: undefined, isError: true }); abrir();
+    expect(screen.getByTestId("investigador-propuestas-error")).toBeTruthy();
   });
 });
