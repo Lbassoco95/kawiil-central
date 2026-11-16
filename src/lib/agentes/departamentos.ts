@@ -12,6 +12,7 @@ export const DEPARTAMENTOS: Record<string, Departamento> = {
   fiscal: { clave: "fiscal", nombre: "Fiscal y finanzas", tinte: "#efdcb8" },
   cumplimiento: { clave: "cumplimiento", nombre: "Cumplimiento", tinte: "#cfe3cc" },
   gestoria: { clave: "gestoria", nombre: "Gestoría y documentos", tinte: "#f0cfca" },
+  marketing: { clave: "marketing", nombre: "Marketing", tinte: "#c9e4de" },
   otros: { clave: "otros", nombre: "Otros", tinte: "#e1dacb" },
 };
 
@@ -35,6 +36,7 @@ const PALABRAS: Array<[RegExp, string]> = [
 export function departamentoDe(a: Pick<AgenteRegistro, "name" | "description" | "config">): Departamento {
   const manual = (a.config as { departamento?: unknown } | null | undefined)?.departamento;
   if (typeof manual === "string" && Object.prototype.hasOwnProperty.call(DEPARTAMENTOS, manual)) return DEPARTAMENTOS[manual];
+  if (a.name.startsWith("marketing_")) return DEPARTAMENTOS.marketing;
   if (a.name.startsWith("legal_")) return DEPARTAMENTOS.acervo;
   if (Object.prototype.hasOwnProperty.call(POR_NOMBRE, a.name)) return DEPARTAMENTOS[POR_NOMBRE[a.name]];
   const texto = `${a.name.replace(/_/g, " ")} ${a.description ?? ""}`;
@@ -42,12 +44,12 @@ export function departamentoDe(a: Pick<AgenteRegistro, "name" | "description" | 
   return DEPARTAMENTOS.otros;
 }
 
-export const MAX_ISLAS = 6;
+export const MAX_ISLAS = 7;
 export interface GrupoDepartamento { depto: Departamento; figuras: FiguraOficina[] }
 
 const PESO_ESTADO: Record<string, number> = { trabajando: 0, atascado: 1, con_error: 1, celebrando: 2, sentado: 3, descansando: 4, apagado: 5 };
 
-/** Agrupa las figuras por departamento: la isla más poblada primero; con más de 6 departamentos, las más chicas se juntan en «Otros». */
+/** Agrupa las figuras por departamento: la isla más poblada primero; con más de 7 departamentos, las más chicas se juntan en «Otros». */
 export function agruparPorDepartamento(figuras: FiguraOficina[], agentes: AgenteRegistro[]): GrupoDepartamento[] {
   const deAgente = new Map(agentes.map((a) => [a.id, departamentoDe(a)]));
   const mapa = new Map<string, GrupoDepartamento>();
