@@ -37,8 +37,8 @@ Pruebas: `tools/marketing/prueba_analista_pglite.mjs`; Node `supabase/functions/
 - **APLICADA el 13 nov 2026** `marketing_estado_equipo` (20261113204250, ya en `supabase/migrations/`): herramienta `estado_equipo` en `mk_analista_datos` (estado real de cada agente de Marketing por sus propias tareas; sin latido ni textos de tareas). Reversa: `tools/marketing/rollback_estado_equipo.sql`.
 - Código (se despliega al fusionar el PR): `estado_equipo` en `HERRAMIENTAS` y `NOMBRES_HERRAMIENTAS`; el CMO la usa y su prompt ya no atribuye la falta de datos de resultados a un agente.
 
-## Investigador web (preparado el 15 nov; sin aplicar ni desplegar)
-- `20261115220000_marketing_investigador.sql`: tablas `mk_fuente_web` (lista cerrada, vacía) y `mk_hallazgo_web`, RLS de solo lectura, agente `marketing_investigador` y alta en `mk_registrar_corrida` / `mk_latido_agente`. Reversa: `tools/marketing/rollback_investigador.sql`; prueba: `tools/marketing/prueba_investigador_pglite.mjs`; trabajo diario sin programar: `tools/marketing/cron_investigador_0800.sql`. Detalle y lista de escrituras: `docs/marketing-investigador-web.md`.
+## Investigador web
+- (Aplicada el 16 nov y movida a `supabase/migrations/`: `20261116164704_marketing_investigador`: tablas `mk_fuente_web` y `mk_hallazgo_web` vacías, estado/origen/aprobación de las fuentes, agente `marketing_investigador` y alta en las funciones de registro.) Reversa: `tools/marketing/rollback_investigador.sql`; prueba: `tools/marketing/prueba_investigador_pglite.mjs`. Siguen sin programar: `tools/marketing/cron_investigador_0800.sql` (lectura diaria) y `cron_investigador_descubrir_mensual.sql` (búsqueda mensual). Detalle: `docs/marketing-investigador-web.md`.
 
 ## Seguimientos del CMO
 - **APLICADA el 16 nov 2026** `marketing_cmo_seguimientos` (20261116165640, ya en `supabase/migrations/`): `mk_seguimiento.agente` (analista por defecto o CMO), `mk_seguimiento_crear` con `p_agente` (tope de 5 por usuario y por agente) y `mk_seguimiento_reclamar` que devuelve el agente. Reversa: `tools/marketing/rollback_cmo_seguimientos.sql`. Prueba: `tools/marketing/prueba_cmo_seguimientos_pglite.mjs`.

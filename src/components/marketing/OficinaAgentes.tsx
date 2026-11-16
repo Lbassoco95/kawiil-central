@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AccionSeguimiento, ConsultaAnalista, FrecuenciaSeguimiento, RespuestaAnalista, SeguimientoAnalista, TurnoHistorial } from "@/hooks/useMarketing";
-import { useFuentesWeb, useHallazgosWeb } from "@/hooks/useMarketing";
+import { useFuentesPropuestas, useFuentesWeb, useHallazgosWeb } from "@/hooks/useMarketing";
 import { Pastilla, Vacio } from "./marketingUi";
 import { TextoAnalista } from "./TextoAnalista";
 import { cuandoRelativo, ESTADO_TAREA, type AgenteRegistro, type TareaMarketing } from "./agentesRegistroLogica";
@@ -372,7 +372,7 @@ const TIPO_FUENTE: Record<string, string> = { propio: "Sitio propio", competenci
 const enlaceSeguro = (u: string): string | null => { try { const x = new URL(u); return x.protocol === "https:" ? x.toString() : null; } catch { return null; } };
 
 function HallazgosWeb({ now }: { now: Date }) {
-  const fuentes = useFuentesWeb(), hallazgos = useHallazgosWeb();
+  const fuentes = useFuentesWeb(), hallazgos = useHallazgosWeb(), propuestas = useFuentesPropuestas();
   return (
     <div className="space-y-3 border-t border-border/40 pt-3" data-testid="investigador-panel">
       <p className="text-xs text-muted-foreground">Solo lee las páginas y noticias que Dirección define. No inicia sesión ni escribe en ningún sitio. Lo que ves es un resumen con su fuente, no el texto de la página.</p>
@@ -388,6 +388,28 @@ function HallazgosWeb({ now }: { now: Date }) {
                   {f.ultimo_estado && <span className="shrink-0 text-muted-foreground">{f.ultimo_estado}</span>}
                 </li>
               ))}
+            </ul>
+          )}
+      </div>
+      <div>
+        <p className="mb-1 text-xs font-medium text-muted-foreground">Fuentes que propone (esperan tu aprobación)</p>
+        {propuestas.isError ? <p className="text-xs text-muted-foreground" data-testid="investigador-propuestas-error">No pudimos leer las propuestas.</p>
+          : propuestas.isLoading ? <p className="text-xs text-muted-foreground">Leyendo…</p>
+          : (propuestas.data ?? []).length === 0 ? <p className="text-xs text-muted-foreground" data-testid="investigador-sin-propuestas">Todavía no propone ninguna. No lee nada de lo que propone hasta que una persona lo apruebe.</p> : (
+            <ul className="space-y-2 text-xs" data-testid="investigador-propuestas">
+              {(propuestas.data ?? []).map((p) => {
+                const url = enlaceSeguro(p.url);
+                return (
+                  <li key={p.id} className="rounded-xl border border-border/40 p-2">
+                    <p className="font-medium">{p.nombre}</p>
+                    {p.motivo && <p className="mt-0.5 text-muted-foreground">{p.motivo}</p>}
+                    <p className="mt-1 flex flex-wrap items-center gap-x-2 text-muted-foreground">
+                      <span>{TIPO_FUENTE[p.tipo] ?? p.tipo} · {p.formato === "feed" ? "feed de noticias" : "página"}{p.verificada_at ? ` · verificada ${cuandoRelativo(p.verificada_at, now)}` : ""}</span>
+                      {url && <a href={url} target="_blank" rel="noopener noreferrer nofollow" className="underline underline-offset-2">Ver sitio</a>}
+                    </p>
+                  </li>
+                );
+              })}
             </ul>
           )}
       </div>

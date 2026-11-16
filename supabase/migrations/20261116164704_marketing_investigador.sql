@@ -1,8 +1,9 @@
--- Marketing: Investigador web (propuesta §14.3). PREPARADA, SIN APLICAR: requiere confirmación explícita de Dirección. No se aplica al fusionar.
+-- Marketing: Investigador web (propuesta §14.3). APLICADA en producción el 16 nov 2026 con confirmación de Dirección (versión 20261116164704).
 -- Requiere antes 20261113015847_marketing_cmo_registro.sql (ya aplicada).
 --
 -- 1) mk_fuente_web: LISTA CERRADA de páginas y fuentes de noticias que el Investigador puede leer. La escribe Dirección (service_role); los usuarios solo leen.
 --    Empieza VACÍA: sin fuentes, el agente no lee nada. Solo https; el sitio exacto de cada url es el único que se pide.
+--    El agente también puede PROPONER fuentes (estado «propuesta», inactivas, con motivo): una persona las aprueba o las rechaza. Las rechazadas se conservan para no volver a proponerlas.
 -- 2) mk_hallazgo_web: lo que encontró (cambio en una página o nota nueva de un feed): título, resumen corto, enlace y fecha. Nunca el texto completo de la página.
 --    Único por (fuente, huella): repetir una corrida no duplica hallazgos.
 -- 3) Agente `marketing_investigador` en agent_registry (kind 'system', solo lectura, bajo demanda hasta que se programe).
@@ -18,12 +19,21 @@ CREATE TABLE IF NOT EXISTS public.mk_fuente_web (
   url text NOT NULL CHECK (char_length(url) <= 500 AND url ~ '^https://[A-Za-z0-9.-]+\.[A-Za-z]{2,}(/[^[:space:]]*)?$'),
   temas text[] NOT NULL DEFAULT '{}' CHECK (cardinality(temas) <= 20),
   activa boolean NOT NULL DEFAULT true,
+  -- Quién la puso y en qué estado está. El agente solo PROPONE: sus filas nacen «propuesta» e inactivas y una persona las aprueba (estado «activa» + aprobada_at).
+  estado text NOT NULL DEFAULT 'activa' CHECK (estado IN ('propuesta', 'activa', 'rechazada')),
+  origen text NOT NULL DEFAULT 'direccion' CHECK (origen IN ('direccion', 'agente')),
+  motivo text CHECK (motivo IS NULL OR char_length(motivo) <= 300),
+  verificada_at timestamptz,
+  aprobada_at timestamptz,
   ultima_lectura_at timestamptz,
   ultima_huella text,
   ultimo_resumen text CHECK (ultimo_resumen IS NULL OR char_length(ultimo_resumen) <= 600),
   ultimo_estado text CHECK (ultimo_estado IS NULL OR char_length(ultimo_estado) <= 200),
   created_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (organization_id, url)
+  UNIQUE (organization_id, url),
+  -- Solo una fuente aprobada se lee, y una fuente del agente no puede estar activa sin una aprobación registrada.
+  CONSTRAINT mk_fuente_web_activa_requiere_estado CHECK (NOT activa OR estado = 'activa'),
+  CONSTRAINT mk_fuente_web_agente_requiere_aprobacion CHECK (origen <> 'agente' OR estado <> 'activa' OR aprobada_at IS NOT NULL)
 );
 
 CREATE TABLE IF NOT EXISTS public.mk_hallazgo_web (
@@ -55,9 +65,9 @@ GRANT ALL ON public.mk_fuente_web, public.mk_hallazgo_web TO service_role;
 
 INSERT INTO public.agent_registry (organization_id, name, display_name, description, role, status, kind, model, capabilities, config)
 VALUES ('00000000-0000-0000-0000-000000000001', 'marketing_investigador', 'Investigador web',
-        'Lee la lista cerrada de páginas y noticias que Dirección define (sitio propio, competencia, noticias) y deja hallazgos con su fuente y fecha. Solo lee; no inicia sesión ni escribe en ningún sitio.',
+        'Lee la lista cerrada de páginas y noticias aprobadas (sitio propio, competencia, noticias) y deja hallazgos con su fuente y fecha. También busca fuentes nuevas y las propone; una persona decide cuáles activar. Solo lee; no inicia sesión ni escribe en ningún sitio.',
         'marketing_investigador', 'idle', 'system', NULL,
-        '["vigilar_sitio_propio","vigilar_competencia","leer_noticias"]'::jsonb,
+        '["vigilar_sitio_propio","vigilar_competencia","leer_noticias","proponer_fuentes"]'::jsonb,
         '{"modulo":"marketing","solo_lectura":true,"funcion":"marketing-investigador","cadencia":"bajo_demanda","horario_legible":"cuando se programe","objetivo":"Avisar de cambios en el sitio propio y la competencia y de noticias del sector, con resumen corto, enlace y fecha, sin guardar texto completo ni inventar.","metas":{"con_fuente":true},"avisos":"solo panel"}'::jsonb)
 ON CONFLICT (organization_id, name) DO NOTHING;
 

@@ -205,6 +205,19 @@ export const useFuentesWeb = () =>
     },
     staleTime: 60_000, retry: false,
   });
+export interface FuentePropuesta { id: string; tipo: "competencia" | "noticias" | "propio"; formato: "pagina" | "feed"; nombre: string; url: string; motivo: string | null; verificada_at: string | null }
+// Fuentes que el agente encontró y verificó, esperando aprobación. No se leen hasta que una persona las activa.
+export const useFuentesPropuestas = () =>
+  useQuery({
+    queryKey: ["investigador", "propuestas"],
+    queryFn: async (): Promise<FuentePropuesta[]> => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any).from("mk_fuente_web").select("id, tipo, formato, nombre, url, motivo, verificada_at").eq("estado", "propuesta").order("created_at", { ascending: false }).limit(30);
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 60_000, retry: false,
+  });
 export const useHallazgosWeb = () =>
   useQuery({
     queryKey: ["investigador", "hallazgos"],
