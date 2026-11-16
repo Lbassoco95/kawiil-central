@@ -1,4 +1,6 @@
--- Marketing: agente «Comunicación interna» y avisos al entrar. PREPARADA, SIN APLICAR: requiere confirmación explícita de Dirección. No se aplica al fusionar.
+-- Marketing: agente «Comunicación interna» y avisos al entrar. APLICADA en producción el 16 nov 2026 (versión 20261116221334) con confirmación de Dirección.
+-- NOTA: la comprobación «¿ya está en la lista?» del bloque final usa una búsqueda de texto que coincidió con el nombre de OTRO agente (marketing_comunicacion_interna, de otra sesión,
+-- aplicado 2 segundos antes) y por eso no agregó `marketing_comunicacion` a mk_registrar_corrida y mk_latido_agente. Se corrigió en 20261116223934_marketing_comunicacion_listas_agentes.sql.
 -- Requiere antes 20261116164704_marketing_investigador.sql (ya aplicada) y la tabla internal_comunicados (ya existe, vacía en producción al 16 nov).
 --
 -- Decisión de Dirección (16 nov): el equipo se entera SOLO dentro del sistema (aviso al abrirlo y la pestaña Comunicados del Hub), y Dirección aprueba cada comunicado.

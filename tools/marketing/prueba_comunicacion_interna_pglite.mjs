@@ -1,13 +1,14 @@
-// Prueba de la migración 20261116190000_marketing_comunicacion_interna.sql y de su reversa contra Postgres en memoria (PGlite).
+// Prueba de las migraciones 20261116221334_marketing_comunicacion_interna.sql y 20261116223934_marketing_comunicacion_listas_agentes.sql y de su reversa contra Postgres en memoria (PGlite).
 // Reproduce lo que hay en producción: dos políticas de lectura sobre internal_comunicados, funciones de registro con la lista de agentes (aquí con un agente extra que
 // «otra sesión» habría agregado) y usuarios con distintos permisos. Uso: PGLITE_PATH=<ruta a pglite/dist/index.js> node tools/marketing/prueba_comunicacion_interna_pglite.mjs
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 const { PGlite } = await import(process.env.PGLITE_PATH);
-const sql = readFileSync(new URL("../../supabase/pendientes/20261116190000_marketing_comunicacion_interna.sql", import.meta.url), "utf8");
+const sql = readFileSync(new URL("../../supabase/migrations/20261116221334_marketing_comunicacion_interna.sql", import.meta.url), "utf8");   // tal como se aplicó
+const fix = readFileSync(new URL("../../supabase/migrations/20261116223934_marketing_comunicacion_listas_agentes.sql", import.meta.url), "utf8"); // corrección de las listas
 const rev = readFileSync(new URL("./rollback_comunicacion_interna.sql", import.meta.url), "utf8");
 const cmo = readFileSync(new URL("../../supabase/migrations/20261113015847_marketing_cmo_registro.sql", import.meta.url), "utf8");
-const funcionesRegistro = cmo.slice(cmo.indexOf("CREATE OR REPLACE FUNCTION public.mk_registrar_corrida(")).replaceAll("'marketing_cmo')", "'marketing_cmo', 'marketing_otro')");
+const funcionesRegistro = cmo.slice(cmo.indexOf("CREATE OR REPLACE FUNCTION public.mk_registrar_corrida(")).replaceAll("'marketing_cmo')", "'marketing_cmo', 'marketing_otro', 'marketing_comunicacion_interna')");
 const A = "a0000000-0000-0000-0000-00000000000a", B = "b0000000-0000-0000-0000-00000000000b", REG = "00000000-0000-0000-0000-000000000001";
 const DIR = "11111111-1111-1111-1111-111111111111", MGR = "22222222-2222-2222-2222-222222222222", MIE = "33333333-3333-3333-3333-333333333333", OTRO = "44444444-4444-4444-4444-444444444444";
 
@@ -45,7 +46,7 @@ async function escenario() {
     CREATE TABLE public.agent_tasks (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), organization_id uuid, agent_id uuid, task_type text, title text, priority text, status text,
       started_at timestamptz, completed_at timestamptz, result jsonb, result_summary text, input_context jsonb);
     INSERT INTO public.agent_registry (organization_id, name, display_name, role, kind) VALUES
-      ('${REG}','marketing_cmo','CMO','marketing_cmo','system'), ('${REG}','marketing_otro','Otro agente de otra sesión','marketing_otro','system'), ('${REG}','coyolli','Coyolli','coyolli','consultable');
+      ('${REG}','marketing_cmo','CMO','marketing_cmo','system'), ('${REG}','marketing_otro','Otro agente de otra sesión','marketing_otro','system'), ('${REG}','marketing_comunicacion_interna','Comunicación interna (otra sesión)','marketing_comunicacion_interna','system'), ('${REG}','coyolli','Coyolli','coyolli','consultable');
     ${funcionesRegistro}
     INSERT INTO public.organizations VALUES ('${A}'), ('${B}');
     INSERT INTO auth.users VALUES ('${DIR}'), ('${MGR}'), ('${MIE}'), ('${OTRO}');
@@ -61,6 +62,8 @@ async function como(db, uid, f) {
   await db.exec(`SET ROLE authenticated; SET test.uid = '${uid}'`);
   try { return await f(); } finally { await db.exec(`RESET ROLE; RESET test.uid`); }
 }
+// Lo que se aplicó en producción: la migración original y luego la corrección de las listas.
+const aplicar = async (db) => { await db.exec(sql); await db.exec(fix); };
 const t = async (n, f) => { await f(); console.log("  ok  ", n); };
 const rechaza = (db, q, re) => assert.rejects(() => db.exec(q), re);
 const n = async (db, q) => (await db.query(q)).rows[0].n;
@@ -68,14 +71,14 @@ const HOY = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/Me
 const dia = (d) => { const x = new Date(`${HOY()}T12:00:00Z`); x.setUTCDate(x.getUTCDate() + d); return x.toISOString().slice(0, 10); };
 
 await t("lo que ya existía queda igual (publicado, de persona, sin vigencia) y aplicarla dos veces no duplica ni rompe", async () => {
-  const db = await escenario(); await db.exec(sql); await db.exec(sql);
+  const db = await escenario(); await aplicar(db); await aplicar(db);
   assert.deepEqual((await db.query(`select estado, origen, vigente_desde, vigente_hasta, avisar_al_entrar, aprobado_at, is_pinned from public.internal_comunicados`)).rows,
     [{ estado: "publicado", origen: "persona", vigente_desde: null, vigente_hasta: null, avisar_al_entrar: false, aprobado_at: null, is_pinned: true }]);
   assert.equal(await n(db, `select count(*)::int n from public.agent_registry where name='marketing_comunicacion'`), 1);
 });
 
 await t("restricciones: estado y origen válidos, vigencia completa y en orden (máx. un año), avisar exige vigencia y el agente no se publica solo", async () => {
-  const db = await escenario(); await db.exec(sql);
+  const db = await escenario(); await aplicar(db);
   const I = (cols, vals) => `INSERT INTO public.internal_comunicados (organization_id, title, ${cols}) VALUES ('${A}', 'T', ${vals})`;
   await rechaza(db, I("estado", "'aprobado'"), /ic_estado_check/);
   await rechaza(db, I("origen", "'robot'"), /ic_origen_check/);
@@ -91,7 +94,7 @@ await t("restricciones: estado y origen válidos, vigencia completa y en orden (
 });
 
 await t("lectura: el equipo ve solo lo publicado; los borradores los ven admin/manager y quien decide; otra organización no ve nada", async () => {
-  const db = await escenario(); await db.exec(sql);
+  const db = await escenario(); await aplicar(db);
   await db.exec(`INSERT INTO public.internal_comunicados (organization_id, title, origen, estado) VALUES ('${A}', 'Borrador', 'agente', 'borrador'), ('${A}', 'Archivado', 'persona', 'archivado')`);
   const titulos = (uid) => como(db, uid, async () => (await db.query(`select title from public.internal_comunicados order by title`)).rows.map((r) => r.title));
   assert.deepEqual(await titulos(MIE), ["Comunicado de siempre"], "un miembro del equipo no ve borradores ni archivados");
@@ -101,7 +104,7 @@ await t("lectura: el equipo ve solo lo publicado; los borradores los ven admin/m
 });
 
 await t("ic_crear_borrador: solo Dirección; deja borrador de origen agente y valida título, mensaje y fechas", async () => {
-  const db = await escenario(); await db.exec(sql);
+  const db = await escenario(); await aplicar(db);
   const id = await como(db, DIR, async () => (await db.query(`select public.ic_crear_borrador('  Lunes sin trabajo ', 'No se trabaja el lunes.', '${dia(0)}', '${dia(3)}', true) as id`)).rows[0].id);
   assert.deepEqual((await db.query(`select title, body, estado, origen, avisar_al_entrar, created_by, organization_id from public.internal_comunicados where id='${id}'`)).rows[0],
     { title: "Lunes sin trabajo", body: "No se trabaja el lunes.", estado: "borrador", origen: "agente", avisar_al_entrar: true, created_by: DIR, organization_id: A });
@@ -119,7 +122,7 @@ await t("ic_crear_borrador: solo Dirección; deja borrador de origen agente y va
 });
 
 await t("ic_publicar: solo Dirección, pone aprobador y fecha, no publica vencidos ni dos veces ni de otra organización", async () => {
-  const db = await escenario(); await db.exec(sql);
+  const db = await escenario(); await aplicar(db);
   const borrador = (d1, d2) => como(db, DIR, async () => (await db.query(`select public.ic_crear_borrador('Aviso','Texto','${d1}','${d2}',true) as id`)).rows[0].id);
   const vigente = await borrador(dia(0), dia(2)), vencido = await borrador(dia(-3), dia(-1));
   await como(db, MGR, () => rechaza(db, `select public.ic_publicar('${vigente}')`, /Solo Dirección/));
@@ -139,7 +142,7 @@ await t("ic_publicar: solo Dirección, pone aprobador y fecha, no publica vencid
 });
 
 await t("ic_archivar e ic_descartar_borrador: solo Dirección, cada una sobre el estado que corresponde", async () => {
-  const db = await escenario(); await db.exec(sql);
+  const db = await escenario(); await aplicar(db);
   const id = async (uid) => como(db, uid, async () => (await db.query(`select public.ic_crear_borrador('A','B') as id`)).rows[0].id);
   const b1 = await id(DIR), b2 = await id(DIR);
   await como(db, DIR, async () => { await db.exec(`select public.ic_publicar('${b1}')`); });
@@ -154,7 +157,7 @@ await t("ic_archivar e ic_descartar_borrador: solo Dirección, cada una sobre el
 });
 
 await t("el agente queda registrado; las listas de agentes se amplían sin quitar a los demás (ni al «otro» agente) y se conservan los permisos", async () => {
-  const db = await escenario(); await db.exec(sql);
+  const db = await escenario(); await aplicar(db);
   const a = (await db.query(`select kind, status, model, config from public.agent_registry where name='marketing_comunicacion'`)).rows[0];
   assert.equal(a.kind, "system"); assert.equal(a.model, null); assert.equal(a.config.solo_lectura, true); assert.equal(a.config.cadencia, "bajo_demanda");
   for (const ag of ["marketing_comunicacion", "marketing_cmo", "marketing_otro"]) await db.exec(`SELECT public.mk_registrar_corrida('${ag}','completed','t','r'); SELECT public.mk_latido_agente('${ag}')`);
@@ -168,7 +171,7 @@ await t("el agente queda registrado; las listas de agentes se amplían sin quita
 });
 
 await t("la reversa quita al agente y sus datos, devuelve las políticas y las listas (conservando a los demás) y deja los comunicados de personas", async () => {
-  const db = await escenario(); await db.exec(sql);
+  const db = await escenario(); await aplicar(db);
   await como(db, DIR, async () => { const id = (await db.query(`select public.ic_crear_borrador('Del agente','X') as id`)).rows[0].id; await db.exec(`select public.ic_publicar('${id}')`); });
   await db.exec(`SELECT public.mk_registrar_corrida('marketing_comunicacion','completed','t','r'); INSERT INTO public.mk_consulta (agente) VALUES ('marketing_comunicacion')`);
   await db.exec(rev);
@@ -183,7 +186,29 @@ await t("la reversa quita al agente y sus datos, devuelve las políticas y las l
   for (const ag of ["marketing_cmo", "marketing_otro"]) await db.exec(`SELECT public.mk_registrar_corrida('${ag}','completed','t','r'); SELECT public.mk_latido_agente('${ag}')`);
   await db.exec(`INSERT INTO public.mk_consulta (agente) VALUES ('marketing_otro'), ('marketing_cmo')`);
   assert.equal(await como(db, MIE, async () => await n(db, `select count(*)::int n from public.internal_comunicados`)), 1);
-  await db.exec(sql); // se puede volver a aplicar después de revertir
+  await aplicar(db); // se puede volver a aplicar después de revertir
   assert.equal(await n(db, `select count(*)::int n from public.agent_registry where name='marketing_comunicacion'`), 1);
+});
+
+await t("el error de producción: la migración original sola NO agrega mi agente si otro agente ya tiene un nombre que lo contiene; la corrección sí, sin tocar al otro, y es idempotente", async () => {
+  const db = await escenario(); await db.exec(sql);                    // como se aplicó primero
+  await rechaza(db, `SELECT public.mk_registrar_corrida('marketing_comunicacion','completed','t','r')`, /no permitido/);   // el fallo: quedó fuera de las listas
+  await db.exec(`SELECT public.mk_registrar_corrida('marketing_comunicacion_interna','completed','t','r')`);               // el otro sí funcionaba
+  const lista = async () => (await db.query(`select substring(pg_get_functiondef('public.mk_registrar_corrida(text,text,text,text,jsonb,timestamptz)'::regprocedure) from 'name IN \\([^)]*\\)') as l`)).rows[0].l;
+  assert.ok(!(await lista()).includes("'marketing_comunicacion'"));
+  await db.exec(fix);                                                  // la corrección
+  for (const ag of ["marketing_comunicacion", "marketing_comunicacion_interna", "marketing_cmo", "marketing_otro"]) await db.exec(`SELECT public.mk_registrar_corrida('${ag}','completed','t','r'); SELECT public.mk_latido_agente('${ag}')`);
+  await rechaza(db, `SELECT public.mk_registrar_corrida('coyolli','completed','t','r')`, /no permitido/);
+  const despues = await lista(); await db.exec(fix);
+  assert.equal(await lista(), despues, "aplicar la corrección otra vez no cambia nada");
+  assert.equal((despues.match(/'marketing_comunicacion'/g) ?? []).length, 1, "mi agente aparece una sola vez");
+  assert.deepEqual((await db.query(`select proacl::text acl from pg_proc where proname in ('mk_registrar_corrida','mk_latido_agente') order by proname`)).rows.map((x) => x.acl), Array(2).fill("{postgres=X/postgres,service_role=X/postgres}"));
+});
+
+await t("la reversa quita solo a marketing_comunicacion: el agente de la otra sesión (marketing_comunicacion_interna) sigue funcionando", async () => {
+  const db = await escenario(); await aplicar(db); await db.exec(rev);
+  await rechaza(db, `SELECT public.mk_registrar_corrida('marketing_comunicacion','completed','t','r')`, /no permitido/);
+  await db.exec(`SELECT public.mk_registrar_corrida('marketing_comunicacion_interna','completed','t','r'); SELECT public.mk_latido_agente('marketing_comunicacion_interna')`);
+  assert.equal(await n(db, `select count(*)::int n from public.agent_registry where name='marketing_comunicacion_interna'`), 1, "su agente sigue registrado");
 });
 console.log("Todas las pruebas de Comunicación interna pasaron");

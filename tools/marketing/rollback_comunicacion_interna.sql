@@ -1,4 +1,4 @@
--- Reversa de 20261116190000_marketing_comunicacion_interna.sql (Comunicación interna y avisos al entrar).
+-- Reversa de 20261116221334_marketing_comunicacion_interna.sql (Comunicación interna y avisos al entrar).
 -- OJO: BORRA los comunicados que se redactaron con el agente (origen = 'agente', borradores y publicados) y las columnas nuevas de internal_comunicados.
 -- Los comunicados publicados por personas se conservan (sin su vigencia ni su aviso al entrar). Copia antes lo que quieras guardar.
 -- Las listas de agentes se devuelven quitando SOLO a `marketing_comunicacion`: se conservan los demás agentes que haya hoy.

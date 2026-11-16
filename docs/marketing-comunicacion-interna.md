@@ -1,6 +1,10 @@
-# Marketing · Comunicación interna (avisos al equipo) — preparado, sin aplicar (16 nov 2026)
+# Marketing · Comunicación interna (avisos al equipo) — migración aplicada, código sin fusionar (16 nov 2026)
 
-Estado: **construido y probado en el repo. No se escribió nada en producción, no se desplegó y no hay nada programado.**
+Estado: **migración aplicada en producción el 16 nov (`20261116221334`) y corregida (`20261116223934`); el código (agente, aviso y Hub) está en la rama y NO se ha fusionado ni desplegado.**
+
+> **Duplicado pendiente de decidir.** Otra sesión construyó en paralelo su propio «Comunicación interna» (rama `claude/comunicacion-interna-avisos`: agente `marketing_comunicacion_interna`, tabla nueva `aviso_equipo`, función `comunicacion-interna`) y aplicó su migración 2 segundos antes que la mía (`20261116221332`). Hoy producción tiene **los dos agentes con el mismo nombre visible** y dos conjuntos de tablas/funciones vacíos. Hay que elegir uno (o fusionarlos) antes de fusionar cualquiera de los dos PR. Además las dos ramas traen un archivo con la versión `20261116221334` y distinto contenido: solo puede quedar uno en `main`.
+>
+> **Error mío ya corregido:** mi migración comprobaba «¿ya está en la lista?» con una búsqueda de texto que coincidió con el nombre del otro agente, y no agregó el mío a `mk_registrar_corrida` / `mk_latido_agente`. `20261116223934_marketing_comunicacion_listas_agentes.sql` lo agrega comprobando el nombre exacto y sin tocar al otro; la prueba reproduce el error y falla si vuelve.
 Pedido de Dirección (16 nov): un agente de marketing para la **comunicación interna** del equipo de Kawiil (por ejemplo, «el lunes 16 no se trabaja») y que ese día, a quien entre al sistema, le aparezca un aviso.
 Decisiones de Dirección: **el equipo se entera solo dentro del sistema** (aviso al abrirlo y Hub) y **Dirección aprueba cada comunicado**.
 
@@ -21,7 +25,7 @@ Quién es el «técnico»: no hace falta un agente que edite código por cada fe
 ## Qué se construyó (repo)
 | Pieza | Dónde |
 |---|---|
-| Migración (sin aplicar): `internal_comunicados` gana estado, origen, vigencia, «avisar al entrar» y aprobación; lectura solo de lo publicado para el equipo; funciones `ic_crear_borrador`, `ic_publicar`, `ic_archivar`, `ic_descartar_borrador` (solo Dirección); agente `marketing_comunicacion` y su alta en `mk_consulta`, `mk_registrar_corrida` y `mk_latido_agente` | `supabase/pendientes/20261116190000_marketing_comunicacion_interna.sql` |
+| Migración (sin aplicar): `internal_comunicados` gana estado, origen, vigencia, «avisar al entrar» y aprobación; lectura solo de lo publicado para el equipo; funciones `ic_crear_borrador`, `ic_publicar`, `ic_archivar`, `ic_descartar_borrador` (solo Dirección); agente `marketing_comunicacion` y su alta en `mk_consulta`, `mk_registrar_corrida` y `mk_latido_agente` | `supabase/migrations/20261116221334_marketing_comunicacion_interna.sql` |
 | Reversa y prueba contra Postgres en memoria (8 pruebas) | `tools/marketing/rollback_comunicacion_interna.sql`, `tools/marketing/prueba_comunicacion_interna_pglite.mjs` |
 | Agente en la función existente `marketing-agente` (prompt, fecha de hoy, herramienta de lectura, sin verificación de cifras) | `_shared/analista.ts`, `_shared/analista_servidor.ts`, `marketing-agente/index.ts` |
 | Aviso al entrar (montado en `AppLayout`) | `src/components/shared/AvisoAlEntrar.tsx`, `src/lib/comunicados.ts` |
@@ -45,8 +49,8 @@ Quién es el «técnico»: no hace falta un agente que edite código por cada fe
 ## Lista de escrituras en producción (cada una con tu confirmación)
 | # | Qué | Dónde | Reversa |
 |---|---|---|---|
-| 1 | Aplicar `marketing_comunicacion_interna` (columnas y restricciones, política de lectura, funciones `ic_*`, agente, listas de agentes). Guardar el archivo en `supabase/migrations/` con la versión real. | Base de datos | `tools/marketing/rollback_comunicacion_interna.sql` (borra lo redactado con el agente) |
-| 2 | Fusionar el PR: despliega la función `marketing-agente` (única función que cambia) y la pantalla (Vercel) | Edge Function + app | `git revert` del PR |
+| 1 | ✅ **Hecho el 16 nov** (`20261116221334`, y su corrección `20261116223934`): columnas y restricciones, política de lectura, funciones `ic_*`, agente, listas de agentes. | Base de datos | `tools/marketing/rollback_comunicacion_interna.sql` (borra lo redactado con el agente; no toca al agente de la otra sesión) |
+| 2 | Fusionar el PR (**después de decidir cuál «Comunicación interna» se queda**): despliega `marketing-agente` y `marketing-seguimientos` y la pantalla (Vercel) | Edge Functions + app | `git revert` del PR |
 | 3 | Usarlo: hablar con el agente, revisar la tarjeta y aprobar. No requiere otra escritura mía. | — | Retirar el aviso desde Hub («Retirar») |
 
 Antes de aplicar se verificó en producción (solo lectura): `internal_comunicados` vacía y con las 8 columnas esperadas, las dos políticas de lectura, las funciones auxiliares de RLS, y las listas de agentes de `mk_registrar_corrida`, `mk_latido_agente` y `mk_consulta`.
