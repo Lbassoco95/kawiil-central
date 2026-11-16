@@ -24,6 +24,7 @@ describe("departamentos (lógica)", () => {
     expect(departamentoDe(ag("x", "cualquiera", { config: { departamento: "fiscal" } })).clave).toBe("fiscal");
     expect(departamentoDe(ag("x", "cualquiera", { config: { departamento: "inventado" } })).clave).toBe("otros");
     expect(departamentoDe(ag("x", "legal_dof")).clave).toBe("acervo");
+    expect(departamentoDe(ag("x", "marketing_cmo", { kind: "system" })).clave).toBe("marketing");
     expect(departamentoDe(ag("x", "amatl")).clave).toBe("juridico");
     expect(departamentoDe(ag("x", "nuevo", { description: "Revisa nómina y SAT" })).clave).toBe("fiscal");
     expect(departamentoDe(ag("x", "nuevo", { description: "Prevención de lavado" })).clave).toBe("cumplimiento");
@@ -131,3 +132,44 @@ describe("<PlanoDepartamentos />", () => {
     expect(screen.getByText(/No hay agentes en el registro/)).toBeTruthy();
   });
 });
+
+describe("isla de Marketing", () => {
+  const MK = [ag("k1", "marketing_cmo", { kind: "system" }), ag("k2", "marketing_vigilante", { kind: "system" })];
+  const TODOS = [...AGENTES, ...MK];
+  const TAREAS_MK = [...TAREAS, ta("k-t1", "k1", "completed", { completed_at: hace(1) }), ta("k-t2", "k2", "pending")];
+  const figsTodos = figurasOficina(TODOS, TAREAS_MK, AHORA);
+  const montar = (o: { onElegir?: (id: string) => void; alAbrirMarketing?: () => void } = {}) => render(<PlanoDepartamentos figuras={figsTodos} agentes={TODOS} tareas={TAREAS_MK} ahora={AHORA} {...o} />);
+
+  it("Marketing es su propio departamento y caben hasta 7 islas sin juntar ninguna en Otros", () => {
+    const g = agruparPorDepartamento(figsTodos, TODOS);
+    expect(g.map((x) => x.depto.clave)).toContain("marketing");
+    expect(g.find((x) => x.depto.clave === "marketing")!.figuras).toHaveLength(2);
+    expect(MAX_ISLAS).toBe(7);
+    expect(g.length).toBe(6);
+  });
+  it("dibuja la isla y su tarjeta con cifras propias", () => {
+    montar();
+    expect(screen.getByTestId("isla-marketing")).toBeTruthy();
+    expect(screen.getByTestId("tarjeta-marketing").getAttribute("aria-label")).toBe("Marketing: 2 agentes, 0 haciendo, 1 en cola, 1 hechas en 30 días");
+  });
+  it("elegir un agente o una tarea de Marketing abre su módulo, no la Oficina; los demás siguen igual", () => {
+    const onElegir = vi.fn(), alAbrirMarketing = vi.fn();
+    montar({ onElegir, alAbrirMarketing });
+    expect(screen.getByTestId("plano-k1").getAttribute("aria-label")).toMatch(/Departamento Marketing \(abre el módulo de Marketing\)$/);
+    fireEvent.click(screen.getByTestId("plano-k1"));
+    fireEvent.click(screen.getByTestId("plano-tarea-k-t2"));
+    expect(alAbrirMarketing).toHaveBeenCalledTimes(2); expect(onElegir).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId("plano-a1"));
+    expect(onElegir).toHaveBeenCalledWith("a1"); expect(alAbrirMarketing).toHaveBeenCalledTimes(2);
+  });
+  it("la nota aclara que el módulo sigue aparte y ofrece abrirlo; sin Marketing no hay nota", () => {
+    const alAbrirMarketing = vi.fn();
+    const { unmount } = montar({ alAbrirMarketing });
+    expect(screen.getByTestId("plano-nota-marketing").textContent).toMatch(/su módulo sigue aparte/);
+    fireEvent.click(screen.getByTestId("plano-abrir-marketing")); expect(alAbrirMarketing).toHaveBeenCalled();
+    unmount();
+    render(<PlanoDepartamentos figuras={figurasOficina(AGENTES, TAREAS, AHORA)} agentes={AGENTES} tareas={TAREAS} ahora={AHORA} />);
+    expect(screen.queryByTestId("plano-nota-marketing")).toBeNull();
+  });
+});
+

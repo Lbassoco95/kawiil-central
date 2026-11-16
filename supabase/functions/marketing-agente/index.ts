@@ -7,8 +7,8 @@
 //   MARKETING_AGENTE_MAX_TOKENS_MES.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import {
-  AGENTES_CONSULTABLES, correrConsulta, evaluarLimites, inicioDiaCDMX, inicioMesCDMX, leerLimites, MODELO_POR_DEFECTO, ESFUERZO_DE, DEFS_DE, normalizarHistorial, systemDe, validarPregunta,
-  type AgenteConsultable, type ResultadoConsulta,
+  AGENTES_CON_SEGUIMIENTO, AGENTES_CONSULTABLES, correrConsulta, evaluarLimites, inicioDiaCDMX, inicioMesCDMX, leerLimites, MODELO_POR_DEFECTO, ESFUERZO_DE, DEFS_DE, normalizarHistorial, systemDe, validarPregunta,
+  type AgenteConsultable, type AgenteConSeguimiento, type ResultadoConsulta,
 } from "../_shared/analista.ts";
 import { herramientasComunicacion, herramientasDe, llmAnthropic } from "../_shared/analista_servidor.ts";
 
@@ -41,17 +41,20 @@ Deno.serve(async (req) => {
   let cuerpo: { agente?: unknown; pregunta?: unknown; historial?: unknown; accion?: unknown; frecuencia?: unknown; id?: unknown; estado?: unknown } = {};
   try { cuerpo = await req.json(); } catch { return json({ ok: false, error: "Solicitud no válida." }, 400); }
 
-  // 2b) Seguimientos: crear, pausar, reanudar o terminar. Solo guardan la pregunta y su frecuencia; el Analista las responde después, en solo lectura.
+  // 2b) Seguimientos: crear, pausar, reanudar o terminar. Solo guardan la pregunta, su frecuencia y el agente que la responde (Analista o CMO) después, en solo lectura.
   if (cuerpo.accion === "crear_seguimiento" || cuerpo.accion === "cambiar_seguimiento") {
     const dbSeg = createClient(url, service, { auth: { persistSession: false } });
     if (cuerpo.accion === "crear_seguimiento") {
       const vs = validarPregunta(cuerpo.pregunta);
       if (!vs.ok) return json({ ok: false, error: vs.error }, 400);
       if (cuerpo.frecuencia !== "una_vez" && cuerpo.frecuencia !== "diaria" && cuerpo.frecuencia !== "semanal") return json({ ok: false, error: "Elige si se repite una vez, a diario o cada semana." }, 400);
-      const { data: id, error } = await dbSeg.rpc("mk_seguimiento_crear", { p_org: org, p_user: u.user.id, p_pregunta: vs.pregunta, p_frecuencia: cuerpo.frecuencia, p_primera: new Date().toISOString() });
+      // Quién responde el seguimiento: el Analista (por defecto) o el CMO. Lista cerrada.
+      if (cuerpo.agente !== undefined && !(AGENTES_CON_SEGUIMIENTO as readonly unknown[]).includes(cuerpo.agente)) return json({ ok: false, error: "Ese agente no tiene seguimientos." }, 400);
+      const agenteSeg: AgenteConSeguimiento = (cuerpo.agente as AgenteConSeguimiento | undefined) ?? "marketing_analista";
+      const { data: id, error } = await dbSeg.rpc("mk_seguimiento_crear", { p_org: org, p_user: u.user.id, p_pregunta: vs.pregunta, p_frecuencia: cuerpo.frecuencia, p_primera: new Date().toISOString(), p_agente: agenteSeg });
       if (error) {
         console.error("marketing-agente: no se pudo crear el seguimiento", error.message);
-        return error.message.includes("tope") ? json({ ok: false, error: "Ya tienes 5 seguimientos. Termina alguno para agregar otro." }, 409) : json({ ok: false, error: "No se pudo guardar el seguimiento." }, 500);
+        return error.message.includes("tope") ? json({ ok: false, error: "Ya tienes 5 seguimientos con este agente. Termina alguno para agregar otro." }, 409) : json({ ok: false, error: "No se pudo guardar el seguimiento." }, 500);
       }
       return json({ ok: true, id });
     }

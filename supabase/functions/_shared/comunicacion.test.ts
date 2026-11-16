@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  AGENTES_CONSULTABLES, correrConsulta, DEFS_DE, ESFUERZO_DE, fechaCDMX, HERRAMIENTAS, HERRAMIENTAS_COMUNICACION, SYSTEM, SYSTEM_CMO, SYSTEM_COMUNICACION, systemDe,
+  AGENTES_CON_SEGUIMIENTO, AGENTES_CONSULTABLES, correrConsulta, DEFS_DE, ESFUERZO_DE, fechaCDMX, HERRAMIENTAS, HERRAMIENTAS_COMUNICACION, SYSTEM, SYSTEM_CMO, SYSTEM_COMUNICACION, SYSTEM_DE, systemDe,
   type Bloque, type Llm, type RespuestaLlm,
 } from "./analista.ts";
 import { herramientasComunicacion } from "./analista_servidor.ts";
@@ -104,4 +104,14 @@ test("el agente no escribe nada: su código solo lee comunicados (sin insert, up
   const bloque = servidor.slice(servidor.indexOf("export function herramientasComunicacion"), servidor.indexOf("// Herramientas: cada una llama"));
   assert.match(bloque, /\.from\("internal_comunicados"\)\.select\(/); assert.doesNotMatch(bloque, /\.(insert|update|delete|upsert|rpc)\(/);
   for (const [n, src] of [["analista_servidor", servidor], ["marketing-agente", index]] as const) assert.doesNotMatch(src, /slack|whatsapp|sendgrid|resend|smtp|mailto|notificacion/i, n);
+});
+
+// ---------- Comunicación interna no tiene seguimientos ----------
+test("seguimientos: solo el Analista y el CMO; Comunicación interna queda fuera y no existe un prompt «vacío» que se pueda usar por error", () => {
+  assert.deepEqual([...AGENTES_CON_SEGUIMIENTO], ["marketing_analista", "marketing_cmo"]);
+  assert.ok(!(AGENTES_CON_SEGUIMIENTO as readonly string[]).includes("marketing_comunicacion"));
+  assert.deepEqual(Object.keys(SYSTEM_DE).sort(), ["marketing_analista", "marketing_cmo"]);
+  assert.ok(Object.values(SYSTEM_DE).every((s) => s.length > 200), "ningún prompt fijo está vacío");
+  const migraciones = readFileSync(new URL("../../migrations/20261116165640_marketing_cmo_seguimientos.sql", import.meta.url), "utf8");
+  assert.match(migraciones, /agente IN \('marketing_analista', 'marketing_cmo'\)/, "la base también lo exige (CHECK de mk_seguimiento.agente)");
 });

@@ -190,9 +190,9 @@ type DatosAgente = {
   consultas: ConsultaAnalista[]; estadoConsultas: EstadoCarga; preguntar: (pregunta: string, historial?: TurnoHistorial[]) => Promise<RespuestaAnalista>;
   comunicados?: { guardarBorrador: (p: PropuestaComunicado) => Promise<ResultadoComunicado>; publicarPropuesta: (p: PropuestaComunicado) => Promise<ResultadoComunicado> };
 };
-// Caja de preguntas y conversación de un agente consultable: el Analista (con seguimientos) o el CMO (solo conversación, de momento).
+// Caja de preguntas, conversación y seguimientos de un agente consultable: el Analista, el CMO (con seguimientos) o Comunicación interna (solo conversación y propuestas).
 function PreguntarAnalista({ analista, datos, agente, now, alPensar }: { analista: AnalistaProps; datos: DatosAgente; agente: "marketing_analista" | "marketing_cmo" | "marketing_comunicacion"; now: Date; alPensar: (pensando: boolean) => void }) {
-  const esCmo = agente === "marketing_cmo", esCom = agente === "marketing_comunicacion", esAnalista = agente === "marketing_analista";
+  const esCmo = agente === "marketing_cmo", esCom = agente === "marketing_comunicacion";
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
   // Conversación: cada turno guarda la pregunta y su respuesta. Al preguntar de nuevo se mandan los últimos turnos como contexto.
@@ -218,10 +218,10 @@ function PreguntarAnalista({ analista, datos, agente, now, alPensar }: { analist
   const nuevaConversacion = () => { setHilo([]); setResp(null); setTexto(""); setAvisoSeg(null); };
 
   const darSeguimiento = async () => {
-    if (!puede || guardando || !analista.gestionarSeguimiento) return;
+    if (agente === "marketing_comunicacion" || !puede || guardando || !analista.gestionarSeguimiento) return; // Comunicación interna no tiene seguimientos
     setGuardando(true); setAvisoSeg(null);
     try {
-      const r = await analista.gestionarSeguimiento({ accion: "crear_seguimiento", pregunta: limpia, frecuencia });
+      const r = await analista.gestionarSeguimiento({ accion: "crear_seguimiento", pregunta: limpia, frecuencia, agente });
       if (r.ok) { setTexto(""); setAvisoSeg({ ok: true, texto: "Listo. Se responderá mañana a las 7:45 (hora de Ciudad de México) y lo verás aquí." }); }
       else setAvisoSeg({ ok: false, texto: r.error ?? "No se pudo guardar el seguimiento." });
     } catch { setAvisoSeg({ ok: false, texto: "No se pudo guardar el seguimiento." }); }
@@ -239,7 +239,7 @@ function PreguntarAnalista({ analista, datos, agente, now, alPensar }: { analist
         <button type="button" onClick={() => void enviar()} disabled={!puede} data-testid="analista-enviar"
           className="rounded-full bg-[#9b7b4f] px-4 py-1.5 text-xs text-white disabled:opacity-50">{enviando ? "Pensando…" : esCom ? "Redactar" : "Preguntar"}</button>
       </div>
-      {esAnalista && analista.gestionarSeguimiento && (
+      {agente !== "marketing_comunicacion" && analista.gestionarSeguimiento && (
         <div className="flex flex-wrap items-center gap-2 text-xs" data-testid="analista-nuevo-seguimiento">
           <span className="text-muted-foreground">O pídele que lo repita:</span>
           <select value={frecuencia} onChange={(e) => setFrecuencia(e.target.value as FrecuenciaSeguimiento)} aria-label="Frecuencia del seguimiento" disabled={guardando}
@@ -274,7 +274,7 @@ function PreguntarAnalista({ analista, datos, agente, now, alPensar }: { analist
         </div>
       )}
 
-      {esAnalista && analista.gestionarSeguimiento && <SeguimientosLista analista={analista} now={now} />}
+      {agente !== "marketing_comunicacion" && analista.gestionarSeguimiento && <SeguimientosLista analista={analista} agente={agente} now={now} />}
 
       <div>
         <p className="mb-1 text-xs font-medium text-muted-foreground">Preguntas recientes</p>
@@ -303,7 +303,7 @@ function PreguntarAnalista({ analista, datos, agente, now, alPensar }: { analist
   );
 }
 
-// ── Seguimientos: preguntas que el Analista responde solo ──────────────────────────────────────────────────────────
+// ── Seguimientos: preguntas que el Analista o el CMO responden solos ──────────────────────────────────────────────────────────
 const FRECUENCIA: Record<FrecuenciaSeguimiento, string> = { una_vez: "Una vez", diaria: "Cada día", semanal: "Cada semana" };
 
 function proximaLegible(iso: string, ahora: Date): string {
@@ -313,10 +313,11 @@ function proximaLegible(iso: string, ahora: Date): string {
   return `el ${d.toLocaleDateString("es-MX", { day: "numeric", month: "short", timeZone: "America/Mexico_City" })} a las 7:45`;
 }
 
-function SeguimientosLista({ analista, now }: { analista: AnalistaProps; now: Date }) {
+function SeguimientosLista({ analista, agente, now }: { analista: AnalistaProps; agente: "marketing_analista" | "marketing_cmo"; now: Date }) {
   const [trabajando, setTrabajando] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const lista = analista.seguimientos ?? [];
+  // Cada agente ve solo sus seguimientos (los anteriores a que existiera el CMO no traen agente: son del Analista).
+  const lista = (analista.seguimientos ?? []).filter((s) => (s.agente ?? "marketing_analista") === agente);
   const cambiar = async (id: string, estado: "activo" | "pausado" | "terminado") => {
     if (!analista.gestionarSeguimiento || trabajando) return;
     setTrabajando(id); setError(null);

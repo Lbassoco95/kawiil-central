@@ -40,5 +40,9 @@ Pruebas: `tools/marketing/prueba_analista_pglite.mjs`; Node `supabase/functions/
 ## Investigador web
 - (Aplicada el 16 nov y movida a `supabase/migrations/`: `20261116164704_marketing_investigador`: tablas `mk_fuente_web` y `mk_hallazgo_web` vacías, estado/origen/aprobación de las fuentes, agente `marketing_investigador` y alta en las funciones de registro.) Reversa: `tools/marketing/rollback_investigador.sql`; prueba: `tools/marketing/prueba_investigador_pglite.mjs`. Siguen sin programar: `tools/marketing/cron_investigador_0800.sql` (lectura diaria) y `cron_investigador_descubrir_mensual.sql` (búsqueda mensual). Detalle: `docs/marketing-investigador-web.md`.
 
+## Seguimientos del CMO
+- **APLICADA el 16 nov 2026** `marketing_cmo_seguimientos` (20261116165640, ya en `supabase/migrations/`): `mk_seguimiento.agente` (analista por defecto o CMO), `mk_seguimiento_crear` con `p_agente` (tope de 5 por usuario y por agente) y `mk_seguimiento_reclamar` que devuelve el agente. Reversa: `tools/marketing/rollback_cmo_seguimientos.sql`. Prueba: `tools/marketing/prueba_cmo_seguimientos_pglite.mjs`.
+- Código (se despliega al fusionar el PR #557): `marketing-agente` y `marketing-seguimientos` con agente de lista cerrada, y «Dar seguimiento» en el panel del CMO.
+
 ## Comunicación interna (preparada el 16 nov; sin aplicar)
 - `20261116190000_marketing_comunicacion_interna.sql`: estado/vigencia/aviso al entrar en `internal_comunicados`, funciones `ic_*` (solo Dirección), agente `marketing_comunicacion`. Reversa: `tools/marketing/rollback_comunicacion_interna.sql`; prueba: `tools/marketing/prueba_comunicacion_interna_pglite.mjs`. Detalle y lista de escrituras: `docs/marketing-comunicacion-interna.md`.

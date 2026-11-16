@@ -82,3 +82,21 @@ test("llamada al modelo: tope de salida amplio (el razonamiento cuenta dentro), 
   assert.doesNotMatch(s, /thinking:\s*\{\s*type:\s*"disabled"|budget_tokens|temperature|top_p|top_k/); // el modelo los rechaza con 400
   assert.match(s, /sinHerramientas \? \{ tool_choice: \{ type: "none" \} \}/); assert.doesNotMatch(s, /type: "(any|tool)"/); // tool_choice forzado también da 400
 });
+
+// ── Seguimientos del CMO ──────────────────────────────────────────────────────────────────────────────────────────────
+test("seguimientos del CMO: marketing-agente valida el agente (lista cerrada) antes de crear y lo manda a la función SQL", () => {
+  const i = codigo.indexOf('"crear_seguimiento"'), j = codigo.indexOf('rpc("mk_seguimiento_crear"');
+  assert.ok(j > i);
+  const bloque = codigo.slice(i, j + 400);
+  // Lista cerrada de agentes CON seguimiento (Analista y CMO): Comunicación interna, que también es consultable, no puede tener seguimientos.
+  assert.match(bloque, /AGENTES_CON_SEGUIMIENTO as readonly unknown\[\]\)\.includes\(cuerpo\.agente\)/);
+  assert.doesNotMatch(bloque, /AGENTES_CONSULTABLES/);
+  assert.match(bloque, /p_agente: agenteSeg/);
+});
+test("seguimientos del CMO: marketing-seguimientos responde con el agente del seguimiento (lista cerrada, por defecto el Analista) y lo registra a su nombre", () => {
+  assert.match(seg, /AGENTES_CON_SEGUIMIENTO as readonly unknown\[\]\)\.includes\(s\.agente\)/); assert.doesNotMatch(seg, /AGENTES_CONSULTABLES/);
+  assert.match(seg, /system: SYSTEM_DE\[AGENTE\], esfuerzo: ESFUERZO_DE\[AGENTE\]/);
+  assert.ok((seg.match(/agente: AGENTE/g) ?? []).length >= 2, "toda inserción en mk_consulta lleva el agente");
+  assert.match(seg, /p_agente: AGENTE/);
+  assert.doesNotMatch(seg, /const AGENTE = "marketing_analista"/);
+});

@@ -5,6 +5,7 @@ import {
   accesosDelAgente, INSTRUCCION_REVISION, MAX_VECES, contextoRevision, mensajesDelHilo, raizDelHilo, resumirTarea, revisionesPendientes, validarRevision,
 } from "../../supabase/functions/_shared/seguimiento";
 import { ATAJOS, HiloAgente, aLocal } from "@/components/agentes/HiloAgente";
+import { accesosOlvidados } from "@/components/agentes/InstruirAgente";
 import { TrabajosAgente } from "@/components/agentes/TrabajosAgente";
 import { Oficina } from "@/components/agentes/Oficina";
 import { figurasOficina } from "@/lib/agentes/oficina";
@@ -18,6 +19,17 @@ const T2 = "5f1c1c1c-1111-4111-8111-111111111111";
 const R1 = "9a9a9a9a-2222-4222-8222-222222222222";
 const REG = { nombre: "informe-actas.docx", formato: "docx", ruta: `${T}/01-informe-actas.docx`, bytes: 20480, titulo: "Informe", creado: "2026-11-09T05:00:00Z" };
 const AHORA_MS = Date.parse("2026-11-09T12:00:00Z");
+
+describe("aviso de acceso olvidado", () => {
+  const A = [{ etiqueta: "SITI PLD" }, { etiqueta: "Portal Vizum" }];
+  it("avisa cuando el texto menciona un acceso (por su nombre o su primera palabra) que no está marcado", () => {
+    expect(accesosOlvidados("Abre el aviso del SITI y descarga el oficio", A, [])).toEqual(["SITI PLD"]);
+    expect(accesosOlvidados("entra al siti pld", A, [])).toEqual(["SITI PLD"]);
+    expect(accesosOlvidados("Abre el aviso del SITI", A, ["SITI PLD"])).toEqual([]);          // ya marcado: sin aviso
+    expect(accesosOlvidados("Resume el informe de actas", A, [])).toEqual([]);                  // no lo menciona: sin aviso
+    expect(accesosOlvidados("la situación del cliente", A, [])).toEqual([]);                    // «siti» dentro de otra palabra no cuenta
+  });
+});
 
 describe("accesos del agente para autorizar", () => {
   it("solo etiqueta y dominio: la referencia de 1Password nunca sale", () => {
@@ -175,6 +187,16 @@ describe("<HiloAgente />", () => {
     const body = invoke.mock.calls.find((c) => c[0] === "dispatch-to-agent")![1].body;
     expect(body.input_context).toEqual({ accesos_aprobados: ["SITI PLD"], hilo_id: T });
     await waitFor(() => expect((screen.getByTestId("instruir-acceso-SITI PLD") as HTMLInputElement).checked).toBe(false));   // la autorización no pasa a la siguiente tarea
+  });
+
+  it("si el mensaje menciona el SITI y no se marcó su acceso, el resumen avisa y deja abierto el panel", async () => {
+    simular({ accesos: [{ etiqueta: "SITI PLD", dominio: "websitipld.cnbv.gob.mx" }] });
+    envolver(<HiloAgente taskId={T} ahora={AHORA} />);
+    fireEvent.change(await screen.findByTestId("hilo-texto"), { target: { value: "Abre el aviso del SITI" } });
+    expect(screen.getByTestId("permisos-resumen").textContent).toContain("falta autorizar «SITI PLD»");
+    expect(screen.getByTestId("acceso-olvidado").textContent).toContain("no podrá entrar");
+    fireEvent.click(screen.getByTestId("instruir-acceso-SITI PLD"));
+    expect(screen.queryByTestId("acceso-olvidado")).toBeNull();
   });
 
   it("mientras el agente trabaja no se puede escribir encima y se ve «Trabajando…»", async () => {
