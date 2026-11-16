@@ -168,7 +168,7 @@ describe("seguimientos del Analista", () => {
     const boton = screen.getByTestId("analista-dar-seguimiento") as HTMLButtonElement; expect(boton.disabled).toBe(true);
     escribir("  ¿Cómo va   el alcance de Facebook?  "); fireEvent.change(screen.getByLabelText("Frecuencia del seguimiento"), { target: { value: "diaria" } });
     expect(boton.disabled).toBe(false); fireEvent.click(boton);
-    await waitFor(() => expect(g).toHaveBeenCalledWith({ accion: "crear_seguimiento", pregunta: "¿Cómo va el alcance de Facebook?", frecuencia: "diaria" }));
+    await waitFor(() => expect(g).toHaveBeenCalledWith({ accion: "crear_seguimiento", pregunta: "¿Cómo va el alcance de Facebook?", frecuencia: "diaria", agente: "marketing_analista" }));
     await waitFor(() => expect(screen.getByTestId("analista-aviso-seguimiento").textContent).toContain("7:45"));
     expect(caja().value).toBe("");
   });
@@ -253,16 +253,30 @@ describe("CMO (director de marketing)", () => {
     expect(cumplimiento(CMO, tm("c1", "marketing_cmo", "completed", "2026-11-05T16:00:00Z", { verificada: true }), AHORA).estado).toBe("cumple");
     expect(cumplimiento(CMO, tm("c1", "marketing_cmo", "completed", "2026-11-05T16:00:00Z", { verificada: false }), AHORA).estado).toBe("no_cumple");
   });
-  it("al elegir al CMO aparece su caja (sin seguimientos) y pregunta por su propio canal, no por el del Analista", async () => {
+  it("al elegir al CMO aparece su caja y pregunta por su propio canal, no por el del Analista", async () => {
     const pAnalista = vi.fn(), pCmo = vi.fn().mockResolvedValue(ok("Qué veo: colchón verde."));
-    vistaCmo({ ...props(pAnalista), cmo: { consultas: [], estadoConsultas: "ok", preguntar: pCmo }, seguimientos: [], estadoSeguimientos: "ok", gestionarSeguimiento: vi.fn() });
+    vistaCmo({ ...props(pAnalista), cmo: { consultas: [], estadoConsultas: "ok", preguntar: pCmo } });
     elegirCmo();
     expect(screen.getByText("Pídele al CMO un panorama o qué priorizar")).toBeTruthy();
-    expect(screen.queryByTestId("analista-nuevo-seguimiento")).toBeNull(); expect(screen.queryByTestId("analista-seguimientos")).toBeNull();
+    expect(screen.queryByTestId("analista-nuevo-seguimiento")).toBeNull();   // sin gestionarSeguimiento no hay seguimientos
     escribir("¿Qué debería priorizar esta semana?"); fireEvent.click(screen.getByTestId("analista-enviar"));
     await waitFor(() => expect(pCmo).toHaveBeenCalledWith("¿Qué debería priorizar esta semana?")); expect(pAnalista).not.toHaveBeenCalled();
     await waitFor(() => expect(screen.getByTestId("analista-respuesta")).toBeTruthy());
     expect(screen.getByText(/El CMO solo lee y propone/)).toBeTruthy();
+  });
+  it("el CMO también da seguimiento: lo crea a nombre del CMO y cada agente ve solo los suyos", async () => {
+    const g = vi.fn().mockResolvedValue({ ok: true });
+    const s = (id: string, agente?: "marketing_analista" | "marketing_cmo") => ({ id, agente, pregunta: `Pregunta de ${id}`, frecuencia: "semanal" as const, estado: "activo" as const, proxima_at: "2026-11-09T13:45:00Z", ultima_at: null, corridas: 0 });
+    vistaCmo({ ...props(vi.fn()), cmo: { consultas: [], estadoConsultas: "ok", preguntar: vi.fn() }, seguimientos: [s("del-cmo", "marketing_cmo"), s("del-analista", "marketing_analista"), s("viejo")], estadoSeguimientos: "ok", gestionarSeguimiento: g });
+    elegirCmo();
+    expect(screen.getByTestId("seguimiento-del-cmo")).toBeTruthy(); expect(screen.queryByTestId("seguimiento-del-analista")).toBeNull(); expect(screen.queryByTestId("seguimiento-viejo")).toBeNull();
+    escribir("¿Qué debería priorizar esta semana?"); fireEvent.change(screen.getByLabelText("Frecuencia del seguimiento"), { target: { value: "semanal" } });
+    fireEvent.click(screen.getByTestId("analista-dar-seguimiento"));
+    await waitFor(() => expect(g).toHaveBeenCalledWith({ accion: "crear_seguimiento", pregunta: "¿Qué debería priorizar esta semana?", frecuencia: "semanal", agente: "marketing_cmo" }));
+    fireEvent.click(within(screen.getByTestId("seguimiento-del-cmo")).getByText("Pausar"));
+    await waitFor(() => expect(g).toHaveBeenCalledWith({ accion: "cambiar_seguimiento", id: "del-cmo", estado: "pausado" }));
+    elegirAnalista();
+    expect(screen.getByTestId("seguimiento-del-analista")).toBeTruthy(); expect(screen.getByTestId("seguimiento-viejo")).toBeTruthy(); expect(screen.queryByTestId("seguimiento-del-cmo")).toBeNull();
   });
   it("cada agente conserva su propia conversación: el hilo del CMO no aparece en el del Analista", async () => {
     const pCmo = vi.fn().mockResolvedValue(ok("Respuesta del CMO.")); vistaCmo({ ...props(vi.fn()), cmo: { consultas: [], estadoConsultas: "ok", preguntar: pCmo } });

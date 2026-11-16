@@ -41,17 +41,20 @@ Deno.serve(async (req) => {
   let cuerpo: { agente?: unknown; pregunta?: unknown; historial?: unknown; accion?: unknown; frecuencia?: unknown; id?: unknown; estado?: unknown } = {};
   try { cuerpo = await req.json(); } catch { return json({ ok: false, error: "Solicitud no válida." }, 400); }
 
-  // 2b) Seguimientos: crear, pausar, reanudar o terminar. Solo guardan la pregunta y su frecuencia; el Analista las responde después, en solo lectura.
+  // 2b) Seguimientos: crear, pausar, reanudar o terminar. Solo guardan la pregunta, su frecuencia y el agente que la responde (Analista o CMO) después, en solo lectura.
   if (cuerpo.accion === "crear_seguimiento" || cuerpo.accion === "cambiar_seguimiento") {
     const dbSeg = createClient(url, service, { auth: { persistSession: false } });
     if (cuerpo.accion === "crear_seguimiento") {
       const vs = validarPregunta(cuerpo.pregunta);
       if (!vs.ok) return json({ ok: false, error: vs.error }, 400);
       if (cuerpo.frecuencia !== "una_vez" && cuerpo.frecuencia !== "diaria" && cuerpo.frecuencia !== "semanal") return json({ ok: false, error: "Elige si se repite una vez, a diario o cada semana." }, 400);
-      const { data: id, error } = await dbSeg.rpc("mk_seguimiento_crear", { p_org: org, p_user: u.user.id, p_pregunta: vs.pregunta, p_frecuencia: cuerpo.frecuencia, p_primera: new Date().toISOString() });
+      // Quién responde el seguimiento: el Analista (por defecto) o el CMO. Lista cerrada.
+      if (cuerpo.agente !== undefined && !(AGENTES_CONSULTABLES as readonly unknown[]).includes(cuerpo.agente)) return json({ ok: false, error: "Agente no válido." }, 400);
+      const agenteSeg: AgenteConsultable = (cuerpo.agente as AgenteConsultable | undefined) ?? "marketing_analista";
+      const { data: id, error } = await dbSeg.rpc("mk_seguimiento_crear", { p_org: org, p_user: u.user.id, p_pregunta: vs.pregunta, p_frecuencia: cuerpo.frecuencia, p_primera: new Date().toISOString(), p_agente: agenteSeg });
       if (error) {
         console.error("marketing-agente: no se pudo crear el seguimiento", error.message);
-        return error.message.includes("tope") ? json({ ok: false, error: "Ya tienes 5 seguimientos. Termina alguno para agregar otro." }, 409) : json({ ok: false, error: "No se pudo guardar el seguimiento." }, 500);
+        return error.message.includes("tope") ? json({ ok: false, error: "Ya tienes 5 seguimientos con este agente. Termina alguno para agregar otro." }, 409) : json({ ok: false, error: "No se pudo guardar el seguimiento." }, 500);
       }
       return json({ ok: true, id });
     }
