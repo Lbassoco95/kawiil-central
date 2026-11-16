@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { AgentesRegistro } from "@/components/marketing/AgentesRegistro";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Oficina } from "@/components/agentes/Oficina";
+import { BarraTareas } from "@/components/agentes/BarraTareas";
 import { PlanoDepartamentos } from "@/components/agentes/PlanoDepartamentos";
 import { ConstructorAgentes } from "@/components/agentes/ConstructorAgentes";
 import { InstruirAgente } from "@/components/agentes/InstruirAgente";
@@ -50,6 +51,7 @@ export default function Agentes() {
           Los agentes de Marketing se ven en <Link className="underline" to="/marketing">Marketing → Agentes</Link>.
         </p>
         {!demo && <BandaEquipo figuras={banda} onElegir={(id) => { setVerEnOficina(id); setAmbito("todos"); setPestana("oficina"); }} />}
+        {!demo && <BarraTareas agentes={reales} onVerSeguimiento={(id) => { setSeguir(id ?? null); setPestana("seguimiento"); }} />}
         <Tabs value={pestana} onValueChange={setPestana}>
           <TabsList>
             <TabsTrigger value="oficina">Oficina</TabsTrigger>
@@ -81,7 +83,7 @@ export default function Agentes() {
             <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={demo} onChange={(e) => setDemo(e.target.checked)} /> Ver demostración con datos de ejemplo</label>
             {cargando ? <p className="text-sm text-muted-foreground">Leyendo el registro de agentes…</p>
               : agentes.isError && !demo ? <p className="text-sm text-muted-foreground">No pudimos leer el registro de agentes. Inténtalo de nuevo.</p>
-              : <Oficina key={verEnOficina ?? "oficina"} seleccionInicial={verEnOficina} figuras={figuras} ahora={reloj} demo={demo} detalleExtra={demo ? undefined : (f) => <TrabajosAgente agentId={f.id} nombre={f.nombre} ahora={reloj} />} />}
+              : <Oficina key={verEnOficina ?? "oficina"} seleccionInicial={verEnOficina} figuras={figuras} ahora={reloj} demo={demo} detalleExtra={demo ? undefined : (f) => <TrabajosAgente agentId={f.id} nombre={f.nombre} ahora={reloj} agente={reales.find((a) => a.id === f.id)} />} />}
           </TabsContent>
           <TabsContent value="departamentos" className="mt-4">
             <PlanoDepartamentos figuras={figurasReales} agentes={reales} tareas={tareas.data ?? []} ahora={reloj} onElegir={(id) => { setVerEnOficina(id); setAmbito("todos"); setPestana("oficina"); }} />

@@ -4,15 +4,17 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { cuandoRelativo } from "@/lib/agentes/registro";
+import { cuandoRelativo, type AgenteRegistro } from "@/lib/agentes/registro";
+import { dominiosEscritura } from "../../../supabase/functions/_shared/seguimiento";
 import { useInstruirAgente } from "@/hooks/useAgenteConstructor";
 import { useTareasSeguimiento } from "@/hooks/useSeguimientoAgentes";
 import { HiloAgente } from "@/components/agentes/HiloAgente";
+import { AutorizarAccesos, AutorizarEscritura, etiquetasAccesos } from "@/components/agentes/InstruirAgente";
 import { ETIQUETA_ESTADO } from "@/components/agentes/SeguimientoAgentes";
 
 // Panel de la Oficina cuando eliges a un agente: sus conversaciones en una lista compacta, el chat abierto (con altura fija y su propio scroll) y,
 // plegada, una solicitud nueva (abierta solo si el agente aún no tiene conversaciones). Con entregables y revisiones programadas. Solo Dirección.
-export function TrabajosAgente({ agentId, nombre, ahora }: { agentId: string; nombre: string; ahora: Date }) {
+export function TrabajosAgente({ agentId, nombre, ahora, agente }: { agentId: string; nombre: string; ahora: Date; agente?: AgenteRegistro }) {
   const q = useTareasSeguimiento("todas", agentId);
   const instruir = useInstruirAgente();
   const qc = useQueryClient();
@@ -20,15 +22,21 @@ export function TrabajosAgente({ agentId, nombre, ahora }: { agentId: string; no
   const [titulo, setTitulo] = useState("");
   const [texto, setTexto] = useState("");
   const [nuevaAbierta, setNuevaAbierta] = useState(false);
-  useEffect(() => { setElegida(null); setTitulo(""); setTexto(""); setNuevaAbierta(false); instruir.reset(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [agentId]);
+  const [aprobados, setAprobados] = useState<string[]>([]);
+  const [escribir, setEscribir] = useState<string[]>([]);
+  // Autorizaciones de ESTA solicitud (accesos de 1Password y escritura en sitios): solo etiqueta y dominio; nunca la referencia.
+  const accesos = etiquetasAccesos(agente);
+  const sitiosEscritura = dominiosEscritura(agente?.config);
+  useEffect(() => { setElegida(null); setTitulo(""); setTexto(""); setNuevaAbierta(false); setAprobados([]); setEscribir([]); instruir.reset(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [agentId]);
 
   // Solo las solicitudes originales: los seguimientos y las revisiones viven dentro de su conversación.
   const solicitudes = (q.data ?? []).filter((t) => !t.hilo);
   const formularioVisible = nuevaAbierta || (!q.isLoading && !q.isError && solicitudes.length === 0);
   const nueva = () => {
     if (!titulo.trim() || !texto.trim()) return;
-    instruir.mutate({ agent_id: agentId, title: titulo.trim(), instructions: texto.trim() }, {
-      onSuccess: (r) => { setTitulo(""); setTexto(""); setNuevaAbierta(false); void qc.invalidateQueries({ queryKey: ["agentes-seguimiento"] }); if (r?.task_id) setElegida(r.task_id); },
+    instruir.mutate({ agent_id: agentId, title: titulo.trim(), instructions: texto.trim(),
+      accesos_aprobados: aprobados.filter((e) => accesos.some((a) => a.etiqueta === e)), escrituras_aprobadas: escribir.filter((d) => sitiosEscritura.includes(d)) }, {
+      onSuccess: (r) => { setTitulo(""); setTexto(""); setAprobados([]); setEscribir([]); setNuevaAbierta(false); void qc.invalidateQueries({ queryKey: ["agentes-seguimiento"] }); if (r?.task_id) setElegida(r.task_id); },
     });
   };
   return (
@@ -70,6 +78,8 @@ export function TrabajosAgente({ agentId, nombre, ahora }: { agentId: string; no
         <p className="flex items-center gap-1 text-sm font-medium"><ChevronDown className="h-4 w-4" aria-hidden />Nueva solicitud para {nombre}</p>
         <Input value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Título (por ejemplo: Revisión de libros corporativos)" data-testid="trabajos-titulo" />
         <Textarea rows={3} value={texto} onChange={(e) => setTexto(e.target.value)} placeholder="Qué debe hacer y qué debe entregarte. Después puedes seguir la conversación aquí mismo." data-testid="trabajos-texto" />
+        <AutorizarAccesos accesos={accesos} marcados={aprobados} onCambio={setAprobados} />
+        <AutorizarEscritura sitios={sitiosEscritura} marcados={escribir} onCambio={setEscribir} />
         {instruir.isError && <p role="alert" className="text-sm text-destructive">{(instruir.error as Error).message}</p>}
         <Button onClick={nueva} disabled={!titulo.trim() || !texto.trim() || instruir.isPending} data-testid="trabajos-enviar">
           {instruir.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}Enviar solicitud

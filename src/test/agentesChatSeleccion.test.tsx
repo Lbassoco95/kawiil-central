@@ -190,6 +190,29 @@ describe("panel del agente: conversaciones y solicitud nueva", () => {
     expect(screen.getByTestId("trabajos-nueva").className).not.toContain("hidden");
   });
 
+  it("la solicitud nueva deja autorizar los accesos de 1Password y la escritura del agente, solo lo marcado y solo para esa solicitud", async () => {
+    const vizumi = { id: "a1", name: "vizumi", config: { credenciales_1password: [{ etiqueta: "SITI PLD", dominio: "websitipld.cnbv.gob.mx", referencia: "op://Cumplimiento/SITI PLD - CNBV - VIZUM" }],
+      navegador: { activo: true, escritura: ["dashboard.vizum.mx"] } } } as unknown as AgenteRegistro;
+    envolver(<TrabajosAgente agentId="a1" nombre="Vizumi" ahora={AHORA} agente={vizumi} />);
+    await screen.findByTestId("trabajos-vacio");
+    expect(screen.getByTestId("instruir-accesos").textContent).not.toContain("op://");
+    fireEvent.change(screen.getByTestId("trabajos-titulo"), { target: { value: "Aviso 06/11" } });
+    fireEvent.change(screen.getByTestId("trabajos-texto"), { target: { value: "Abre el aviso" } });
+    fireEvent.click(screen.getByTestId("instruir-acceso-SITI PLD"));          // solo el acceso; la escritura queda sin marcar
+    fireEvent.click(screen.getByTestId("trabajos-enviar"));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("dispatch-to-agent", expect.anything()));
+    const body = invoke.mock.calls.find((c) => c[0] === "dispatch-to-agent")![1].body;
+    expect(body.input_context).toEqual({ accesos_aprobados: ["SITI PLD"] });
+    await waitFor(() => expect((screen.getByTestId("instruir-acceso-SITI PLD") as HTMLInputElement).checked).toBe(false));
+  });
+
+  it("sin accesos ni sitios de escritura configurados no aparece ninguna casilla", async () => {
+    envolver(<TrabajosAgente agentId="a1" nombre="Tlahtolli" ahora={AHORA} agente={{ id: "a1", name: "x", config: {} } as unknown as AgenteRegistro} />);
+    await screen.findByTestId("trabajos-vacio");
+    expect(screen.queryByTestId("instruir-accesos")).toBeNull();
+    expect(screen.queryByTestId("autorizar-escritura")).toBeNull();
+  });
+
   it("al enviar una solicitud nueva se pliega el formulario y se abre su chat", async () => {
     tareas = TAREAS;
     envolver(<TrabajosAgente agentId="a1" nombre="Tlahtolli" ahora={AHORA} />);

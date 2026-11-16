@@ -14,7 +14,7 @@ explícita de Dirección, escritura por escritura.
 
 ## Sigue aquí (Entrega 2, escrituras 2–8, cada una con su confirmación)
 - (Aplicadas el 15 nov y ya movidas a `supabase/migrations/`: `20261115192905_marketing_semaforo_corregido` y `20261115193119_marketing_recalcular_semaforo`.)
-- `20261101130000_marketing_nota_umbral_instagram.sql`: se descartará; Dirección pidió registrar la nota con `mk_cambiar_regla`, con motivo.
+- (Aplicada el 15 nov y movida a `supabase/migrations/`: `20261115195017_marketing_nota_umbral_instagram`, nota de «mantener 35 / 15» en la regla de Instagram.)
 
 ## Analista de resultados (fase 2; ver `docs/marketing-equipo-agentes-diseno.md`, sección 12)
 1. **APLICADA el 5 nov 2026** `marketing_analista_datos` (20261105191631): función de lectura `mk_analista_datos` (solo `service_role`). Reversa: `tools/marketing/rollback_analista_datos.sql`.
