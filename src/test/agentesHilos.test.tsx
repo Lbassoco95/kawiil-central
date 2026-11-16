@@ -168,6 +168,8 @@ describe("<HiloAgente />", () => {
     fireEvent.change(await screen.findByTestId("hilo-texto"), { target: { value: "Entra al SITI" } });
     fireEvent.click(await screen.findByTestId("instruir-acceso-SITI PLD"));
     expect(screen.getByTestId("instruir-accesos").textContent).toContain("Autorizo usar «SITI PLD» en websitipld.cnbv.gob.mx");
+    expect(screen.getByTestId("permisos-resumen").textContent).toContain("SITI PLD");                     // lo autorizado se ve en una línea, con los permisos plegados
+    expect((screen.getByTestId("permisos-tarea") as HTMLDetailsElement).open).toBe(false);                // y no le quitan espacio a la conversación
     fireEvent.click(screen.getByTestId("hilo-enviar"));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("dispatch-to-agent", expect.anything()));
     const body = invoke.mock.calls.find((c) => c[0] === "dispatch-to-agent")![1].body;

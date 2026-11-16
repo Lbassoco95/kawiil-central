@@ -34,6 +34,27 @@ export function AutorizarAccesos({ accesos, marcados, onCambio }: { accesos: { e
   );
 }
 
+// Las dos autorizaciones juntas y plegadas, para el chat: ocupan una línea (con lo que está autorizado a la vista) y se abren solo cuando hace falta,
+// en vez de quitarle espacio a la conversación. Mismas casillas y mismas reglas que en Instrucciones.
+export function PermisosTarea({ accesos, aprobados, onAccesos, sitios, escribir, onEscribir }: {
+  accesos: { etiqueta: string; dominio: string }[]; aprobados: string[]; onAccesos: (v: string[]) => void;
+  sitios: string[]; escribir: string[]; onEscribir: (v: string[]) => void;
+}) {
+  if (accesos.length === 0 && sitios.length === 0) return null;
+  const marcados = [...aprobados.filter((e) => accesos.some((a) => a.etiqueta === e)), ...escribir.filter((d) => sitios.includes(d)).map((d) => `escribir en ${d}`)];
+  return (
+    <details className="rounded-xl border border-border/60 bg-background/60 text-sm" data-testid="permisos-tarea">
+      <summary className="cursor-pointer select-none px-3 py-1.5 text-xs font-medium" data-testid="permisos-resumen">
+        Permisos para este mensaje · {marcados.length ? <span className="text-primary">{marcados.join(", ")}</span> : <span className="text-muted-foreground">ninguno autorizado (solo lee)</span>}
+      </summary>
+      <div className="max-h-56 space-y-2 overflow-y-auto p-2">
+        <AutorizarAccesos accesos={accesos} marcados={aprobados} onCambio={onAccesos} />
+        <AutorizarEscritura sitios={sitios} marcados={escribir} onCambio={onEscribir} />
+      </div>
+    </details>
+  );
+}
+
 // Casilla de «autorizo escribir» por sitio, solo para ESTA tarea. Sin marcarla el agente lee, descarga y prepara un resumen, pero no carga nada.
 export function AutorizarEscritura({ sitios, marcados, onCambio }: { sitios: string[]; marcados: string[]; onCambio: (v: string[]) => void }) {
   if (sitios.length === 0) return null;
