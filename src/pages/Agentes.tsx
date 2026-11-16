@@ -7,6 +7,7 @@ import { AgentesRegistro } from "@/components/marketing/AgentesRegistro";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Oficina } from "@/components/agentes/Oficina";
 import { BarraTareas } from "@/components/agentes/BarraTareas";
+import { CalendarioRutinas } from "@/components/agentes/CalendarioRutinas";
 import { PlanoDepartamentos } from "@/components/agentes/PlanoDepartamentos";
 import { ConstructorAgentes } from "@/components/agentes/ConstructorAgentes";
 import { InstruirAgente } from "@/components/agentes/InstruirAgente";
@@ -56,6 +57,7 @@ export default function Agentes() {
           <TabsList>
             <TabsTrigger value="oficina">Oficina</TabsTrigger>
             <TabsTrigger value="departamentos">Departamentos</TabsTrigger>
+            <TabsTrigger value="rutinas">Rutinas</TabsTrigger>
             <TabsTrigger value="tablas">Tablas</TabsTrigger>
             <TabsTrigger value="crear">Crear agente</TabsTrigger>
             <TabsTrigger value="instrucciones">Instrucciones</TabsTrigger>
@@ -87,6 +89,9 @@ export default function Agentes() {
           </TabsContent>
           <TabsContent value="departamentos" className="mt-4">
             <PlanoDepartamentos figuras={figurasReales} agentes={reales} tareas={tareas.data ?? []} ahora={reloj} onElegir={(id) => { setVerEnOficina(id); setAmbito("todos"); setPestana("oficina"); }} />
+          </TabsContent>
+          <TabsContent value="rutinas" className="mt-4">
+            <CalendarioRutinas agentes={agentes.data ?? []} tareas={tareas.data ?? []} ahora={reloj} onElegir={(id) => { setVerEnOficina(id); setAmbito("todos"); setPestana("oficina"); }} onProgramar={() => setPestana("programar")} />
           </TabsContent>
           <TabsContent value="tablas" className="mt-4">
             <AgentesRegistro sinMarketing errores={errores.data ?? []} agentes={agentes.data ?? []} tareas={tareas.data ?? []}
