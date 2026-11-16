@@ -3,8 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import {
   correrConsulta, evaluarLimites, HERRAMIENTAS, normalizarHistorial, AGENTES_CONSULTABLES, ESFUERZO_DE, SYSTEM_CMO, SYSTEM_DE, inicioDiaCDMX, inicioMesCDMX, leerLimites, LIMITES_POR_DEFECTO, MAX_PREGUNTA, SYSTEM, validarPregunta, verificarCifras,
-  type Bloque, type Herramientas, type Llm, type RespuestaLlm,
-} from "./analista.ts";
+  type Bloque, type Herramientas, type Llm, type RespuestaLlm, systemDe } from "./analista.ts";
 
 const uso = { entrada: 100, salida: 20 };
 const texto = (t: string): RespuestaLlm => ({ contenido: [{ type: "text", text: t }], stop_reason: "end_turn", uso });
@@ -182,8 +181,10 @@ test("CMO: solo propone (no ejecuta), cifras de herramientas, fuente y corte, es
   assert.doesNotMatch(SYSTEM_CMO, /puedes (publicar|programar|editar)/i);
 });
 test("agentes consultables: lista cerrada con un prompt por agente", () => {
-  assert.deepEqual([...AGENTES_CONSULTABLES], ["marketing_analista", "marketing_cmo"]);
+  assert.deepEqual([...AGENTES_CONSULTABLES], ["marketing_analista", "marketing_cmo", "marketing_comunicacion"]);
   assert.equal(SYSTEM_DE.marketing_analista, SYSTEM); assert.equal(SYSTEM_DE.marketing_cmo, SYSTEM_CMO);
+  // El de Comunicación interna lleva la fecha de hoy, así que se arma con systemDe() (ver comunicacion.test.ts); el del Analista y el del CMO no cambian.
+  assert.equal(systemDe("marketing_analista", new Date()), SYSTEM); assert.equal(systemDe("marketing_cmo", new Date()), SYSTEM_CMO);
 });
 test("el prompt elegido llega al modelo (el CMO usa el suyo; sin indicar, el del Analista)", async () => {
   const vistos: string[] = [];

@@ -22,6 +22,23 @@ export function llmAnthropic(apiKey: string, modelo: string): Llm {
   };
 }
 
+// Herramienta de Comunicación interna: lee los comunicados que ya existen para no duplicar un aviso. Solo los publicados y los borradores de quien pregunta
+// (no los de otras personas). El texto de los comunicados se entrega recortado y es DATO, no instrucciones. Si la base aún no tiene las columnas nuevas, falla y el agente sigue sin ella.
+// deno-lint-ignore no-explicit-any
+export function herramientasComunicacion(db: { from: (t: string) => any }, org: string, userId: string): Herramientas {
+  return {
+    comunicados_recientes: async () => {
+      const { data, error } = await db.from("internal_comunicados").select("title, body, estado, origen, vigente_desde, vigente_hasta, avisar_al_entrar, created_by, created_at")
+        .eq("organization_id", org).order("created_at", { ascending: false }).limit(40);
+      if (error) throw new Error(error.message);
+      type Fila = { title: string; body: string | null; estado: string; origen: string; vigente_desde: string | null; vigente_hasta: string | null; avisar_al_entrar: boolean; created_by: string | null; created_at: string };
+      const filas = ((data ?? []) as Fila[]).filter((c) => c.estado === "publicado" || (c.estado === "borrador" && c.created_by === userId)).slice(0, 15)
+        .map((c) => ({ titulo: c.title, texto: (c.body ?? "").slice(0, 300), estado: c.estado, origen: c.origen, vigente_desde: c.vigente_desde, vigente_hasta: c.vigente_hasta, avisar_al_entrar: c.avisar_al_entrar, creado: c.created_at.slice(0, 10) }));
+      return { herramienta: "comunicados_recientes", corte: new Date().toISOString(), datos: filas };
+    },
+  };
+}
+
 // Herramientas: cada una llama a la función SQL de lista cerrada con la organización indicada.
 export const NOMBRES_HERRAMIENTAS = ["colchon_actual", "resultados_semanales", "resultados_por_formato", "resultados_por_pilar", "semaforo_semanas", "casos_abiertos", "informe_hoy", "piezas_proximas", "reglas_vigentes", "cobertura_fuentes", "estado_equipo"];
 

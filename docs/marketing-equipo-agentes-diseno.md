@@ -172,6 +172,9 @@ Pedido de Dirección (13 nov): (a) poder **conversar** con el Analista, (b) migr
 - **Conflicto con una regla vigente:** programar en Metricool **escribe** en Metricool, y la regla de Dirección es que el módulo y los agentes solo leen. Propongo que la programación siga siendo humana (o la habilidad actual) y que el agente entregue la pieza lista. Cambiar esa regla es decisión explícita de Dirección.
 - **Dónde corre el render:** una Edge Function no sirve para renderizar imágenes pesadas. Opciones: la VM `kawiil-agents` (parece encendida: marca a los agentes cada ~30 min), un trabajo en GitHub Actions o una función de Vercel. Pendiente de decidir tras ver qué hacen hoy esos agentes (horarios, entradas, salidas y dónde guardan).
 
+### 14.4b Comunicación interna (16 nov)
+Agente que redacta comunicados para el equipo de Kawiil (por ejemplo, días no laborables) y propone un aviso al abrir el sistema. Solo propone; Dirección aprueba; el equipo lo ve solo dentro del sistema. Construido y probado en el repo, sin aplicar: ver `docs/marketing-comunicacion-interna.md`.
+
 ### 14.5 Orden sugerido
 1. **Conversación** (hecha en el repo; despliegue por el flujo al fusionar, sin migración).
 2. **CMO v1** (registro del agente + función; migración de registro y despliegue).

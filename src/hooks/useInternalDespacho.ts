@@ -4,6 +4,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { logEntityActivity } from "@/lib/activityLog";
 import { sanitizeStorageFileName } from "@/lib/storageFilename";
+import { hoyCDMX, type Comunicado } from "@/lib/comunicados";
+import { archivarComunicado, descartarBorradorComunicado, publicarComunicado } from "@/lib/comunicadosApi";
 
 const INTERNAL_PROCEDURES_PATH = "internal/procedures";
 
@@ -281,7 +283,7 @@ export function useCreateInternalComunicado() {
   const { user } = useAuth();
 
   return useMutation({
-    mutationFn: async (input: { title: string; body?: string; is_pinned?: boolean }) => {
+    mutationFn: async (input: { title: string; body?: string; is_pinned?: boolean; vigente_desde?: string; vigente_hasta?: string; avisar_al_entrar?: boolean }) => {
       const { data: profile } = await supabase
         .from("profiles")
         .select("organization_id")
@@ -297,6 +299,9 @@ export function useCreateInternalComunicado() {
           body: input.body || null,
           is_pinned: input.is_pinned ?? false,
           created_by: user!.id,
+          // Los campos de vigencia solo se envían cuando se usan: sin ellos, el formulario de siempre funciona igual aunque la base no tenga las columnas nuevas.
+          ...(input.vigente_desde && input.vigente_hasta ? { vigente_desde: input.vigente_desde, vigente_hasta: input.vigente_hasta } : {}),
+          ...(input.avisar_al_entrar ? { avisar_al_entrar: true } : {}),
         })
         .select()
         .single();
@@ -331,6 +336,44 @@ export function useDeleteInternalComunicado() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["internal-comunicados"] });
       toast.success("Comunicado eliminado");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+}
+
+/** Avisos que se muestran al abrir el sistema hoy (publicados, con «avisar al entrar» y vigentes). Si la base aún no tiene las columnas nuevas, no muestra nada y no molesta. */
+export function useComunicadosAviso() {
+  const { user } = useAuth();
+  const hoy = hoyCDMX();
+  return useQuery({
+    queryKey: ["internal-comunicados", "aviso", hoy],
+    queryFn: async (): Promise<Comunicado[]> => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("internal_comunicados")
+        .select("id, title, body, is_pinned, created_at, estado, vigente_desde, vigente_hasta, avisar_al_entrar")
+        .eq("estado", "publicado").eq("avisar_al_entrar", true).lte("vigente_desde", hoy).gte("vigente_hasta", hoy);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!user,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+}
+
+/** Publicar (aprobar), retirar o descartar un comunicado. Solo Dirección: la base lo vuelve a comprobar. */
+export function useGestionarComunicado() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (a: { accion: "publicar" | "archivar" | "descartar"; id: string }) => {
+      const r = a.accion === "publicar" ? await publicarComunicado(a.id) : a.accion === "archivar" ? await archivarComunicado(a.id) : await descartarBorradorComunicado(a.id);
+      if (!r.ok) throw new Error(r.error ?? "No se pudo completar la acción.");
+      return a.accion;
+    },
+    onSuccess: (accion) => {
+      queryClient.invalidateQueries({ queryKey: ["internal-comunicados"] });
+      toast.success(accion === "publicar" ? "Comunicado publicado: el equipo lo verá en el sistema" : accion === "archivar" ? "Comunicado retirado" : "Borrador descartado");
     },
     onError: (e: Error) => toast.error(e.message),
   });

@@ -6,6 +6,7 @@ import { FloatingAIChat } from "@/components/FloatingAIChat";
 import { ChatProvider } from "@/hooks/useChat";
 import { AppTopbar } from "@/components/layout/AppTopbar";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
+import { AvisoAlEntrar } from "@/components/shared/AvisoAlEntrar";
 import { GlobalCommandPalette } from "@/components/search/GlobalCommandPalette";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useTasksRealtime } from "@/hooks/useTasksRealtime";
@@ -115,6 +116,7 @@ export function AppLayout({
     </div>
     <TaskFormDialog open={newTaskOpen} onOpenChange={setNewTaskOpen} />
     <GlobalCommandPalette />
+    <AvisoAlEntrar />
     </ChatProvider>
     </NewTaskModalContext.Provider>
   );

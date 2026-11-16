@@ -39,3 +39,6 @@ Pruebas: `tools/marketing/prueba_analista_pglite.mjs`; Node `supabase/functions/
 
 ## Investigador web
 - (Aplicada el 16 nov y movida a `supabase/migrations/`: `20261116164704_marketing_investigador`: tablas `mk_fuente_web` y `mk_hallazgo_web` vacías, estado/origen/aprobación de las fuentes, agente `marketing_investigador` y alta en las funciones de registro.) Reversa: `tools/marketing/rollback_investigador.sql`; prueba: `tools/marketing/prueba_investigador_pglite.mjs`. Siguen sin programar: `tools/marketing/cron_investigador_0800.sql` (lectura diaria) y `cron_investigador_descubrir_mensual.sql` (búsqueda mensual). Detalle: `docs/marketing-investigador-web.md`.
+
+## Comunicación interna (preparada el 16 nov; sin aplicar)
+- `20261116190000_marketing_comunicacion_interna.sql`: estado/vigencia/aviso al entrar en `internal_comunicados`, funciones `ic_*` (solo Dirección), agente `marketing_comunicacion`. Reversa: `tools/marketing/rollback_comunicacion_interna.sql`; prueba: `tools/marketing/prueba_comunicacion_interna_pglite.mjs`. Detalle y lista de escrituras: `docs/marketing-comunicacion-interna.md`.

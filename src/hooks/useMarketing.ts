@@ -170,7 +170,7 @@ export const useTareasMarketingAgentes = () =>
 // ── Analista de resultados (agente con IA, solo lectura) ─────────────────────────────────────────────────────────────
 export interface ConsultaAnalista { id: string; pregunta: string; respuesta: string | null; estado: "respondida" | "error" | "rechazada_limite"; verificada: boolean | null; no_verificadas: string[]; created_at: string; seguimiento_id?: string | null; agente?: string | null }
 export interface RespuestaAnalista {
-  ok: boolean; respuesta?: string; verificada?: boolean; no_verificadas?: string[]; fuentes?: Array<{ herramienta: string; filas: number | null; corte: string | null }>;
+  ok: boolean; respuesta?: string; verificada?: boolean | null; no_verificadas?: string[]; fuentes?: Array<{ herramienta: string; filas: number | null; corte: string | null }>;
   restantes_hoy?: number; error?: string; limite?: "dia" | "mes";
 }
 
@@ -242,13 +242,13 @@ const SIN_RESPUESTA = { ok: false, error: "El Analista tardó demasiado en respo
 
 // Pregunta al Analista por la función marketing-agente. Devuelve siempre un objeto (nunca lanza): los errores llegan con un mensaje para mostrar.
 export interface TurnoHistorial { rol: "user" | "assistant"; texto: string }
-export type AgenteConsultable = "marketing_analista" | "marketing_cmo";
+export type AgenteConsultable = "marketing_analista" | "marketing_cmo" | "marketing_comunicacion";
 export function preguntarAlAnalista(pregunta: string, historial?: TurnoHistorial[], agente: AgenteConsultable = "marketing_analista"): Promise<RespuestaAnalista> {
   return conTope(preguntarSinTope(pregunta, historial, agente), SIN_RESPUESTA);
 }
 async function preguntarSinTope(pregunta: string, historial: TurnoHistorial[] | undefined, agente: AgenteConsultable): Promise<RespuestaAnalista> {
   try {
-    const { data, error } = await supabase.functions.invoke("marketing-agente", { body: { pregunta, ...(historial && historial.length > 0 ? { historial } : {}), ...(agente === "marketing_cmo" ? { agente } : {}) } });
+    const { data, error } = await supabase.functions.invoke("marketing-agente", { body: { pregunta, ...(historial && historial.length > 0 ? { historial } : {}), ...(agente !== "marketing_analista" ? { agente } : {}) } });
     if (!error) return data as RespuestaAnalista;
     const ctx = (error as { context?: Response }).context;
     if (ctx && typeof ctx.json === "function") { try { return (await ctx.json()) as RespuestaAnalista; } catch { /* sin cuerpo */ } }
