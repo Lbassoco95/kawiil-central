@@ -1,9 +1,9 @@
-// Prueba de la migración 20261115220000_marketing_investigador.sql y de su reversa contra Postgres en memoria (PGlite).
+// Prueba de la migración 20261116164704_marketing_investigador.sql y de su reversa contra Postgres en memoria (PGlite).
 // Uso: PGLITE_PATH=<ruta a pglite/dist/index.js> node tools/marketing/prueba_investigador_pglite.mjs
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 const { PGlite } = await import(process.env.PGLITE_PATH);
-const sql = readFileSync(new URL("../../supabase/pendientes/20261115220000_marketing_investigador.sql", import.meta.url), "utf8");
+const sql = readFileSync(new URL("../../supabase/migrations/20261116164704_marketing_investigador.sql", import.meta.url), "utf8");
 const rev = readFileSync(new URL("./rollback_investigador.sql", import.meta.url), "utf8");
 const ORG = "a0000000-0000-0000-0000-000000000001", REG = "00000000-0000-0000-0000-000000000001";
 

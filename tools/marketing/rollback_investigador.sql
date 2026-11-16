@@ -1,4 +1,4 @@
--- Reversa de 20261115220000_marketing_investigador.sql (Investigador web): borra sus hallazgos, fuentes, tareas y registro, y devuelve las funciones de
+-- Reversa de 20261116164704_marketing_investigador.sql (Investigador web): borra sus hallazgos, fuentes, tareas y registro, y devuelve las funciones de
 -- registro de corridas a la lista con el CMO. Si Dirección ya cargó fuentes, ESTA REVERSA LAS BORRA (guarda antes una copia de mk_fuente_web si hace falta).
 DELETE FROM public.agent_tasks WHERE agent_id IN (SELECT id FROM public.agent_registry WHERE name = 'marketing_investigador');
 DELETE FROM public.agent_registry WHERE name = 'marketing_investigador';
