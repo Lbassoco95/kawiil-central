@@ -1,4 +1,4 @@
--- Reversa de 20261116000000_marketing_cmo_seguimientos.sql. Borra los seguimientos del CMO (las respuestas pasadas en mk_consulta se conservan)
+-- Reversa de 20261116165640_marketing_cmo_seguimientos.sql. Borra los seguimientos del CMO (las respuestas pasadas en mk_consulta se conservan)
 -- y deja las funciones y la tabla como las dejó 20261106003827_marketing_analista_seguimientos.sql.
 DELETE FROM public.mk_seguimiento WHERE agente <> 'marketing_analista';
 DROP FUNCTION IF EXISTS public.mk_seguimiento_crear(uuid, uuid, text, text, timestamptz, text);

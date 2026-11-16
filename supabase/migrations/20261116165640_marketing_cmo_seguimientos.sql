@@ -1,5 +1,4 @@
--- Marketing: seguimientos también para el CMO. PENDIENTE: NO aplicada en producción; se aplica solo con la confirmación de Dirección,
--- y el archivo pasa a supabase/migrations/ con la versión real del registro cuando ya esté aplicada.
+-- Marketing: seguimientos también para el CMO. APLICADA en producción el 16 nov 2026 con confirmación de Dirección (versión del registro 20261116165640).
 -- Requiere antes 20261106003827_marketing_analista_seguimientos.sql y 20261113015847_marketing_cmo_registro.sql (ya aplicadas).
 --
 -- Un seguimiento es una pregunta que un agente de Marketing vuelve a responder solo (una vez, a diario o cada semana). Hasta hoy siempre lo respondía el Analista.

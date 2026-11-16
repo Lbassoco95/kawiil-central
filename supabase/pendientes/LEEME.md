@@ -40,7 +40,6 @@ Pruebas: `tools/marketing/prueba_analista_pglite.mjs`; Node `supabase/functions/
 ## Investigador web (preparado el 15 nov; sin aplicar ni desplegar)
 - `20261115220000_marketing_investigador.sql`: tablas `mk_fuente_web` (lista cerrada, vacía) y `mk_hallazgo_web`, RLS de solo lectura, agente `marketing_investigador` y alta en `mk_registrar_corrida` / `mk_latido_agente`. Reversa: `tools/marketing/rollback_investigador.sql`; prueba: `tools/marketing/prueba_investigador_pglite.mjs`; trabajo diario sin programar: `tools/marketing/cron_investigador_0800.sql`. Detalle y lista de escrituras: `docs/marketing-investigador-web.md`.
 
-## Seguimientos del CMO (preparado el 16 nov; sin aplicar)
-- `20261116000000_marketing_cmo_seguimientos.sql`: `mk_seguimiento.agente` (analista por defecto o CMO), `mk_seguimiento_crear` con `p_agente` (tope de 5 por usuario y por agente) y `mk_seguimiento_reclamar` que devuelve el agente. Compatible con el código actual. Reversa: `tools/marketing/rollback_cmo_seguimientos.sql`. Prueba: `tools/marketing/prueba_cmo_seguimientos_pglite.mjs`.
-- **Orden obligatorio:** 1) aplicar la migración (con la confirmación de Dirección) y mover el archivo a `supabase/migrations/` con la versión real del registro; 2) fusionar el PR (despliega `marketing-agente` y `marketing-seguimientos` y la pantalla). Si se fusiona antes, `marketing-agente` manda `p_agente` a una función que aún no lo tiene y falla el crear seguimiento.
-
+## Seguimientos del CMO
+- **APLICADA el 16 nov 2026** `marketing_cmo_seguimientos` (20261116165640, ya en `supabase/migrations/`): `mk_seguimiento.agente` (analista por defecto o CMO), `mk_seguimiento_crear` con `p_agente` (tope de 5 por usuario y por agente) y `mk_seguimiento_reclamar` que devuelve el agente. Reversa: `tools/marketing/rollback_cmo_seguimientos.sql`. Prueba: `tools/marketing/prueba_cmo_seguimientos_pglite.mjs`.
+- Código (se despliega al fusionar el PR #557): `marketing-agente` y `marketing-seguimientos` con agente de lista cerrada, y «Dar seguimiento» en el panel del CMO.
