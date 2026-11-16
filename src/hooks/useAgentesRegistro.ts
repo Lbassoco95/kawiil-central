@@ -24,7 +24,7 @@ export const useTareasAgentes = () =>
     queryFn: async (): Promise<TareaAgente[]> => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any).from("agent_tasks")
-        .select("id, agent_id, task_type, status, created_at, started_at, completed_at").order("created_at", { ascending: false }).limit(300);
+        .select("id, agent_id, task_type, status, created_at, started_at, completed_at, source_task_id").order("created_at", { ascending: false }).limit(300);
       if (error) throw error;
       return data ?? [];
     },
