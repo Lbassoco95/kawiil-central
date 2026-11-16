@@ -43,3 +43,8 @@ Pruebas: `tools/marketing/prueba_analista_pglite.mjs`; Node `supabase/functions/
 ## Seguimientos del CMO
 - **APLICADA el 16 nov 2026** `marketing_cmo_seguimientos` (20261116165640, ya en `supabase/migrations/`): `mk_seguimiento.agente` (analista por defecto o CMO), `mk_seguimiento_crear` con `p_agente` (tope de 5 por usuario y por agente) y `mk_seguimiento_reclamar` que devuelve el agente. Reversa: `tools/marketing/rollback_cmo_seguimientos.sql`. Prueba: `tools/marketing/prueba_cmo_seguimientos_pglite.mjs`.
 - Código (se despliega al fusionar el PR #557): `marketing-agente` y `marketing-seguimientos` con agente de lista cerrada, y «Dar seguimiento» en el panel del CMO.
+
+## Comunicación interna (preparado el 16 nov; sin aplicar)
+- `20261116200000_marketing_comunicacion_interna.sql`: tabla `aviso_equipo` (RLS: los usuarios solo leen los publicados; escribe `service_role`), agente `marketing_comunicacion_interna` y alta en `mk_registrar_corrida` / `mk_latido_agente`. Reversa: `tools/marketing/rollback_comunicacion_interna.sql`; prueba: `tools/marketing/prueba_comunicacion_interna_pglite.mjs`. Detalle: `docs/comunicacion-interna.md`.
+- **Orden obligatorio:** aplicar la migración (con la confirmación de Dirección) y mover el archivo a `supabase/migrations/` con la versión real; después fusionar el PR (función `comunicacion-interna` y pantalla).
+
