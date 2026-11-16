@@ -189,7 +189,7 @@ export function HiloAgente({ taskId, ahora, claseAlto = "h-[min(64vh,42rem)] min
           )}
         </div>
         <div className="shrink-0 space-y-2 border-t border-border/40 p-2">
-          <PermisosTarea accesos={q.data?.accesos ?? []} aprobados={aprobados} onAccesos={setAprobados} sitios={q.data?.escritura_dominios ?? []} escribir={escribir} onEscribir={setEscribir} />
+          <PermisosTarea texto={texto} accesos={q.data?.accesos ?? []} aprobados={aprobados} onAccesos={setAprobados} sitios={q.data?.escritura_dominios ?? []} escribir={escribir} onEscribir={setEscribir} />
           {instruir.isError && <p role="alert" className="text-sm text-destructive">{(instruir.error as Error).message}</p>}
           <div className="flex items-end gap-2">
             <Textarea rows={2} value={texto} onChange={(e) => setTexto(e.target.value)} className="max-h-40 min-h-[3.25rem] resize-none overflow-x-hidden"
