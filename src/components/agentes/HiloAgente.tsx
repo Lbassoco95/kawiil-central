@@ -14,7 +14,7 @@ import { EscritorioAgente, EstilosOficina } from "@/components/agentes/escritori
 import { useFiguraDe } from "@/components/agentes/BandaEquipo";
 import { ESTADO_OFICINA } from "@/lib/agentes/oficina";
 import { PlanEncargo } from "@/components/agentes/PlanEncargo";
-import { AutorizarAccesos, AutorizarEscritura } from "@/components/agentes/InstruirAgente";
+import { PermisosTarea } from "@/components/agentes/InstruirAgente";
 
 // Una solicitud con su conversación: lo que se le pidió al agente, lo que respondió y entregó, y lo que se le sigue pidiendo en el mismo
 // hilo (el agente recuerda lo ya hablado). Desde aquí también se programan revisiones («revísalo el lunes», «cada semana»).
@@ -178,7 +178,7 @@ export function HiloAgente({ taskId, ahora, claseAlto = "h-[min(64vh,42rem)] min
           </div>
         </div>
         <div className="relative flex min-h-0 flex-1 flex-col">
-          <div ref={lista} onScroll={alScroll} className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain p-3" aria-live="polite" role="log" aria-label="Conversación" data-testid="hilo-mensajes">
+          <div ref={lista} onScroll={alScroll} className="min-h-[10rem] flex-1 space-y-2 overflow-y-auto overscroll-contain p-3" aria-live="polite" role="log" aria-label="Conversación" data-testid="hilo-mensajes">
             {mensajes.map((m, i) => <Burbuja key={`${m.task_id}-${m.rol}-${i}`} m={m} ahora={ahora} />)}
           </div>
           {nuevos > 0 && (
@@ -189,11 +189,10 @@ export function HiloAgente({ taskId, ahora, claseAlto = "h-[min(64vh,42rem)] min
           )}
         </div>
         <div className="shrink-0 space-y-2 border-t border-border/40 p-2">
-          <AutorizarAccesos accesos={q.data?.accesos ?? []} marcados={aprobados} onCambio={setAprobados} />
-          <AutorizarEscritura sitios={q.data?.escritura_dominios ?? []} marcados={escribir} onCambio={setEscribir} />
+          <PermisosTarea accesos={q.data?.accesos ?? []} aprobados={aprobados} onAccesos={setAprobados} sitios={q.data?.escritura_dominios ?? []} escribir={escribir} onEscribir={setEscribir} />
           {instruir.isError && <p role="alert" className="text-sm text-destructive">{(instruir.error as Error).message}</p>}
           <div className="flex items-end gap-2">
-            <Textarea rows={2} value={texto} onChange={(e) => setTexto(e.target.value)} className="max-h-40 min-h-[3.25rem] resize-none"
+            <Textarea rows={2} value={texto} onChange={(e) => setTexto(e.target.value)} className="max-h-40 min-h-[3.25rem] resize-none overflow-x-hidden"
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); enviar(); } }}
               placeholder={en_curso ? "Espera a que termine para escribirle de nuevo…" : `Escríbele a ${hilo.agente}: un cambio, otro documento…`}
               disabled={en_curso} data-testid="hilo-texto" aria-label={`Mensaje para ${hilo.agente}`} />
