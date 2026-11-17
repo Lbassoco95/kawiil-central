@@ -20,7 +20,7 @@ evento → fila en notifications (campana) → trigger trg_push_bridge_notificat
        → edge function push-from-notification → sendWebPushToUsers → sw.js muestra el aviso
 ```
 
-- `supabase/migrations/20261117120000_push_bridge_notifications.sql`: triggers, tabla `email_push_state` y cron `push-email-poller` (cada 5 min).
+- `supabase/migrations/20261117030246_push_bridge_notifications.sql`: triggers, tabla `email_push_state` y cron `push-email-poller` (cada 5 min).
 - `supabase/functions/push-from-notification`: traduce tipo → ruta y envía el push. Auth: `x-cron-secret` (= `CRON_SECRET`).
 - `supabase/functions/push-email-poller`: lee remitente/asunto de correos sin leer (Microsoft Graph y Gmail) desde la última marca. No marca ni modifica nada en los buzones. La primera vez que ve una cuenta solo guarda la marca.
 - Las funciones nuevas atrapan sus errores: nunca bloquean el alta del candidato, el aviso o la solicitud.
