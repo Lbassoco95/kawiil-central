@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { FiltroLpb, MovimientoLpb, PersonaLpb } from "../../supabase/functions/_shared/lpb";
 
 // Lista maestra de Personas Bloqueadas y su cola de visto bueno. Todo pasa por `agente-lpb` (solo Dirección); el navegador nunca lee las tablas.
-export interface ResumenLpb { total: number; vigentes: number; eliminadas: number; por_revisar: number; por_corregir: number; dudosos: number; incompletos: number; revisadas: number }
+export interface ResumenLpb { total: number; vigentes: number; eliminadas: number; por_revisar: number; por_corregir: number; dudosos: number; incompletos: number; revisadas: number; agente_coincide: number; agente_discrepa: number; agente_no_verificable: number }
 export interface PaginaLpb { personas: PersonaLpb[]; total: number; pagina: number; limite: number }
 export interface DetallePersonaLpb { persona: PersonaLpb; movimientos: MovimientoLpb[] }
 

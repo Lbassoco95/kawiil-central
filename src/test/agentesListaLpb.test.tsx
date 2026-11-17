@@ -8,8 +8,9 @@ vi.mock("@/integrations/supabase/client", () => ({ supabase: { functions: { invo
 
 const U1 = "11111111-1111-4111-8111-111111111111";
 const P = { id: U1, nombre: "ANA PÉREZ", rfc: "PEAA8001019X0", rfc_dudoso: true, tipo_persona: "fisica", estado: "vigente", fecha_alta: "2026-03-06", fecha_baja: null, datos_incompletos: false,
-  origen: "importado_marzo_2026", revisado: false, por_corregir: false, revision_nota: null, notas: null, revisado_en: null };
-const RES = { total: 923, vigentes: 923, eliminadas: 0, por_revisar: 923, por_corregir: 0, dudosos: 34, incompletos: 740, revisadas: 0 };
+  origen: "importado_marzo_2026", revisado: false, por_corregir: false, revision_nota: null, notas: null, revisado_en: null,
+  revision_agente: "no_coincide", revision_agente_nota: "El oficio dice RFC PEAA800101AB1.", revision_agente_en: "2026-11-17T04:00:00Z" };
+const RES = { total: 923, vigentes: 923, eliminadas: 0, por_revisar: 923, por_corregir: 0, dudosos: 34, incompletos: 740, revisadas: 0, agente_coincide: 5, agente_discrepa: 1, agente_no_verificable: 2 };
 
 function montar() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -49,6 +50,15 @@ describe("Lista LPB", () => {
     fireEvent.click(screen.getByRole("button", { name: /Dar visto bueno/ }));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("agente-lpb", { body: { action: "revisar", ids: [U1], decision: "aprobar", nota: "" } }));
     expect(await screen.findByText(/1 persona\(s\) aprobadas/)).toBeTruthy();
+  });
+  it("muestra el dictamen del agente como opinión, y avisa antes de aprobar algo que discrepa", async () => {
+    montar();
+    expect(await screen.findByText("Discrepa")).toBeTruthy();
+    fireEvent.click(screen.getByLabelText("Ver detalle"));
+    expect(await screen.findByText(/El oficio dice RFC PEAA800101AB1\./)).toBeTruthy();
+    expect(screen.getByText(/es una opinión; el visto bueno es tuyo/)).toBeTruthy();
+    fireEvent.click(screen.getByLabelText("Seleccionar ANA PÉREZ"));
+    expect((await screen.findByRole("alert")).textContent).toContain("discrepancia señalada por el agente supervisor");
   });
   it("un filtro distinto vuelve a consultar con ese filtro", async () => {
     montar();

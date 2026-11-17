@@ -4,10 +4,16 @@ import { FILTROS, MAX_REVISION, aCsv, busquedaSegura, celdaCsv, validarListar, v
 const U1 = "11111111-1111-4111-8111-111111111111";
 const U2 = "22222222-2222-4222-8222-222222222222";
 const persona = (o: Partial<PersonaLpb> = {}): PersonaLpb => ({ id: U1, nombre: "ANA PÉREZ", rfc: "PEAA800101AB1", rfc_dudoso: false, tipo_persona: "fisica", estado: "vigente", fecha_alta: "2026-03-06", fecha_baja: null,
-  datos_incompletos: false, origen: "agente", revisado: false, por_corregir: false, revision_nota: null, notas: null, revisado_en: null, ...o });
+  datos_incompletos: false, origen: "agente", revisado: false, por_corregir: false, revision_nota: null, notas: null, revisado_en: null, revision_agente: null, revision_agente_nota: null, revision_agente_en: null, ...o });
 
 describe("validarListar", () => {
   it("usa «por revisar» y 50 por página por omisión", () => expect(validarListar({})).toEqual({ filtro: "por_revisar", q: "", pagina: 0, limite: 50 }));
+  it("los filtros del dictamen del agente existen y tienen etiqueta", () => {
+    for (const f of ["agente_coincide", "agente_discrepa", "agente_no_verificable", "sin_dictamen"] as const) {
+      expect(FILTROS).toContain(f);
+      expect("error" in validarListar({ filtro: f })).toBe(false);
+    }
+  });
   it("acepta todos los filtros y rechaza los demás", () => {
     for (const f of FILTROS) expect("error" in validarListar({ filtro: f })).toBe(false);
     expect(validarListar({ filtro: "borrar" })).toEqual({ error: "Filtro no válido." });
@@ -53,5 +59,10 @@ describe("CSV", () => {
     expect(filas).toHaveLength(3);
     expect(filas[1]).toContain("ANA PÉREZ,PEAA800101AB1");
     expect(filas[2].startsWith("'=EVIL")).toBe(true);
+  });
+  it("incluye el dictamen del agente y su nota, que es texto libre y no puede inyectar fórmulas", () => {
+    const csv = aCsv([persona({ revision_agente: "no_coincide", revision_agente_nota: "=HYPERLINK(\"x\")" })]);
+    expect(csv).toContain("Dictamen del agente,Nota del agente");
+    expect(csv).toContain("no_coincide,\"'=HYPERLINK(\"\"x\"\")\"");
   });
 });

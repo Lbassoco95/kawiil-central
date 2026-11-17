@@ -1,7 +1,7 @@
 // Lista maestra de Personas Bloqueadas (LPB): validación y formato compartidos por la función `agente-lpb` y la pantalla.
 // Sin acceso a datos: solo reglas puras (se prueban con vitest).
 
-export const FILTROS = ["por_revisar", "por_corregir", "dudosos", "incompletos", "vigentes", "eliminadas", "revisadas", "todas"] as const;
+export const FILTROS = ["por_revisar", "agente_coincide", "agente_discrepa", "agente_no_verificable", "sin_dictamen", "por_corregir", "dudosos", "incompletos", "vigentes", "eliminadas", "revisadas", "todas"] as const;
 export type FiltroLpb = (typeof FILTROS)[number];
 export const MAX_POR_PAGINA = 100;
 export const MAX_REVISION = 50;
@@ -11,11 +11,12 @@ export interface PersonaLpb {
   id: string; nombre: string; rfc: string | null; rfc_dudoso: boolean; tipo_persona: string; estado: string;
   fecha_alta: string | null; fecha_baja: string | null; datos_incompletos: boolean; origen: string;
   revisado: boolean; por_corregir: boolean; revision_nota: string | null; notas: string | null; revisado_en: string | null;
+  revision_agente: string | null; revision_agente_nota: string | null; revision_agente_en: string | null;   // dictamen del agente supervisor: una opinión, nunca el visto bueno
 }
 export interface MovimientoLpb {
   id: string; tipo: string; oficio: string | null; fecha_oficio: string | null; acuerdo: string | null; fundamento: string | null; archivo: string | null; fuente: string;
 }
-export const CAMPOS_PERSONA = "id, nombre, rfc, rfc_dudoso, tipo_persona, estado, fecha_alta, fecha_baja, datos_incompletos, origen, revisado, por_corregir, revision_nota, notas, revisado_en";
+export const CAMPOS_PERSONA = "id, nombre, rfc, rfc_dudoso, tipo_persona, estado, fecha_alta, fecha_baja, datos_incompletos, origen, revisado, por_corregir, revision_nota, notas, revisado_en, revision_agente, revision_agente_nota, revision_agente_en";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const esUuid = (v: unknown): v is string => typeof v === "string" && UUID.test(v);
@@ -51,12 +52,13 @@ export const celdaCsv = (v: unknown): string => {
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 export function aCsv(personas: PersonaLpb[]): string {
-  const enc = ["Nombre", "RFC", "RFC dudoso", "Tipo", "Estado", "Fecha alta", "Fecha baja", "Datos incompletos", "Origen", "Revisado", "Por corregir", "Nota de revisión"];
-  const filas = personas.map((p) => [p.nombre, p.rfc, p.rfc_dudoso ? "sí" : "", p.tipo_persona, p.estado, p.fecha_alta, p.fecha_baja, p.datos_incompletos ? "sí" : "", p.origen, p.revisado ? "sí" : "", p.por_corregir ? "sí" : "", p.revision_nota]);
+  const enc = ["Nombre", "RFC", "RFC dudoso", "Tipo", "Estado", "Fecha alta", "Fecha baja", "Datos incompletos", "Origen", "Revisado", "Por corregir", "Nota de revisión", "Dictamen del agente", "Nota del agente"];
+  const filas = personas.map((p) => [p.nombre, p.rfc, p.rfc_dudoso ? "sí" : "", p.tipo_persona, p.estado, p.fecha_alta, p.fecha_baja, p.datos_incompletos ? "sí" : "", p.origen, p.revisado ? "sí" : "", p.por_corregir ? "sí" : "", p.revision_nota, p.revision_agente, p.revision_agente_nota]);
   return "﻿" + [enc, ...filas].map((f) => f.map(celdaCsv).join(",")).join("\r\n");
 }
 
 export const ETIQUETA_ESTADO: Record<string, string> = { vigente: "Vigente", eliminada: "Eliminada", eliminacion_provisional: "Eliminación provisional" };
 export const ETIQUETA_FILTRO: Record<FiltroLpb, string> = {
-  por_revisar: "Por revisar", por_corregir: "Por corregir", dudosos: "RFC dudoso", incompletos: "Datos incompletos", vigentes: "Vigentes", eliminadas: "Eliminadas", revisadas: "Revisadas", todas: "Todas",
+  por_revisar: "Por revisar", agente_coincide: "Agente: coincide", agente_discrepa: "Agente: discrepa", agente_no_verificable: "Agente: no verificó", sin_dictamen: "Sin dictamen", por_corregir: "Por corregir", dudosos: "RFC dudoso", incompletos: "Datos incompletos", vigentes: "Vigentes", eliminadas: "Eliminadas", revisadas: "Revisadas", todas: "Todas",
 };
+export const ETIQUETA_DICTAMEN: Record<string, string> = { coincide: "Coincide", no_coincide: "Discrepa", no_verificable: "No verificó" };
