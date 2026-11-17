@@ -18,6 +18,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { encode as hexEncode } from "https://deno.land/std@0.168.0/encoding/hex.ts";
 import { sendWebPushToUsers } from "../_shared/webPush.ts";
+// Los avisos push respetan el horario de silencio de cada persona (22:00–07:00 por defecto): ver _shared/horarioSilencio.ts.
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": '*',

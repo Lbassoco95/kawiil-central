@@ -100,6 +100,8 @@ Deno.serve(async (req) => {
       tag: `push-test-${Date.now()}`,
       force: true,
       requireInteraction: true,
+      // Es una prueba que la persona pide a propósito: suena aunque sea de noche.
+      bypassQuietHours: true,
     });
 
     const okCount = report.filter((r) => r.status === "ok").length;

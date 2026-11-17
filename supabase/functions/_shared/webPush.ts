@@ -1,3 +1,5 @@
+import { enHorarioDeSilencio } from "./horarioSilencio.ts";
+
 type SendWebPushArgs = {
   userIds: string[];
   title: string;
@@ -7,6 +9,11 @@ type SendWebPushArgs = {
   force?: boolean;
   /** Si true, el banner del SO permanece hasta que el usuario lo atienda (DMs, menciones). */
   requireInteraction?: boolean;
+  /**
+   * Si true, el aviso suena aunque la persona esté en su horario de silencio (por defecto 22:00–07:00).
+   * Solo para lo que no puede esperar a la mañana (p. ej. solicitudes por aprobar) y para pruebas.
+   */
+  bypassQuietHours?: boolean;
 };
 
 export type WebPushDeliveryReport = {
@@ -16,7 +23,7 @@ export type WebPushDeliveryReport = {
   userAgent?: string | null;
   /** 200/201 si entregó, 404/410 si stale (se borra), otros códigos si error. */
   statusCode: number | null;
-  status: "ok" | "stale_removed" | "error" | "skipped_no_subs" | "skipped_toggle_off";
+  status: "ok" | "stale_removed" | "error" | "skipped_no_subs" | "skipped_toggle_off" | "skipped_quiet_hours";
   errorMessage?: string;
 };
 
@@ -77,6 +84,22 @@ export async function sendWebPushToUsers(
       if (prof?.desktop_push_notifications !== true) {
         console.log("[webpush] saltado (toggle desktop_push_notifications off)", { uid });
         report.push({ userId: uid, subId: "", endpointPrefix: "", statusCode: null, status: "skipped_toggle_off" });
+        continue;
+      }
+    }
+
+    // Horario de silencio de la persona (por defecto 22:00–07:00, hora de Ciudad de México).
+    // La notificación ya quedó en la campana; aquí solo se evita el aviso al celular.
+    // Si no se puede leer el horario (error de lectura), se avisa como siempre: nunca se pierde un aviso por esto.
+    if (!args.bypassQuietHours) {
+      const { data: q } = await supabase
+        .from("profiles")
+        .select("push_quiet_enabled, push_quiet_start, push_quiet_end")
+        .eq("user_id", uid)
+        .maybeSingle();
+      if (q && enHorarioDeSilencio(new Date(), { enabled: q.push_quiet_enabled, start: q.push_quiet_start, end: q.push_quiet_end })) {
+        console.log("[webpush] saltado (horario de silencio)", { uid, tag: args.tag });
+        report.push({ userId: uid, subId: "", endpointPrefix: "", statusCode: null, status: "skipped_quiet_hours" });
         continue;
       }
     }

@@ -15,15 +15,18 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
 };
 
-type Ruta = { url: string; requireInteraction: boolean };
+type Ruta = { url: string; requireInteraction: boolean; ignoraSilencio: boolean };
 
-/** Tipo de notificación → a dónde abre el toque y si el banner se queda hasta que lo atiendan. */
+/**
+ * Tipo de notificación → a dónde abre el toque, si el banner se queda hasta que lo atiendan y si puede
+ * sonar dentro del horario de silencio (por defecto 22:00–07:00). Solo las solicitudes por aprobar lo ignoran.
+ */
 export const RUTAS_PUSH: Record<string, Ruta> = {
-  rh_request_pending: { url: "/rh?rh=solicitudes", requireInteraction: true },
-  rh_request_decided: { url: "/rh?rh=solicitudes", requireInteraction: false },
-  rh_candidate_new: { url: "/rh?rh=reclutamiento", requireInteraction: false },
-  aviso_equipo: { url: "/", requireInteraction: false },
-  email_new: { url: "/correo", requireInteraction: false },
+  rh_request_pending: { url: "/rh?rh=solicitudes", requireInteraction: true, ignoraSilencio: true },
+  rh_request_decided: { url: "/rh?rh=solicitudes", requireInteraction: false, ignoraSilencio: false },
+  rh_candidate_new: { url: "/rh?rh=reclutamiento", requireInteraction: false, ignoraSilencio: false },
+  aviso_equipo: { url: "/", requireInteraction: false, ignoraSilencio: false },
+  email_new: { url: "/correo", requireInteraction: false, ignoraSilencio: false },
 };
 
 function json(body: unknown, status = 200) {
@@ -65,6 +68,7 @@ Deno.serve(async (req) => {
       // Los correos comparten tag: el aviso nuevo reemplaza al anterior en vez de apilarse.
       tag: payload.type === "email_new" ? "kawiil-email-new" : `${payload.type}-${payload.notification_id ?? Date.now()}`,
       requireInteraction: ruta.requireInteraction,
+      bypassQuietHours: ruta.ignoraSilencio,
     });
 
     return json({

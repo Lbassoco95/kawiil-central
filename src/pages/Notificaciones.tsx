@@ -42,6 +42,7 @@ import { NotificationsKawiilCard } from "@/components/notifications/Notification
 import { PersonalRemindersPanel } from "@/components/reminders/PersonalRemindersPanel";
 import { useReminders } from "@/hooks/useReminders";
 import { groupByMoment } from "@/lib/notificationGroups";
+import { HorarioSilencioCard } from "@/components/notifications/HorarioSilencioCard";
 
 type Tab = "menciones" | "actividad" | "sistema" | "vencimientos" | "recordatorios";
 
@@ -1202,6 +1203,7 @@ export default function Notificaciones() {
             </p>
           </div>
           <NotificationDeliveryPreferences />
+          <HorarioSilencioCard />
           <NotificationAiPreferences />
         </div>
       </div>
