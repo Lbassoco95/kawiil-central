@@ -34,7 +34,11 @@ interface Props {
   hasMore?: boolean;
   onLoadMore?: () => void;
   onOpenThread?: (ts: string) => void;
+  onPrefetchThread?: (ts: string) => void;
   onReact?: (ts: string, emoji: string) => void;
+  quickReactions?: string[];
+  showQuickReactions?: boolean;
+  frequentEmoji?: string[];
   onSaveForLater?: (msg: SlackMessage) => void;
   onCreateTask?: (msg: SlackMessage) => void;
   userMap?: Record<string, { display_name?: string; real_name?: string; avatar_url?: string }>;
@@ -59,7 +63,11 @@ export function MessageArea({
   hasMore = false,
   onLoadMore,
   onOpenThread,
+  onPrefetchThread,
   onReact,
+  quickReactions,
+  showQuickReactions,
+  frequentEmoji,
   onSaveForLater,
   onCreateTask,
   userMap = {},
@@ -367,7 +375,11 @@ export function MessageArea({
               userMap={userMap}
               customEmoji={customEmoji}
               onOpenThread={onOpenThread}
+              onPrefetchThread={onPrefetchThread}
               onReact={onReact}
+              quickReactions={quickReactions}
+              showQuickReactions={showQuickReactions}
+              frequentEmoji={frequentEmoji}
               onSaveForLater={onSaveForLater}
               onCreateTask={onCreateTask}
             />

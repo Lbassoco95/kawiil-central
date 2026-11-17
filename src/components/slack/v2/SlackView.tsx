@@ -23,6 +23,14 @@ import {
   SLACK_CONV_LIST_TIMEOUT_MS,
 } from "@/lib/slackWorkspaceFetch";
 import { saveSlackHistoryCache, loadSlackHistoryCache } from "@/lib/slackHistoryCache";
+import { loadSlackThreadCache } from "@/lib/slackThreadCache";
+import {
+  continueSlackThreadInBackground,
+  fetchSlackThreadFirstPage,
+  slackThreadQueryKey,
+} from "@/lib/slackThreadFetch";
+import { slackReactionNamesMatch } from "@/lib/slackQuickReactions";
+import { useSlackQuickReactions } from "@/hooks/useSlackQuickReactions";
 import { useSlackUserProfiles } from "@/hooks/useSlackUserProfiles";
 import { useSlackChannelNotificationBadges, markSlackChannelNotificationsRead } from "@/hooks/useSlackChannelNotificationBadges";
 import { useSlackUnreadMentionsCount } from "@/hooks/useSlackActivityFeed";
@@ -122,6 +130,7 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
   const [emojiTarget, setEmojiTarget] = useState<"main" | "thread">("main");
   const customEmojiQuery = useSlackCustomEmoji(true);
   const customEmoji = customEmojiQuery.emoji;
+  const quickReactions = useSlackQuickReactions();
   const [groupsDialogOpen, setGroupsDialogOpen] = useState(false);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [activityOpen, setActivityOpen] = useState(false);
@@ -477,32 +486,75 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
   }, [user?.id, selectedChannel]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Hilo (replies) ─────────────────────────────────────
+  // La raíz (o el hilo en caché) se ve al instante. La primera página llega
+  // sola; si el hilo es largo, el resto se suma en segundo plano.
   const threadQuery = useQuery({
-    queryKey: ["slack-thread-v2", selectedChannel, threadRootTs],
+    queryKey: slackThreadQueryKey(selectedChannel, threadRootTs ?? ""),
     queryFn: async () => {
       if (!selectedChannel || !threadRootTs) return [];
-      const data = await invokeSlackApi<{ ok: boolean; messages?: SlackMessage[] }>({
-        action: "conversations.replies",
-        channel: selectedChannel,
-        ts: threadRootTs,
-        limit: 200,
-      }, { timeoutMs: 45_000 });
-      return data.messages ?? [];
+      const root = messages.find((m) => m.ts === threadRootTs);
+      return fetchSlackThreadFirstPage(selectedChannel, threadRootTs, root?.reply_count);
     },
     enabled: !!selectedChannel && !!threadRootTs,
-    staleTime: 30_000,
-    // Apertura instantánea: muestra el mensaje raíz (ya en el historial) mientras
-    // llegan las respuestas, en vez de un panel vacío/cargando.
+    staleTime: 45_000,
+    gcTime: 30 * 60_000,
+    refetchOnWindowFocus: false,
     placeholderData: () => {
-      if (!threadRootTs) return undefined;
+      if (!selectedChannel || !threadRootTs) return undefined;
+      const cached = loadSlackThreadCache(selectedChannel, threadRootTs);
+      if (cached?.messages.length) return cached.messages;
       const root = messages.find((m) => m.ts === threadRootTs);
       return root ? [root] : undefined;
     },
   });
 
   const threadMessages = threadQuery.data ?? [];
-  const rootMessage = threadMessages[0] ?? null;
-  const threadReplies = threadMessages.slice(1);
+  const historyRoot = threadRootTs
+    ? messages.find((m) => m.ts === threadRootTs) ?? null
+    : null;
+  const rootMessage = threadMessages[0] ?? historyRoot;
+  const threadReplies = threadMessages.length > 0 && threadMessages[0]?.ts === rootMessage?.ts
+    ? threadMessages.slice(1)
+    : threadMessages.filter((m) => m.ts !== rootMessage?.ts);
+
+  useEffect(() => {
+    if (!selectedChannel || !threadRootTs) return;
+    continueSlackThreadInBackground(qc, selectedChannel, threadRootTs);
+  }, [qc, selectedChannel, threadRootTs, threadQuery.dataUpdatedAt]);
+
+  const prefetchThread = useCallback((ts: string) => {
+    if (!selectedChannel || !ts) return;
+    const root = messages.find((m) => m.ts === ts || m.thread_ts === ts);
+    void qc.prefetchQuery({
+      queryKey: slackThreadQueryKey(selectedChannel, ts),
+      staleTime: 45_000,
+      queryFn: () => fetchSlackThreadFirstPage(selectedChannel, ts, root?.reply_count),
+    });
+  }, [qc, selectedChannel, messages]);
+
+  const prefetchedChannelRef = useRef("");
+  useEffect(() => {
+    if (!selectedChannel || messages.length === 0) return;
+    const signature = `${selectedChannel}:${messages.length}:${messages[messages.length - 1]?.ts ?? ""}`;
+    if (prefetchedChannelRef.current === signature) return;
+    prefetchedChannelRef.current = signature;
+    const channelId = selectedChannel;
+    const targets = messages
+      .filter((m) => (m.reply_count ?? 0) > 0 && !!m.ts)
+      .sort((a, b) => parseFloat(b.latest_reply || b.ts) - parseFloat(a.latest_reply || a.ts))
+      .slice(0, 3);
+    targets.forEach((m, index) => {
+      window.setTimeout(() => {
+        if (prefetchedChannelRef.current !== signature) return;
+        const ts = m.thread_ts && m.thread_ts !== m.ts ? m.thread_ts : m.ts!;
+        void qc.prefetchQuery({
+          queryKey: slackThreadQueryKey(channelId, ts),
+          staleTime: 45_000,
+          queryFn: () => fetchSlackThreadFirstPage(channelId, ts, m.reply_count),
+        });
+      }, 600 + index * 450);
+    });
+  }, [selectedChannel, messages, qc]);
 
   // ─── Enviar mensaje ─────────────────────────────────────
   const sendMutation = useMutation({
@@ -595,7 +647,7 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
     onMutate: async ({ text, files }) => {
       if (files && files.length > 0) return undefined;
       if (!selectedChannel || !threadRootTs) return undefined;
-      const key = ["slack-thread-v2", selectedChannel, threadRootTs];
+      const key = slackThreadQueryKey(selectedChannel, threadRootTs);
       await qc.cancelQueries({ queryKey: key });
       const prev = qc.getQueryData(key);
       const tempMsg = {
@@ -621,19 +673,19 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
 
   // ─── Reacciones ─────────────────────────────────────────
   const reactionMutation = useMutation({
-    mutationFn: async ({ ts, emoji }: { ts: string; emoji: string }) => {
+    mutationFn: async ({ ts, emoji, remove }: { ts: string; emoji: string; remove?: boolean }) => {
       const name = emoji.replace(/^:|:$/g, "").trim();
       if (!selectedChannel || !name) throw new Error("Sin canal o emoji");
-      await invokeSlackApi<{ ok: boolean }>({
-        action: "reactions.add",
+      const data = await invokeSlackApi<{ ok?: boolean; error?: string }>({
+        action: remove ? "reactions.remove" : "reactions.add",
         channel: selectedChannel,
         ts,
         name,
-      }, { timeoutMs: 15_000 });
+      }, { timeoutMs: 12_000 });
+      if (data.ok === false) throw new Error(data.error || "No se pudo actualizar la reacción");
     },
-    // Optimista: la reacción aparece al instante; solo se refresca la superficie
-    // (historial o hilo) que realmente contiene el mensaje, no ambas.
-    onMutate: async ({ ts, emoji }) => {
+    // Optimista: la reacción cambia al instante, sin recargar el hilo.
+    onMutate: async ({ ts, emoji, remove }) => {
       const name = emoji.replace(/^:|:$/g, "").trim();
       const self = connection.slack_user_id ?? undefined;
       const bump = (msgs: SlackMessage[]): { changed: boolean; next: SlackMessage[] } => {
@@ -641,10 +693,16 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
         const next = msgs.map((m) => {
           if (m.ts !== ts) return m;
           changed = true;
-          const reactions = m.reactions ? m.reactions.map((r) => ({ ...r })) : [];
-          const idx = reactions.findIndex((r) => r.name === name);
-          if (idx >= 0) {
-            if (self && reactions[idx].users?.includes(self)) return m; // ya reaccionó
+          const reactions = m.reactions ? m.reactions.map((r) => ({ ...r, users: r.users ? [...r.users] : [] })) : [];
+          const idx = reactions.findIndex((r) => slackReactionNamesMatch(r.name, name));
+          if (remove) {
+            if (idx < 0) return m;
+            const users = (reactions[idx].users ?? []).filter((id) => id !== self);
+            const count = Math.max(0, reactions[idx].count - 1);
+            if (count <= 0) reactions.splice(idx, 1);
+            else reactions[idx] = { ...reactions[idx], count, users };
+          } else if (idx >= 0) {
+            if (self && reactions[idx].users?.includes(self)) return m;
             reactions[idx].count += 1;
             reactions[idx].users = [...(reactions[idx].users ?? []), ...(self ? [self] : [])];
           } else {
@@ -656,16 +714,16 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
       };
 
       const histKey = ["slack-history-v2", selectedChannel];
-      const thrKey = ["slack-thread-v2", selectedChannel, threadRootTs];
+      const thrKey = threadRootTs ? slackThreadQueryKey(selectedChannel, threadRootTs) : null;
       const prevHist = qc.getQueryData(histKey);
-      const prevThread = threadRootTs ? qc.getQueryData(thrKey) : undefined;
+      const prevThread = thrKey ? qc.getQueryData(thrKey) : undefined;
       let inThread = false;
 
       qc.setQueryData(histKey, (old: { pages?: HistoryPage[]; pageParams?: unknown[] } | undefined) => {
         if (!old?.pages?.length) return old;
         return { ...old, pages: old.pages.map((p) => ({ ...p, messages: bump(p.messages).next })) };
       });
-      if (threadRootTs) {
+      if (thrKey) {
         qc.setQueryData(thrKey, (old: SlackMessage[] | undefined) => {
           if (!Array.isArray(old)) return old;
           const res = bump(old);
@@ -677,21 +735,33 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
     },
     onSuccess: (_data, _vars, ctx) => {
       const c = ctx as { inThread?: boolean } | undefined;
-      // Refetch dirigido: solo la superficie que contiene el mensaje.
-      if (c?.inThread) void threadQuery.refetch();
-      else void historyQuery.refetch();
+      // El hilo abierto no se vuelve a bajar: la reacción ya está en pantalla.
+      if (!c?.inThread) void historyQuery.refetch();
     },
     onError: (err, _vars, ctx) => {
-      const c = ctx as { histKey?: unknown[]; thrKey?: unknown[]; prevHist?: unknown; prevThread?: unknown } | undefined;
+      const c = ctx as { histKey?: string[]; thrKey?: string[] | null; prevHist?: unknown; prevThread?: unknown } | undefined;
       if (c?.histKey && c.prevHist !== undefined) qc.setQueryData(c.histKey, c.prevHist);
       if (c?.thrKey && c.prevThread !== undefined) qc.setQueryData(c.thrKey, c.prevThread);
-      toast.error(err instanceof Error ? err.message : "No se pudo agregar la reacción");
+      toast.error(err instanceof Error ? err.message : "No se pudo actualizar la reacción");
     },
   });
 
   const handleReact = useCallback((ts: string, emoji: string) => {
-    reactionMutation.mutate({ ts, emoji });
-  }, [reactionMutation]);
+    const self = connection.slack_user_id;
+    let existingName: string | undefined;
+    if (self) {
+      for (const list of [messages, threadMessages]) {
+        const hit = list
+          .find((m) => m.ts === ts)
+          ?.reactions?.find((r) => slackReactionNamesMatch(r.name, emoji) && r.users?.includes(self));
+        if (hit) {
+          existingName = hit.name;
+          break;
+        }
+      }
+    }
+    reactionMutation.mutate({ ts, emoji: existingName ?? emoji, remove: !!existingName });
+  }, [connection.slack_user_id, messages, threadMessages, reactionMutation]);
 
   // ─── Perfiles de usuarios ────────────────────────────────
   const userIds = useMemo(() => {
@@ -701,6 +771,9 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
       if (m.user) ids.add(m.user);
       if (m.reply_users) m.reply_users.forEach((u) => ids.add(u));
     }
+    for (const m of threadMessages) {
+      if (m.user) ids.add(m.user);
+    }
     // Todos los DMs (is_im) del sidebar, para resolver su nombre/avatar.
     // useSlackUserProfiles ya acota el total (600) y cachea por id, así que
     // incluirlos todos es seguro y evita que algún DM quede con el ID crudo.
@@ -708,7 +781,7 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
       if (c.is_im && c.user) ids.add(c.user);
     }
     return [...ids];
-  }, [messages, conversations]);
+  }, [messages, threadMessages, conversations]);
 
   const profilesQuery = useSlackUserProfiles(userIds);
   const userMap = profilesQuery.data ?? {};
@@ -1020,8 +1093,12 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
             isFetchingNextPage={historyQuery.isFetchingNextPage}
             onLoadMore={() => void historyQuery.fetchNextPage()}
             onOpenThread={(ts) => setThreadRootTs(ts)}
+            onPrefetchThread={prefetchThread}
             userMap={userMap}
             customEmoji={customEmoji}
+            quickReactions={quickReactions.quick}
+            showQuickReactions={quickReactions.enabled}
+            frequentEmoji={quickReactions.frequent}
             selfUserId={connection.slack_user_id ?? undefined}
             onOpenAi={() => {}}
             onOpenActivity={() => setActivityOpen(true)}
@@ -1058,12 +1135,22 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
           channelId={selectedChannel}
           rootMessage={rootMessage}
           replies={threadReplies}
-          isLoading={threadQuery.isLoading}
+          isLoading={threadQuery.isLoading && !rootMessage}
+          loadError={threadQuery.error instanceof Error ? threadQuery.error.message : null}
+          isFetchingReplies={
+            threadQuery.isFetching
+            && threadReplies.length === 0
+            && (rootMessage?.reply_count ?? 0) > 0
+          }
+          expectedReplies={rootMessage?.reply_count ?? 0}
           isSending={sendReplyMutation.isPending}
           composerRef={threadComposerRef}
           onDropFiles={(files) => threadComposerRef.current?.addFiles(files)}
           onSendReply={(text, files) => sendReplyMutation.mutate({ text, files })}
           onReact={handleReact}
+          quickReactions={quickReactions.quick}
+          showQuickReactions={quickReactions.enabled}
+          frequentEmoji={quickReactions.frequent}
           onCreateTask={handleCreateTask}
           userMap={userMap}
           customEmoji={customEmoji}

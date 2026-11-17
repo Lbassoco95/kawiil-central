@@ -328,7 +328,14 @@
 .sl-msg-action.ai { color: hsl(var(--primary)); }
 .sl-msg-action.ai:hover { background: hsl(var(--primary) / 0.12); }
 .sl-quick-react { font-size: 14px; width: auto; min-width: 30px; padding: 0 4px; }
+.sl-quick-react .sl-emoji { font-size: 16px; }
+.sl-quick-react .sl-emoji-custom { width: 18px; height: 18px; vertical-align: middle; }
 .sl-quick-react.active { background: hsl(var(--primary) / 0.12); color: hsl(var(--primary)); }
+.sl-thread-pending {
+  margin: 8px 16px 12px;
+  font-size: 12px;
+  color: hsl(var(--muted-foreground));
+}
 
 /* Reacciones */
 .sl-reactions { display: flex; gap: 4px; margin-top: 4px; flex-wrap: wrap; }

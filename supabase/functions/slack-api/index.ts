@@ -71,6 +71,8 @@ type SlackMethod =
   | "emoji.list"
   | "users.info"
   | "users.list"
+  | "users.prefs.get"
+  | "team.prefs.get"
   | "auth.test";
 
 const MAX_UPLOAD_BYTES = 52 * 1024 * 1024;
@@ -330,6 +332,54 @@ type SlackRepliesPage = {
   error?: string;
   response_metadata?: { next_cursor?: string };
 };
+
+const SLACK_DEFAULT_QUICK_REACTIONS = ["white_check_mark", "eyes", "raised_hands"];
+
+function readQuickEmojiName(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const name = value.trim().replace(/^:|:$/g, "");
+  if (!/^[a-z0-9_+-]{1,100}(?:::skin-tone-[2-6])?$/i.test(name)) return null;
+  return name;
+}
+
+function readSlackFlag(value: unknown, whenMissing: boolean): boolean {
+  if (value === undefined || value === null || value === "") return whenMissing;
+  if (value === false || value === 0 || value === "0" || value === "false") return false;
+  if (value === true || value === 1 || value === "1" || value === "true") return true;
+  return whenMissing;
+}
+
+/** Solo los conteos que necesita el cliente; el resto de prefs no sale de la función. */
+function trimEmojiUse(raw: unknown): Record<string, number> {
+  let value = raw;
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return {};
+    }
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const rows: Array<[string, number]> = [];
+  for (const [key, count] of Object.entries(value as Record<string, unknown>)) {
+    const name = readQuickEmojiName(key);
+    const n = typeof count === "number" ? count : Number(count);
+    if (!name || !Number.isFinite(n) || n <= 0) continue;
+    rows.push([name, n]);
+  }
+  rows.sort((a, b) => b[1] - a[1]);
+  return Object.fromEntries(rows.slice(0, 24));
+}
+
+function workspaceQuickReactions(teamPrefs: Record<string, unknown> | null): string[] {
+  const prefs = teamPrefs && teamPrefs.ok === true
+    ? (teamPrefs.prefs as Record<string, unknown> | undefined)
+    : undefined;
+  const raw = prefs?.admin_customized_quick_reactions;
+  if (!Array.isArray(raw)) return SLACK_DEFAULT_QUICK_REACTIONS;
+  const names = raw.map(readQuickEmojiName).filter((name): name is string => !!name);
+  return names.length >= 3 ? names.slice(0, 3) : SLACK_DEFAULT_QUICK_REACTIONS;
+}
 
 function sortSlackMessagesByTs(messages: Array<Record<string, unknown>>): void {
   messages.sort((a, b) => {
@@ -868,9 +918,10 @@ Deno.serve(async (req) => {
       const rawLimit = typeof json.limit === "number" ? json.limit : 50;
       const maxTotal = Math.min(SLACK_THREAD_REPLIES_MAX_MESSAGES, Math.max(1, rawLimit));
       const clientCursor = (json.cursor as string | undefined)?.trim() || undefined;
+      // Una sola página: el cliente pinta ya y, si hace falta, pide el resto.
+      const singlePage = json.single_page === true;
 
-      // Modo compat: el cliente pasa `cursor` explícito → una sola página (sin fusión automática).
-      if (clientCursor) {
+      if (clientCursor || singlePage) {
         const perPage = Math.min(1000, Math.max(1, maxTotal));
         const data = await slackCall(conn.access_token, "conversations.replies", {
           channel,
@@ -1056,6 +1107,45 @@ Deno.serve(async (req) => {
     if (action === "emoji.list") {
       const data = await slackCall(conn.access_token, "emoji.list", {});
       return jsonOk(annotateSlackResponse(data as Record<string, unknown>));
+    }
+
+    if (action === "users.prefs.quickReactions") {
+      const userPrefs = await slackCall(conn.access_token, "users.prefs.get", {}) as Record<string, unknown>;
+      if (userPrefs.ok !== true) {
+        return jsonOk({
+          ok: false,
+          error: typeof userPrefs.error === "string" ? userPrefs.error : "prefs_unavailable",
+          workspace_defaults: SLACK_DEFAULT_QUICK_REACTIONS,
+        });
+      }
+      const prefs = (userPrefs.prefs && typeof userPrefs.prefs === "object"
+        ? userPrefs.prefs
+        : {}) as Record<string, unknown>;
+      const slots = [
+        prefs.user_customized_quick_reactions_emoji_1,
+        prefs.user_customized_quick_reactions_emoji_2,
+        prefs.user_customized_quick_reactions_emoji_3,
+      ];
+      const personalized = readSlackFlag(prefs.user_customized_quick_reactions_has_customized, false)
+        || readSlackFlag(prefs.user_customized_quick_reactions_use_frequently_used_emoji, false)
+        || slots.some((slot) => readQuickEmojiName(slot));
+      let workspaceDefaults = SLACK_DEFAULT_QUICK_REACTIONS;
+      if (!personalized) {
+        const teamPrefs = await slackCall(conn.access_token, "team.prefs.get", {}) as Record<string, unknown>;
+        workspaceDefaults = workspaceQuickReactions(teamPrefs);
+      }
+      return jsonOk({
+        ok: true,
+        show_quick_reactions: readSlackFlag(prefs.show_quick_reactions, true),
+        use_frequently_used: readSlackFlag(prefs.user_customized_quick_reactions_use_frequently_used_emoji, false),
+        has_customized: readSlackFlag(prefs.user_customized_quick_reactions_has_customized, false),
+        emoji_1: prefs.user_customized_quick_reactions_emoji_1 ?? null,
+        emoji_2: prefs.user_customized_quick_reactions_emoji_2 ?? null,
+        emoji_3: prefs.user_customized_quick_reactions_emoji_3 ?? null,
+        preferred_skin_tone: prefs.preferred_skin_tone ?? "",
+        emoji_use: trimEmojiUse(prefs.emoji_use),
+        workspace_defaults: workspaceDefaults,
+      });
     }
 
     if (action === "reactions.add" || action === "reactions.remove") {
@@ -1281,6 +1371,7 @@ Deno.serve(async (req) => {
         "conversations.members",
         "conversations.members.batch",
         "conversations.replies",
+        "users.prefs.quickReactions",
         "conversations.info",
         "chat.postMessage",
         "chat.scheduleMessage",

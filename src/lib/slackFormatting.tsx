@@ -514,12 +514,20 @@ export type SlackEmojiSuggestion = {
 };
 
 export function resolveSlackEmoji(alias: string, custom?: SlackCustomEmojiMap): ResolvedSlackEmoji {
-  const name = alias.replace(/^:|:$/g, "").trim().toLowerCase();
-  if (!name) return { kind: "unknown", name: alias };
+  const raw = alias.replace(/^:|:$/g, "").trim().toLowerCase();
+  if (!raw) return { kind: "unknown", name: alias };
+  const skinSep = raw.indexOf("::");
+  const name = skinSep >= 0 ? raw.slice(0, skinSep) : raw;
+  const skinPart = skinSep >= 0 ? raw.slice(skinSep + 2) : "";
   const url = custom?.[name];
   if (url && /^https?:\/\//i.test(url)) return { kind: "image", url, name };
   const char = EMOJI_INDEX.byName.get(name);
-  if (char) return { kind: "unicode", char };
+  if (char) {
+    const tone = /^skin-tone-([2-6])$/.exec(skinPart);
+    const modifier = tone ? EMOJI_INDEX.byName.get(`skin-tone-${tone[1]}`) : undefined;
+    if (modifier) return { kind: "unicode", char: char + modifier };
+    return { kind: "unicode", char };
+  }
   return { kind: "unknown", name };
 }
 

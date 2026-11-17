@@ -103,6 +103,10 @@ describe("catálogo de emojis", () => {
       char: "🎁",
     });
     expect(resolveSlackEmoji("point_right")).toMatchObject({ kind: "unicode", char: "👉" });
+    expect(resolveSlackEmoji("raised_hands::skin-tone-4")).toMatchObject({
+      kind: "unicode",
+      char: "🙌\u{1F3FD}",
+    });
     expect(resolveSlackEmoji("shushingface")).toMatchObject({ kind: "unicode", char: "🤫" });
     expect(resolveSlackEmoji("loveletter")).toMatchObject({ kind: "unicode", char: "💌" });
     expect(resolveSlackEmoji("candy")).toMatchObject({ kind: "unicode", char: "🍬" });
