@@ -4,6 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Megaphone } from "lucide-react";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
+import { useAgentesEnVivo } from "@/hooks/useAgentesEnVivo";
 import { useCalibracion, useCasos, useColchon, useCobertura, useInformeDiario, usePiezas, useUltimaCorrida, useReglaHistorial, useReglas, useBitacora, usePropuestas, useDecisiones, useEstadoTrabajos, useAgentesRegistro, useTareasAgentes, useTareasMarketingAgentes, useConsultasAnalista, preguntarAlAnalista, useSeguimientosAnalista, gestionarSeguimiento } from "@/hooks/useMarketing";
 import { PanelDia } from "@/components/marketing/PanelDia";
 import { Calendario } from "@/components/marketing/Calendario";
@@ -35,6 +36,7 @@ export default function Marketing() {
   const trabajos = useEstadoTrabajos();
   const agentesReg = useAgentesRegistro();
   const tareasReg = useTareasAgentes();
+  useAgentesEnVivo();   // la oficina de Marketing también se refresca sola cuando un agente empieza o termina algo
   const tareasMk = useTareasMarketingAgentes();
   const consultas = useConsultasAnalista();
   const seguimientos = useSeguimientosAnalista();
