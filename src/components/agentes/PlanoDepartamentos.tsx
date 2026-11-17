@@ -16,6 +16,8 @@ import { DIAS_COLABORACION, llamadasEntreAgentes, origenDeTarea } from "@/lib/ag
 // el código y los colores son propios de Kawiil.
 
 const CSS_PLANO = `
+.pl-isla-hit:hover{fill:rgba(255,255,255,.18)}
+.pl-isla-hit:focus-visible{outline:none;stroke:#8fb4d9;stroke-width:3}
 .pl-agente .pl-anillo{opacity:0;transition:opacity .25s ease}
 .pl-agente:hover .pl-anillo,.pl-agente:focus-visible .pl-anillo{opacity:1}
 .pl-agente:focus{outline:none}
@@ -61,7 +63,7 @@ function Agente({ f, x, y, depto, onElegir }: { f: FiguraOficina; x: number; y: 
   );
 }
 
-function Isla({ g, centro, activa, onElegir }: { g: GrupoDepartamento; centro: { x: number; y: number }; activa: boolean; onElegir?: (id: string) => void }) {
+function Isla({ g, centro, activa, onElegir, onAbrir }: { g: GrupoDepartamento; centro: { x: number; y: number }; activa: boolean; onElegir?: (id: string) => void; onAbrir?: (clave: string) => void }) {
   const { cols, filas } = celdasDe(g.figuras.length);
   const s = Math.min(1, ANCHO_ISLA_MAX / ((cols + filas) * TW));
   const A = isoPunto(0, 0, cols, filas), B = isoPunto(cols, 0, cols, filas), C = isoPunto(cols, filas, cols, filas), D = isoPunto(0, filas, cols, filas);
@@ -72,7 +74,13 @@ function Isla({ g, centro, activa, onElegir }: { g: GrupoDepartamento; centro: {
       <polygon points={pts(D, C, baja(C), baja(D))} fill={oscurecer(g.depto.tinte, 0.86)} />
       <polygon points={pts(B, C, baja(C), baja(B))} fill={oscurecer(g.depto.tinte, 0.74)} />
       <polygon points={pts(A, B, C, D)} fill={g.depto.tinte} />
-      {activa && <polygon className="pl-viva" points={pts(A, B, C, D)} fill="rgba(95,179,122,.22)" stroke="#3f9d63" strokeWidth={5} strokeLinejoin="round" data-testid={`isla-viva-${g.depto.clave}`} />}
+      {onAbrir && (
+        // Toda la isla se puede tocar (el piso y su orilla); los agentes se dibujan encima y conservan su propio clic. La transformación va anulada por index.css.
+        <polygon className="pl-isla-hit" role="button" tabIndex={0} data-testid={`isla-abrir-${g.depto.clave}`} style={{ cursor: "pointer", transform: "none", pointerEvents: "all" }} fill="transparent"
+          points={pts(A, B, baja(B), baja(C), baja(D), D)} aria-label={`Abrir la isla ${g.depto.nombre}: ${g.figuras.length} ${g.figuras.length === 1 ? "agente" : "agentes"}${activa ? ", trabajando ahora" : ""}`}
+          onClick={() => onAbrir(g.depto.clave)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onAbrir(g.depto.clave); } }} />
+      )}
+      {activa && <polygon className="pl-viva" style={{ pointerEvents: "none" }} points={pts(A, B, C, D)} fill="rgba(95,179,122,.22)" stroke="#3f9d63" strokeWidth={5} strokeLinejoin="round" data-testid={`isla-viva-${g.depto.clave}`} />}
       {Array.from({ length: cols * filas }, (_, k) => {
         const i = k % cols, j = Math.floor(k / cols);
         return <polygon key={k} points={pts(isoPunto(i, j, cols, filas), isoPunto(i + 1, j, cols, filas), isoPunto(i + 1, j + 1, cols, filas), isoPunto(i, j + 1, cols, filas))} fill="none" stroke="rgba(255,255,255,.5)" strokeWidth={1} />;
@@ -86,12 +94,12 @@ function Isla({ g, centro, activa, onElegir }: { g: GrupoDepartamento; centro: {
 }
 
 const TW_CARD = 208, TH_CARD = 108;
-function Tarjeta({ g, x, y, ahora, tareas, activa }: { g: GrupoDepartamento; x: number; y: number; ahora: Date; tareas: TareaAgente[]; activa: boolean }) {
+function Tarjeta({ g, x, y, ahora, tareas, activa, onAbrir }: { g: GrupoDepartamento; x: number; y: number; ahora: Date; tareas: TareaAgente[]; activa: boolean; onAbrir?: (clave: string) => void }) {
   const r = resumenDepartamento(g.figuras.map((f) => f.id), tareas, ahora);
   const stat = (etq: string, n: number, dx: number) => <text key={etq} x={x + dx} y={y + 93} fontSize={9} letterSpacing={0.6} style={{ fill: "#7a6d58" }}>{etq} <tspan fontSize={13} fontWeight={700} style={{ fill: "#3f362a" }}>{n}</tspan></text>;
   return (
     <g data-testid={`tarjeta-${g.depto.clave}`} role="group" aria-label={`${g.depto.nombre}: ${r.agentes} agentes, ${r.haciendo} haciendo, ${r.enCola} en cola, ${r.hechas} hechas en ${DIAS_HECHAS} días${r.conError ? `, ${r.conError} con error` : ""}${activa ? ", trabajando ahora" : ""}`}>
-      <rect x={x} y={y} width={TW_CARD} height={TH_CARD} rx={18} fill="rgba(255,255,255,.8)" stroke="rgba(120,100,70,.16)" />
+      <rect x={x} y={y} width={TW_CARD} height={TH_CARD} rx={18} fill="rgba(255,255,255,.8)" stroke="rgba(120,100,70,.16)" style={onAbrir ? { cursor: "pointer" } : undefined} onClick={onAbrir ? () => onAbrir(g.depto.clave) : undefined} />
       <rect x={x} y={y + 14} width={4} height={26} rx={2} fill={oscurecer(g.depto.tinte, 0.8)} />
       <circle className={activa ? "pl-viva" : undefined} cx={x + 20} cy={y + 24} r={5} fill={activa ? "#5fb37a" : oscurecer(g.depto.tinte, 0.82)} />
       <text x={x + 32} y={y + 28} fontSize={13} fontWeight={600} style={{ fill: "#3f362a" }}>{recorta(g.depto.nombre, r.conError > 0 ? 15 : 24)}</text>
@@ -131,7 +139,7 @@ function Barra({ grupo }: { grupo: FilaTarea["grupo"] }) {
 }
 
 // `alAbrirMarketing`: Marketing tiene su módulo aparte (/marketing). Su isla es un resumen: al elegir uno de sus agentes o tareas se abre ese módulo en vez de la Oficina.
-export function PlanoDepartamentos({ figuras, agentes, tareas, ahora, onElegir, alAbrirMarketing }: { figuras: FiguraOficina[]; agentes: AgenteRegistro[]; tareas: TareaAgente[]; ahora: Date; onElegir?: (id: string) => void; alAbrirMarketing?: () => void }) {
+export function PlanoDepartamentos({ figuras, agentes, tareas, ahora, onElegir, alAbrirMarketing, onAbrirIsla }: { figuras: FiguraOficina[]; agentes: AgenteRegistro[]; tareas: TareaAgente[]; ahora: Date; onElegir?: (id: string) => void; alAbrirMarketing?: () => void; onAbrirIsla?: (clave: string) => void }) {
   const [filtro, setFiltro] = useState<FiltroTareas>("todas");
   const grupos = useMemo(() => agruparPorDepartamento(figuras, agentes), [figuras, agentes]);
   const ids = useMemo(() => new Set(figuras.map((f) => f.id)), [figuras]);
@@ -182,11 +190,11 @@ export function PlanoDepartamentos({ figuras, agentes, tareas, ahora, onElegir, 
               </g>
             );
           })}
-          {grupos.map((g, k) => <Isla key={g.depto.clave} g={g} centro={posiciones[k]} activa={activaDe(g)} onElegir={elegir} />)}
+          {grupos.map((g, k) => <Isla key={g.depto.clave} g={g} centro={posiciones[k]} activa={activaDe(g)} onElegir={elegir} onAbrir={onAbrirIsla} />)}
           {grupos.map((g, k) => {
             const { cols, filas: fl } = celdasDe(g.figuras.length), s = Math.min(1, ANCHO_ISLA_MAX / ((cols + fl) * TW)), mitad = ((cols + fl) * TH * s) / 2, p = posiciones[k];
             const y = p.fila === "arriba" ? Math.max(12, p.y - mitad - TH_CARD - 92) : Math.min(escena.alto - TH_CARD - 10, p.y + mitad + PROF + 22);
-            return <Tarjeta key={"t" + g.depto.clave} g={g} x={p.x - TW_CARD / 2} y={y} ahora={ahora} tareas={visibles} activa={activaDe(g)} />;
+            return <Tarjeta key={"t" + g.depto.clave} g={g} x={p.x - TW_CARD / 2} y={y} ahora={ahora} tareas={visibles} activa={activaDe(g)} onAbrir={onAbrirIsla} />;
           })}
         </svg>
         {idsMarketing.size > 0 && (
