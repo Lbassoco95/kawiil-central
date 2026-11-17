@@ -8,6 +8,7 @@
  */
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { sendWebPushToUsers } from "../_shared/webPush.ts";
+// Los avisos push respetan el horario de silencio de cada persona (22:00–07:00 por defecto): ver _shared/horarioSilencio.ts.
 import { buildCierreMessage, parseCierreOptions } from "../_shared/kawiilitoCierre.ts";
 
 const corsHeaders = {

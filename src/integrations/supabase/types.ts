@@ -4255,6 +4255,9 @@ export type Database = {
           created_at: string
           desktop_browser_notifications: boolean
           desktop_push_notifications: boolean
+          push_quiet_enabled: boolean
+          push_quiet_end: string
+          push_quiet_start: string
           dropbox_personal_folder: string | null
           email: string
           full_name: string
@@ -4287,6 +4290,9 @@ export type Database = {
           created_at?: string
           desktop_browser_notifications?: boolean
           desktop_push_notifications?: boolean
+          push_quiet_enabled?: boolean
+          push_quiet_end?: string
+          push_quiet_start?: string
           dropbox_personal_folder?: string | null
           email: string
           full_name: string
@@ -4319,6 +4325,9 @@ export type Database = {
           created_at?: string
           desktop_browser_notifications?: boolean
           desktop_push_notifications?: boolean
+          push_quiet_enabled?: boolean
+          push_quiet_end?: string
+          push_quiet_start?: string
           dropbox_personal_folder?: string | null
           email?: string
           full_name?: string
