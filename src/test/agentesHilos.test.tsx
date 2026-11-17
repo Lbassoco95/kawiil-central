@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   accesosDelAgente, opcionesFirma, INSTRUCCION_REVISION, MAX_VECES, contextoRevision, mensajesDelHilo, raizDelHilo, resumirTarea, revisionesPendientes, validarRevision,
 } from "../../supabase/functions/_shared/seguimiento";
-import { ATAJOS, HiloAgente, aLocal } from "@/components/agentes/HiloAgente";
+import { ATAJOS, DocumentosDelHilo, HiloAgente, aLocal } from "@/components/agentes/HiloAgente";
 import { accesosOlvidados } from "@/components/agentes/InstruirAgente";
 import { TrabajosAgente } from "@/components/agentes/TrabajosAgente";
 import { Oficina } from "@/components/agentes/Oficina";
@@ -166,6 +166,23 @@ describe("<HiloAgente />", () => {
     fireEvent.click(screen.getByTestId(`hilo-descargar-${T}-0`));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("agente-seguimiento", { body: { action: "descargar", task_id: T, indice: 0 } }));   // «Descargar» no manda `ver`
     abrir.mockRestore();
+  });
+
+  it("el panel «Documentos de esta conversación» junta los de todas las respuestas, sin duplicados, con Ver (PDF) y Descargar", async () => {
+    const doc = (nombre: string, formato = "pdf") => ({ nombre, formato, bytes: 1000, titulo: nombre, creado: "2026-11-09T05:49:00Z" });
+    const msj = (task_id: string, entregables: ReturnType<typeof doc>[]) => ({ task_id, rol: "agente", texto: "ok", cuando: "2026-11-09T05:49:00Z", estado: "completed", entregables }) as never;
+    const T3 = "7a7a7a7a-3333-4333-8333-333333333333";
+    render(<DocumentosDelHilo mensajes={[msj(T, [doc("uno.pdf"), doc("informe.docx", "docx")]), msj(T3, [doc("uno.pdf")])]} />, { wrapper: ({ children }) => <QueryClientProvider client={new QueryClient()}>{children}</QueryClientProvider> });
+    expect(screen.getByTestId("hilo-documentos-resumen").textContent).toContain("2");            // uno.pdf repetido cuenta una vez
+    expect(screen.getByTestId(`doc-ver-${T3}-0`)).toBeTruthy();                                   // queda el más reciente
+    expect(screen.queryByTestId(`doc-ver-${T}-0`)).toBeNull();
+    expect(screen.queryByTestId(`doc-ver-${T}-1`)).toBeNull();                                    // el Word no tiene «Ver»
+    expect(screen.getByTestId(`doc-descargar-${T}-1`)).toBeTruthy();
+  });
+
+  it("sin documentos entregados no aparece el panel", () => {
+    render(<DocumentosDelHilo mensajes={[]} />, { wrapper: ({ children }) => <QueryClientProvider client={new QueryClient()}>{children}</QueryClientProvider> });
+    expect(screen.queryByTestId("hilo-documentos")).toBeNull();
   });
 
   it("las opciones del enlace firmado: Ver solo aplica a PDF; lo demás fuerza la descarga con su nombre", () => {
