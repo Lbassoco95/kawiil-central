@@ -1,5 +1,6 @@
 import { useEffect, useRef, useMemo, useState } from "react";
 import type { SlackMessage, SlackConversation } from "@/lib/slackApi";
+import type { SlackCustomEmojiMap } from "@/lib/slackFormatting";
 import { MessageItem } from "./MessageItem";
 
 // ─── Utilidades ──────────────────────────────────────────────
@@ -37,6 +38,7 @@ interface Props {
   onSaveForLater?: (msg: SlackMessage) => void;
   onCreateTask?: (msg: SlackMessage) => void;
   userMap?: Record<string, { display_name?: string; real_name?: string; avatar_url?: string }>;
+  customEmoji?: SlackCustomEmojiMap;
   selfUserId?: string;
   onOpenActivity?: () => void;
   onOpenAi?: () => void;
@@ -61,6 +63,7 @@ export function MessageArea({
   onSaveForLater,
   onCreateTask,
   userMap = {},
+  customEmoji,
   selfUserId,
   onOpenActivity,
   onOpenAi,
@@ -362,6 +365,7 @@ export function MessageArea({
               isSelf={msg.user === selfUserId}
               selfUserId={selfUserId}
               userMap={userMap}
+              customEmoji={customEmoji}
               onOpenThread={onOpenThread}
               onReact={onReact}
               onSaveForLater={onSaveForLater}

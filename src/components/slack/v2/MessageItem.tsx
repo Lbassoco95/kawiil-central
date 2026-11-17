@@ -1,6 +1,11 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { fetchSlackPrivateFileBlob, type SlackMessage, type SlackFile } from "@/lib/slackApi";
-import { slackMrkdwnToReact, slackEmojiAliasToChar, type FormatContext } from "@/lib/slackFormatting";
+import {
+  slackMrkdwnToReact,
+  slackEmojiToReact,
+  type FormatContext,
+  type SlackCustomEmojiMap,
+} from "@/lib/slackFormatting";
 import type { SlackUserProfile } from "@/hooks/useSlackUserProfiles";
 import { SlackAttachmentPreviewDialog } from "@/components/slack/SlackAttachmentPreviewDialog";
 
@@ -250,6 +255,7 @@ interface Props {
   isSelf?: boolean;
   selfUserId?: string;
   userMap?: Record<string, SlackUserProfile | undefined>;
+  customEmoji?: SlackCustomEmojiMap;
   onOpenThread?: (ts: string) => void;
   onReact?: (ts: string, emoji: string) => void;
   onSaveForLater?: (msg: SlackMessage) => void;
@@ -264,6 +270,7 @@ export function MessageItem({
   isSelf = false,
   selfUserId,
   userMap,
+  customEmoji,
   onOpenThread,
   onReact,
   onSaveForLater,
@@ -276,8 +283,12 @@ export function MessageItem({
   const isBot = !!message.bot_id;
 
   const formatCtx = useMemo<FormatContext>(
-    () => ({ userMap: userMap ?? {} }),
-    [userMap],
+    () => ({ userMap: userMap ?? {}, customEmoji }),
+    [userMap, customEmoji],
+  );
+  const workspaceEmoji = useMemo(
+    () => Object.entries(customEmoji ?? {}).slice(0, 12),
+    [customEmoji],
   );
 
   const [previewFile, setPreviewFile] = useState<SlackFile | null>(null);
@@ -376,7 +387,7 @@ export function MessageItem({
                 className={`sl-react${selfUserId && r.users?.includes(selfUserId) ? " me" : ""}`}
                 onClick={() => onReact?.(message.ts ?? "", r.name)}
               >
-                {slackEmojiAliasToChar(r.name)} <span className="count">{r.count}</span>
+                {slackEmojiToReact(r.name, customEmoji)} <span className="count">{r.count}</span>
               </button>
             ))}
           </div>
@@ -455,6 +466,28 @@ export function MessageItem({
                   minWidth: 176,
                 }}
               >
+                {workspaceEmoji.map(([emojiName, url]) => (
+                  <button
+                    key={`ws-${emojiName}`}
+                    title={emojiName}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      onReact(message.ts ?? "", emojiName);
+                      setShowEmojiPicker(false);
+                    }}
+                    style={{
+                      background: hasReacted(emojiName) ? "hsl(var(--primary) / 0.15)" : "transparent",
+                      border: "none",
+                      borderRadius: 6,
+                      cursor: "pointer",
+                      padding: "4px",
+                      display: "grid",
+                      placeItems: "center",
+                    }}
+                  >
+                    <img src={url} alt="" className="sl-emoji-custom" style={{ width: 20, height: 20 }} />
+                  </button>
+                ))}
                 {EXTRA_EMOJIS.map(([emojiName, char]) => (
                   <button
                     key={emojiName}

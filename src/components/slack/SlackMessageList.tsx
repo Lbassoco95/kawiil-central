@@ -27,6 +27,7 @@ import type { SlackFile, SlackMessage } from "@/lib/slackApi";
 import { slackUserDisplayName } from "./slackGrouping";
 import { SlackAttachmentPreviewDialog } from "@/components/slack/SlackAttachmentPreviewDialog";
 import type { FormatContext } from "@/lib/slackFormatting";
+import { useSlackCustomEmoji } from "@/hooks/useSlackCustomEmoji";
 import { buildSlackListRows, estimateSlackRowHeight } from "./slackListRows";
 import { SlackMessageListRowView } from "./SlackMessageListRowView";
 
@@ -115,12 +116,14 @@ export function SlackMessageList({
   const anchorPrefetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevSelectedChannelRef = useRef(selectedChannelId);
 
+  const { emoji: customEmoji } = useSlackCustomEmoji(true);
   const formatCtx = useMemo<FormatContext>(
     () => ({
       userMap,
+      customEmoji,
       onUserMentionClick: (id) => setMentionUserId(id),
     }),
-    [userMap],
+    [userMap, customEmoji],
   );
 
   const listRows = useMemo(
