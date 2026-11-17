@@ -28,6 +28,16 @@ describe("<AvisosEquipo />", () => {
     expect(screen.getByTestId("aviso-a1").getAttribute("data-tipo")).toBe("dia_inhabil");
     expect(screen.queryByTestId("aviso-a2")).toBeNull();
   });
+  it("tiene colores propios para modo oscuro (un fondo claro con texto claro no se leía)", async () => {
+    montar(<AvisosEquipo />);
+    await waitFor(() => screen.getByTestId("aviso-a1"));
+    const clase = screen.getByTestId("aviso-a1").className;
+    expect(clase).toMatch(/dark:bg-amber-950/); expect(clase).toMatch(/dark:text-amber-50/); expect(clase).toMatch(/dark:border-amber-400/);
+    cleanup(); filas = [A2, { ...A1, id: "a3", tipo: "general" }];
+    montar(<AvisosEquipo />);
+    await waitFor(() => screen.getByTestId("aviso-a3"));
+    expect(screen.getByTestId("aviso-a3").className).toMatch(/dark:bg-sky-950/);
+  });
   it("se puede cerrar y no vuelve a salir en la sesión", async () => {
     const { unmount } = montar(<AvisosEquipo />);
     await waitFor(() => screen.getByTestId("aviso-a1"));
