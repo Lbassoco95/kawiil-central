@@ -18,17 +18,11 @@ serve(async (req) => {
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const admin = createClient(supabaseUrl, serviceKey);
 
-  // Cron o service
-  const okCron = cronSecret && header === cronSecret;
-  let okJwt = false;
-  if (auth?.startsWith("Bearer ")) {
-    const userClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
-      global: { headers: { Authorization: auth } },
-    });
-    const { data } = await userClient.auth.getUser();
-    okJwt = !!data.user;
-  }
-  if (!okCron && !okJwt) {
+  // Solo cron o service role — no JWT de usuario (evita que cualquier sesión dispare la cola).
+  const okCron = Boolean(cronSecret) && header === cronSecret;
+  const bearer = auth?.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+  const okService = Boolean(serviceKey) && bearer === serviceKey;
+  if (!okCron && !okService) {
     return new Response(JSON.stringify({ error: "unauthorized" }), {
       status: 401,
       headers: { ...cors, "Content-Type": "application/json" },

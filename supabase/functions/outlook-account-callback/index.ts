@@ -1,7 +1,10 @@
 import { verifyOAuthState } from "../_shared/oauthState.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const postMessageOrigin = "*";
+const postMessageOrigin =
+  Deno.env.get("APP_ORIGIN")?.trim() ||
+  Deno.env.get("KAWIIL_APP_URL")?.trim().replace(/\/$/, "") ||
+  "https://www.kawiil-central.mx";
 
 function escapeHtml(text: string): string {
   return text

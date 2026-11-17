@@ -38,6 +38,45 @@ async function signPayload(secret: string, email: string, timestamp: string): Pr
   return toBase64Url(new Uint8Array(signature));
 }
 
+const DEFAULT_APP_ORIGINS = new Set([
+  "https://www.kawiil-central.mx",
+  "https://kawiil-central.mx",
+  "https://kawiil-core-hub.lovable.app",
+]);
+
+/** Solo orígenes allowlisted y path de cambio de contraseña (anti open-redirect). */
+function sanitizeRedirectTo(redirectTo: unknown, siteUrl: string): string {
+  const fallbackPath = "/cambiar-contrasena?flow=direct";
+  const fallbackOrigin = (() => {
+    try {
+      if (siteUrl) return new URL(siteUrl).origin;
+    } catch { /* ignore */ }
+    return "https://www.kawiil-central.mx";
+  })();
+  const fallback = `${fallbackOrigin}${fallbackPath}`;
+
+  if (typeof redirectTo !== "string" || !redirectTo.trim()) return fallback;
+
+  try {
+    const u = new URL(redirectTo.trim());
+    const allowed = new Set(DEFAULT_APP_ORIGINS);
+    try {
+      if (siteUrl) allowed.add(new URL(siteUrl).origin);
+    } catch { /* ignore */ }
+    const extra = (Deno.env.get("ALLOWED_ORIGINS") ?? "")
+      .split(",")
+      .map((s) => s.trim().replace(/\/$/, ""))
+      .filter(Boolean);
+    for (const o of extra) allowed.add(o);
+
+    if (!allowed.has(u.origin)) return fallback;
+    if (u.pathname !== "/cambiar-contrasena") return fallback;
+    return u.toString();
+  } catch {
+    return fallback;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -63,7 +102,7 @@ Deno.serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const siteUrl = Deno.env.get("SITE_URL") || "";
+    const siteUrl = Deno.env.get("SITE_URL") || Deno.env.get("PUBLIC_APP_URL") || "";
 
     const expectedSig = await signPayload(serviceRoleKey, email, String(ts));
     if (!safeEqual(expectedSig, String(sig))) {
@@ -71,9 +110,7 @@ Deno.serve(async (req) => {
     }
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
-    const redirectTo = typeof redirect_to === "string" && redirect_to.length > 0
-      ? redirect_to
-      : `${siteUrl}/cambiar-contrasena?flow=direct`;
+    const redirectTo = sanitizeRedirectTo(redirect_to, siteUrl);
 
     const { error: resetError } = await adminClient.auth.resetPasswordForEmail(email, {
       redirectTo,
