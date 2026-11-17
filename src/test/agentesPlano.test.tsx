@@ -4,7 +4,7 @@ import { PlanoDepartamentos } from "@/components/agentes/PlanoDepartamentos";
 import { figurasOficina } from "@/lib/agentes/oficina";
 import type { AgenteRegistro, TareaAgente } from "@/lib/agentes/registro";
 import {
-  agruparPorDepartamento, celdasDe, contarTareas, ESCENA, departamentoDe, filasDeTareas, grupoDeEstado, isoPunto, MAX_ISLAS, posicionesIslas, resumenDepartamento,
+  agruparPorDepartamento, celdasDe, contarTareas, ANCHO_ISLA_MAX, escenaPara, departamentoDe, filasDeTareas, grupoDeEstado, isoPunto, MAX_ISLAS, posicionesIslas, resumenDepartamento,
 } from "@/lib/agentes/departamentos";
 
 const AHORA = new Date("2026-11-15T12:00:00Z");
@@ -74,8 +74,16 @@ describe("departamentos (lógica)", () => {
     const p = posicionesIslas(5);
     expect(p).toHaveLength(5);
     expect(p.filter((x) => x.fila === "arriba")).toHaveLength(3);
-    expect(p.every((x) => x.x >= 0 && x.x <= 1200)).toBe(true);
-    expect(posicionesIslas(1)[0].y).toBe(ESCENA.hub.y);
+    expect(p.every((x) => x.x >= 0 && x.x <= escenaPara(5).ancho)).toBe(true);
+    expect(posicionesIslas(1)[0].y).toBe(escenaPara(1).hub.y);
+  });
+  it("ninguna isla ni tarjeta queda recortada, con 1 a 8 departamentos (con 4 islas en una fila la escena se ensancha)", () => {
+    for (let n = 1; n <= 8; n++) {
+      const e = escenaPara(n), pos = posicionesIslas(n);
+      expect(e.hub.x).toBe(e.ancho / 2);
+      for (const q of pos) { expect(q.x - ANCHO_ISLA_MAX / 2).toBeGreaterThanOrEqual(0); expect(q.x + ANCHO_ISLA_MAX / 2).toBeLessThanOrEqual(e.ancho); expect(q.x - 104).toBeGreaterThanOrEqual(0); expect(q.x + 104).toBeLessThanOrEqual(e.ancho); }
+    }
+    expect(escenaPara(6).ancho).toBe(1200); expect(escenaPara(7).ancho).toBeGreaterThan(1200);
   });
 });
 
@@ -180,6 +188,8 @@ describe("islas en vivo", () => {
     montar([ta("t1", "a1", "in_progress")]);
     expect(screen.getByTestId("isla-juridico").getAttribute("data-activa")).toBe("true");
     expect(screen.getByTestId("isla-viva-juridico")).toBeTruthy();
+    expect(screen.getByTestId("tarjeta-viva-juridico").textContent).toBe("TRABAJANDO");
+    expect(screen.queryByTestId("tarjeta-viva-fiscal")).toBeNull();
     expect(screen.getByTestId("tarjeta-juridico").getAttribute("aria-label")).toMatch(/trabajando ahora$/);
     expect(screen.getByTestId("isla-fiscal").getAttribute("data-activa")).toBe("false");
     expect(screen.queryByTestId("isla-viva-fiscal")).toBeNull();
@@ -194,3 +204,20 @@ describe("islas en vivo", () => {
     expect(screen.getByTestId("plano-a1").getAttribute("data-estado")).toBe("celebrando");
   });
 });
+
+describe("isla iluminada por tareas en curso", () => {
+  const A = [ag("m1", "marketing_vigilante", { kind: "system" }), ag("a1", "amatl")];
+  const recientes = (min: number) => new Date(AHORA.getTime() - min * 60_000).toISOString();
+  const montar = (tareas: TareaAgente[]) => render(<PlanoDepartamentos figuras={figurasOficina(A, tareas, AHORA)} agentes={A} tareas={tareas} ahora={AHORA} />);
+  it("una tarea en curso reciente ilumina la isla aunque el agente no esté «trabajando» (agentes de Marketing, por ejemplo)", () => {
+    montar([ta("t1", "m1", "in_progress", { task_type: "scheduled", created_at: recientes(2), started_at: recientes(2), completed_at: null })]);
+    expect(screen.getByTestId("isla-marketing").getAttribute("data-activa")).toBe("true");
+    expect(screen.getByTestId("tarjeta-viva-marketing").textContent).toBe("TRABAJANDO");
+  });
+  it("una «en curso» de hace días no ilumina nada (sería un fantasma)", () => {
+    montar([ta("t1", "m1", "in_progress", { created_at: recientes(3 * 24 * 60), started_at: recientes(3 * 24 * 60), completed_at: null })]);
+    expect(screen.getByTestId("isla-marketing").getAttribute("data-activa")).toBe("false");
+    expect(screen.queryByTestId("tarjeta-viva-marketing")).toBeNull();
+  });
+});
+
