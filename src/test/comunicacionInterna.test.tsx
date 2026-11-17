@@ -3,7 +3,8 @@ import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/re
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AvisosEquipo } from "@/components/AvisosEquipo";
 import { ComunicacionInterna } from "@/components/agentes/ComunicacionInterna";
-import { personajes } from "@/components/marketing/oficinaAgentesLogica";
+import { figurasDeSala, personajes } from "@/components/marketing/oficinaAgentesLogica";
+import { distribuirSala } from "@/lib/agentes/salas";
 import { hoyEnMexico } from "../../supabase/functions/_shared/avisos";
 import type { AgenteRegistro } from "@/lib/agentes/registro";
 
@@ -135,9 +136,10 @@ describe("<ComunicacionInterna />", () => {
 
 describe("Marketing: el agente de Comunicación interna en su oficina", () => {
   const ag = (name: string, o: Partial<AgenteRegistro> = {}): AgenteRegistro => ({ id: name, name, display_name: null, description: null, role: null, status: "idle", kind: "system", last_heartbeat: null, last_task_at: null, tasks_completed: 0, tasks_failed: 0, ...o });
-  it("aparece en la oficina con su propio lugar, después del Investigador", () => {
+  it("aparece en la oficina después del Investigador, en la zona «Análisis y comunicación» de la sala", () => {
     const p = personajes([ag("marketing_comunicacion_interna"), ag("marketing_investigador"), ag("marketing_analista")], [], new Date());
     expect(p.map((x) => x.aspecto.corto)).toEqual(["Analista", "Investigador", "Comunicación"]);
-    expect(p[2].aspecto.x).toBe(450);
+    const sala = distribuirSala("marketing", figurasDeSala(p), (f) => f.clave);
+    expect(sala.zonas.find((z) => z.nombre === "Análisis y comunicación")?.claves).toContain("marketing_comunicacion_interna");
   });
 });

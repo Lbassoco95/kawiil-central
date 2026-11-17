@@ -1,11 +1,8 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect } from "vitest";
 import { render, screen, within, fireEvent } from "@testing-library/react";
 import { OficinaAgentes } from "@/components/marketing/OficinaAgentes";
-import { estadoVisual, personajeEn, personajes, aspectoDe, VENTANA_RECIENTE_MS } from "@/components/marketing/oficinaAgentesLogica";
+import { estadoVisual, estadoDeSala, figurasDeSala, personajes, VENTANA_RECIENTE_MS } from "@/components/marketing/oficinaAgentesLogica";
 import type { AgenteRegistro, TareaMarketing } from "@/components/marketing/agentesRegistroLogica";
-
-// jsdom no implementa el lienzo: se simula su ausencia (el componente lo tolera y deja funcionando la lista y el panel).
-beforeAll(() => { HTMLCanvasElement.prototype.getContext = (() => null) as unknown as typeof HTMLCanvasElement.prototype.getContext; });
 
 // Datos como los de producción el 5 nov 2026 (7:00 y 7:30 CDMX = 13:00 y 13:30 UTC).
 const ag = (name: string, o: Partial<AgenteRegistro> = {}): AgenteRegistro => ({
@@ -71,10 +68,19 @@ describe("personajes", () => {
     const p = personajes(AGENTES, muchas, A10).find((x) => x.aspecto.corto === "Vigilante")!;
     expect(p.historial.length).toBe(5); expect(p.historial[0].id).toBe("m7");
   });
-  it("hit-test: clic sobre un personaje lo elige; fuera, ninguno", () => {
-    const lista = personajes(AGENTES, TAREAS, A10), v = aspectoDe(AGENTES[1]);
-    expect(personajeEn(v.x + 6, v.y, lista)?.aspecto.corto).toBe("Vigilante");
-    expect(personajeEn(2, 2, lista)).toBeUndefined();
+  it("cada estado de Marketing se dibuja con el estado de oficina que más se le parece", () => {
+    const justo = T("2026-11-05T13:10:00Z");
+    expect(estadoDeSala(estadoVisual(AGENTES[1], TAREAS[0], A10))).toBe("sentado");
+    expect(estadoDeSala(estadoVisual(AGENTES[1], TAREAS[0], justo))).toBe("celebrando");
+    expect(estadoDeSala(estadoVisual(AGENTES[1], TAREAS[0], A10, true))).toBe("trabajando");
+    expect(estadoDeSala(estadoVisual(ag("marketing_vigia"), undefined, A10))).toBe("apagado");
+    expect(estadoDeSala(estadoVisual(ag("marketing_vigilante", { status: "error", last_heartbeat: "2026-11-05T13:00:00Z" }), undefined, A10))).toBe("con_error");
+    expect(estadoDeSala(estadoVisual(AGENTES[1], tm("v2", "marketing_vigilante", "completed", "2026-11-05T13:00:05Z", "r", col(4)), A10))).toBe("con_error");
+  });
+  it("las figuras de la sala traen la clave real del agente para su aspecto", () => {
+    const f = figurasDeSala(personajes(AGENTES, TAREAS, A10));
+    expect(f.map((x) => x.clave)).toEqual(["marketing_vigilante", "marketing_informe_diario", "marketing_vigia"]);
+    expect(f[0].ultimaTareaAt).toBe("2026-11-05T13:00:05Z");
   });
 });
 
@@ -104,8 +110,14 @@ describe("OficinaAgentes (pantalla)", () => {
     vista(); expect(screen.getByTestId("oficina-proximamente").textContent).toContain("siguiente fase");
     expect(screen.queryByText("Dejar tarea")).toBeNull(); expect(screen.queryByRole("textbox")).toBeNull();
   });
-  it("el lienzo tiene descripción accesible con el estado de cada agente", () => {
-    vista(); expect(screen.getByTestId("oficina-lienzo").getAttribute("aria-label")).toContain("Vigilante del colchón, Al día");
+  it("la sala isométrica de Marketing muestra a cada agente con la etiqueta de Marketing y deja elegirlo", () => {
+    vista();
+    expect(screen.getByTestId("sala-marketing")).toBeTruthy();
+    expect(screen.getByLabelText("Vigilante del colchón: Al día")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("sala-agente-marketing_informe_diario"));
+    expect(screen.getByTestId("oficina-agente-Informe").getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByTestId("sala-agente-marketing_informe_diario").getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByTestId("oficina-resultado").textContent).toContain("0 faltantes");
   });
   it("cargando, error y vacío no rompen la pantalla; error solo en el historial deja ver los agentes", () => {
     const { unmount } = vista({ estadoAgentes: "cargando" }); expect(screen.getByText(/Preparando la oficina/)).toBeTruthy(); unmount();

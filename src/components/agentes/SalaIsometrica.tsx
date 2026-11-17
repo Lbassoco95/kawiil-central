@@ -18,7 +18,7 @@ const CSS_SALA = `
 .sl-agente:focus{outline:none}.sl-agente:focus-visible .sl-aro,.sl-agente:hover .sl-aro{opacity:1}.sl-aro{opacity:0;transition:opacity .2s ease}
 `;
 
-function Puesto({ f, x, y, onElegir }: { f: FiguraOficina; x: number; y: number; onElegir?: (id: string) => void }) {
+function Puesto({ f, x, y, onElegir, elegido, texto }: { f: FiguraOficina; x: number; y: number; onElegir?: (id: string) => void; elegido: boolean; texto: string }) {
   const info = ESTADO_OFICINA[f.estado], c = TONO[info.color] ?? TONO.gris, apagado = f.estado === "apagado";
   const sprite = spriteAgente(f.estado, f.id, c.cuerpo, f.clave);
   const w = ANCHO * PX, h = ALTO * PX, activar = () => onElegir?.(f.id);
@@ -28,9 +28,9 @@ function Puesto({ f, x, y, onElegir }: { f: FiguraOficina; x: number; y: number;
       <ellipse cx={0} cy={2} rx={42} ry={11} fill="rgba(70,52,28,.16)" />
       {/* La posición va en un <g> aparte: index.css aplica transform a todo [role="button"]:active y borraría el translate. */}
       <g className={`sl-agente of-${f.estado}`} role="button" tabIndex={0} data-testid={`sala-agente-${f.id}`} data-estado={f.estado} style={{ cursor: onElegir ? "pointer" : "default", transform: "none" }}
-        aria-label={`${f.nombre}: ${info.etiqueta}`} onClick={activar} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activar(); } }}>
+        aria-label={`${f.nombre}: ${texto}`} aria-pressed={onElegir ? elegido : undefined} onClick={activar} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activar(); } }}>
         <rect className="of-celda" x={-w / 2 - 8} y={-h - 4} width={w + 16} height={h + 56} rx={10} fill="transparent" style={{ pointerEvents: "all" }} />
-        <rect className="sl-aro" x={-w / 2 - 8} y={-h - 4} width={w + 16} height={h + 56} rx={10} fill="rgba(143,180,217,.14)" stroke="#8fb4d9" strokeWidth={1.5} />
+        <rect className="sl-aro" style={elegido ? { opacity: 1 } : undefined} x={-w / 2 - 8} y={-h - 4} width={w + 16} height={h + 56} rx={10} fill="rgba(143,180,217,.14)" stroke="#8fb4d9" strokeWidth={1.5} />
         <g opacity={apagado ? 0.55 : 1} transform={`translate(${-w / 2},${-h + 6})`} shapeRendering="crispEdges">
           {sprite.frames.map((fr, k) => <g key={k} className={sprite.frames.length > 1 ? `of-frame of-frame-${k}` : undefined}>{fr.map((r, i) => <rect key={i} x={r.x * PX} y={r.y * PX} width={r.w * PX} height={r.h * PX} fill={r.c} />)}</g>)}
           {pintarAccesorios(sprite.accesorios, PX)}
@@ -38,13 +38,15 @@ function Puesto({ f, x, y, onElegir }: { f: FiguraOficina; x: number; y: number;
         </g>
         <rect x={-tw / 2} y={14} width={tw} height={19} rx={9.5} style={{ fill: "var(--sl-etq)", stroke: "var(--sl-borde)" }} />
         <text x={0} y={28} textAnchor="middle" fontSize={12} fontWeight={600} style={{ fill: "var(--sl-texto)" }}>{nombre}</text>
-        <text x={0} y={48} textAnchor="middle" fontSize={11} style={{ fill: "var(--sl-texto)", opacity: 0.8 }}>{info.etiqueta}</text>
+        <text x={0} y={48} textAnchor="middle" fontSize={11} style={{ fill: "var(--sl-texto)", opacity: 0.8 }}>{texto}</text>
       </g>
     </g>
   );
 }
 
-export function SalaIsometrica({ depto, figuras, onElegir }: { depto: Departamento; figuras: FiguraOficina[]; onElegir?: (id: string) => void }) {
+// `etiqueta`: texto del estado si no es el de la oficina (Marketing usa el suyo). `elegidoId`: agente con el aro fijo.
+export function SalaIsometrica({ depto, figuras, onElegir, elegidoId, etiqueta }: { depto: Departamento; figuras: FiguraOficina[]; onElegir?: (id: string) => void; elegidoId?: string | null; etiqueta?: (f: FiguraOficina) => string }) {
+  const texto = (f: FiguraOficina) => etiqueta?.(f) || ESTADO_OFICINA[f.estado].etiqueta;
   const sala = useMemo(() => distribuirSala(depto.clave, figuras, (f) => f.clave), [depto.clave, figuras]);
   const n = sala.n;
   const A = P(0, 0), B = P(n, 0), C = P(n, n), D = P(0, n);
@@ -75,7 +77,7 @@ export function SalaIsometrica({ depto, figuras, onElegir }: { depto: Departamen
             const u0 = Math.max(0.15, z.u0), v0 = Math.max(0.15, z.v0), u1 = Math.min(n - 0.15, z.u1), v1 = Math.min(n - 0.15, z.v1);
             return <polygon key={z.nombre} data-testid={`zona-${z.nombre}`} points={pts(P(u0, v0), P(u1, v0), P(u1, v1), P(u0, v1))} fill={depto.tinte} opacity={0.55} stroke={oscurecer(depto.tinte, 0.75)} strokeWidth={1.5} strokeDasharray="6 5" />;
           })}
-          {orden.map(({ item, u, v }) => { const p = P(u, v); return <Puesto key={item.id} f={item} x={p.x} y={p.y + TH * 0.5} onElegir={onElegir} />; })}
+          {orden.map(({ item, u, v }) => { const p = P(u, v); return <Puesto key={item.id} f={item} x={p.x} y={p.y + TH * 0.5} onElegir={onElegir} elegido={item.id === elegidoId} texto={texto(item)} />; })}
         </g>
       </svg>
       {/* La lista repite lo que se ve en la sala: sirve con teclado y lector de pantalla, y en el celular, donde el dibujo se ve chico. */}
@@ -87,7 +89,7 @@ export function SalaIsometrica({ depto, figuras, onElegir }: { depto: Departamen
               {z.claves.map((c) => { const f = figuras.find((x) => x.clave === c)!; return (
                 <li key={f.id}>
                   <button type="button" onClick={() => onElegir?.(f.id)} disabled={!onElegir} data-testid={`sala-lista-${f.id}`} className="rounded-full border border-border/60 px-2.5 py-1 text-xs enabled:hover:bg-background/70">
-                    <span className="font-medium">{f.nombre}</span> <span className="text-muted-foreground">· {ESTADO_OFICINA[f.estado].etiqueta}</span>
+                    <span className="font-medium">{f.nombre}</span> <span className="text-muted-foreground">· {texto(f)}</span>
                   </button>
                 </li>); })}
             </ul>

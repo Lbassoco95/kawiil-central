@@ -1,11 +1,10 @@
-import { describe, it, expect, beforeAll, vi } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render, screen, within, fireEvent, waitFor, cleanup } from "@testing-library/react";
 import { OficinaAgentes, type AnalistaProps } from "@/components/marketing/OficinaAgentes";
 import { estadoVisual, personajes } from "@/components/marketing/oficinaAgentesLogica";
 import { cumplimiento, senalAgente, type AgenteRegistro, type TareaMarketing } from "@/components/marketing/agentesRegistroLogica";
 import type { ConsultaAnalista, RespuestaAnalista } from "@/hooks/useMarketing";
 
-beforeAll(() => { HTMLCanvasElement.prototype.getContext = (() => null) as unknown as typeof HTMLCanvasElement.prototype.getContext; });
 
 const ag = (name: string, o: Partial<AgenteRegistro> = {}): AgenteRegistro => ({
   id: name, name, display_name: name, description: `Descripción de ${name}`, role: name, status: "idle", kind: "system", last_heartbeat: null, last_task_at: null,
@@ -239,14 +238,10 @@ describe("CMO (director de marketing)", () => {
   const ok = (respuesta: string): RespuestaAnalista => ({ ok: true, respuesta, verificada: true, no_verificadas: [], fuentes: [], restantes_hoy: 10 });
   const elegirCmo = () => fireEvent.click(screen.getByTestId("oficina-agente-CMO"));
 
-  it("la oficina pone al CMO primero y arriba (franja de dirección); los demás bajan; sin CMO nada cambia", async () => {
-    const { altoOficina, hayCmo, ALTO, DESPLAZA_CMO } = await import("@/components/marketing/oficinaAgentesLogica");
+  it("la oficina pone al CMO primero (zona Dirección de la sala); sin CMO nada cambia", () => {
     const con = personajes(CON_CMO, [], AHORA), sin = personajes(AGENTES, [], AHORA);
     expect(con.map((p) => p.aspecto.corto)).toEqual(["CMO", "Vigilante", "Informe", "Vigía", "Analista"]);
-    expect(con[0].aspecto).toMatchObject({ x: 520, y: 48 });
-    expect(con[4].aspecto.y).toBe(sin[3].aspecto.y + DESPLAZA_CMO);
-    expect(altoOficina(con)).toBe(ALTO + DESPLAZA_CMO); expect(altoOficina(sin)).toBe(ALTO); expect(hayCmo(sin)).toBe(false);
-    expect(con[0].aspecto.x).toBe(con[4].aspecto.x); expect(con[0].aspecto.y).toBeLessThan(con[4].aspecto.y);
+    expect(sin.map((p) => p.aspecto.corto)).toEqual(["Vigilante", "Informe", "Vigía", "Analista"]);
   });
   it("el CMO es un agente bajo demanda: «Disponible» y su cumplimiento sigue las cifras verificadas", () => {
     expect(senalAgente(CMO, AHORA)).toBe("disponible");

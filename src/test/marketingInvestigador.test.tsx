@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, within, fireEvent, cleanup } from "@testing-library/react";
 import type { FuentePropuesta, FuenteWebFila, HallazgoWeb } from "@/hooks/useMarketing";
 
@@ -10,7 +10,6 @@ import { OficinaAgentes } from "@/components/marketing/OficinaAgentes";
 import { personajes } from "@/components/marketing/oficinaAgentesLogica";
 import type { AgenteRegistro } from "@/components/marketing/agentesRegistroLogica";
 
-beforeAll(() => { HTMLCanvasElement.prototype.getContext = (() => null) as unknown as typeof HTMLCanvasElement.prototype.getContext; });
 afterEach(cleanup);
 
 const ag = (name: string, o: Partial<AgenteRegistro> = {}): AgenteRegistro => ({
@@ -26,12 +25,9 @@ const q = <T,>(o: Partial<Q<T>>): Q<T> => ({ data: [], isLoading: false, isError
 const abrir = () => { render(<OficinaAgentes agentes={AGENTES} tareasMarketing={[]} estadoAgentes="ok" estadoTareas="ok" ahora={AHORA} />); fireEvent.click(screen.getByTestId("oficina-agente-Investigador")); };
 
 describe("Investigador web en la oficina", () => {
-  it("aparece al final de la oficina, junto al Analista, con su propio sitio", () => {
+  it("aparece al final de la lista de la oficina, después del Analista", () => {
     const l = personajes(AGENTES, [], AHORA);
     expect(l.map((p) => p.aspecto.corto)).toEqual(["Vigilante", "Analista", "Investigador"]);
-    const [an, inv] = [l[1].aspecto, l[2].aspecto];
-    expect(inv.x - an.x).toBeGreaterThanOrEqual(60); // no se encima con el Analista
-    expect(inv.x + 38).toBeLessThanOrEqual(640);     // cabe en el lienzo
   });
 
   it("sin fuentes lo dice claro; no muestra el aviso de «siguiente fase» y los demás agentes lo conservan", () => {
