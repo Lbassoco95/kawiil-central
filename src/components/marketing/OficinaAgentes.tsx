@@ -50,7 +50,7 @@ export function OficinaAgentes({ agentes, tareasMarketing, estadoAgentes, estado
         <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Agentes de Marketing">
           {lista.map((p) => (
             <button key={p.id} type="button" aria-pressed={p.id === elegido?.id} data-testid={`oficina-agente-${p.aspecto.corto}`} onClick={() => setElegidoId(p.id)}
-              className={`rounded-full border px-3 py-1 text-xs ${p.id === elegido?.id ? "border-transparent bg-[#9b7b4f] text-white" : "border-border"}`}>
+              className={`rounded-full border px-3 py-1 text-xs ${p.id === elegido?.id ? "border-transparent bg-[#7a5f38] text-white" : "border-border"}`}>
               {p.nombre} · {p.estado.etiqueta}
             </button>
           ))}

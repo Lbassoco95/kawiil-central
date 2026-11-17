@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { spriteAgente, ANCHO, ALTO, oscurecer } from "@/lib/agentes/sprites";
 import { ESTADO_OFICINA, type FiguraOficina } from "@/lib/agentes/oficina";
 import { distribuirSala } from "@/lib/agentes/salas";
@@ -49,6 +49,9 @@ export function SalaIsometrica({ depto, figuras, onElegir, elegidoId, etiqueta }
   const texto = (f: FiguraOficina) => etiqueta?.(f) || ESTADO_OFICINA[f.estado].etiqueta;
   const sala = useMemo(() => distribuirSala(depto.clave, figuras, (f) => f.clave), [depto.clave, figuras]);
   const n = sala.n;
+  // En pantallas angostas la sala se desliza de lado: se empieza viéndola por el centro, no por una esquina.
+  const caja = useRef<HTMLDivElement>(null);
+  useEffect(() => { const c = caja.current; if (c && c.scrollWidth > c.clientWidth) c.scrollLeft = (c.scrollWidth - c.clientWidth) / 2; }, [depto.clave, n]);
   const A = P(0, 0), B = P(n, 0), C = P(n, n), D = P(0, n);
   const sube = (p: { x: number; y: number }) => ({ x: p.x, y: p.y - PARED });
   const ancho = n * TW + MARGEN * 2, alto = n * TH + PARED + 40 + MARGEN;
@@ -60,9 +63,10 @@ export function SalaIsometrica({ depto, figuras, onElegir, elegidoId, etiqueta }
   };
   const activa = figuras.some((f) => f.estado === "trabajando");
   return (
-    <div className="sl zen-glass overflow-x-auto rounded-3xl p-2" data-testid={`sala-${depto.clave}`} data-activa={activa ? "true" : "false"}>
+    <div className="sl zen-glass rounded-3xl p-2" data-testid={`sala-${depto.clave}`} data-activa={activa ? "true" : "false"}>
       <style>{CSS}{CSS_SALA}</style>
       <p className="px-2 pt-1 text-[11px] text-muted-foreground sm:hidden">Desliza para ver toda la sala; abajo está la lista de agentes.</p>
+      <div ref={caja} className="overflow-x-auto">
       <svg viewBox={`0 0 ${ancho} ${alto}`} className="mx-auto w-full min-w-[620px] max-w-[980px]" role="group" aria-label={`Sala de ${depto.nombre}`} shapeRendering="geometricPrecision">
         <g transform={`translate(${ox},${oy})`}>
           <polygon points={pts(A, B, sube(B), sube(A))} style={{ fill: "var(--sl-pared-d)", stroke: "var(--sl-borde)" }} />
@@ -80,16 +84,17 @@ export function SalaIsometrica({ depto, figuras, onElegir, elegidoId, etiqueta }
           {orden.map(({ item, u, v }) => { const p = P(u, v); return <Puesto key={item.id} f={item} x={p.x} y={p.y + TH * 0.5} onElegir={onElegir} elegido={item.id === elegidoId} texto={texto(item)} />; })}
         </g>
       </svg>
+      </div>
       {/* La lista repite lo que se ve en la sala: sirve con teclado y lector de pantalla, y en el celular, donde el dibujo se ve chico. */}
       <ul className="mt-2 grid gap-2 px-2 pb-2 sm:grid-cols-2" aria-label={`Zonas de ${depto.nombre}`} data-testid="sala-zonas">
         {sala.zonas.map((z) => (
           <li key={z.nombre} className="rounded-2xl border border-border/50 bg-background/40 p-2.5">
-            <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">{z.nombre}</p>
+            <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-foreground/75">{z.nombre}</p>
             <ul className="flex flex-wrap gap-1.5">
               {z.claves.map((c) => { const f = figuras.find((x) => x.clave === c)!; return (
                 <li key={f.id}>
                   <button type="button" onClick={() => onElegir?.(f.id)} disabled={!onElegir} data-testid={`sala-lista-${f.id}`} className="rounded-full border border-border/60 px-2.5 py-1 text-xs enabled:hover:bg-background/70">
-                    <span className="font-medium">{f.nombre}</span> <span className="text-muted-foreground">· {texto(f)}</span>
+                    <span className="font-medium">{f.nombre}</span> <span className="text-foreground/70">· {texto(f)}</span>
                   </button>
                 </li>); })}
             </ul>

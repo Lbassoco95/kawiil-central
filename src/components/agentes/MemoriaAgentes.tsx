@@ -65,7 +65,7 @@ export function MemoriaAgentes({ agentes, ahora, agenteInicial, fijo = false }: 
         <p className="text-xs text-muted-foreground">Puedes apagar una memoria que esté mal y volver a encenderla; no se borra ni se edita nada.</p>
       </div>
       {memorias.isLoading ? <p className="text-sm text-muted-foreground" role="status">Leyendo la memoria de los agentes…</p>
-        : memorias.isError ? <p role="alert" className="zen-glass rounded-2xl p-3 text-sm text-destructive" data-testid="memoria-error">{(memorias.error as Error).message}</p> : (
+        : memorias.isError ? <p role="alert" className="zen-glass rounded-2xl p-3 text-sm text-destructive dark:text-red-300" data-testid="memoria-error">{(memorias.error as Error).message}</p> : (
           <>
             <ul className="flex flex-wrap gap-2 text-xs text-muted-foreground" aria-label="Resumen de memorias" data-testid="memoria-resumen">
               <li className="rounded-full border border-border/50 px-2.5 py-0.5">Memorias: {total.total}</li>

@@ -89,7 +89,7 @@ export function PanelAgente({ figura: f, agente, agentes, tareas, ahora, pestana
           <p className="text-sm" role="status" data-testid="panel-actividad">{actividadDe(agente.id, f.estado, tareas)}</p>
           {f.rol && <p className="text-xs text-muted-foreground">{f.rol}</p>}
           {perfil && <p className="text-xs italic text-muted-foreground">{perfil.frase}</p>}
-          <p className="text-xs"><span aria-hidden>{nivel.estrellas}</span> {nivel.etiqueta}{espera > 0 && <> <span aria-hidden>·</span> <button type="button" onClick={() => onPestana("conversaciones")} className="rounded-full border border-amber-300/70 bg-amber-100/60 px-2 py-0.5 text-amber-900" data-testid="panel-espera">Te espera: {espera} {espera === 1 ? "tarea" : "tareas"}</button></>}</p>
+          <p className="text-xs"><span aria-hidden>{nivel.estrellas}</span> {nivel.etiqueta}{espera > 0 && <> <span aria-hidden>·</span> <button type="button" onClick={() => onPestana("conversaciones")} className="rounded-full border border-amber-300/70 bg-amber-100/60 px-2 py-0.5 text-amber-900 dark:border-amber-400/50 dark:bg-amber-400/20 dark:text-amber-100" data-testid="panel-espera">Te espera: {espera} {espera === 1 ? "tarea" : "tareas"}</button></>}</p>
           {(colab.recibioDe.length > 0 || colab.pasoA.length > 0) && (
             <ul className="text-xs text-muted-foreground" aria-label="Colaboración con otros agentes" data-testid="panel-colaboracion">
               <Enlaces titulo="Le pasó trabajo" lista={colab.recibioDe} nombreDe={nombreDe} testid="panel-recibio" />
@@ -101,7 +101,7 @@ export function PanelAgente({ figura: f, agente, agentes, tareas, ahora, pestana
       </header>
       <Tabs value={pestana} onValueChange={(v) => onPestana(v as PestanaEscritorio)}>
         <TabsList className="h-auto w-full flex-wrap justify-start" aria-label="Escritorio del agente">
-          {PESTANAS_ESCRITORIO.map((p) => <TabsTrigger key={p.v} value={p.v} data-testid={`pestana-${p.v}`}>{p.t}</TabsTrigger>)}
+          {PESTANAS_ESCRITORIO.map((p) => <TabsTrigger key={p.v} value={p.v} className="text-foreground/75 data-[state=active]:text-foreground" data-testid={`pestana-${p.v}`}>{p.t}</TabsTrigger>)}
         </TabsList>
         <TabsContent value="conversaciones" className="mt-3 space-y-3">
           {!sistema && <TrabajosAgente agentId={agente.id} nombre={f.nombre} ahora={ahora} agente={agente} />}

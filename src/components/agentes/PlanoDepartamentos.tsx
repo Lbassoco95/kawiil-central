@@ -121,10 +121,10 @@ function Tarjeta({ g, x, y, ahora, tareas, activa, onAbrir }: { g: GrupoDepartam
 }
 
 const ESTADO_TAREA: Record<FilaTarea["grupo"], { t: string; pastilla: string; barra: string }> = {
-  en_curso: { t: "En curso", pastilla: "border-sky-300/70 bg-sky-100/60 text-sky-900", barra: "bg-sky-300" },
-  en_cola: { t: "En cola", pastilla: "border-amber-300/70 bg-amber-100/60 text-amber-900", barra: "bg-amber-200" },
-  terminadas: { t: "Terminada", pastilla: "border-emerald-300/70 bg-emerald-100/60 text-emerald-900", barra: "bg-emerald-300" },
-  con_error: { t: "Con error", pastilla: "border-rose-300/70 bg-rose-100/60 text-rose-900", barra: "bg-rose-300" },
+  en_curso: { t: "En curso", pastilla: "border-sky-300/70 bg-sky-100/60 text-sky-900 dark:border-sky-400/50 dark:bg-sky-400/20 dark:text-sky-100", barra: "bg-sky-300" },
+  en_cola: { t: "En cola", pastilla: "border-amber-300/70 bg-amber-100/60 text-amber-900 dark:border-amber-400/50 dark:bg-amber-400/20 dark:text-amber-100", barra: "bg-amber-200" },
+  terminadas: { t: "Terminada", pastilla: "border-emerald-300/70 bg-emerald-100/60 text-emerald-900 dark:border-emerald-400/50 dark:bg-emerald-400/20 dark:text-emerald-100", barra: "bg-emerald-300" },
+  con_error: { t: "Con error", pastilla: "border-rose-300/70 bg-rose-100/60 text-rose-900 dark:border-rose-400/50 dark:bg-rose-400/20 dark:text-rose-100", barra: "bg-rose-300" },
 };
 
 function Barra({ grupo }: { grupo: FilaTarea["grupo"] }) {
@@ -227,7 +227,7 @@ export function PlanoDepartamentos({ figuras, agentes, tareas, ahora, onElegir, 
                       <span className="truncate font-medium">{t.agente}</span>
                       <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] ${e.pastilla}`}>{e.t}</span>
                     </span>
-                    <span className="block truncate text-xs text-muted-foreground">{t.tipo} · {cuandoRelativo(t.fin ?? t.creada, ahora)}{origenes.get(t.id) ? ` · pedida por ${origenes.get(t.id) === "desconocido" ? "otra tarea" : nombreDe.get(origenes.get(t.id)!) ?? "otro agente"}` : ""}</span>
+                    <span className="block truncate text-xs text-foreground/70">{t.tipo} · {cuandoRelativo(t.fin ?? t.creada, ahora)}{origenes.get(t.id) ? ` · pedida por ${origenes.get(t.id) === "desconocido" ? "otra tarea" : nombreDe.get(origenes.get(t.id)!) ?? "otro agente"}` : ""}</span>
                     <Barra grupo={t.grupo} />
                   </button>
                 </li>

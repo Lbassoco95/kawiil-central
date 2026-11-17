@@ -84,8 +84,8 @@ export default function Agentes() {
         <IndicadorEnVivo estado={enVivo} actualizadoEn={Math.max(agentes.dataUpdatedAt, tareas.dataUpdatedAt)} />
         <Tabs value={seccion} onValueChange={cambiarSeccion}>
           <TabsList>
-            <TabsTrigger value="oficina" data-testid="seccion-oficina">Oficina</TabsTrigger>
-            <TabsTrigger value="administrar" data-testid="seccion-administrar">Administrar</TabsTrigger>
+            <TabsTrigger value="oficina" className="text-foreground/75 data-[state=active]:text-foreground" data-testid="seccion-oficina">Oficina</TabsTrigger>
+            <TabsTrigger value="administrar" className="text-foreground/75 data-[state=active]:text-foreground" data-testid="seccion-administrar">Administrar</TabsTrigger>
           </TabsList>
           <TabsContent value="oficina" className="mt-4 space-y-3">
             {servicio.estado !== "en_linea" && (
