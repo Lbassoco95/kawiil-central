@@ -69,7 +69,14 @@ function sanitizeRedirectTo(redirectTo: unknown, siteUrl: string): string {
       .filter(Boolean);
     for (const o of extra) allowed.add(o);
 
-    if (!allowed.has(u.origin)) return fallback;
+    if (!allowed.has(u.origin)) {
+      // Previews / local (mismo criterio que OAuth Microsoft).
+      const host = u.hostname;
+      const previewOk =
+        (u.protocol === "http:" && (host === "localhost" || host === "127.0.0.1")) ||
+        (u.protocol === "https:" && (host.endsWith(".lovable.app") || host.endsWith(".vercel.app")));
+      if (!previewOk) return fallback;
+    }
     if (u.pathname !== "/cambiar-contrasena") return fallback;
     return u.toString();
   } catch {

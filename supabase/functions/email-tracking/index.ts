@@ -37,11 +37,24 @@ function parseHttpUrl(u: string | null): URL | null {
  * Anti open-redirect: el destino debe aparecer en el cuerpo del correo registrado.
  * Así un atacante no puede usar un eid válido (o inventado) para redirigir a un sitio malicioso.
  */
-function urlAllowedByEmailBody(redirect: URL, bodyHtml: string | null, bodyText: string | null): boolean {
+function emailBodyHaystack(bodyHtml: string | null, bodyText: string | null): string {
+  return `${bodyHtml || ""}\n${bodyText || ""}`.trim();
+}
+
+/**
+ * Si hay cuerpo guardado, el destino debe aparecer ahí (anti open-redirect).
+ * Si el log no tiene body (filas viejas), devolvemos null → el caller permite
+ * el redirect solo porque el eid ya es un UUID real de email_log.
+ */
+function urlAllowedByEmailBody(
+  redirect: URL,
+  bodyHtml: string | null,
+  bodyText: string | null,
+): boolean | null {
+  const haystack = emailBodyHaystack(bodyHtml, bodyText);
+  if (!haystack) return null;
+
   const candidates = [redirect.href, redirect.toString()];
-  // Comparar también sin trailing slash / encoding básico
-  const haystack = `${bodyHtml || ""}\n${bodyText || ""}`;
-  if (!haystack) return false;
   for (const c of candidates) {
     if (haystack.includes(c)) return true;
     try {
@@ -50,7 +63,6 @@ function urlAllowedByEmailBody(redirect: URL, bodyHtml: string | null, bodyText:
       /* ignore */
     }
   }
-  // Enlaces a menudo se guardan sin query order; comprobar host+pathname
   const bare = `${redirect.origin}${redirect.pathname}`;
   return haystack.includes(bare);
 }
@@ -102,7 +114,8 @@ Deno.serve(async (req) => {
     }
 
     if (t === "click" && redirectParsed) {
-      if (!urlAllowedByEmailBody(redirectParsed, logRow.body_html, logRow.body_text)) {
+      const allowed = urlAllowedByEmailBody(redirectParsed, logRow.body_html, logRow.body_text);
+      if (allowed === false) {
         console.warn("email-tracking: redirect rechazado (URL no está en el correo)", {
           eid,
           host: redirectParsed.host,

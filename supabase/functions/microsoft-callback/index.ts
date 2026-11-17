@@ -7,12 +7,7 @@ import {
   sanitizeAppOrigin,
   sanitizeReturnPath,
 } from "../_shared/microsoftOAuthState.ts";
-
-/** Origen del opener; nunca `*` (evita que otra pestaña escuche el resultado OAuth). */
-const postMessageOrigin =
-  Deno.env.get("APP_ORIGIN")?.trim() ||
-  Deno.env.get("KAWIIL_APP_URL")?.trim().replace(/\/$/, "") ||
-  "https://www.kawiil-central.mx";
+import { openerPostMessageScript } from "../_shared/postMessageOrigins.ts";
 
 function escapeHtml(s: string): string {
   return s
@@ -129,12 +124,15 @@ function finishHtml(
       )
       : undefined;
 
-  // Preferir origen allowlisted del state OAuth; fallback a APP_ORIGIN / producción.
-  const targetOrigin = sanitizeAppOrigin(state?.o) || postMessageOrigin;
+  // Preferir origen allowlisted del state; sin APP_ORIGIN mantiene `*` (compat prod).
+  const preferred = sanitizeAppOrigin(state?.o);
   const postMsg =
     postMessageType === "microsoft-auth-success"
-      ? `window.opener?.postMessage({type:'microsoft-auth-success'},${JSON.stringify(targetOrigin)});`
-      : `window.opener?.postMessage({type:'microsoft-auth-error',error:${JSON.stringify(postMessageError || "error").replace(/</g, "\\u003c")}},${JSON.stringify(targetOrigin)});`;
+      ? openerPostMessageScript("{type:'microsoft-auth-success'}", preferred)
+      : openerPostMessageScript(
+        `{type:'microsoft-auth-error',error:${JSON.stringify(postMessageError || "error").replace(/</g, "\\u003c")}}`,
+        preferred,
+      );
 
   const page = renderPage(kind, title, detail, { returnUrl, autoClose: mode === "popup" });
   // Inyectar postMessage justo antes de </body> (evitar HTML anidado / mojibake).

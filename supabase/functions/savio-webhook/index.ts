@@ -72,42 +72,43 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Compat prod: sin secreto se acepta (como antes) + warning.
+    // Con secreto: fail-closed (firma obligatoria y válida).
     const webhookSecret = Deno.env.get('SAVIO_WEBHOOK_SECRET')?.trim()
-    if (!webhookSecret) {
-      console.error('savio-webhook: SAVIO_WEBHOOK_SECRET no configurado')
-      return new Response(JSON.stringify({ success: false, error: 'webhook_not_configured' }), {
-        status: 503,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
-    }
+    const rawBody = await req.text()
 
-    const signature = req.headers.get('x-webhook-signature')?.trim()
-    const timestamp = req.headers.get('x-webhook-timestamp')?.trim() || null
-    if (!signature) {
-      return new Response(JSON.stringify({ success: false, error: 'missing_signature' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
-    }
-
-    if (timestamp) {
-      const ts = Number(timestamp)
-      const now = Math.floor(Date.now() / 1000)
-      if (!Number.isFinite(ts) || Math.abs(now - ts) > MAX_TIMESTAMP_SKEW_SEC) {
-        return new Response(JSON.stringify({ success: false, error: 'stale_timestamp' }), {
+    if (webhookSecret) {
+      const signature = req.headers.get('x-webhook-signature')?.trim()
+      const timestamp = req.headers.get('x-webhook-timestamp')?.trim() || null
+      if (!signature) {
+        return new Response(JSON.stringify({ success: false, error: 'missing_signature' }), {
           status: 401,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       }
-    }
 
-    const rawBody = await req.text()
-    const valid = await verifySavioSignature(webhookSecret, signature, timestamp, rawBody)
-    if (!valid) {
-      return new Response(JSON.stringify({ success: false, error: 'invalid_signature' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      if (timestamp) {
+        const ts = Number(timestamp)
+        const now = Math.floor(Date.now() / 1000)
+        if (!Number.isFinite(ts) || Math.abs(now - ts) > MAX_TIMESTAMP_SKEW_SEC) {
+          return new Response(JSON.stringify({ success: false, error: 'stale_timestamp' }), {
+            status: 401,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          })
+        }
+      }
+
+      const valid = await verifySavioSignature(webhookSecret, signature, timestamp, rawBody)
+      if (!valid) {
+        return new Response(JSON.stringify({ success: false, error: 'invalid_signature' }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+    } else {
+      console.warn(
+        'savio-webhook: SAVIO_WEBHOOK_SECRET no configurado — aceptando sin firma (compat). Configura el secreto y el header x-webhook-signature para endurecer.',
+      )
     }
 
     let payload: Record<string, unknown>

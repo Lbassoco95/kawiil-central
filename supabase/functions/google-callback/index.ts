@@ -1,10 +1,6 @@
 import { verifyOAuthState } from "../_shared/oauthState.ts";
+import { openerPostMessageScript } from "../_shared/postMessageOrigins.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-
-const postMessageOrigin =
-  Deno.env.get("APP_ORIGIN")?.trim() ||
-  Deno.env.get("KAWIIL_APP_URL")?.trim().replace(/\/$/, "") ||
-  "https://www.kawiil-central.mx";
 
 function escapeHtml(text: string): string {
   return text
@@ -43,8 +39,11 @@ Deno.serve(async (req) => {
     const error = url.searchParams.get("error");
 
     if (error) {
+      const pm = openerPostMessageScript(
+        `{type:'google-auth-error',error:${JSON.stringify(error).replace(/</g, "\\u003c")}}`,
+      );
       return new Response(
-        `<html><head></head><body><script>window.opener?.postMessage({type:'google-auth-error',error:${JSON.stringify(error).replace(/</g, "\\u003c")}},${JSON.stringify(postMessageOrigin)});</script>${renderPage("error", "Error de conexión", error)}</body></html>`,
+        `<html><head></head><body><script>${pm}</script>${renderPage("error", "Error de conexión", error)}</body></html>`,
         { headers: { "Content-Type": "text/html" } },
       );
     }
@@ -72,7 +71,7 @@ Deno.serve(async (req) => {
     if (!tokenResponse.ok) {
       console.error("Google token exchange failed:", tokenData);
       return new Response(
-        `<html><head></head><body><script>window.opener?.postMessage({type:'google-auth-error',error:'token_exchange_failed'},'${postMessageOrigin}');</script>${renderPage("error", "Error al obtener token", "No se pudo completar la autenticación con Google.")}</body></html>`,
+        `<html><head></head><body><script>${openerPostMessageScript("{type:'google-auth-error',error:'token_exchange_failed'}")}</script>${renderPage("error", "Error al obtener token", "No se pudo completar la autenticación con Google.")}</body></html>`,
         { headers: { "Content-Type": "text/html" } },
       );
     }
@@ -121,13 +120,13 @@ Deno.serve(async (req) => {
     if (dbError) {
       console.error("DB error:", dbError);
       return new Response(
-        `<html><head></head><body><script>window.opener?.postMessage({type:'google-auth-error',error:'db_error'},'${postMessageOrigin}');</script>${renderPage("error", "Error al guardar", "No se pudieron guardar las credenciales.")}</body></html>`,
+        `<html><head></head><body><script>${openerPostMessageScript("{type:'google-auth-error',error:'db_error'}")}</script>${renderPage("error", "Error al guardar", "No se pudieron guardar las credenciales.")}</body></html>`,
         { headers: { "Content-Type": "text/html" } },
       );
     }
 
     return new Response(
-      `<html><head></head><body><script>window.opener?.postMessage({type:'google-auth-success'},'${postMessageOrigin}');</script>${renderPage("success", "¡Google conectado!", "Tu cuenta se vinculó correctamente con Kawiil.")}</body></html>`,
+      `<html><head></head><body><script>${openerPostMessageScript("{type:'google-auth-success'}")}</script>${renderPage("success", "¡Google conectado!", "Tu cuenta se vinculó correctamente con Kawiil.")}</body></html>`,
       { headers: { "Content-Type": "text/html" } },
     );
   } catch (err) {
