@@ -3,6 +3,7 @@ import { NewTaskModalContext } from "@/contexts/NewTaskModalContext";
 import { TaskFormDialog } from "@/components/tasks/TaskFormDialog";
 import { AppSidebar } from "@/components/AppSidebar";
 import { AvisosEquipo } from "@/components/AvisosEquipo";
+import { PushActivationBanner } from "@/components/notifications/PushActivationBanner";
 import { FloatingAIChat } from "@/components/FloatingAIChat";
 import { ChatProvider } from "@/hooks/useChat";
 import { AppTopbar } from "@/components/layout/AppTopbar";
@@ -113,6 +114,7 @@ export function AppLayout({
         </div>
       </main>
       <FloatingAIChat />
+      <PushActivationBanner />
       {isMobile && !isFullWidth && <MobileBottomNav />}
     </div>
     <TaskFormDialog open={newTaskOpen} onOpenChange={setNewTaskOpen} />
