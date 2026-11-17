@@ -14,6 +14,7 @@ vi.mock("@/components/agentes/IndicadorEnVivo", () => ({ IndicadorEnVivo: () => 
 vi.mock("@/components/marketing/AgentesRegistro", () => ({ AgentesRegistro: () => <div data-testid="stub-tablas" /> }));
 vi.mock("@/components/agentes/BarraTareas", () => ({ BarraTareas: ({ onVerSeguimiento }: { onVerSeguimiento?: (id?: string) => void }) => <button data-testid="stub-barra" onClick={() => onVerSeguimiento?.("t1")} /> }));
 vi.mock("@/components/agentes/ConstructorAgentes", () => ({ ConstructorAgentes: ({ onIr }: { onIr?: (p: string, id: string) => void }) => <button data-testid="stub-constructor" onClick={() => onIr?.("programar", AG)} /> }));
+vi.mock("@/components/agentes/ListaLpb", () => ({ ListaLpb: () => <div data-testid="stub-lpb" /> }));
 vi.mock("@/components/agentes/VistaOficina", () => ({ VistaOficina: ({ vista, pestana }: { vista: { tipo: string }; pestana: string }) => <div data-testid="stub-oficina">{vista.tipo}:{pestana}</div> }));
 
 import Agentes from "@/pages/Agentes";
@@ -31,6 +32,7 @@ describe("página Agentes con dos pestañas", () => {
     montar("/agentes?pestana=administrar");
     expect(screen.getByTestId("administrar-crear")).toBeTruthy();
     expect(screen.getByTestId("stub-tablas")).toBeTruthy();
+    expect(screen.getByTestId("stub-lpb")).toBeTruthy();   // «Lista LPB» (de otro cambio) vive en Administrar
     expect(screen.queryByTestId("stub-oficina")).toBeNull();
   });
   it("cambiar de pestaña queda en la URL", () => {

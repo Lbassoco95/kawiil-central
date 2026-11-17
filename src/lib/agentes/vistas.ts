@@ -30,6 +30,6 @@ export const PESTANAS_VIEJAS: Record<string, DestinoViejo> = {
   memoria: { pestana: "oficina", escritorio: "aprendizaje" }, ensenar: { pestana: "oficina", escritorio: "aprendizaje" },
   rutinas: { pestana: "oficina", escritorio: "rutinas" }, programar: { pestana: "oficina", escritorio: "rutinas" },
   documentos: { pestana: "oficina", escritorio: "documentos" },
-  tablas: { pestana: "administrar" }, crear: { pestana: "administrar" },
+  tablas: { pestana: "administrar" }, crear: { pestana: "administrar" }, lpb: { pestana: "administrar" },
 };
 export const destinoDePestanaVieja = (p: string | null | undefined): DestinoViejo | undefined => (p && Object.prototype.hasOwnProperty.call(PESTANAS_VIEJAS, p) ? PESTANAS_VIEJAS[p] : undefined);

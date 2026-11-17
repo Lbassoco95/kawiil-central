@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarraTareas } from "@/components/agentes/BarraTareas";
 import { VistaOficina } from "@/components/agentes/VistaOficina";
 import { ConstructorAgentes } from "@/components/agentes/ConstructorAgentes";
+import { ListaLpb } from "@/components/agentes/ListaLpb";
 import { FigurasContext } from "@/components/agentes/BandaEquipo";
 import { IndicadorEnVivo } from "@/components/agentes/IndicadorEnVivo";
 import { agentesDelModulo, esAgenteLegal, resumenServicio } from "@/lib/agentes/registro";
@@ -17,7 +18,7 @@ import { useAgentesRegistro, useErroresAgentes, useTareasAgentes } from "@/hooks
 import { useAgentesEnVivo } from "@/hooks/useAgentesEnVivo";
 
 // Módulo Agentes: dos pestañas. «Oficina» (plano → sala de la isla → escritorio del agente, con todo lo de cada agente dentro de su escritorio) y
-// «Administrar» (Crear agente + Tablas). Las 12 pestañas de antes ya no existen: sus enlaces (`?pestana=memoria`, etc.) se traducen con PESTANAS_VIEJAS.
+// «Administrar» (Crear agente, Lista LPB y Tablas). Las 12 pestañas de antes ya no existen: sus enlaces (`?pestana=memoria`, etc.) se traducen con PESTANAS_VIEJAS.
 // La pantalla no escribe en la base directamente: crear agentes pasa por `agente-constructor` y las instrucciones por `dispatch-to-agent`.
 type Seccion = "oficina" | "administrar";
 // Pestaña del escritorio a la que lleva cada paso del «conectar agente» del Constructor (nombres viejos de pestaña).
@@ -102,6 +103,10 @@ export default function Agentes() {
             <section aria-label="Crear agente" className="space-y-3" data-testid="administrar-crear">
               <h2 className="text-lg font-medium">Crear agente</h2>
               <ConstructorAgentes agentes={reales} onIr={irAlEscritorio} />
+            </section>
+            <section aria-label="Lista LPB" className="space-y-3" data-testid="administrar-lpb">
+              <h2 className="text-lg font-medium">Lista LPB</h2>
+              <ListaLpb />
             </section>
             <section aria-label="Tablas" className="space-y-3" data-testid="administrar-tablas">
               <h2 className="text-lg font-medium">Tablas</h2>

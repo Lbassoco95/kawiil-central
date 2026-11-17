@@ -31,7 +31,8 @@ describe("vista de la oficina en la URL", () => {
     expect(leerPestanaEscritorio(null)).toBe("conversaciones");
   });
   it("las 12 pestañas viejas tienen destino: Oficina (con pestaña del escritorio) o Administrar", () => {
-    expect(Object.keys(PESTANAS_VIEJAS)).toHaveLength(12);
+    expect(Object.keys(PESTANAS_VIEJAS)).toHaveLength(13);   // las 12 de antes + «Lista LPB», que se sumó después y vive en Administrar
+    expect(destinoDePestanaVieja("lpb")).toEqual({ pestana: "administrar" });
     expect(destinoDePestanaVieja("crear")).toEqual({ pestana: "administrar" });
     expect(destinoDePestanaVieja("tablas")).toEqual({ pestana: "administrar" });
     expect(destinoDePestanaVieja("memoria")).toEqual({ pestana: "oficina", escritorio: "aprendizaje" });
