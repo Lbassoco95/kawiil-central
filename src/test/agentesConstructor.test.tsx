@@ -5,8 +5,6 @@ import {
   validarPropuesta, slugAgente, construirSystemPrompt, filaDesdePropuesta, limpiarMensajes, ORG_AGENTES, FUENTES_KAWIIL,
 } from "../../supabase/functions/_shared/agenteConstructor";
 import { ConstructorAgentes } from "@/components/agentes/ConstructorAgentes";
-import { InstruirAgente } from "@/components/agentes/InstruirAgente";
-import { filtrarAmbito } from "@/lib/agentes/oficina";
 import type { AgenteRegistro } from "@/lib/agentes/registro";
 
 const invoke = vi.fn();
@@ -97,32 +95,6 @@ describe("ConstructorAgentes", () => {
   });
 });
 
-describe("InstruirAgente", () => {
-  const ag = (o: Partial<AgenteRegistro> & { id: string; name: string }): AgenteRegistro => ({ display_name: null, description: null, role: null, status: "idle", kind: "consultable", last_heartbeat: null, last_task_at: null, tasks_completed: 0, tasks_failed: 0, ...o });
-  beforeEach(() => invoke.mockReset());
-  it("no ofrece archivados ni de sistema y despacha la tarea", async () => {
-    invoke.mockResolvedValue({ data: { ok: true }, error: null });
-    envolver(<InstruirAgente agentes={[ag({ id: "a", name: "nelli", display_name: "Nelli" }), ag({ id: "b", name: "viejo", status: "archived" }), ag({ id: "c", name: "marketing_x", kind: "system" })]} />);
-    expect(screen.getAllByRole("radio").map((o) => (o.getAttribute("aria-label") ?? "").split(":")[0])).toEqual(["Nelli"]);   // solo el consultable activo
-    expect((screen.getByTestId("instruir-enviar") as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.click(screen.getByTestId("instruir-agente-a"));
-    fireEvent.change(screen.getByTestId("instruir-titulo"), { target: { value: "Revisar" } });
-    fireEvent.change(screen.getByTestId("instruir-texto"), { target: { value: "Revisa los documentos nuevos" } });
-    fireEvent.click(screen.getByTestId("instruir-enviar"));
-    await waitFor(() => expect(screen.getByTestId("instruir-ok")).toBeTruthy());
-    expect(invoke.mock.calls[0][0]).toBe("dispatch-to-agent");
-    expect(invoke.mock.calls[0][1].body).toMatchObject({ agent_id: "a", title: "Revisar" });
-  });
-});
-
-describe("oficina: Mi equipo", () => {
-  it("filtra los agentes creados desde el constructor", () => {
-    const a = { id: "1", name: "x", config: { origen: "constructor_agentes" } } as unknown as AgenteRegistro;
-    const b = { id: "2", name: "y", config: {} } as unknown as AgenteRegistro;
-    expect(filtrarAmbito([a, b], "equipo")).toEqual([a]);
-  });
-});
-
 import { normalizarDominio, esReferencia1Password, pareceSecreto } from "../../supabase/functions/_shared/agenteConstructor";
 
 describe("internet y 1Password", () => {
@@ -179,29 +151,6 @@ describe("accesos 1Password: dominio obligatorio y autorización por tarea", () 
   it("acepta la referencia al elemento sin campo", () => {
     const r = validarPropuesta({ ...BUENA, credenciales: [{ etiqueta: "Portal", referencia: "op://Agentes-Kawiil/Vizum-portal", dominio: "portal.vizum.mx" }] });
     expect(r.ok).toBe(true);
-  });
-});
-
-describe("InstruirAgente: autorizar accesos", () => {
-  const conAcceso = { id: "a", name: "oficial", display_name: "Oficial", description: null, role: null, status: "idle", kind: "consultable", last_heartbeat: null, last_task_at: null, tasks_completed: 0, tasks_failed: 0,
-    config: { credenciales_1password: [{ etiqueta: "Portal Vizum", referencia: "op://Agentes-Kawiil/Vizum-portal", dominio: "portal.vizum.mx" }] } } as unknown as AgenteRegistro;
-  beforeEach(() => invoke.mockReset());
-  it("no muestra la referencia, no envía accesos sin marcar y envía los marcados", async () => {
-    invoke.mockResolvedValue({ data: { ok: true }, error: null });
-    envolver(<InstruirAgente agentes={[conAcceso]} />);
-    fireEvent.click(screen.getByTestId("instruir-agente-a"));
-    expect(screen.getByTestId("instruir-accesos").textContent).not.toContain("op://");
-    fireEvent.change(screen.getByTestId("instruir-titulo"), { target: { value: "Revisar" } });
-    fireEvent.change(screen.getByTestId("instruir-texto"), { target: { value: "Revisa el panel" } });
-    fireEvent.click(screen.getByTestId("instruir-enviar"));
-    await waitFor(() => expect(invoke).toHaveBeenCalledTimes(1));
-    expect(invoke.mock.calls[0][1].body.input_context).toBeUndefined();
-    fireEvent.change(screen.getByTestId("instruir-titulo"), { target: { value: "Revisar 2" } });
-    fireEvent.change(screen.getByTestId("instruir-texto"), { target: { value: "Otra vez" } });
-    fireEvent.click(screen.getByTestId("instruir-acceso-Portal Vizum"));
-    fireEvent.click(screen.getByTestId("instruir-enviar"));
-    await waitFor(() => expect(invoke).toHaveBeenCalledTimes(2));
-    expect(invoke.mock.calls[1][1].body.input_context).toEqual({ accesos_aprobados: ["Portal Vizum"] });
   });
 });
 

@@ -7,7 +7,6 @@ import {
 import { ATAJOS, DocumentosDelHilo, HiloAgente, aLocal } from "@/components/agentes/HiloAgente";
 import { accesosOlvidados } from "@/components/agentes/InstruirAgente";
 import { TrabajosAgente } from "@/components/agentes/TrabajosAgente";
-import { Oficina } from "@/components/agentes/Oficina";
 import { figurasOficina } from "@/lib/agentes/oficina";
 import type { AgenteRegistro } from "@/lib/agentes/registro";
 
@@ -295,7 +294,7 @@ describe("<HiloAgente />", () => {
   });
 });
 
-describe("<TrabajosAgente /> y la Oficina", () => {
+describe("<TrabajosAgente />", () => {
   beforeEach(() => { invoke.mockReset(); simular(); });
 
   it("lista solo las solicitudes originales (no los seguimientos ni las revisiones) y abre la conversación", async () => {
@@ -323,14 +322,4 @@ describe("<TrabajosAgente /> y la Oficina", () => {
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("agente-seguimiento", { body: { action: "hilo", task_id: T2 } }));
   });
 
-  it("la Oficina muestra el panel del agente elegido, y solo del elegido", () => {
-    const ag = (id: string, name: string): AgenteRegistro => ({ id, name, display_name: name, description: "x", role: null, status: "idle", kind: "consultable", last_heartbeat: new Date().toISOString(), last_task_at: null, tasks_completed: 0, tasks_failed: 0 });
-    const figuras = figurasOficina([ag("a1", "Tlahtolli"), ag("a2", "Atl")], [], new Date());
-    envolver(<Oficina figuras={figuras} ahora={new Date()} demo={false} detalleExtra={(f) => <p data-testid="extra">panel de {f.nombre}</p>} />);
-    expect(screen.queryByTestId("oficina-extra")).toBeNull();
-    fireEvent.click(screen.getByTestId("oficina-a2"));
-    expect(screen.getByTestId("extra").textContent).toBe("panel de Atl");
-    fireEvent.click(screen.getByTestId("oficina-a2"));                                      // deseleccionar
-    expect(screen.queryByTestId("oficina-extra")).toBeNull();
-  });
 });

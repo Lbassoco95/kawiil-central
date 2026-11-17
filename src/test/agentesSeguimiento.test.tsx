@@ -4,7 +4,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   detalleTarea, entregablesDe, estadosDelGrupo, esUuid, limpiarEvento, publicos, resumirTarea, rutaValida, truncar,
 } from "../../supabase/functions/_shared/seguimiento";
-import { SeguimientoAgentes, tamano } from "@/components/agentes/SeguimientoAgentes";
+import { tamano } from "@/lib/agentes/etiquetas";
+import { HiloAgente } from "@/components/agentes/HiloAgente";
 
 const invoke = vi.fn();
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { functions: { invoke: (...a: unknown[]) => invoke(...a) } } }));
@@ -63,7 +64,7 @@ function envolver(ui: React.ReactElement) {
   return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>{ui}</QueryClientProvider>);
 }
 
-describe("<SeguimientoAgentes />", () => {
+describe("la conversación de una solicitud (<HiloAgente />)", () => {
   beforeEach(() => {
     invoke.mockReset();
     invoke.mockImplementation(async (_n: string, { body }: { body: Record<string, unknown> }) => {
@@ -79,20 +80,8 @@ describe("<SeguimientoAgentes />", () => {
     });
   });
 
-  it("lista las tareas con su estado en texto y filtra por grupo", async () => {
-    envolver(<SeguimientoAgentes ahora={AHORA} />);
-    expect(await screen.findByText("Revisión de actas")).toBeTruthy();
-    expect(screen.getAllByTestId("seguimiento-estado").map((e) => e.textContent)).toEqual(["Terminó", "Falló"]);
-    expect(screen.getByText(/1 documento/)).toBeTruthy();
-    fireEvent.click(screen.getByTestId("seguimiento-filtro-con_error"));
-    expect(await screen.findByText("Consulta SAT")).toBeTruthy();
-    expect(screen.queryByText("Revisión de actas")).toBeNull();
-    expect(invoke).toHaveBeenCalledWith("agente-seguimiento", { body: { action: "listar", grupo: "con_error" } });
-  });
-
-  it("al elegir una solicitud abre su conversación: lo pedido, la respuesta con formato, el avance y los documentos", async () => {
-    envolver(<SeguimientoAgentes ahora={AHORA} />);
-    fireEvent.click(await screen.findByTestId(`seguimiento-tarea-${T}`));
+  it("muestra la conversación: lo pedido, la respuesta con formato, el avance y los documentos", async () => {
+    envolver(<HiloAgente taskId={T} ahora={AHORA} />);
     const hilo = await screen.findByTestId("hilo");
     expect(screen.getByTestId("hilo-texto")).toBeTruthy();                                  // se le puede seguir escribiendo al agente
     expect(screen.getByTestId("hilo-programar-resumen")).toBeTruthy();                      // y programar revisiones
@@ -111,21 +100,10 @@ describe("<SeguimientoAgentes />", () => {
 
   it("descargar pide un enlace firmado por tarea e índice y lo abre en otra pestaña", async () => {
     const abrir = vi.spyOn(window, "open").mockImplementation(() => null);
-    envolver(<SeguimientoAgentes ahora={AHORA} />);
-    fireEvent.click(await screen.findByTestId(`seguimiento-tarea-${T}`));
+    envolver(<HiloAgente taskId={T} ahora={AHORA} />);
     fireEvent.click(await screen.findByTestId(`hilo-descargar-${T}-0`));
     await waitFor(() => expect(abrir).toHaveBeenCalledWith("https://x.supabase.co/signed/abc", "_blank", "noopener,noreferrer"));
     expect(invoke).toHaveBeenCalledWith("agente-seguimiento", { body: { action: "descargar", task_id: T, indice: 0 } });
     abrir.mockRestore();
-  });
-
-  it("sin tareas lo dice; si falla la lectura muestra el mensaje de la función", async () => {
-    invoke.mockResolvedValueOnce({ data: { tareas: [] }, error: null });
-    const { unmount } = envolver(<SeguimientoAgentes ahora={AHORA} />);
-    expect(await screen.findByTestId("seguimiento-vacio")).toBeTruthy();
-    unmount();
-    invoke.mockResolvedValueOnce({ data: null, error: { context: { json: async () => ({ error: "Solo Dirección puede ver el seguimiento de los agentes." }) } } });
-    envolver(<SeguimientoAgentes ahora={AHORA} />);
-    expect((await screen.findByRole("alert")).textContent).toContain("Solo Dirección");
   });
 });

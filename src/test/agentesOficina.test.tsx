@@ -1,7 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
-import { Oficina } from "@/components/agentes/Oficina";
-import { datosDemo, estadoOficina, figurasOficina } from "@/lib/agentes/oficina";
+import { estadoOficina, figurasOficina } from "@/lib/agentes/oficina";
 import type { AgenteRegistro, TareaAgente } from "@/lib/agentes/registro";
 
 const AHORA = new Date("2026-11-05T16:00:00Z");
@@ -28,36 +26,7 @@ describe("estadoOficina", () => {
   it("figuras omiten archivados", () => expect(figurasOficina([ag({ id: "a" }), ag({ id: "b", status: "archived" })], [], AHORA).map((f) => f.id)).toEqual(["a"]));
 });
 
-describe("demostración", () => {
-  it("cubre los siete estados", () => {
-    const { agentes, tareas } = datosDemo(AHORA);
-    expect(new Set(figurasOficina(agentes, tareas, AHORA).map((f) => f.estado)).size).toBe(7);
-  });
-});
-
-describe("<Oficina />", () => {
-  const { agentes, tareas } = datosDemo(AHORA);
-  const figuras = figurasOficina(agentes, tareas, AHORA);
-  it("avisa que son datos de ejemplo y no en modo real", () => {
-    const { unmount } = render(<Oficina figuras={figuras} ahora={AHORA} demo />);
-    expect(screen.getByTestId("oficina-demo")).toBeTruthy();
-    unmount();
-    render(<Oficina figuras={figuras} ahora={AHORA} demo={false} />);
-    expect(screen.queryByTestId("oficina-demo")).toBeNull();
-  });
-  it("elegir un agente muestra su estado con texto", () => {
-    render(<Oficina figuras={figuras} ahora={AHORA} demo />);
-    const f = figuras.find((x) => x.estado === "atascado")!;
-    fireEvent.click(screen.getByTestId(`oficina-${f.id}`));
-    expect(screen.getByTestId("oficina-detalle").textContent).toContain("Atascado");
-  });
-  it("sin agentes muestra un mensaje", () => {
-    render(<Oficina figuras={[]} ahora={AHORA} demo={false} />);
-    expect(screen.getByText(/No hay agentes/)).toBeTruthy();
-  });
-});
-
-describe("ámbito de la oficina y agentes legales reales (5 nov 2026)", () => {
+describe("agentes legales reales (5 nov 2026)", () => {
   const A5 = new Date("2026-11-05T18:00:00Z");
   const real = (id: string, name: string, display: string, status: string, hb: string | null, ok: number, mal: number): AgenteRegistro =>
     ({ id, name, display_name: display, description: null, role: null, status, kind: "consultable", last_heartbeat: hb, last_task_at: null, tasks_completed: ok, tasks_failed: mal });
@@ -70,11 +39,6 @@ describe("ámbito de la oficina y agentes legales reales (5 nov 2026)", () => {
     real("l6", "legal_socratic_jurist", "Sócrates", "idle", null, 0, 0),
   ];
   const OTRO = real("x1", "nelli", "Nelli", "idle", "2026-04-30T15:07:21Z", 9, 2);
-  it("filtra legales vs todos", async () => {
-    const { filtrarAmbito } = await import("@/lib/agentes/oficina");
-    expect(filtrarAmbito([...LEGALES, OTRO], "legales")).toHaveLength(6);
-    expect(filtrarAmbito([...LEGALES, OTRO], "todos")).toHaveLength(7);
-  });
   it("con los datos reales: Vigía DOF atascado y los otros cinco sin señal", () => {
     const f = Object.fromEntries(figurasOficina(LEGALES, [], A5).map((x) => [x.nombre, x.estado]));
     expect(f["Vigía DOF"]).toBe("atascado");
