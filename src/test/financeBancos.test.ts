@@ -29,6 +29,90 @@ describe("importación bancaria", () => {
     const r = parsePastedMovements("04/11/2026\tPago renta\t5000\t\n05/11/2026\tDepósito cliente\t\t9000")!;
     expect(r.movements.map((m) => [m.debit, m.credit])).toEqual([[5000, 0], [0, 9000]]);
   });
+
+  it("acepta el año a dos dígitos", () => {
+    expect(parseMovementDate("17/11/26")).toBe("2026-11-17");
+  });
+
+  it("lee la lista copiada de la app (Fondeadora), del más nuevo al más viejo", () => {
+    const txt = [
+      "Hoy",
+      "movement img",
+      "Compra en GAMMA.APP",
+      "17/11/26・12:54 pm",
+      "-$472.50",
+      "Plataformas",
+      " **9215",
+      "・",
+      "L",
+      "movement img",
+      "Depósito de MARIO ALBERTO LOPEZ",
+      "17/11/26・12:00 pm",
+      "+$1,000.00",
+      "movement img",
+      "Devolución",
+      "17/11/26・10:28 am",
+      "+$289.93",
+      "Compras en línea Legal",
+      " **2487",
+      "・",
+      "J",
+      "Esta semana",
+      "movement img",
+      "Transferencia a Marco Alejandro Avila",
+      "16/11/26 · 7:32 pm",
+      "-$2,000.00",
+      "V",
+      "movement img",
+      "Compra en DLO*UBER EATS",
+      "16/11/26 5:57 pm",
+      "-$756.00",
+      "Uber",
+      "**9706",
+      "·",
+      "V",
+      "Este mes",
+      "movement img",
+      "Devolución",
+      "13/11/26・1:52 pm",
+      "+$497.15",
+      "Compras en línea Legal",
+      "**2487",
+      "・",
+      "J",
+      "movement img",
+      "Devolución",
+      "13/11/26・1:52 pm",
+      "+$497.15",
+      "Compras en línea Legal",
+      "**2487",
+      "・",
+      "J",
+      "movement img",
+      "Compra en APPLE.COM/BILL",
+      "13/11/26・6:45 am",
+      "-$51.45",
+      "Compras",
+      "**7165",
+      "・",
+      "F",
+    ].join("\n");
+    const r = parsePastedMovements(txt)!;
+    expect(r.movements.map((m) => [m.date, m.description, m.debit, m.credit, m.reference])).toEqual([
+      ["2026-11-13", "Compra en APPLE.COM/BILL", 51.45, 0, "Compras **7165"],
+      ["2026-11-13", "Devolución", 0, 497.15, "Compras en línea Legal **2487"],
+      ["2026-11-13", "Devolución", 0, 497.15, "Compras en línea Legal **2487"],
+      ["2026-11-16", "Compra en DLO*UBER EATS", 756, 0, "Uber **9706"],
+      ["2026-11-16", "Transferencia a Marco Alejandro Avila", 2000, 0, null],
+      ["2026-11-17", "Devolución", 0, 289.93, "Compras en línea Legal **2487"],
+      ["2026-11-17", "Depósito de MARIO ALBERTO LOPEZ", 0, 1000, null],
+      ["2026-11-17", "Compra en GAMMA.APP", 472.5, 0, "Plataformas **9215"],
+    ]);
+    expect(new Set(r.movements.map((m) => m.dedupeKey)).size).toBe(8);
+    expect(categoryFromReference(r.movements[0].reference)).toBe("Compras generales");
+    expect(categoryFromReference(r.movements[3].reference)).toBe("Transporte (Uber/Didi)");
+    expect(categoryFromReference(r.movements[7].reference)).toBe("Software y plataformas");
+  });
 });
 
 describe("clasificación que aprende", () => {
