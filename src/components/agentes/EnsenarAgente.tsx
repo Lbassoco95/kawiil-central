@@ -49,9 +49,9 @@ export function TarjetaHabilidad({ h, onGuardar, guardando, error }: { h: Habili
   );
 }
 
-export function EnsenarAgente({ agentes, tareas, ahora = new Date() }: { agentes: AgenteRegistro[]; tareas: TareaAgente[]; ahora?: Date }) {
+export function EnsenarAgente({ agentes, tareas, ahora = new Date(), agenteInicial, fijo = false }: { agentes: AgenteRegistro[]; tareas: TareaAgente[]; ahora?: Date; agenteInicial?: string; fijo?: boolean }) {
   const lista = agentes.filter(ensenable);
-  const [agenteId, setAgenteId] = useState("");
+  const [agenteId, setAgenteId] = useState(agenteInicial ?? "");
   const agente = lista.find((a) => a.id === agenteId);
   const [mensajes, setMensajes] = useState<MensajeChat[]>([]);
   const [texto, setTexto] = useState("");
@@ -96,7 +96,7 @@ export function EnsenarAgente({ agentes, tareas, ahora = new Date() }: { agentes
       <p className="flex items-center gap-2 text-sm text-muted-foreground"><GraduationCap className="h-4 w-4" />Cuéntale cómo se hace una tarea, o elige una que ya hizo, y se convierte en una habilidad que tú revisas. El agente no cambia sus habilidades solo.</p>
       {lista.length === 0 ? <p className="zen-glass rounded-2xl p-4 text-sm text-muted-foreground" data-testid="ensenar-vacio">Aún no hay agentes creados desde el constructor.</p> : (
         <>
-          <SelectorAgentes agentes={lista} valor={agenteId} testid="ensenar-agente" onCambio={setAgenteId} detalle={(a) => `${habilidadesDe(a).filter((h) => h.estado === "aprobada").length} habilidades en uso`} />
+          {!fijo && <SelectorAgentes agentes={lista} valor={agenteId} testid="ensenar-agente" onCambio={setAgenteId} detalle={(a) => `${habilidadesDe(a).filter((h) => h.estado === "aprobada").length} habilidades en uso`} />}
           <FichaAgente agente={agente} />
           {agente && (
             <>

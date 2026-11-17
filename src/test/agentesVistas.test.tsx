@@ -1,9 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
+vi.mock("@/components/agentes/PanelAgente", () => ({ PanelAgente: ({ figura, pestana }: { figura: { nombre: string }; pestana: string }) => <div data-testid="stub-panel">{figura.nombre}:{pestana}</div> }));
 import { VistaOficina } from "@/components/agentes/VistaOficina";
 import { figurasOficina } from "@/lib/agentes/oficina";
 import type { AgenteRegistro, TareaAgente } from "@/lib/agentes/registro";
-import { destinoDePestanaVieja, escribirVista, leerVista, PESTANAS_VIEJAS, VISTA_PLANO } from "@/lib/agentes/vistas";
+import { destinoDePestanaVieja, escribirVista, leerPestanaEscritorio, leerVista, PESTANAS_VIEJAS, VISTA_PLANO } from "@/lib/agentes/vistas";
 
 const AHORA = new Date("2026-11-15T12:00:00Z");
 const ID = "123e4567-e89b-12d3-a456-426614174000";
@@ -23,6 +24,11 @@ describe("vista de la oficina en la URL", () => {
     expect(escribirVista(VISTA_PLANO)).toBeNull();
     expect(escribirVista({ tipo: "isla", clave: "fiscal" })).toBe("isla:fiscal");
     expect(leerVista(escribirVista({ tipo: "agente", id: ID }))).toEqual({ tipo: "agente", id: ID });
+  });
+  it("la pestaña del escritorio viene de ?tab= y lo desconocido abre Conversaciones", () => {
+    expect(leerPestanaEscritorio("perfil")).toBe("perfil");
+    expect(leerPestanaEscritorio("zzz")).toBe("conversaciones");
+    expect(leerPestanaEscritorio(null)).toBe("conversaciones");
   });
   it("las 12 pestañas viejas tienen destino: Oficina (con pestaña del escritorio) o Administrar", () => {
     expect(Object.keys(PESTANAS_VIEJAS)).toHaveLength(12);
@@ -67,5 +73,25 @@ describe("VistaOficina", () => {
   it("sin nadie trabajando la franja lo dice", () => {
     render(<VistaOficina figuras={figurasOficina(AGENTES, [], AHORA)} agentes={AGENTES} tareas={[]} ahora={AHORA} vista={VISTA_PLANO} onVista={vi.fn()} onElegirAgente={vi.fn()} />);
     expect(screen.getByTestId("franja-resumen").textContent).toContain("nadie trabaja ahora");
+  });
+  it("la vista de agente muestra la sala de su isla y su escritorio, y deja volver a la isla", () => {
+    const onVista = vi.fn();
+    render(<VistaOficina figuras={figs} agentes={AGENTES} tareas={TAREAS} ahora={AHORA} vista={{ tipo: "agente", id: "a3" }} onVista={onVista} onElegirAgente={vi.fn()} pestana="perfil" />);
+    expect(screen.getByTestId("sala-juridico")).toBeTruthy();
+    expect(screen.getByTestId("stub-panel").textContent).toBe("tepantli:perfil");
+    expect(screen.getByTestId("agente-titulo").textContent).toBe("tepantli");
+    fireEvent.click(screen.getByTestId("volver-isla"));
+    expect(onVista).toHaveBeenCalledWith({ tipo: "isla", clave: "juridico" });
+  });
+  it("un agente que no existe avisa en vez de quedar en blanco", () => {
+    render(<VistaOficina figuras={figs} agentes={AGENTES} tareas={TAREAS} ahora={AHORA} vista={{ tipo: "agente", id: "no-existe" }} onVista={vi.fn()} onElegirAgente={vi.fn()} />);
+    expect(screen.getByTestId("agente-no-existe")).toBeTruthy();
+  });
+  it("la franja cuenta lo que te espera y pone la tarea en curso en la actividad", () => {
+    const t = [...TAREAS, { ...ta("t9", "a2", "waiting_approval") }];
+    render(<VistaOficina figuras={figurasOficina(AGENTES, t, AHORA)} agentes={AGENTES} tareas={t} ahora={AHORA} vista={VISTA_PLANO} onVista={vi.fn()} onElegirAgente={vi.fn()} />);
+    expect(screen.getByTestId("franja-esperan").textContent).toContain("1 te espera");
+    expect(screen.getByTestId("franja-a1").textContent).toContain("Trabajando · consulta");
+    expect(screen.getByTestId("franja-a2").textContent).toContain("te espera");
   });
 });

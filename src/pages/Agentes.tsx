@@ -11,7 +11,7 @@ import { MemoriaAgentes } from "@/components/agentes/MemoriaAgentes";
 import { ComunicacionInterna } from "@/components/agentes/ComunicacionInterna";
 import { CalendarioRutinas } from "@/components/agentes/CalendarioRutinas";
 import { VistaOficina } from "@/components/agentes/VistaOficina";
-import { escribirVista, leerVista, type Vista } from "@/lib/agentes/vistas";
+import { escribirVista, leerPestanaEscritorio, leerVista, type PestanaEscritorio, type Vista } from "@/lib/agentes/vistas";
 import { ConstructorAgentes } from "@/components/agentes/ConstructorAgentes";
 import { InstruirAgente } from "@/components/agentes/InstruirAgente";
 import { ProgramarAgente } from "@/components/agentes/ProgramarAgente";
@@ -50,7 +50,9 @@ export default function Agentes() {
   const navegar = useNavigate();
   const [params, setParams] = useSearchParams();
   const vista = useMemo(() => leerVista(params.get("vista")), [params]);
-  const cambiarVista = (v: Vista) => setParams((p) => { const n = new URLSearchParams(p); const x = escribirVista(v); if (x) n.set("vista", x); else n.delete("vista"); return n; });
+  const cambiarVista = (v: Vista) => setParams((p) => { const n = new URLSearchParams(p); const x = escribirVista(v); if (x) n.set("vista", x); else n.delete("vista"); if (v.tipo !== "agente") n.delete("tab"); return n; });
+  const pestanaEscritorio = leerPestanaEscritorio(params.get("tab"));
+  const cambiarPestanaEscritorio = (t: PestanaEscritorio) => setParams((p) => { const n = new URLSearchParams(p); n.set("tab", t); return n; });
   const figurasReales = useMemo(() => figurasOficina(reales, tareas.data ?? [], reloj), [reales, tareas.data, reloj]);
   const banda = useMemo(() => figurasDeLaBanda(figurasReales, new Set(reales.filter(esAgenteDelEquipo).map((a) => a.id))), [figurasReales, reales]);
   const [verEnOficina, setVerEnOficina] = useState<string | null>(null);
@@ -103,7 +105,7 @@ export default function Agentes() {
               : <Oficina key={verEnOficina ?? "oficina"} seleccionInicial={verEnOficina} figuras={figuras} ahora={reloj} demo={demo} detalleExtra={demo ? undefined : (f) => <TrabajosAgente agentId={f.id} nombre={f.nombre} ahora={reloj} agente={reales.find((a) => a.id === f.id)} />} />}
           </TabsContent>
           <TabsContent value="departamentos" className="mt-4">
-            <VistaOficina figuras={todasLasFiguras} agentes={agentes.data ?? []} tareas={tareas.data ?? []} ahora={reloj} vista={vista} onVista={cambiarVista} alAbrirMarketing={() => navegar("/marketing")} onElegirAgente={(id) => { setVerEnOficina(id); setAmbito("todos"); setPestana("oficina"); }} />
+            <VistaOficina figuras={todasLasFiguras} agentes={agentes.data ?? []} tareas={tareas.data ?? []} ahora={reloj} vista={vista} onVista={cambiarVista} alAbrirMarketing={() => navegar("/marketing")} onElegirAgente={(id) => cambiarVista({ tipo: "agente", id })} pestana={pestanaEscritorio} onPestana={cambiarPestanaEscritorio} />
           </TabsContent>
           <TabsContent value="rutinas" className="mt-4">
             <CalendarioRutinas agentes={agentes.data ?? []} tareas={tareas.data ?? []} ahora={reloj} onElegir={(id) => { setVerEnOficina(id); setAmbito("todos"); setPestana("oficina"); }} onProgramar={() => setPestana("programar")} />

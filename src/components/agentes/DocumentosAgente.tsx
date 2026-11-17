@@ -26,7 +26,7 @@ export const cuentasActivas = (a?: AgenteRegistro): boolean => (a?.config as { c
 
 export const documentable = (a: AgenteRegistro) => a.status !== "archived" && a.kind !== "system";
 
-export function DocumentosAgente({ agentes, agenteInicial }: { agentes: AgenteRegistro[]; agenteInicial?: string }) {
+export function DocumentosAgente({ agentes, agenteInicial, fijo = false }: { agentes: AgenteRegistro[]; agenteInicial?: string; fijo?: boolean }) {
   const lista = agentes.filter(documentable);
   const [agenteId, setAgenteId] = useState(agenteInicial ?? "");
   const agente = lista.find((a) => a.id === agenteId);
@@ -79,7 +79,7 @@ export function DocumentosAgente({ agentes, agenteInicial }: { agentes: AgenteRe
       <p className="flex items-center gap-2 text-sm text-muted-foreground"><FolderOpen className="h-4 w-4" />Elige qué carpetas puede leer un agente. Solo lectura, solo dentro de cada carpeta. El cliente además debe compartirlas con la identidad de la VM; quitar ese permiso lo revoca.</p>
       {lista.length === 0 ? <p className="zen-glass rounded-2xl p-4 text-sm text-muted-foreground" data-testid="documentos-vacio">Aún no hay agentes disponibles.</p> : (
         <>
-          <SelectorAgentes agentes={lista} valor={agenteId} testid="documentos-agente" onCambio={setAgenteId} detalle={(a) => `${fuentesDe(a).length} fuentes`} />
+          {!fijo && <SelectorAgentes agentes={lista} valor={agenteId} testid="documentos-agente" onCambio={setAgenteId} detalle={(a) => `${fuentesDe(a).length} fuentes`} />}
           <FichaAgente agente={agente} />
           {agente && (
             <>

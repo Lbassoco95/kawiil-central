@@ -25,7 +25,7 @@ export function resumenProgramacion(a: AgenteRegistro): string {
   return "Sin programar";
 }
 
-export function ProgramarAgente({ agentes, agenteInicial }: { agentes: AgenteRegistro[]; agenteInicial?: string }) {
+export function ProgramarAgente({ agentes, agenteInicial, fijo = false }: { agentes: AgenteRegistro[]; agenteInicial?: string; fijo?: boolean }) {
   const lista = agentes.filter(programable);
   const [agenteId, setAgenteId] = useState(agenteInicial ?? "");
   const agente = lista.find((a) => a.id === agenteId);
@@ -59,7 +59,7 @@ export function ProgramarAgente({ agentes, agenteInicial }: { agentes: AgenteReg
       <p className="flex items-center gap-2 text-sm text-muted-foreground"><CalendarClock className="h-4 w-4" />Haz que un agente ejecute una instrucción solo, cada día o cada semana. Guardar no ejecuta nada en ese momento.</p>
       {lista.length === 0 ? <p className="text-sm text-muted-foreground" data-testid="programar-vacio">Aún no hay agentes con cadencia diaria o semanal creados desde el constructor.</p> : (
         <>
-          <SelectorAgentes agentes={lista} valor={agenteId} testid="programar-agente" onCambio={setAgenteId} detalle={(a) => resumenProgramacion(a)} />
+          {!fijo && <SelectorAgentes agentes={lista} valor={agenteId} testid="programar-agente" onCambio={setAgenteId} detalle={(a) => resumenProgramacion(a)} />}
           <FichaAgente agente={agente} />
           {agente && (
             <div className="space-y-3">

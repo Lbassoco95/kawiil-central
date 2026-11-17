@@ -1,7 +1,7 @@
 // Navegación de la Oficina de agentes: plano → isla → agente. La vista vive en la URL (`?vista=`) para poder compartirla y volver con «atrás».
 //   ?vista=plano            (o sin parámetro)   todas las islas
 //   ?vista=isla:<clave>                          una isla (clave de departamento)
-//   ?vista=agente:<id>                           el escritorio de un agente
+//   ?vista=agente:<id>&tab=<pestaña>             el escritorio de un agente (conversaciones, perfil, aprendizaje, rutinas, documentos)
 // Aquí también se traducen las 12 pestañas viejas de /agentes a la nueva organización (Oficina y Administrar), para que los enlaces viejos sigan sirviendo.
 import { DEPARTAMENTOS } from "./departamentos";
 
@@ -19,6 +19,9 @@ export function leerVista(param: string | null | undefined): Vista {
 export const escribirVista = (v: Vista): string | null => (v.tipo === "plano" ? null : v.tipo === "isla" ? `isla:${v.clave}` : `agente:${v.id}`);
 
 export type PestanaEscritorio = "conversaciones" | "perfil" | "aprendizaje" | "rutinas" | "documentos";
+export const PESTANAS_ESCRITORIO_VALORES: PestanaEscritorio[] = ["conversaciones", "perfil", "aprendizaje", "rutinas", "documentos"];
+/** `?tab=` del escritorio; un valor desconocido abre Conversaciones. */
+export const leerPestanaEscritorio = (v: string | null | undefined): PestanaEscritorio => (PESTANAS_ESCRITORIO_VALORES as string[]).includes(v ?? "") ? (v as PestanaEscritorio) : "conversaciones";
 export interface DestinoViejo { pestana: "oficina" | "administrar"; escritorio?: PestanaEscritorio }
 // Las 12 pestañas de antes → dónde viven ahora. Lo que era de un agente pasa a una pestaña de su escritorio.
 export const PESTANAS_VIEJAS: Record<string, DestinoViejo> = {
