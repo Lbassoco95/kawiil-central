@@ -3,7 +3,7 @@ import { cuandoRelativo, type AgenteRegistro, type TareaAgente } from "@/lib/age
 import { spriteAgente, ANCHO, ALTO, oscurecer, type Rect } from "@/lib/agentes/sprites";
 import { ESTADO_OFICINA, type FiguraOficina } from "@/lib/agentes/oficina";
 import {
-  agruparPorDepartamento, celdasDe, contarTareas, ESCENA, filasDeTareas, FILTROS_TAREAS, isoPunto, posicionesIslas, resumenDepartamento, TH, TW, DIAS_HECHAS,
+  agruparPorDepartamento, celdasDe, contarTareas, ANCHO_ISLA_MAX, escenaPara, filasDeTareas, FILTROS_TAREAS, isoPunto, posicionesIslas, resumenDepartamento, TH, TW, DIAS_HECHAS,
   type FiltroTareas, type FilaTarea, type GrupoDepartamento,
 } from "@/lib/agentes/departamentos";
 import { CSS, TONO } from "@/components/agentes/escritorio";
@@ -26,6 +26,7 @@ const CSS_PLANO = `
 @media (prefers-reduced-motion: reduce){.pl-barra{animation:none!important;transform:translateX(30%)}.pl-viva{animation:none!important;opacity:.7}}
 `;
 
+const VENTANA_EN_CURSO_MS = 30 * 60_000;
 const PXS = 2.6;                       // tamaño de cada píxel del dibujo de un agente en el plano
 const PROF = 16;                       // grosor de las islas
 const pintarEsc = (rs: Rect[]) => rs.map((r, i) => <rect key={i} x={r.x * PXS} y={r.y * PXS} width={r.w * PXS} height={r.h * PXS} fill={r.c} />);
@@ -59,19 +60,18 @@ function Agente({ f, x, y, depto, onElegir }: { f: FiguraOficina; x: number; y: 
   );
 }
 
-function Isla({ g, centro, onElegir }: { g: GrupoDepartamento; centro: { x: number; y: number }; onElegir?: (id: string) => void }) {
+function Isla({ g, centro, activa, onElegir }: { g: GrupoDepartamento; centro: { x: number; y: number }; activa: boolean; onElegir?: (id: string) => void }) {
   const { cols, filas } = celdasDe(g.figuras.length);
-  const s = Math.min(1, 350 / ((cols + filas) * TW));
+  const s = Math.min(1, ANCHO_ISLA_MAX / ((cols + filas) * TW));
   const A = isoPunto(0, 0, cols, filas), B = isoPunto(cols, 0, cols, filas), C = isoPunto(cols, filas, cols, filas), D = isoPunto(0, filas, cols, filas);
   const baja = (p: { x: number; y: number }) => ({ x: p.x, y: p.y + PROF });
-  const activa = g.figuras.some((f) => f.estado === "trabajando");   // alguien de esta isla está trabajando ahora: la isla se ilumina
   const celdas = g.figuras.map((f, k) => ({ f, i: k % cols, j: Math.floor(k / cols) })).sort((p, q) => p.i + p.j - (q.i + q.j));
   return (
     <g transform={`translate(${centro.x},${centro.y}) scale(${s})`} data-testid={`isla-${g.depto.clave}`} data-activa={activa ? "true" : "false"}>
       <polygon points={pts(D, C, baja(C), baja(D))} fill={oscurecer(g.depto.tinte, 0.86)} />
       <polygon points={pts(B, C, baja(C), baja(B))} fill={oscurecer(g.depto.tinte, 0.74)} />
       <polygon points={pts(A, B, C, D)} fill={g.depto.tinte} />
-      {activa && <polygon className="pl-viva" points={pts(A, B, C, D)} fill="none" stroke="#5fb37a" strokeWidth={4} strokeLinejoin="round" data-testid={`isla-viva-${g.depto.clave}`} />}
+      {activa && <polygon className="pl-viva" points={pts(A, B, C, D)} fill="rgba(95,179,122,.22)" stroke="#3f9d63" strokeWidth={5} strokeLinejoin="round" data-testid={`isla-viva-${g.depto.clave}`} />}
       {Array.from({ length: cols * filas }, (_, k) => {
         const i = k % cols, j = Math.floor(k / cols);
         return <polygon key={k} points={pts(isoPunto(i, j, cols, filas), isoPunto(i + 1, j, cols, filas), isoPunto(i + 1, j + 1, cols, filas), isoPunto(i, j + 1, cols, filas))} fill="none" stroke="rgba(255,255,255,.5)" strokeWidth={1} />;
@@ -85,8 +85,7 @@ function Isla({ g, centro, onElegir }: { g: GrupoDepartamento; centro: { x: numb
 }
 
 const TW_CARD = 208, TH_CARD = 108;
-function Tarjeta({ g, x, y, ahora, tareas }: { g: GrupoDepartamento; x: number; y: number; ahora: Date; tareas: TareaAgente[] }) {
-  const activa = g.figuras.some((f) => f.estado === "trabajando");
+function Tarjeta({ g, x, y, ahora, tareas, activa }: { g: GrupoDepartamento; x: number; y: number; ahora: Date; tareas: TareaAgente[]; activa: boolean }) {
   const r = resumenDepartamento(g.figuras.map((f) => f.id), tareas, ahora);
   const stat = (etq: string, n: number, dx: number) => <text key={etq} x={x + dx} y={y + 93} fontSize={9} letterSpacing={0.6} style={{ fill: "#7a6d58" }}>{etq} <tspan fontSize={13} fontWeight={700} style={{ fill: "#3f362a" }}>{n}</tspan></text>;
   return (
@@ -97,6 +96,12 @@ function Tarjeta({ g, x, y, ahora, tareas }: { g: GrupoDepartamento; x: number; 
       <text x={x + 32} y={y + 28} fontSize={13} fontWeight={600} style={{ fill: "#3f362a" }}>{recorta(g.depto.nombre, r.conError > 0 ? 15 : 24)}</text>
       {r.conError > 0 && (
         <g><rect x={x + TW_CARD - 74} y={y + 10} width={62} height={18} rx={9} fill="rgba(227,169,176,.35)" /><text x={x + TW_CARD - 43} y={y + 23} textAnchor="middle" fontSize={9.5} fontWeight={600} style={{ fill: "#8c4650" }}>{r.conError} con error</text></g>
+      )}
+      {activa && (
+        <g data-testid={`tarjeta-viva-${g.depto.clave}`}>
+          <rect className="pl-viva" x={x + TW_CARD - 86} y={y + 48} width={72} height={20} rx={10} fill="rgba(95,179,122,.28)" stroke="#3f9d63" />
+          <text x={x + TW_CARD - 50} y={y + 62} textAnchor="middle" fontSize={10} fontWeight={700} style={{ fill: "#1f6b3f" }}>TRABAJANDO</text>
+        </g>
       )}
       <text x={x + 20} y={y + 66} fontSize={34} fontWeight={300} style={{ fill: "#3f362a" }}>{r.agentes}</text>
       <text x={x + 20 + String(r.agentes).length * 20 + 8} y={y + 64} fontSize={10} letterSpacing={1.4} style={{ fill: "#7a6d58" }}>{r.agentes === 1 ? "AGENTE" : "AGENTES"}</text>
@@ -136,17 +141,20 @@ export function PlanoDepartamentos({ figuras, agentes, tareas, ahora, onElegir, 
   const nombreDe = useMemo(() => new Map(figuras.map((f) => [f.id, f.nombre])), [figuras]);
   const llamadas = useMemo(() => llamadasEntreAgentes(visibles, ahora).filter((l) => ids.has(l.de) && ids.has(l.a)), [visibles, ahora, ids]);
   const indiceIsla = useMemo(() => new Map(grupos.flatMap((g, k) => g.figuras.map((f) => [f.id, k] as const))), [grupos]);
+  // «Trabajando ahora»: alguien de la isla está en estado trabajando, o tiene una tarea en curso que empezó hace menos de 30 min (una «en curso» de hace días no cuenta: sería un fantasma).
+  const idsConTareaReciente = useMemo(() => new Set(visibles.filter((t) => t.status === "in_progress" && ahora.getTime() - new Date(t.started_at ?? t.created_at).getTime() <= VENTANA_EN_CURSO_MS).map((t) => t.agent_id)), [visibles, ahora]);
+  const activaDe = (g: GrupoDepartamento) => g.figuras.some((f) => f.estado === "trabajando" || idsConTareaReciente.has(f.id));
   const origenes = useMemo(() => new Map(visibles.map((t) => [t.id, origenDeTarea(t, visibles)])), [visibles]);
   const idsMarketing = useMemo(() => new Set(grupos.filter((g) => g.depto.clave === "marketing").flatMap((g) => g.figuras.map((f) => f.id))), [grupos]);
   const elegir = onElegir || alAbrirMarketing ? (id: string) => { if (idsMarketing.has(id)) alAbrirMarketing?.(); else onElegir?.(id); } : undefined;
 
   if (figuras.length === 0) return <p className="zen-glass rounded-2xl p-6 text-sm text-muted-foreground">No hay agentes en el registro para mostrar en el plano.</p>;
-  const hub = ESCENA.hub;
+  const escena = escenaPara(grupos.length), hub = escena.hub;
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_21rem] lg:items-start" data-testid="plano">
       <style>{CSS}{CSS_PLANO}</style>
       <div className="zen-glass min-w-0 overflow-x-auto rounded-3xl p-2">
-        <svg viewBox={`0 0 ${ESCENA.ancho} ${ESCENA.alto}`} className="mx-auto w-full min-w-[640px]" role="group" aria-label="Plano de departamentos">
+        <svg viewBox={`0 0 ${escena.ancho} ${escena.alto}`} className="mx-auto w-full min-w-[640px]" role="group" aria-label="Plano de departamentos">
           {posiciones.map((p, k) => (
             <g key={"c" + k}>
               <line x1={hub.x} y1={hub.y} x2={p.x} y2={p.y} stroke="#efe6d6" strokeWidth={22} strokeLinecap="round" />
@@ -173,11 +181,11 @@ export function PlanoDepartamentos({ figuras, agentes, tareas, ahora, onElegir, 
               </g>
             );
           })}
-          {grupos.map((g, k) => <Isla key={g.depto.clave} g={g} centro={posiciones[k]} onElegir={elegir} />)}
+          {grupos.map((g, k) => <Isla key={g.depto.clave} g={g} centro={posiciones[k]} activa={activaDe(g)} onElegir={elegir} />)}
           {grupos.map((g, k) => {
-            const { cols, filas: fl } = celdasDe(g.figuras.length), s = Math.min(1, 350 / ((cols + fl) * TW)), mitad = ((cols + fl) * TH * s) / 2, p = posiciones[k];
-            const y = p.fila === "arriba" ? Math.max(12, p.y - mitad - TH_CARD - 92) : Math.min(ESCENA.alto - TH_CARD - 10, p.y + mitad + PROF + 22);
-            return <Tarjeta key={"t" + g.depto.clave} g={g} x={p.x - TW_CARD / 2} y={y} ahora={ahora} tareas={visibles} />;
+            const { cols, filas: fl } = celdasDe(g.figuras.length), s = Math.min(1, ANCHO_ISLA_MAX / ((cols + fl) * TW)), mitad = ((cols + fl) * TH * s) / 2, p = posiciones[k];
+            const y = p.fila === "arriba" ? Math.max(12, p.y - mitad - TH_CARD - 92) : Math.min(escena.alto - TH_CARD - 10, p.y + mitad + PROF + 22);
+            return <Tarjeta key={"t" + g.depto.clave} g={g} x={p.x - TW_CARD / 2} y={y} ahora={ahora} tareas={visibles} activa={activaDe(g)} />;
           })}
         </svg>
         {idsMarketing.size > 0 && (

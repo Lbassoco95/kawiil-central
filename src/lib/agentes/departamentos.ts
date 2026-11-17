@@ -129,11 +129,18 @@ export function isoPunto(i: number, j: number, cols: number, filas: number): { x
   return { x: (i - j) * TW - ((cols - filas) * TW) / 2, y: (i + j) * TH - ((cols + filas) * TH) / 2 };
 }
 
-export const ESCENA = { ancho: 1200, alto: 940, hub: { x: 600, y: 470 } };
+export const ANCHO_ISLA_MAX = 350;   // ancho máximo de una isla en la escena (Isla la escala para no pasarse de esto)
+/** Tamaño de la escena para `n` islas: con 4 islas en una fila (7 o 8 departamentos) la escena se ensancha para que ninguna ni su tarjeta quede recortada. */
+export function escenaPara(n: number): { ancho: number; alto: number; hub: { x: number; y: number } } {
+  const arriba = Math.max(1, Math.ceil(n / 2));
+  const ancho = Math.max(1200, (arriba - 1) * 360 + ANCHO_ISLA_MAX + 100);
+  return { ancho, alto: 940, hub: { x: ancho / 2, y: 470 } };
+}
+export const ESCENA = escenaPara(6);
 
 /** Centros de las islas: arriba la mitad (redondeando hacia arriba) y abajo el resto, repartidas de forma pareja. */
 export function posicionesIslas(n: number): Array<{ x: number; y: number; fila: "arriba" | "abajo" }> {
-  const arriba = Math.ceil(n / 2), abajo = n - arriba;
-  const fila = (k: number, y: number, lado: "arriba" | "abajo") => Array.from({ length: k }, (_, i) => ({ x: ESCENA.hub.x + (i - (k - 1) / 2) * 360, y, fila: lado }));
-  return [...fila(arriba, n === 1 ? ESCENA.hub.y : 310, "arriba"), ...fila(abajo, 640, "abajo")];
+  const arriba = Math.ceil(n / 2), abajo = n - arriba, { hub } = escenaPara(n);
+  const fila = (k: number, y: number, lado: "arriba" | "abajo") => Array.from({ length: k }, (_, i) => ({ x: hub.x + (i - (k - 1) / 2) * 360, y, fila: lado }));
+  return [...fila(arriba, n === 1 ? hub.y : 310, "arriba"), ...fila(abajo, 640, "abajo")];
 }
