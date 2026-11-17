@@ -57,7 +57,7 @@ export function PermisosTarea({ accesos, aprobados, onAccesos, sitios, escribir,
   const marcados = [...aprobados.filter((e) => accesos.some((a) => a.etiqueta === e)), ...escribir.filter((d) => sitios.includes(d)).map((d) => `escribir en ${d}`)];
   const olvidados = accesosOlvidados(texto, accesos, aprobados);
   return (
-    <details className="rounded-xl border border-border/60 bg-background/60 text-sm" data-testid="permisos-tarea" open={olvidados.length > 0 ? true : undefined}>
+    <details className="rounded-xl border border-border/60 bg-background text-sm" data-testid="permisos-tarea" open={olvidados.length > 0 ? true : undefined}>
       <summary className="cursor-pointer select-none px-3 py-1.5 text-xs font-medium" data-testid="permisos-resumen">
         Permisos para este mensaje · {olvidados.length > 0 ? <span className="font-semibold text-amber-700">⚠ falta autorizar «{olvidados.join("», «")}»</span> : marcados.length ? <span className="text-primary">{marcados.join(", ")}</span> : <span className="text-muted-foreground">ninguno autorizado (solo lee)</span>}
       </summary>

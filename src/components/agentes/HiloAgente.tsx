@@ -177,8 +177,8 @@ export function HiloAgente({ taskId, ahora, claseAlto = "h-[min(64vh,42rem)] min
             {figura && <p className="truncate text-xs text-muted-foreground" data-testid="hilo-estado-agente">{en_curso ? (figura.estado === "trabajando" ? "En su escritorio, trabajando en esto ahora." : "Esperando su turno: empieza en cuanto esté libre.") : ESTADO_OFICINA[figura.estado].frase}</p>}
           </div>
         </div>
-        <div className="relative flex min-h-0 flex-1 flex-col">
-          <div ref={lista} onScroll={alScroll} className="min-h-[10rem] flex-1 space-y-2 overflow-y-auto overscroll-contain p-3" aria-live="polite" role="log" aria-label="Conversación" data-testid="hilo-mensajes">
+        <div className="relative flex min-h-[8rem] flex-1 flex-col overflow-hidden">
+          <div ref={lista} onScroll={alScroll} className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain p-3" aria-live="polite" role="log" aria-label="Conversación" data-testid="hilo-mensajes">
             {mensajes.map((m, i) => <Burbuja key={`${m.task_id}-${m.rol}-${i}`} m={m} ahora={ahora} />)}
           </div>
           {nuevos > 0 && (
@@ -188,7 +188,7 @@ export function HiloAgente({ taskId, ahora, claseAlto = "h-[min(64vh,42rem)] min
             </button>
           )}
         </div>
-        <div className="shrink-0 space-y-2 border-t border-border/40 p-2">
+        <div className="relative z-10 max-h-[55%] shrink-0 space-y-2 overflow-y-auto border-t border-border/40 bg-background p-2" data-testid="hilo-escribir">
           <PermisosTarea texto={texto} accesos={q.data?.accesos ?? []} aprobados={aprobados} onAccesos={setAprobados} sitios={q.data?.escritura_dominios ?? []} escribir={escribir} onEscribir={setEscribir} />
           {instruir.isError && <p role="alert" className="text-sm text-destructive">{(instruir.error as Error).message}</p>}
           <div className="flex items-end gap-2">
