@@ -1,9 +1,15 @@
 import { useState, useRef, useCallback, useMemo, useEffect, forwardRef, useImperativeHandle } from "react";
-import { search as emojiSearch, get as emojiGet } from "node-emoji";
+import {
+  resolveSlackEmoji,
+  searchSlackEmoji,
+  type SlackCustomEmojiMap,
+  type SlackEmojiSuggestion,
+} from "@/lib/slackFormatting";
 
 /** API imperativa: permite que el padre (drag & drop) agregue archivos a la cola. */
 export interface SlackComposerHandle {
   addFiles: (files: File[]) => void;
+  insertPlainText: (snippet: string) => void;
 }
 
 /** Tamaño legible: 24 KB, 1.3 MB, etc. */
@@ -28,6 +34,8 @@ interface Props {
   onSchedule?: (text: string, postAtUnix: number) => void;
   disabled?: boolean;
   userMap?: Record<string, UserSuggestion | undefined>;
+  customEmoji?: SlackCustomEmojiMap;
+  onManageEmoji?: () => void;
   onTyping?: () => void;
   /** Hay un archivo arrastrándose sobre el chat: puntea la caja para indicar dónde soltar. */
   dropTargetActive?: boolean;
@@ -37,7 +45,7 @@ interface Props {
 const QUICK_EMOJIS = ["😊","👍","❤️","🔥","✅","😂","🎉","👀","🙏","💪","😅","🤔","👏","🚀","💯","😍","🤝","📌","⚠️","❓"];
 
 export const SlackComposerNew = forwardRef<SlackComposerHandle, Props>(function SlackComposerNew(
-  { channelName, isSending, onSend, onSchedule, disabled, userMap = {}, onTyping, dropTargetActive = false },
+  { channelName, isSending, onSend, onSchedule, disabled, userMap = {}, customEmoji, onManageEmoji, onTyping, dropTargetActive = false },
   ref,
 ) {
   const [text, setText] = useState("");
@@ -219,8 +227,9 @@ export const SlackComposerNew = forwardRef<SlackComposerHandle, Props>(function 
     // Auto-convertir un shortcode completo ":nombre:" recién cerrado → emoji.
     const complete = before.match(/(?:^|\s):([a-z0-9_+-]{2,}):$/i);
     if (complete && node.nodeType === Node.TEXT_NODE) {
-      const char = emojiGet(complete[1]);
-      if (char && char !== complete[1] && !char.startsWith(":")) {
+      const resolved = resolveSlackEmoji(complete[1], customEmoji);
+      const char = resolved.kind === "unicode" ? resolved.char : "";
+      if (char) {
         const tokenLen = complete[1].length + 2; // ":" + nombre + ":"
         const start = pos - tokenLen;
         node.textContent = nodeText.slice(0, start) + char + nodeText.slice(pos);
@@ -246,18 +255,14 @@ export const SlackComposerNew = forwardRef<SlackComposerHandle, Props>(function 
       }
     }
     setEmojiQuery(null);
-  }, [onTyping]);
+  }, [onTyping, customEmoji]);
 
   const emojiSuggestions = useMemo(() => {
     if (!emojiQuery || emojiQuery.length < 2) return [];
-    try {
-      return emojiSearch(emojiQuery).slice(0, 8);
-    } catch {
-      return [];
-    }
-  }, [emojiQuery]);
+    return searchSlackEmoji(emojiQuery, customEmoji, 8);
+  }, [emojiQuery, customEmoji]);
 
-  const insertEmojiSuggestion = useCallback((em: { emoji: string; name: string }) => {
+  const insertEmojiSuggestion = useCallback((em: SlackEmojiSuggestion) => {
     const sel = window.getSelection();
     if (!sel || sel.rangeCount === 0 || !inputRef.current) return;
     const range = sel.getRangeAt(0);
@@ -265,10 +270,11 @@ export const SlackComposerNew = forwardRef<SlackComposerHandle, Props>(function 
     const offset = range.startOffset;
     const rawText = node.textContent ?? "";
     const colonIdx = rawText.lastIndexOf(":", offset - 1);
+    const glyph = em.emoji ?? `:${em.name}:`;
     if (colonIdx !== -1 && node.nodeType === Node.TEXT_NODE) {
-      const newText = `${rawText.slice(0, colonIdx)}${em.emoji} ${rawText.slice(offset)}`;
+      const newText = `${rawText.slice(0, colonIdx)}${glyph} ${rawText.slice(offset)}`;
       node.textContent = newText;
-      const caret = colonIdx + em.emoji.length + 1;
+      const caret = colonIdx + glyph.length + 1;
       const r = document.createRange();
       r.setStart(node, caret);
       r.collapse(true);
@@ -318,27 +324,39 @@ export const SlackComposerNew = forwardRef<SlackComposerHandle, Props>(function 
     inputRef.current.focus();
   }, []);
 
-  // ─── Insertar emoji ──────────────────────────────────────
-  const insertEmoji = (emoji: string) => {
+  // ─── Insertar texto / emoji ──────────────────────────────
+  const insertPlainText = useCallback((snippet: string) => {
     const el = inputRef.current;
     if (!el) return;
-    el.focus();
     const sel = window.getSelection();
-    if (sel && sel.rangeCount > 0) {
-      const range = sel.getRangeAt(0);
-      range.deleteContents();
-      const node = document.createTextNode(emoji);
+    const inside = !!(sel && sel.rangeCount > 0 && sel.anchorNode && el.contains(sel.anchorNode));
+    const saved = inside && sel ? sel.getRangeAt(0).cloneRange() : null;
+    el.focus();
+    if (saved) {
+      saved.deleteContents();
+      const node = document.createTextNode(snippet);
+      saved.insertNode(node);
+      saved.setStartAfter(node);
+      saved.collapse(true);
+      const next = window.getSelection();
+      next?.removeAllRanges();
+      next?.addRange(saved);
+    } else {
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      range.collapse(false);
+      const node = document.createTextNode(snippet);
       range.insertNode(node);
       range.setStartAfter(node);
       range.collapse(true);
-      sel.removeAllRanges();
-      sel.addRange(range);
-    } else {
-      el.innerText += emoji;
+      const next = window.getSelection();
+      next?.removeAllRanges();
+      next?.addRange(range);
     }
     setText(el.innerText);
     setShowEmojiPicker(false);
-  };
+  }, []);
+  const insertEmoji = (emoji: string) => insertPlainText(emoji);
 
   // ─── Archivos ────────────────────────────────────────────
   const addFiles = useCallback((files: File[]) => {
@@ -347,7 +365,7 @@ export const SlackComposerNew = forwardRef<SlackComposerHandle, Props>(function 
   }, []);
 
   // Expone addFiles para el drag & drop del área de chat.
-  useImperativeHandle(ref, () => ({ addFiles }), [addFiles]);
+  useImperativeHandle(ref, () => ({ addFiles, insertPlainText }), [addFiles, insertPlainText]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     addFiles(Array.from(e.target.files || []));
@@ -449,7 +467,13 @@ export const SlackComposerNew = forwardRef<SlackComposerHandle, Props>(function 
               className={`sl-mention-item${i === emojiIndex ? " active" : ""}`}
               onMouseDown={(e) => { e.preventDefault(); insertEmojiSuggestion(em); }}
             >
-              <span style={{ fontSize: 18, width: 22, textAlign: "center" }}>{em.emoji}</span>
+              <span style={{ fontSize: 18, width: 22, textAlign: "center" }}>
+                {em.url ? (
+                  <img src={em.url} alt="" className="sl-emoji-custom" style={{ width: 18, height: 18 }} />
+                ) : (
+                  em.emoji
+                )}
+              </span>
               <span className="sl-mention-name">:{em.name}:</span>
             </button>
           ))}
@@ -469,7 +493,7 @@ export const SlackComposerNew = forwardRef<SlackComposerHandle, Props>(function 
           display: "flex",
           flexWrap: "wrap",
           gap: 4,
-          width: 240,
+          width: 280,
           zIndex: 50,
           boxShadow: "0 4px 16px hsl(0 0% 0% / 0.12)",
           marginBottom: 6,
@@ -485,6 +509,46 @@ export const SlackComposerNew = forwardRef<SlackComposerHandle, Props>(function 
               {emoji}
             </button>
           ))}
+          {Object.keys(customEmoji ?? {}).length > 0 && (
+            <div style={{ flex: "1 0 100%", marginTop: 6 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "hsl(var(--muted-foreground))", padding: "2px 4px 4px" }}>
+                Del workspace
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                {Object.entries(customEmoji ?? {}).slice(0, 16).map(([name, url]) => (
+                  <button
+                    key={name}
+                    type="button"
+                    title={`:${name}:`}
+                    onMouseDown={(e) => { e.preventDefault(); insertPlainText(`:${name}: `); }}
+                    style={{ width: 32, height: 32, border: 0, borderRadius: 6, background: "transparent", cursor: "pointer", display: "grid", placeItems: "center" }}
+                  >
+                    <img src={url} alt="" style={{ width: 20, height: 20, objectFit: "contain" }} />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {onManageEmoji && (
+            <button
+              type="button"
+              onMouseDown={(e) => { e.preventDefault(); setShowEmojiPicker(false); onManageEmoji(); }}
+              style={{
+                flex: "1 0 100%",
+                marginTop: 6,
+                border: "1px solid hsl(var(--border))",
+                background: "hsl(var(--muted) / 0.4)",
+                borderRadius: 8,
+                padding: "6px 8px",
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: "pointer",
+                color: "hsl(var(--foreground))",
+              }}
+            >
+              Ver y subir emojis
+            </button>
+          )}
         </div>
       )}
 

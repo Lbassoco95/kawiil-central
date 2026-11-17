@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Bot } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -7,6 +7,8 @@ import { AgentesRegistro } from "@/components/marketing/AgentesRegistro";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Oficina } from "@/components/agentes/Oficina";
 import { BarraTareas } from "@/components/agentes/BarraTareas";
+import { MemoriaAgentes } from "@/components/agentes/MemoriaAgentes";
+import { ComunicacionInterna } from "@/components/agentes/ComunicacionInterna";
 import { CalendarioRutinas } from "@/components/agentes/CalendarioRutinas";
 import { PlanoDepartamentos } from "@/components/agentes/PlanoDepartamentos";
 import { ConstructorAgentes } from "@/components/agentes/ConstructorAgentes";
@@ -39,6 +41,9 @@ export default function Agentes() {
   const fuente = useMemo(() => (demo ? datosDemo(reloj) : { agentes: reales, tareas: tareas.data ?? [] }), [demo, reales, tareas.data, reloj]);
   const figuras = useMemo(() => figurasOficina(demo ? fuente.agentes : filtrarAmbito(fuente.agentes, ambito), fuente.tareas, reloj), [fuente, reloj, demo, ambito]);
   // Siempre a la vista: todos los agentes reales (sin filtro de ámbito), con quien trabaja primero.
+  // El plano de departamentos incluye también a Marketing (su módulo sigue aparte en /marketing): todos los agentes del registro.
+  const todasLasFiguras = useMemo(() => figurasOficina(agentes.data ?? [], tareas.data ?? [], reloj), [agentes.data, tareas.data, reloj]);
+  const navegar = useNavigate();
   const figurasReales = useMemo(() => figurasOficina(reales, tareas.data ?? [], reloj), [reales, tareas.data, reloj]);
   const banda = useMemo(() => figurasDeLaBanda(figurasReales, new Set(reales.filter(esAgenteDelEquipo).map((a) => a.id))), [figurasReales, reales]);
   const [verEnOficina, setVerEnOficina] = useState<string | null>(null);
@@ -58,6 +63,8 @@ export default function Agentes() {
             <TabsTrigger value="oficina">Oficina</TabsTrigger>
             <TabsTrigger value="departamentos">Departamentos</TabsTrigger>
             <TabsTrigger value="rutinas">Rutinas</TabsTrigger>
+            <TabsTrigger value="memoria">Memoria</TabsTrigger>
+            <TabsTrigger value="comunicacion">Comunicación</TabsTrigger>
             <TabsTrigger value="tablas">Tablas</TabsTrigger>
             <TabsTrigger value="crear">Crear agente</TabsTrigger>
             <TabsTrigger value="instrucciones">Instrucciones</TabsTrigger>
@@ -88,11 +95,15 @@ export default function Agentes() {
               : <Oficina key={verEnOficina ?? "oficina"} seleccionInicial={verEnOficina} figuras={figuras} ahora={reloj} demo={demo} detalleExtra={demo ? undefined : (f) => <TrabajosAgente agentId={f.id} nombre={f.nombre} ahora={reloj} agente={reales.find((a) => a.id === f.id)} />} />}
           </TabsContent>
           <TabsContent value="departamentos" className="mt-4">
-            <PlanoDepartamentos figuras={figurasReales} agentes={reales} tareas={tareas.data ?? []} ahora={reloj} onElegir={(id) => { setVerEnOficina(id); setAmbito("todos"); setPestana("oficina"); }} />
+            <PlanoDepartamentos figuras={todasLasFiguras} agentes={agentes.data ?? []} tareas={tareas.data ?? []} ahora={reloj} alAbrirMarketing={() => navegar("/marketing")} onElegir={(id) => { setVerEnOficina(id); setAmbito("todos"); setPestana("oficina"); }} />
           </TabsContent>
           <TabsContent value="rutinas" className="mt-4">
             <CalendarioRutinas agentes={agentes.data ?? []} tareas={tareas.data ?? []} ahora={reloj} onElegir={(id) => { setVerEnOficina(id); setAmbito("todos"); setPestana("oficina"); }} onProgramar={() => setPestana("programar")} />
           </TabsContent>
+          <TabsContent value="memoria" className="mt-4">
+            <MemoriaAgentes agentes={agentes.data ?? []} ahora={reloj} />
+          </TabsContent>
+          <TabsContent value="comunicacion" className="mt-4"><ComunicacionInterna /></TabsContent>
           <TabsContent value="tablas" className="mt-4">
             <AgentesRegistro sinMarketing errores={errores.data ?? []} agentes={agentes.data ?? []} tareas={tareas.data ?? []}
               estadoAgentes={agentes.isError ? "error" : agentes.isLoading ? "cargando" : "ok"}

@@ -37,8 +37,8 @@ import {
   formatSlackTooltipFull,
   isSlackSystemSubtype,
   slackMrkdwnToReact,
+  slackEmojiToReact,
   slackSystemMessageLabel,
-  slackEmojiAliasToChar,
   type FormatContext,
 } from "@/lib/slackFormatting";
 import { SLACK_EMOJI } from "@/lib/slackFormatting";
@@ -70,11 +70,6 @@ const REACTION_PICKER_KEYS = [
   "ok_hand",
   "wave",
 ].filter((k) => k in SLACK_EMOJI);
-
-function reactionLabel(name: string): string {
-  const k = name.replace(/^::|::$/g, "").replace(/^:|:$/g, "").toLowerCase();
-  return slackEmojiAliasToChar(k);
-}
 
 function slackReactionNamesMatch(a: string, b: string): boolean {
   const na = a.replace(/^:|:$/g, "").toLowerCase();
@@ -490,7 +485,9 @@ function SlackMessageListRowViewInner({
                     !interactive && "cursor-default",
                   )}
                 >
-                  <span>{reactionLabel(r.name)}</span>
+                  <span className="inline-flex items-center text-sm leading-none">
+                    {slackEmojiToReact(r.name, formatCtx.customEmoji)}
+                  </span>
                   <span className="text-muted-foreground tabular-nums">{r.count}</span>
                 </button>
               );

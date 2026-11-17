@@ -41,6 +41,8 @@ import { TypingIndicator } from "./TypingIndicator";
 import { SlackGroupsOrganizerDialog } from "@/components/slack/SlackGroupsOrganizerDialog";
 import { SlackCreateTaskDialog } from "@/components/slack/SlackCreateTaskDialog";
 import { SlackActivityPanel } from "@/components/slack/SlackActivityPanel";
+import { SlackEmojiLibrary } from "./SlackEmojiLibrary";
+import { useSlackCustomEmoji } from "@/hooks/useSlackCustomEmoji";
 
 // ─── Tipos ───────────────────────────────────────────────────
 type HistoryPage = {
@@ -116,6 +118,10 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
   const channelFromUrl = searchParams.get("channel") || "";
   const [selectedChannel, setSelectedChannel] = useState<string>(channelFromUrl);
   const [threadRootTs, setThreadRootTs] = useState<string | null>(null);
+  const [emojiLibOpen, setEmojiLibOpen] = useState(false);
+  const [emojiTarget, setEmojiTarget] = useState<"main" | "thread">("main");
+  const customEmojiQuery = useSlackCustomEmoji(true);
+  const customEmoji = customEmojiQuery.emoji;
   const [groupsDialogOpen, setGroupsDialogOpen] = useState(false);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [activityOpen, setActivityOpen] = useState(false);
@@ -1015,6 +1021,7 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
             onLoadMore={() => void historyQuery.fetchNextPage()}
             onOpenThread={(ts) => setThreadRootTs(ts)}
             userMap={userMap}
+            customEmoji={customEmoji}
             selfUserId={connection.slack_user_id ?? undefined}
             onOpenAi={() => {}}
             onOpenActivity={() => setActivityOpen(true)}
@@ -1034,6 +1041,11 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
             onSchedule={(text, postAt) => scheduleMutation.mutate({ text, postAt })}
             disabled={!selectedChannel}
             userMap={userMap}
+            customEmoji={customEmoji}
+            onManageEmoji={() => {
+              setEmojiTarget("main");
+              setEmojiLibOpen(true);
+            }}
             onTyping={onTyping}
             dropTargetActive={isDraggingFile}
           />
@@ -1054,6 +1066,11 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
           onReact={handleReact}
           onCreateTask={handleCreateTask}
           userMap={userMap}
+          customEmoji={customEmoji}
+          onManageEmoji={() => {
+            setEmojiTarget("thread");
+            setEmojiLibOpen(true);
+          }}
           selfUserId={connection.slack_user_id ?? undefined}
         />
       </div>
@@ -1105,6 +1122,21 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
       )}
 
       {/* Diálogo crear tarea desde mensaje */}
+      <SlackEmojiLibrary
+        open={emojiLibOpen}
+        onClose={() => setEmojiLibOpen(false)}
+        customEmoji={customEmoji}
+        loading={customEmojiQuery.isFetching}
+        error={customEmojiQuery.error instanceof Error ? customEmojiQuery.error.message : null}
+        onSync={() => {
+          void customEmojiQuery.refetch();
+        }}
+        onInsert={(token) => {
+          const target = emojiTarget === "thread" ? threadComposerRef : composerRef;
+          target.current?.insertPlainText(token);
+        }}
+      />
+
       <SlackCreateTaskDialog
         open={taskDialogOpen}
         onOpenChange={setTaskDialogOpen}

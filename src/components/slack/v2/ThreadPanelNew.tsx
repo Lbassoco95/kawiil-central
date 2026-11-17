@@ -1,5 +1,6 @@
 import { useRef, useEffect, type RefObject } from "react";
 import type { SlackMessage } from "@/lib/slackApi";
+import type { SlackCustomEmojiMap } from "@/lib/slackFormatting";
 import { MessageItem } from "./MessageItem";
 import { SlackComposerNew, type SlackComposerHandle } from "./SlackComposerNew";
 import { SlackChatFileDropZone } from "../SlackChatFileDropZone";
@@ -16,7 +17,9 @@ interface Props {
   onReact?: (ts: string, emoji: string) => void;
   onCreateTask?: (msg: SlackMessage) => void;
   userMap?: Record<string, { display_name?: string; real_name?: string; avatar_url?: string }>;
+  customEmoji?: SlackCustomEmojiMap;
   selfUserId?: string;
+  onManageEmoji?: () => void;
   /** Ref al composer del hilo para agregar archivos soltados. */
   composerRef?: RefObject<SlackComposerHandle>;
   /** Archivos soltados sobre el hilo (drag & drop). */
@@ -35,7 +38,9 @@ export function ThreadPanelNew({
   onReact,
   onCreateTask,
   userMap = {},
+  customEmoji,
   selfUserId,
+  onManageEmoji,
   composerRef,
   onDropFiles,
 }: Props) {
@@ -121,6 +126,7 @@ export function ThreadPanelNew({
                   isSelf={msg.user === selfUserId}
                   selfUserId={selfUserId}
                   userMap={userMap}
+                  customEmoji={customEmoji}
                   onReact={onReact}
                   onCreateTask={onCreateTask}
                 />
@@ -136,6 +142,8 @@ export function ThreadPanelNew({
           isSending={isSending}
           onSend={onSendReply}
           userMap={userMap}
+          customEmoji={customEmoji}
+          onManageEmoji={onManageEmoji}
         />
         </SlackChatFileDropZone>
       </div>

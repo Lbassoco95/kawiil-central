@@ -259,9 +259,9 @@ async function preguntarSinTope(pregunta: string, historial: TurnoHistorial[] | 
 }
 
 
-// ── Seguimientos del Analista (preguntas que responde solo, una vez, a diario o cada semana) ──────────────────────────
+// ── Seguimientos del Analista y del CMO (preguntas que responden solos, una vez, a diario o cada semana) ──────────────────────────
 export type FrecuenciaSeguimiento = "una_vez" | "diaria" | "semanal";
-export interface SeguimientoAnalista { id: string; pregunta: string; frecuencia: FrecuenciaSeguimiento; estado: "activo" | "pausado" | "terminado"; proxima_at: string; ultima_at: string | null; corridas: number }
+export interface SeguimientoAnalista { id: string; agente?: "marketing_analista" | "marketing_cmo" | null; pregunta: string; frecuencia: FrecuenciaSeguimiento; estado: "activo" | "pausado" | "terminado"; proxima_at: string; ultima_at: string | null; corridas: number }
 
 // RLS: solo quien tiene el permiso de ver Marketing, de su organización. Si la tabla aún no existe, no rompe la pantalla.
 export const useSeguimientosAnalista = () =>
@@ -269,7 +269,7 @@ export const useSeguimientosAnalista = () =>
     queryKey: ["analista", "seguimientos"],
     queryFn: async (): Promise<SeguimientoAnalista[]> => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any).from("mk_seguimiento").select("id, pregunta, frecuencia, estado, proxima_at, ultima_at, corridas").neq("estado", "terminado").order("created_at", { ascending: false }).limit(20);
+      const { data, error } = await (supabase as any).from("mk_seguimiento").select("id, agente, pregunta, frecuencia, estado, proxima_at, ultima_at, corridas").neq("estado", "terminado").order("created_at", { ascending: false }).limit(20);
       if (error) throw error;
       return data ?? [];
     },
@@ -278,7 +278,7 @@ export const useSeguimientosAnalista = () =>
   });
 
 export type AccionSeguimiento =
-  | { accion: "crear_seguimiento"; pregunta: string; frecuencia: FrecuenciaSeguimiento }
+  | { accion: "crear_seguimiento"; pregunta: string; frecuencia: FrecuenciaSeguimiento; agente?: "marketing_analista" | "marketing_cmo" }
   | { accion: "cambiar_seguimiento"; id: string; estado: "activo" | "pausado" | "terminado" };
 
 // Crear, pausar, reanudar o terminar un seguimiento por marketing-agente. Devuelve siempre un objeto (nunca lanza).

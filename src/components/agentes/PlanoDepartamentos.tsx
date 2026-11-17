@@ -7,6 +7,7 @@ import {
   type FiltroTareas, type FilaTarea, type GrupoDepartamento,
 } from "@/lib/agentes/departamentos";
 import { CSS, TONO } from "@/components/agentes/escritorio";
+import { DIAS_COLABORACION, llamadasEntreAgentes, origenDeTarea } from "@/lib/agentes/colaboracion";
 
 // Plano por departamentos (Zen + Glass): una isla isométrica por departamento con sus agentes en su escritorio (los mismos dibujos y animaciones de la
 // Oficina), una tarjeta de cifras junto a cada isla y, a la derecha, el estado de las tareas con su filtro. Es solo lectura. Las tareas se cuentan por
@@ -40,7 +41,7 @@ function Agente({ f, x, y, depto, onElegir }: { f: FiguraOficina; x: number; y: 
       <ellipse cx={0} cy={2} rx={27} ry={8} fill="rgba(70,52,28,.14)" />
       {/* La posición va en un <g> aparte: index.css aplica transform a todo [role="button"]:active y, en un SVG, eso borraría el translate. */}
       <g className={`pl-agente of-${f.estado}`} role="button" tabIndex={0} data-testid={`plano-${f.id}`} data-estado={f.estado} style={{ cursor: onElegir ? "pointer" : "default", transform: "none" }}
-        aria-label={`${f.nombre}: ${info.etiqueta}. Departamento ${depto}`} onClick={activar} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activar(); } }}>
+        aria-label={`${f.nombre}: ${info.etiqueta}. Departamento ${depto}${depto === "Marketing" ? " (abre el módulo de Marketing)" : ""}`} onClick={activar} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activar(); } }}>
         <rect className="of-celda" x={-ancho / 2 - 6} y={-alto - 22} width={ancho + 12} height={alto + 26} rx={10} fill="transparent" style={{ pointerEvents: "all" }} />
         <rect className="pl-anillo" x={-ancho / 2 - 6} y={-alto - 22} width={ancho + 12} height={alto + 26} rx={10} fill="rgba(143,180,217,.12)" stroke="#8fb4d9" strokeWidth={1.5} />
         <g opacity={apagado ? 0.55 : 1} transform={`translate(${-ancho / 2},${-alto + 3})`} shapeRendering="crispEdges">
@@ -118,7 +119,8 @@ function Barra({ grupo }: { grupo: FilaTarea["grupo"] }) {
   );
 }
 
-export function PlanoDepartamentos({ figuras, agentes, tareas, ahora, onElegir }: { figuras: FiguraOficina[]; agentes: AgenteRegistro[]; tareas: TareaAgente[]; ahora: Date; onElegir?: (id: string) => void }) {
+// `alAbrirMarketing`: Marketing tiene su módulo aparte (/marketing). Su isla es un resumen: al elegir uno de sus agentes o tareas se abre ese módulo en vez de la Oficina.
+export function PlanoDepartamentos({ figuras, agentes, tareas, ahora, onElegir, alAbrirMarketing }: { figuras: FiguraOficina[]; agentes: AgenteRegistro[]; tareas: TareaAgente[]; ahora: Date; onElegir?: (id: string) => void; alAbrirMarketing?: () => void }) {
   const [filtro, setFiltro] = useState<FiltroTareas>("todas");
   const grupos = useMemo(() => agruparPorDepartamento(figuras, agentes), [figuras, agentes]);
   const ids = useMemo(() => new Set(figuras.map((f) => f.id)), [figuras]);
@@ -126,6 +128,12 @@ export function PlanoDepartamentos({ figuras, agentes, tareas, ahora, onElegir }
   const conteo = useMemo(() => contarTareas(visibles), [visibles]);
   const filas = useMemo(() => filasDeTareas(visibles, agentes, filtro), [visibles, agentes, filtro]);
   const posiciones = posicionesIslas(grupos.length);
+  const nombreDe = useMemo(() => new Map(figuras.map((f) => [f.id, f.nombre])), [figuras]);
+  const llamadas = useMemo(() => llamadasEntreAgentes(visibles, ahora).filter((l) => ids.has(l.de) && ids.has(l.a)), [visibles, ahora, ids]);
+  const indiceIsla = useMemo(() => new Map(grupos.flatMap((g, k) => g.figuras.map((f) => [f.id, k] as const))), [grupos]);
+  const origenes = useMemo(() => new Map(visibles.map((t) => [t.id, origenDeTarea(t, visibles)])), [visibles]);
+  const idsMarketing = useMemo(() => new Set(grupos.filter((g) => g.depto.clave === "marketing").flatMap((g) => g.figuras.map((f) => f.id))), [grupos]);
+  const elegir = onElegir || alAbrirMarketing ? (id: string) => { if (idsMarketing.has(id)) alAbrirMarketing?.(); else onElegir?.(id); } : undefined;
 
   if (figuras.length === 0) return <p className="zen-glass rounded-2xl p-6 text-sm text-muted-foreground">No hay agentes en el registro para mostrar en el plano.</p>;
   const hub = ESCENA.hub;
@@ -146,13 +154,32 @@ export function PlanoDepartamentos({ figuras, agentes, tareas, ahora, onElegir }
             <text x={hub.x} y={hub.y - 2} textAnchor="middle" fontSize={11} letterSpacing={2.2} style={{ fill: "#7a6d58" }}>EQUIPO</text>
             <text x={hub.x} y={hub.y + 16} textAnchor="middle" fontSize={15} fontWeight={600} style={{ fill: "#3f362a" }}>{figuras.length} {figuras.length === 1 ? "agente" : "agentes"}</text>
           </g>
-          {grupos.map((g, k) => <Isla key={g.depto.clave} g={g} centro={posiciones[k]} onElegir={onElegir} />)}
+          {llamadas.map((l) => {
+            const i = indiceIsla.get(l.de), j = indiceIsla.get(l.a);
+            if (i === undefined || j === undefined || i === j) return null;
+            const p = posiciones[i], q = posiciones[j], mx = (p.x + q.x) / 2, my = (p.y + q.y) / 2, dx = q.x - p.x, dy = q.y - p.y, d = Math.hypot(dx, dy) || 1;
+            const cx = mx - (dy / d) * 70, cy = my + (dx / d) * 70;   // la curva se abre hacia un lado para no encimarse con los caminos al centro
+            const tx = 0.25 * p.x + 0.5 * cx + 0.25 * q.x, ty = 0.25 * p.y + 0.5 * cy + 0.25 * q.y;
+            return (
+              <g key={`${l.de}>${l.a}`} data-testid={`llamada-${l.de}-${l.a}`}>
+                <path d={`M${p.x},${p.y} Q${cx},${cy} ${q.x},${q.y}`} fill="none" stroke="#7fa6d3" strokeWidth={1.5 + Math.min(3, Math.log2(l.veces + 1))} strokeDasharray="6 5" strokeLinecap="round" opacity={0.85} />
+                <rect x={tx - 16} y={ty - 10} width={32} height={20} rx={10} fill="rgba(255,255,255,.92)" stroke="#7fa6d3" />
+                <text x={tx} y={ty + 4} textAnchor="middle" fontSize={11} fontWeight={600} style={{ fill: "#3f5f86" }}>{l.veces}×</text>
+              </g>
+            );
+          })}
+          {grupos.map((g, k) => <Isla key={g.depto.clave} g={g} centro={posiciones[k]} onElegir={elegir} />)}
           {grupos.map((g, k) => {
             const { cols, filas: fl } = celdasDe(g.figuras.length), s = Math.min(1, 350 / ((cols + fl) * TW)), mitad = ((cols + fl) * TH * s) / 2, p = posiciones[k];
             const y = p.fila === "arriba" ? Math.max(12, p.y - mitad - TH_CARD - 92) : Math.min(ESCENA.alto - TH_CARD - 10, p.y + mitad + PROF + 22);
             return <Tarjeta key={"t" + g.depto.clave} g={g} x={p.x - TW_CARD / 2} y={y} ahora={ahora} tareas={visibles} />;
           })}
         </svg>
+        {idsMarketing.size > 0 && (
+          <p className="px-3 pb-2 pt-1 text-xs text-muted-foreground" data-testid="plano-nota-marketing">
+            La isla de Marketing es un resumen: su módulo sigue aparte.{alAbrirMarketing && <> <button type="button" className="underline" onClick={alAbrirMarketing} data-testid="plano-abrir-marketing">Abrir Marketing</button></>}
+          </p>
+        )}
       </div>
 
       <aside className="zen-glass min-w-0 rounded-3xl p-4 lg:sticky lg:top-3 lg:max-h-[calc(100vh-1.5rem)] lg:overflow-y-auto" aria-label="Estado de tareas" data-testid="plano-tareas">
@@ -172,13 +199,13 @@ export function PlanoDepartamentos({ figuras, agentes, tareas, ahora, onElegir }
               const e = ESTADO_TAREA[t.grupo];
               return (
                 <li key={t.id}>
-                  <button type="button" disabled={!onElegir || !t.agenteId} onClick={() => t.agenteId && onElegir?.(t.agenteId)} data-testid={`plano-tarea-${t.id}`}
+                  <button type="button" disabled={!elegir || !t.agenteId} onClick={() => t.agenteId && elegir?.(t.agenteId)} data-testid={`plano-tarea-${t.id}`}
                     className="w-full rounded-2xl border border-border/50 bg-background/40 p-2.5 text-left text-sm enabled:hover:bg-background/70">
                     <span className="flex items-center justify-between gap-2">
                       <span className="truncate font-medium">{t.agente}</span>
                       <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] ${e.pastilla}`}>{e.t}</span>
                     </span>
-                    <span className="block truncate text-xs text-muted-foreground">{t.tipo} · {cuandoRelativo(t.fin ?? t.creada, ahora)}</span>
+                    <span className="block truncate text-xs text-muted-foreground">{t.tipo} · {cuandoRelativo(t.fin ?? t.creada, ahora)}{origenes.get(t.id) ? ` · pedida por ${origenes.get(t.id) === "desconocido" ? "otra tarea" : nombreDe.get(origenes.get(t.id)!) ?? "otro agente"}` : ""}</span>
                     <Barra grupo={t.grupo} />
                   </button>
                 </li>
@@ -186,6 +213,18 @@ export function PlanoDepartamentos({ figuras, agentes, tareas, ahora, onElegir }
             })}
           </ul>
         )}
+        <section className="mt-4 border-t border-border/40 pt-3" aria-label="Colaboración entre agentes" data-testid="plano-colaboracion">
+          <h3 className="text-sm font-medium">Colaboración entre agentes</h3>
+          {llamadas.length === 0 ? (
+            <p className="text-xs text-muted-foreground" data-testid="plano-sin-colaboracion">Aún no hay llamadas entre agentes. Cuando un agente le pida trabajo a otro, aparecerá aquí.</p>
+          ) : (
+            <ul className="mt-1 space-y-1 text-xs" data-testid="plano-llamadas">
+              {llamadas.map((l) => (
+                <li key={`${l.de}>${l.a}`}>{nombreDe.get(l.de)} → {nombreDe.get(l.a)} · {l.veces} {l.veces === 1 ? "vez" : "veces"} en {DIAS_COLABORACION} días{l.conError > 0 ? ` (${l.conError} con error)` : ""}</li>
+              ))}
+            </ul>
+          )}
+        </section>
       </aside>
     </div>
   );

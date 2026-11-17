@@ -68,6 +68,7 @@ type SlackMethod =
   | "chat.delete"
   | "reactions.add"
   | "reactions.remove"
+  | "emoji.list"
   | "users.info"
   | "users.list"
   | "auth.test";
@@ -582,6 +583,38 @@ Deno.serve(async (req) => {
 
     const action = String(json.action ?? "").trim();
 
+    if (action === "emoji.add" && multipart) {
+      const name = String(multipart.get("name") || "").trim().toLowerCase();
+      const file = multipart.get("file");
+      if (!/^[a-z0-9_-]{1,100}$/.test(name)) {
+        return jsonOk({ ok: false, error: "invalid_name" });
+      }
+      if (!(file instanceof File)) {
+        return jsonOk({ ok: false, error: "file required" });
+      }
+      const mime = file.type || "";
+      if (!["image/png", "image/jpeg", "image/gif"].includes(mime)) {
+        return jsonOk({ ok: false, error: "invalid_emoji_type" });
+      }
+      const buf = new Uint8Array(await file.arrayBuffer());
+      const maxEmojiBytes = 128 * 1024;
+      if (buf.byteLength <= 0 || buf.byteLength > maxEmojiBytes) {
+        return jsonOk({ ok: false, error: "emoji_too_large" });
+      }
+      const form = new FormData();
+      form.append("token", conn.access_token);
+      form.append("mode", "data");
+      form.append("name", name);
+      form.append("image", new Blob([buf], { type: mime }), file.name || `${name}.png`);
+      const res = await fetch("https://slack.com/api/emoji.add", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${conn.access_token}` },
+        body: form,
+      });
+      const data = await res.json().catch(() => ({ ok: false, error: "parse_error" }));
+      return jsonOk(annotateSlackResponse(data as Record<string, unknown>));
+    }
+
     if (action === "files.upload" && multipart) {
       const channel = String(multipart.get("channel") || "");
       const filename = String(multipart.get("filename") || "upload");
@@ -1018,6 +1051,11 @@ Deno.serve(async (req) => {
           has_reactions_read: scopes.includes("reactions:read"),
         },
       });
+    }
+
+    if (action === "emoji.list") {
+      const data = await slackCall(conn.access_token, "emoji.list", {});
+      return jsonOk(annotateSlackResponse(data as Record<string, unknown>));
     }
 
     if (action === "reactions.add" || action === "reactions.remove") {

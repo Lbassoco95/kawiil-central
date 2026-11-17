@@ -22,6 +22,8 @@ export const ASPECTO: Record<string, Aspecto> = {
   marketing_cmo: { corto: "CMO", pelo: "#2a1f3a", ropa: "#6b5b95", x: 520, y: 48, trabajo: "escribiendo" },
   // El Investigador web se sienta a la derecha del Analista (zona Análisis).
   marketing_investigador: { corto: "Investigador", pelo: "#1f3a3a", ropa: "#5b8a95", x: 585, y: 84, trabajo: "leyendo" },
+  // Comunicación interna: redacta los avisos para el equipo; se sienta en la segunda fila, a la derecha del Vigía.
+  marketing_comunicacion_interna: { corto: "Comunicación", pelo: "#6b3a2a", ropa: "#c98a5b", x: 450, y: 140, trabajo: "escribiendo" },
 };
 const ASPECTO_POR_DEFECTO: Aspecto = { corto: "Agente", pelo: "#444444", ropa: "#999999", x: 300, y: 84, trabajo: "leyendo" };
 export const aspectoDe = (a: Pick<AgenteRegistro, "name">): Aspecto => ASPECTO[a.name] ?? ASPECTO_POR_DEFECTO;
@@ -57,7 +59,7 @@ export interface PersonajeOficina {
   id: string; clave: string; nombre: string; aspecto: Aspecto; estado: EstadoVisual; ultima: TareaMarketing | undefined; historial: TareaMarketing[];
 }
 
-const ORDEN = ["marketing_cmo", "marketing_vigilante", "marketing_informe_diario", "marketing_vigia", "marketing_analista", "marketing_investigador"];
+const ORDEN = ["marketing_cmo", "marketing_vigilante", "marketing_informe_diario", "marketing_vigia", "marketing_analista", "marketing_investigador", "marketing_comunicacion_interna"];
 
 // Los agentes de Marketing, en orden fijo, con su estado. No se inventan agentes que no están en el registro.
 export function personajes(agentes: AgenteRegistro[], tareas: TareaMarketing[], ahora: Date, pensandoId: string | null = null): PersonajeOficina[] {
