@@ -55,6 +55,37 @@ function Entregables({ m }: { m: MensajeHilo }) {
   );
 }
 
+// Todos los documentos que el agente entregó en esta conversación (de cualquier respuesta), siempre a la mano: si repites una petición
+// o la página se recarga, no hay que buscar en qué mensaje quedaron. Sin duplicados por nombre (queda el más reciente).
+export function DocumentosDelHilo({ mensajes }: { mensajes: MensajeHilo[] }) {
+  const descargar = useDescargarEntregable();
+  const porNombre = new Map<string, { m: MensajeHilo; i: number; e: MensajeHilo["entregables"][number] }>();
+  for (const m of mensajes) m.entregables.forEach((e, i) => porNombre.set(e.nombre, { m, i, e }));
+  const docs = [...porNombre.values()];
+  if (docs.length === 0) return null;
+  return (
+    <details className="shrink-0 border-b border-border/40 bg-background text-sm" data-testid="hilo-documentos">
+      <summary className="cursor-pointer select-none px-3 py-1.5 text-xs font-medium" data-testid="hilo-documentos-resumen">Documentos de esta conversación · {docs.length}</summary>
+      <ul className="max-h-44 space-y-1.5 overflow-y-auto px-3 pb-2">
+        {docs.map(({ m, i, e }) => (
+          <li key={`${m.task_id}-${i}`} className="flex flex-wrap items-center gap-2">
+            <span className="font-medium">{e.nombre}</span><span className="text-xs text-muted-foreground">{tamano(e.bytes)}</span>
+            {e.formato === "pdf" && (
+              <Button size="sm" variant="outline" disabled={descargar.isPending} data-testid={`doc-ver-${m.task_id}-${i}`} onClick={() => descargar.mutate({ taskId: m.task_id, indice: i, ver: true })}>
+                <Eye className="mr-1 h-3.5 w-3.5" />Ver
+              </Button>
+            )}
+            <Button size="sm" variant="outline" disabled={descargar.isPending} data-testid={`doc-descargar-${m.task_id}-${i}`} onClick={() => descargar.mutate({ taskId: m.task_id, indice: i })}>
+              <Download className="mr-1 h-3.5 w-3.5" />Descargar
+            </Button>
+          </li>
+        ))}
+        {descargar.isError && <li role="alert" className="text-sm text-destructive">{(descargar.error as Error).message}</li>}
+      </ul>
+    </details>
+  );
+}
+
 function Burbuja({ m, ahora }: { m: MensajeHilo; ahora: Date }) {
   const agente = m.rol === "agente";
   const enCurso = agente && !m.texto && ["pending", "queued", "in_progress", "waiting_approval"].includes(m.estado);
@@ -182,6 +213,7 @@ export function HiloAgente({ taskId, ahora, claseAlto = "h-[min(64vh,42rem)] min
             {figura && <p className="truncate text-xs text-muted-foreground" data-testid="hilo-estado-agente">{en_curso ? (figura.estado === "trabajando" ? "En su escritorio, trabajando en esto ahora." : "Esperando su turno: empieza en cuanto esté libre.") : ESTADO_OFICINA[figura.estado].frase}</p>}
           </div>
         </div>
+        <DocumentosDelHilo mensajes={mensajes} />
         <div className="relative flex min-h-[8rem] flex-1 flex-col overflow-hidden">
           <div ref={lista} onScroll={alScroll} className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain p-3" aria-live="polite" role="log" aria-label="Conversación" data-testid="hilo-mensajes">
             {mensajes.map((m, i) => <Burbuja key={`${m.task_id}-${m.rol}-${i}`} m={m} ahora={ahora} />)}
