@@ -9,14 +9,14 @@ import { CAMPOS_PERSONA, MAX_EXPORTAR, aCsv, esUuid, validarListar, validarRevis
  * Lista maestra de Personas Bloqueadas (LPB) de transmisores de dinero y su cola de visto bueno. La mantiene el servicio de agentes; aquí Dirección la consulta y
  * verifica cada persona contra el PDF.
  *
- *   action "resumen"  → {} → { total, vigentes, eliminadas, por_revisar, por_corregir, dudosos, incompletos, revisadas }
+ *   action "resumen"  → {} → { total, vigentes, eliminadas, por_revisar, por_corregir, dudosos, incompletos, revisadas, agente_coincide, agente_discrepa, agente_no_verificable }
  *   action "listar"   → { filtro?, q?, pagina?, limite? } → { personas, total, pagina, limite }
  *   action "persona"  → { id } → { persona, movimientos }
  *   action "revisar"  → { ids[1..50], decision: "aprobar"|"devolver", nota? } → { actualizadas }   (aprobar = verificada contra el PDF; devolver = el dato no coincide)
  *   action "exportar" → { filtro?, q? } → { csv, filas, truncado }   (hasta 2 000 filas)
  *
  * Seguridad: verify_jwt=true; solo admin/manager (is_admin_or_manager). Las tablas lpb_* tienen RLS sin políticas, así que se leen y escriben con service_role,
- * siempre acotadas a la organización de agentes. Lo único que se escribe es la revisión (revisado, por_corregir, quién y cuándo): nunca nombre, RFC ni estado.
+ * siempre acotadas a la organización de agentes. Lo único que se escribe es la revisión humana (revisado, por_corregir, quién y cuándo): nunca nombre, RFC ni estado. El dictamen del agente supervisor (revision_agente*) lo escribe el servicio de agentes; aquí solo se muestra y se filtra por él.
  * La búsqueda se limpia a letras y números antes de entrar a un filtro. Un lote de revisión es de máximo 50.
  *
  * Secrets: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY.
@@ -35,6 +35,10 @@ type Consulta = any;
 function aplicarFiltro(q: Consulta, filtro: FiltroLpb, texto: string): Consulta {
   switch (filtro) {
     case "por_revisar": q = q.eq("revisado", false).eq("por_corregir", false); break;
+    case "agente_coincide": q = q.eq("revisado", false).eq("revision_agente", "coincide"); break;
+    case "agente_discrepa": q = q.eq("revisado", false).eq("revision_agente", "no_coincide"); break;
+    case "agente_no_verificable": q = q.eq("revisado", false).eq("revision_agente", "no_verificable"); break;
+    case "sin_dictamen": q = q.eq("revisado", false).is("revision_agente", null); break;
     case "por_corregir": q = q.eq("por_corregir", true); break;
     case "dudosos": q = q.eq("rfc_dudoso", true); break;
     case "incompletos": q = q.eq("datos_incompletos", true); break;
@@ -71,12 +75,14 @@ serve(async (req: Request) => {
         if (error) throw new Error(error.message);
         return count ?? 0;
       };
-      const [total, vigentes, eliminadas, porRevisar, porCorregir, dudosos, incompletos, revisadas] = await Promise.all([
+      const [total, vigentes, eliminadas, porRevisar, porCorregir, dudosos, incompletos, revisadas, dCoincide, dDiscrepa, dNoVerif] = await Promise.all([
         contar((q) => q), contar((q) => q.eq("estado", "vigente")), contar((q) => q.in("estado", ["eliminada", "eliminacion_provisional"])),
         contar((q) => q.eq("revisado", false).eq("por_corregir", false)), contar((q) => q.eq("por_corregir", true)),
         contar((q) => q.eq("rfc_dudoso", true)), contar((q) => q.eq("datos_incompletos", true)), contar((q) => q.eq("revisado", true)),
+        contar((q) => q.eq("revisado", false).eq("revision_agente", "coincide")), contar((q) => q.eq("revisado", false).eq("revision_agente", "no_coincide")),
+        contar((q) => q.eq("revisado", false).eq("revision_agente", "no_verificable")),
       ]);
-      return json({ total, vigentes, eliminadas, por_revisar: porRevisar, por_corregir: porCorregir, dudosos, incompletos, revisadas });
+      return json({ total, vigentes, eliminadas, por_revisar: porRevisar, por_corregir: porCorregir, dudosos, incompletos, revisadas, agente_coincide: dCoincide, agente_discrepa: dDiscrepa, agente_no_verificable: dNoVerif });
     }
 
     if (body.action === "listar") {

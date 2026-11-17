@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useDetallePersonaLpb, useExportarLpb, useListaLpb, useResumenLpb, useRevisarLpb } from "@/hooks/useLpb";
-import { ETIQUETA_ESTADO, ETIQUETA_FILTRO, FILTROS, MAX_REVISION, type FiltroLpb, type PersonaLpb } from "../../../supabase/functions/_shared/lpb";
+import { ETIQUETA_DICTAMEN, ETIQUETA_ESTADO, ETIQUETA_FILTRO, FILTROS, MAX_REVISION, type FiltroLpb, type PersonaLpb } from "../../../supabase/functions/_shared/lpb";
 
 // Lista maestra de Personas Bloqueadas (transmisores de dinero) y cola de visto bueno. Lo que el agente registra entra «por revisar»: aquí Dirección
 // lo verifica contra el PDF y lo aprueba, o lo devuelve con una nota. Solo se escribe la revisión; nombre, RFC y estado los mantiene el agente.
@@ -20,6 +20,12 @@ function Detalle({ id }: { id: string }) {
   return (
     <div className="space-y-2 bg-muted/40 p-3 text-sm">
       {p.rfc_dudoso && <p className="flex items-start gap-1 text-amber-700 dark:text-amber-400"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />El RFC no pasa la fecha o el dígito verificador. Puede ser el dato del propio oficio: compáralo con el PDF antes de decidir.</p>}
+      {p.revision_agente && (
+        <p className={p.revision_agente === "coincide" ? "" : "text-amber-700 dark:text-amber-400"}>
+          <span className="font-medium">Dictamen del agente supervisor ({ETIQUETA_DICTAMEN[p.revision_agente] ?? p.revision_agente}):</span> {p.revision_agente_nota || "Nombre, RFC y datos concuerdan con el oficio."}
+          <span className="text-xs text-muted-foreground"> · es una opinión; el visto bueno es tuyo</span>
+        </p>
+      )}
       {p.revision_nota && <p><span className="font-medium">Nota de revisión:</span> {p.revision_nota}</p>}
       {p.notas && <p><span className="font-medium">Notas del agente:</span> {p.notas}</p>}
       <div className="overflow-x-auto">
@@ -58,6 +64,7 @@ export function ListaLpb() {
   const personas = lista.data?.personas ?? [];
   const total = lista.data?.total ?? 0;
   const limite = lista.data?.limite ?? 50;
+  const conDiscrepancia = personas.filter((p) => marcadas.has(p.id) && p.revision_agente === "no_coincide").length;
   const todas = personas.length > 0 && personas.every((p) => marcadas.has(p.id));
   const alternar = (id: string) => setMarcadas((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else if (n.size < MAX_REVISION) n.add(id); return n; });
   const resolver = (decision: "aprobar" | "devolver") => {
@@ -77,8 +84,8 @@ export function ListaLpb() {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {[["Total", resumen.data?.total], ["Vigentes", resumen.data?.vigentes], ["Eliminadas", resumen.data?.eliminadas], ["Por revisar", resumen.data?.por_revisar], ["Por corregir", resumen.data?.por_corregir], ["RFC dudoso", resumen.data?.dudosos], ["Datos incompletos", resumen.data?.incompletos], ["Revisadas", resumen.data?.revisadas]].map(([t, n]) => (
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+        {[["Total", resumen.data?.total], ["Vigentes", resumen.data?.vigentes], ["Eliminadas", resumen.data?.eliminadas], ["Por revisar", resumen.data?.por_revisar], ["Por corregir", resumen.data?.por_corregir], ["RFC dudoso", resumen.data?.dudosos], ["Datos incompletos", resumen.data?.incompletos], ["Revisadas", resumen.data?.revisadas], ["Agente: coincide", resumen.data?.agente_coincide], ["Agente: discrepa", resumen.data?.agente_discrepa], ["Agente: no verificó", resumen.data?.agente_no_verificable]].map(([t, n]) => (
           <div key={String(t)} className="rounded-md border p-2"><p className="text-xs text-muted-foreground">{t}</p><p className="text-lg font-semibold">{cifra(n as number | undefined)}</p></div>
         ))}
       </div>
@@ -101,6 +108,7 @@ export function ListaLpb() {
             <Button onClick={() => resolver("aprobar")} disabled={revisar.isPending}><CheckCircle2 className="mr-1 h-4 w-4" />Dar visto bueno</Button>
             <Button variant="outline" onClick={() => resolver("devolver")} disabled={revisar.isPending || nota.trim().length < 3}><Undo2 className="mr-1 h-4 w-4" />Devolver para corregir</Button>
           </div>
+          {conDiscrepancia > 0 && <p className="flex items-start gap-1 text-sm text-amber-700 dark:text-amber-400" role="alert"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />{conDiscrepancia} de las seleccionadas tienen una discrepancia señalada por el agente supervisor. Revisa su nota y el PDF antes de dar el visto bueno.</p>}
           <p className="text-xs text-muted-foreground">«Visto bueno» significa que verificaste esas personas contra el PDF del oficio. Si no lo has hecho, no lo des.</p>
         </div>
       )}
@@ -110,12 +118,12 @@ export function ListaLpb() {
       <div className="overflow-x-auto rounded-md border">
         <table className="w-full text-left text-sm">
           <thead className="bg-muted/50 text-xs text-muted-foreground">
-            <tr><th className="w-8 p-2"><Checkbox checked={todas} onCheckedChange={(c) => setMarcadas(c ? new Set(personas.slice(0, MAX_REVISION).map((p) => p.id)) : new Set())} aria-label="Seleccionar la página" /></th><th className="w-6" /><th className="p-2">Nombre</th><th className="p-2">RFC</th><th className="p-2">Estado</th><th className="p-2">Alta</th><th className="p-2">Revisión</th></tr>
+            <tr><th className="w-8 p-2"><Checkbox checked={todas} onCheckedChange={(c) => setMarcadas(c ? new Set(personas.slice(0, MAX_REVISION).map((p) => p.id)) : new Set())} aria-label="Seleccionar la página" /></th><th className="w-6" /><th className="p-2">Nombre</th><th className="p-2">RFC</th><th className="p-2">Estado</th><th className="p-2">Alta</th><th className="p-2">Supervisor</th><th className="p-2">Revisión</th></tr>
           </thead>
           <tbody>
-            {lista.isLoading && <tr><td colSpan={7} className="p-4 text-muted-foreground"><Loader2 className="mr-1 inline h-4 w-4 animate-spin" />Cargando…</td></tr>}
-            {lista.error && <tr><td colSpan={7} className="p-4 text-destructive">{(lista.error as Error).message}</td></tr>}
-            {!lista.isLoading && !lista.error && personas.length === 0 && <tr><td colSpan={7} className="p-4 text-muted-foreground">No hay personas con este filtro.</td></tr>}
+            {lista.isLoading && <tr><td colSpan={8} className="p-4 text-muted-foreground"><Loader2 className="mr-1 inline h-4 w-4 animate-spin" />Cargando…</td></tr>}
+            {lista.error && <tr><td colSpan={8} className="p-4 text-destructive">{(lista.error as Error).message}</td></tr>}
+            {!lista.isLoading && !lista.error && personas.length === 0 && <tr><td colSpan={8} className="p-4 text-muted-foreground">No hay personas con este filtro.</td></tr>}
             {personas.map((p: PersonaLpb) => (
               <FilaPersona key={p.id} p={p} marcada={marcadas.has(p.id)} abierta={abierta === p.id} onMarcar={() => alternar(p.id)} onAbrir={() => setAbierta(abierta === p.id ? null : p.id)} />
             ))}
@@ -144,9 +152,10 @@ function FilaPersona({ p, marcada, abierta, onMarcar, onAbrir }: { p: PersonaLpb
         <td className="p-2 font-mono text-xs">{p.rfc ?? <span className="text-muted-foreground">sin RFC</span>}{p.rfc_dudoso && <Badge variant="outline" className="ml-1 border-amber-500 text-amber-700 dark:text-amber-400">dudoso</Badge>}</td>
         <td className="p-2">{ETIQUETA_ESTADO[p.estado] ?? p.estado}</td>
         <td className="p-2">{fecha(p.fecha_alta)}</td>
+        <td className="p-2">{p.revision_agente ? <Badge variant={p.revision_agente === "coincide" ? "secondary" : "outline"} className={p.revision_agente === "coincide" ? "" : "border-amber-500 text-amber-700 dark:text-amber-400"}>{ETIQUETA_DICTAMEN[p.revision_agente] ?? p.revision_agente}</Badge> : <span className="text-xs text-muted-foreground">sin dictamen</span>}</td>
         <td className="p-2">{p.revisado ? <Badge variant="secondary">Revisada</Badge> : p.por_corregir ? <Badge variant="destructive">Por corregir</Badge> : <Badge variant="outline">Por revisar</Badge>}{p.datos_incompletos && <Badge variant="outline" className="ml-1">incompleta</Badge>}</td>
       </tr>
-      {abierta && <tr><td colSpan={7} className="p-0"><Detalle id={p.id} /></td></tr>}
+      {abierta && <tr><td colSpan={8} className="p-0"><Detalle id={p.id} /></td></tr>}
     </>
   );
 }
