@@ -1,4 +1,4 @@
-import { spriteAgente, ANCHO, type Rect } from "@/lib/agentes/sprites";
+import { spriteAgente, ANCHO, type Rect, type SpriteAgente } from "@/lib/agentes/sprites";
 import { ESTADO_OFICINA, type FiguraOficina } from "@/lib/agentes/oficina";
 
 // Piezas compartidas de la oficina: estilos, colores y un escritorio suelto (un agente en su escritorio) que se usa en la banda del equipo
@@ -11,6 +11,12 @@ export const TONO: Record<string, { cuerpo: string; escritorio: string }> = {
 };
 export const COLS = 4, CW = 190, CH = 188, PX = 5;
 export const pintar = (rs: Rect[]) => rs.map((r, i) => <rect key={i} x={r.x * PX} y={r.y * PX} width={r.w * PX} height={r.h * PX} fill={r.c} />);
+
+/** Accesorios (lentes, barba, gafete…): vienen en unidades de 5 por celda; `px` es el tamaño real de una celda. */
+export const pintarAccesorios = (ds: SpriteAgente["accesorios"], px: number) => ds.map((d, i) => {
+  const k = px / 5;
+  return <rect key={i} x={d.x * k} y={d.y * k} width={d.w * k} height={d.h * k} rx={d.rx ? d.rx * k : undefined} fill={d.fill} stroke={d.stroke} strokeWidth={d.sw ? d.sw * k : undefined} />;
+});
 
 export const CSS = `
 /* Solo la celda recibe clics: la figura se mueve y, si también los recibiera, el clic se perdería al cambiar el objeto bajo el cursor. */
@@ -40,7 +46,7 @@ export function EstilosOficina() { return <style>{CSS}</style>; }
 export function EscritorioAgente({ f, compacto = false, mini = false, onElegir, activo = false }: { f: FiguraOficina; compacto?: boolean; mini?: boolean; onElegir?: () => void; activo?: boolean }) {
   const info = ESTADO_OFICINA[f.estado], c = TONO[info.color] ?? TONO.gris;
   const apagado = f.estado === "apagado";
-  const sprite = spriteAgente(f.estado, f.id, c.cuerpo);
+  const sprite = spriteAgente(f.estado, f.id, c.cuerpo, f.clave);
   const alto = compacto ? 150 : CH;
   const contenido = (
     <svg viewBox={`0 0 ${CW} ${alto}`} className={compacto ? (mini ? "h-[60px] w-[76px] shrink-0" : "h-[100px] w-[127px] shrink-0") : "w-full max-w-[190px]"} role="img" aria-label={`${f.nombre}: ${info.etiqueta}`} data-testid={`escritorio-${f.id}`} data-estado={f.estado}>
@@ -48,6 +54,7 @@ export function EscritorioAgente({ f, compacto = false, mini = false, onElegir, 
         <rect x={4} y={4} width={CW - 8} height={alto - 8} rx={22} style={{ fill: "var(--of-celda, rgba(255,255,255,.55))" }} stroke={activo ? "#8fb4d9" : "rgba(120,100,70,.18)"} strokeWidth={activo ? 2.5 : 1} />
         <g opacity={apagado ? 0.5 : 1} transform={`translate(${(CW - ANCHO * PX) / 2},${12})`} shapeRendering="crispEdges">
           {sprite.frames.map((fr, k) => <g key={k} className={sprite.frames.length > 1 ? `of-frame of-frame-${k}` : undefined}>{pintar(fr)}</g>)}
+          {pintarAccesorios(sprite.accesorios, PX)}
           <g className="of-emote">{pintar(sprite.emote)}</g>
         </g>
         {!mini && <text x={CW / 2} y={compacto ? 130 : 136} textAnchor="middle" fontSize={compacto ? 15 : 13} fontWeight={600} style={{ fill: "var(--of-texto, #4a4033)" }}>{f.nombre.length > 20 ? f.nombre.slice(0, 19) + "…" : f.nombre}</text>}

@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8">
+<title>Escritorio · Móvil</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+
+body{margin:0}
+.zk{font-family:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;color:#323a48;font-size:14px;line-height:20px;background:#f3f4f6;position:relative;overflow:hidden;-webkit-font-smoothing:antialiased}
+.zk *{box-sizing:border-box}
+.zk-bg{position:absolute;left:0;top:0;right:0;bottom:0;background:radial-gradient(60% 50% at 12% 0%,rgba(250,231,190,.55),transparent 70%),radial-gradient(55% 45% at 95% 15%,rgba(197,236,223,.45),transparent 70%),radial-gradient(50% 40% at 50% 100%,rgba(208,230,246,.4),transparent 70%);pointer-events:none}
+.glass{background:rgba(252,250,248,.6);border:1px solid rgba(255,255,255,.65);box-shadow:0 10px 40px -18px rgba(107,77,46,.25),inset 0 1px 0 rgba(255,255,255,.7);-webkit-backdrop-filter:blur(16px) saturate(1.2);backdrop-filter:blur(16px) saturate(1.2)}
+.zk a,.zk button,.zk textarea,.zk input{font-family:inherit;color:inherit;text-decoration:none}
+.zk a:focus-visible,.zk button:focus-visible,.zk textarea:focus-visible{outline:2px solid #0075f0;outline-offset:2px}
+.mut{color:#6b7280}
+.cap{font-size:11px;line-height:16px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6b7280}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(15,23,42,.14);border-radius:999px;padding:4px 12px;font-size:12px;line-height:16px;background:transparent;cursor:pointer}
+.chip-on{border-color:rgba(0,117,240,.6);background:rgba(0,117,240,.1);font-weight:500}
+.chip b{font-weight:600}
+.pill{display:inline-flex;align-items:center;border:1px solid;border-radius:999px;padding:1px 8px;font-size:11px;line-height:16px;font-weight:500;white-space:nowrap}
+.p-curso{border-color:rgba(125,211,252,.7);background:rgba(224,242,254,.6);color:#0c4a6e}
+.p-cola{border-color:rgba(252,211,77,.7);background:rgba(254,243,199,.6);color:#78350f}
+.p-ok{border-color:rgba(110,231,183,.7);background:rgba(209,250,229,.6);color:#064e3b}
+.p-err{border-color:rgba(253,164,175,.7);background:rgba(255,228,230,.6);color:#881337}
+.p-gris{border-color:rgba(15,23,42,.14);color:#4b5563}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:0 14px;border:1px solid #e5e7eb;border-radius:8px;background:rgba(255,255,255,.8);font-size:14px;font-weight:500;cursor:pointer}
+.btn-sm{min-height:32px;padding:0 12px;font-size:13px}
+.btn-pri{border-color:transparent;background:#0075f0;color:#fff}
+.btn-pri:disabled{opacity:.5;cursor:not-allowed}
+.tabs{display:inline-flex;flex-wrap:wrap;align-items:center;gap:2px;border-radius:8px;background:rgba(15,23,42,.05);padding:4px}
+.tab{display:inline-flex;align-items:center;padding:6px 12px;border-radius:6px;font-size:14px;font-weight:500;color:#6b7280;white-space:nowrap}
+.tab-on{background:#fff;color:#323a48;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.tab-sep{width:1px;height:20px;background:rgba(15,23,42,.14);margin:0 6px}
+.spr svg{display:block;width:127px;height:107px;flex:none}
+.spr-s svg{width:76px;height:64px}
+.card-ag{display:flex;flex-direction:column;align-items:center;gap:2px;border:1px solid rgba(15,23,42,.1);border-radius:16px;padding:6px;background:rgba(255,255,255,.4);text-align:center;width:100%;cursor:pointer;transition:background .3s ease}
+.card-ag:hover{background:rgba(255,255,255,.7)}
+.card-on{border-color:rgba(0,117,240,.6);background:rgba(0,117,240,.1);box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.item{display:flex;flex-direction:column;gap:4px;width:100%;text-align:left;border:1px solid rgba(15,23,42,.1);border-radius:16px;padding:10px 12px;background:rgba(255,255,255,.35);cursor:pointer;transition:background .3s ease}
+.item:hover{background:rgba(255,255,255,.65)}
+.item-on{border-color:rgba(0,117,240,.6);background:rgba(0,117,240,.07)}
+.bub-p{border:1px solid rgba(0,117,240,.4);background:rgba(0,117,240,.1);border-radius:16px;padding:8px 12px}
+.bub-a{border:1px solid rgba(15,23,42,.1);background:rgba(255,255,255,.55);border-radius:16px;padding:8px 12px}
+.scr{overflow-y:auto;scrollbar-width:thin}
+@media (prefers-reduced-motion:reduce){.card-ag,.item{transition:none}}
+
+.of-frame-1{opacity:0}
+.of-trabajando .of-frame-0{animation:of-a 0.8s steps(1,end) infinite}
+.of-trabajando .of-frame-1{animation:of-b 0.8s steps(1,end) infinite}
+.of-celebrando .of-frame-0{animation:of-a 1.2s steps(1,end) infinite}
+.of-celebrando .of-frame-1{animation:of-b 1.2s steps(1,end) infinite}
+.of-sentado .of-frame-1{animation:of-parpadeo 4s steps(1,end) infinite}
+.of-sentado .of-frame-0{animation:of-parpadeo-inv 4s steps(1,end) infinite}
+.of-atascado .of-emote,.of-con_error .of-emote{animation:of-pulso 2.4s ease-in-out infinite}
+.of-descansando .of-emote{animation:of-pulso 3.2s ease-in-out infinite}
+@keyframes of-a{0%{opacity:1}50%{opacity:0}}
+@keyframes of-b{0%{opacity:0}50%{opacity:1}}
+@keyframes of-parpadeo{0%,90%{opacity:0}95%,100%{opacity:1}}
+@keyframes of-parpadeo-inv{0%,90%{opacity:1}95%,100%{opacity:0}}
+@keyframes of-pulso{0%,100%{opacity:1}50%{opacity:.35}}
+@media (prefers-reduced-motion: reduce){.of-frame-0,.of-frame-1,.of-emote{animation:none!important}.of-frame-0{opacity:1!important}.of-frame-1{opacity:0!important}}
+
+.zk.dk{color:#e8eaf0;background:#0f1218;--of-celda:rgba(255,255,255,.07);--of-texto:#e8e0d0}
+.dk .zk-bg{background:radial-gradient(60% 50% at 12% 0%,rgba(120,100,60,.2),transparent 70%),radial-gradient(55% 45% at 95% 15%,rgba(40,110,100,.2),transparent 70%),radial-gradient(50% 40% at 50% 100%,rgba(50,80,130,.2),transparent 70%)}
+.dk .glass{background:rgba(28,32,42,.7);border-color:rgba(255,255,255,.08);box-shadow:0 10px 40px -18px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.05)}
+.dk .mut,.dk .cap{color:#9aa3b2}
+.dk .chip{border-color:rgba(255,255,255,.16)}.dk .chip-on{background:rgba(0,117,240,.22);border-color:rgba(90,160,255,.7)}
+.dk .btn{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.14);color:#e8eaf0}.dk .btn-pri{background:#0075f0;color:#fff;border-color:transparent}
+.dk .tabs{background:rgba(255,255,255,.06)}.dk .tab,.dk .tab2{color:#9aa3b2}.dk .tab-on,.dk .tab2-on{background:#2a3142;color:#fff}
+.dk .row,.dk .item,.dk .card-ag{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.1)}.dk .item:hover,.dk .ag:hover{background:rgba(255,255,255,.08)}.dk .item-on{background:rgba(0,117,240,.16);border-color:rgba(90,160,255,.6)}.dk .ag-on{background:rgba(255,255,255,.1)}
+.dk .bub-a{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.1)}.dk .bub-p{background:rgba(0,117,240,.22);border-color:rgba(90,160,255,.45)}
+.dk .field input,.dk .field select,.dk .field textarea,.dk textarea,.dk input,.dk select{background:rgba(255,255,255,.06)!important;border-color:rgba(255,255,255,.16)!important;color:#e8eaf0}
+.dk .isla{border-color:rgba(255,255,255,.1)}.dk .isla .suelo{opacity:.5}
+.dk [style*="background:rgba(255,255,255,.55)"],.dk [style*="background:rgba(255,255,255,.45)"],.dk [style*="background:rgba(255,255,255,.5)"],.dk [style*="background:rgba(255,255,255,.35)"]{background:rgba(255,255,255,.06)!important}
+.dk svg[style="position:absolute;left:0;top:0"]{filter:brightness(.5) saturate(.85)}
+.dk h1{filter:brightness(1.15)}
+</style>
+</helmet>
+<div class="{{rootClass}}" style="min-height:844px;width:390px">
+<div class="zk-bg" aria-hidden="true"></div>
+<div style="position:relative;display:flex;flex-direction:column;height:844px">
+<div style="display:flex;align-items:center;gap:8px;padding:14px 14px 10px"><button type="button" class="btn btn-sm" aria-label="Volver a la oficina" style="padding:0 8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
+<div class="spr spr-s" style="border:1px solid rgba(15,23,42,.08);border-radius:14px;background:rgba(255,255,255,.55)"><svg viewBox="0 0 190 160" role="img" aria-label="Amatl: Trabajando" data-estado="trabajando"><g class="of-trabajando"><rect x="4" y="4" width="182" height="152" rx="22" stroke="#8fb4d9" stroke-width="2.5" style="fill: var(--of-celda, rgba(255,255,255,.55));"></rect><g opacity="1" transform="translate(45,12)" shape-rendering="crispEdges"><g class="of-frame of-frame-0"><rect x="45" y="0" width="10" height="5" fill="#8d5122"></rect><rect x="35" y="5" width="30" height="5" fill="#b0652a"></rect><rect x="30" y="10" width="40" height="5" fill="#b0652a"></rect><rect x="30" y="15" width="10" height="5" fill="#b0652a"></rect><rect x="40" y="15" width="20" height="5" fill="#c99468"></rect><rect x="60" y="15" width="10" height="5" fill="#b0652a"></rect><rect x="30" y="20" width="40" height="5" fill="#c99468"></rect><rect x="30" y="25" width="40" height="5" fill="#c99468"></rect><rect x="30" y="30" width="10" height="5" fill="#c99468"></rect><rect x="40" y="30" width="5" height="5" fill="#3d3226"></rect><rect x="45" y="30" width="10" height="5" fill="#c99468"></rect><rect x="55" y="30" width="5" height="5" fill="#3d3226"></rect><rect x="60" y="30" width="10" height="5" fill="#c99468"></rect><rect x="30" y="35" width="40" height="5" fill="#c99468"></rect><rect x="30" y="40" width="15" height="5" fill="#c99468"></rect><rect x="45" y="40" width="10" height="5" fill="#8a4b43"></rect><rect x="55" y="40" width="15" height="5" fill="#c99468"></rect><rect x="30" y="45" width="40" height="5" fill="#b1825c"></rect><rect x="45" y="50" width="10" height="5" fill="#b1825c"></rect><rect x="30" y="55" width="40" height="5" fill="#8fb4d9"></rect><rect x="15" y="60" width="10" height="5" fill="#8fb4d9"></rect><rect x="25" y="60" width="5" height="5" fill="#7a99b8"></rect><rect x="30" y="60" width="40" height="5" fill="#8fb4d9"></rect><rect x="70" y="60" width="5" height="5" fill="#7a99b8"></rect><rect x="75" y="60" width="10" height="5" fill="#8fb4d9"></rect><rect x="15" y="65" width="10" height="5" fill="#8fb4d9"></rect><rect x="25" y="65" width="5" height="5" fill="#7a99b8"></rect><rect x="30" y="65" width="40" height="5" fill="#8fb4d9"></rect><rect x="70" y="65" width="5" height="5" fill="#7a99b8"></rect><rect x="75" y="65" width="10" height="5" fill="#8fb4d9"></rect><rect x="15" y="70" width="10" height="5" fill="#8fb4d9"></rect><rect x="25" y="70" width="5" height="5" fill="#7a99b8"></rect><rect x="30" y="70" width="5" height="5" fill="#8fb4d9"></rect><rect x="30" y="65" width="40" height="5" fill="#59636f"></rect><rect x="30" y="70" width="5" height="10" fill="#59636f"></rect><rect x="65" y="70" width="5" height="10" fill="#59636f"></rect><rect x="35" y="70" width="30" height="5" fill="#bfe3ea"></rect><rect x="65" y="70" width="5" height="5" fill="#8fb4d9"></rect><rect x="70" y="70" width="5" height="5" fill="#7a99b8"></rect><rect x="75" y="70" width="10" height="5" fill="#8fb4d9"></rect><rect x="15" y="75" width="10" height="5" fill="#c99468"></rect><rect x="25" y="75" width="5" height="5" fill="#7a99b8"></rect><rect x="30" y="75" width="5" height="5" fill="#8fb4d9"></rect><rect x="35" y="75" width="10" height="5" fill="#bfe3ea"></rect><rect x="45" y="75" width="10" height="5" fill="#7fd1a0"></rect><rect x="55" y="75" width="10" height="5" fill="#bfe3ea"></rect><rect x="65" y="75" width="5" height="5" fill="#8fb4d9"></rect><rect x="70" y="75" width="5" height="5" fill="#7a99b8"></rect><rect x="75" y="75" width="10" height="5" fill="#8fb4d9"></rect><rect x="25" y="80" width="5" height="5" fill="#7a99b8"></rect><rect x="30" y="80" width="5" height="5" fill="#8fb4d9"></rect><rect x="35" y="80" width="30" height="5" fill="#59636f"></rect><rect x="65" y="80" width="5" height="5" fill="#8fb4d9"></rect><rect x="70" y="80" width="5" height="5" fill="#7a99b8"></rect><rect x="75" y="80" width="10" height="5" fill="#c99468"></rect><rect x="5" y="85" width="90" height="5" fill="#dcb98f"></rect><rect x="5" y="90" width="90" height="5" fill="#c49a68"></rect><rect x="5" y="95" width="90" height="5" fill="#c49a68"></rect><rect x="10" y="105" width="10" height="10" fill="#9b7550"></rect><rect x="80" y="105" width="10" height="10" fill="#9b7550"></rect><rect x="5" y="100" width="90" height="5" fill="#b58a5a"></rect><rect x="36" y="27" width="13" height="11" rx="3" fill="rgba(255,255,255,.18)" stroke="#2f2a25" stroke-width="2"/><rect x="52" y="27" width="13" height="11" rx="3" fill="rgba(255,255,255,.18)" stroke="#2f2a25" stroke-width="2"/><rect x="49" y="31" width="3" height="2" fill="#2f2a25"/><rect x="58" y="64" width="7" height="7" fill="#d94a4a"/><rect x="60" y="66" width="3" height="3" fill="#fff"/></g><g class="of-frame of-frame-1"><rect x="45" y="0" width="10" height="5" fill="#8d5122"></rect><rect x="35" y="5" width="30" height="5" fill="#b0652a"></rect><rect x="30" y="10" width="40" height="5" fill="#b0652a"></rect><rect x="30" y="15" width="10" height="5" fill="#b0652a"></rect><rect x="40" y="15" width="20" height="5" fill="#c99468"></rect><rect x="60" y="15" width="10" height="5" fill="#b0652a"></rect><rect x="30" y="20" width="40" height="5" fill="#c99468"></rect><rect x="30" y="25" width="40" height="5" fill="#c99468"></rect><rect x="30" y="30" width="10" height="5" fill="#c99468"></rect><rect x="40" y="30" width="5" height="5" fill="#3d3226"></rect><rect x="45" y="30" width="10" height="5" fill="#c99468"></rect><rect x="55" y="30" width="5" height="5" fill="#3d3226"></rect><rect x="60" y="30" width="10" height="5" fill="#c99468"></rect><rect x="30" y="35" width="40" height="5" fill="#c99468"></rect><rect x="30" y="40" width="15" height="5" fill="#c99468"></rect><rect x="45" y="40" width="10" height="5" fill="#8a4b43"></rect><rect x="55" y="40" width="15" height="5" fill="#c99468"></rect><rect x="30" y="45" width="40" height="5" fill="#b1825c"></rect><rect x="45" y="50" width="10" height="5" fill="#b1825c"></rect><rect x="30" y="55" width="40" height="5" fill="#8fb4d9"></rect><rect x="15" y="60" width="10" height="5" fill="#8fb4d9"></rect><rect x="25" y="60" width="5" height="5" fill="#7a99b8"></rect><rect x="30" y="60" width="40" height="5" fill="#8fb4d9"></rect><rect x="70" y="60" width="5" height="5" fill="#7a99b8"></rect><rect x="75" y="60" width="10" height="5" fill="#8fb4d9"></rect><rect x="15" y="65" width="10" height="5" fill="#8fb4d9"></rect><rect x="25" y="65" width="5" height="5" fill="#7a99b8"></rect><rect x="30" y="65" width="40" height="5" fill="#8fb4d9"></rect><rect x="70" y="65" width="5" height="5" fill="#7a99b8"></rect><rect x="75" y="65" width="10" height="5" fill="#8fb4d9"></rect><rect x="15" y="70" width="10" height="5" fill="#8fb4d9"></rect><rect x="25" y="70" width="5" height="5" fill="#7a99b8"></rect><rect x="30" y="70" width="5" height="5" fill="#8fb4d9"></rect><rect x="30" y="65" width="40" height="5" fill="#59636f"></rect><rect x="30" y="70" width="5" height="10" fill="#59636f"></rect><rect x="65" y="70" width="5" height="10" fill="#59636f"></rect><rect x="35" y="70" width="30" height="5" fill="#bfe3ea"></rect><rect x="65" y="70" width="5" height="5" fill="#8fb4d9"></rect><rect x="70" y="70" width="5" height="5" fill="#7a99b8"></rect><rect x="75" y="70" width="10" height="5" fill="#8fb4d9"></rect><rect x="15" y="75" width="10" height="5" fill="#8fb4d9"></rect><rect x="25" y="75" width="5" height="5" fill="#7a99b8"></rect><rect x="30" y="75" width="5" height="5" fill="#8fb4d9"></rect><rect x="35" y="75" width="10" height="5" fill="#bfe3ea"></rect><rect x="45" y="75" width="10" height="5" fill="#7fd1a0"></rect><rect x="55" y="75" width="10" height="5" fill="#bfe3ea"></rect><rect x="65" y="75" width="5" height="5" fill="#8fb4d9"></rect><rect x="70" y="75" width="5" height="5" fill="#7a99b8"></rect><rect x="75" y="75" width="10" height="5" fill="#c99468"></rect><rect x="15" y="80" width="10" height="5" fill="#c99468"></rect><rect x="25" y="80" width="5" height="5" fill="#7a99b8"></rect><rect x="30" y="80" width="5" height="5" fill="#8fb4d9"></rect><rect x="35" y="80" width="30" height="5" fill="#59636f"></rect><rect x="65" y="80" width="5" height="5" fill="#8fb4d9"></rect><rect x="70" y="80" width="5" height="5" fill="#7a99b8"></rect><rect x="5" y="85" width="90" height="5" fill="#dcb98f"></rect><rect x="5" y="90" width="90" height="5" fill="#c49a68"></rect><rect x="5" y="95" width="90" height="5" fill="#c49a68"></rect><rect x="10" y="105" width="10" height="10" fill="#9b7550"></rect><rect x="80" y="105" width="10" height="10" fill="#9b7550"></rect><rect x="5" y="100" width="90" height="5" fill="#b58a5a"></rect><rect x="36" y="27" width="13" height="11" rx="3" fill="rgba(255,255,255,.18)" stroke="#2f2a25" stroke-width="2"/><rect x="52" y="27" width="13" height="11" rx="3" fill="rgba(255,255,255,.18)" stroke="#2f2a25" stroke-width="2"/><rect x="49" y="31" width="3" height="2" fill="#2f2a25"/><rect x="58" y="64" width="7" height="7" fill="#d94a4a"/><rect x="60" y="66" width="3" height="3" fill="#fff"/></g><g class="of-emote"></g></g><text x="95" y="149" text-anchor="middle" font-size="15" font-weight="600" style="fill: var(--of-texto, #4a4033);">Amatl</text></g></svg></div>
+<div style="min-width:0"><div style="display:flex;align-items:center;gap:6px"><h1 style="margin:0;font-size:18px;line-height:24px;font-weight:600">Amatl</h1><span class="pill p-curso">Trabajando</span></div><p class="mut" style="margin:0;font-size:12px">Archivista legal</p></div></div>
+<div style="display:flex;gap:6px;padding:0 14px 10px;overflow-x:auto"><button type="button" class="chip chip-on">Libro de actas · Terminada</button><button type="button" class="chip">Digitalizar 2024 · En curso</button><button type="button" class="chip">Índice poderes</button></div>
+<div class="glass scr" role="log" aria-label="Conversación" style="flex:1;margin:0 10px;border-radius:24px;padding:14px;display:flex;flex-direction:column;gap:10px">
+<div class="bub-p" style="align-self:flex-end;max-width:88%">Prepara el libro de actas de Grupo Ejemplo con las asambleas de 2025 y 2026, en Word.<div class="mut" style="font-size:11px">Tú · hace 2 h</div></div>
+<div class="bub-a" style="align-self:flex-start;max-width:92%">Listo. Reuní 6 asambleas. Dejé marcadas dos fechas que no coinciden.
+<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:8px"><span style="font-size:13px;font-weight:500">Libro de actas.docx</span><span class="mut" style="font-size:12px">214 KB</span><button type="button" class="btn btn-sm"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>Descargar</button></div><div class="mut" style="font-size:11px;margin-top:4px">Agente · hace 12 min</div></div>
+<div style="display:flex;align-items:center;gap:8px"><div style="flex:1;height:1px;background:rgba(15,23,42,.12)"></div><span style="font-size:11px;font-weight:600;color:#0060c4;border:1px solid rgba(0,117,240,.4);background:rgba(0,117,240,.08);border-radius:99px;padding:2px 10px">Desde tu última visita</span><div style="flex:1;height:1px;background:rgba(15,23,42,.12)"></div></div>
+<div class="bub-a mut" style="align-self:flex-start;display:flex;align-items:center;gap:8px"><span aria-hidden="true" style="width:12px;height:12px;border-radius:99px;border:2px solid #0075f0;border-right-color:transparent"></span>Trabajando…</div></div>
+<div style="display:flex;align-items:flex-end;gap:8px;padding:10px 14px 18px"><textarea rows="2" aria-label="Mensaje para Amatl" placeholder="Escríbele a Amatl…" style="flex:1;min-width:0;resize:none;border:1px solid #d1d5db;border-radius:8px;background:rgba(255,255,255,.85);padding:8px 12px;font-size:14px"></textarea><button type="button" class="btn btn-pri" aria-label="Enviar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg></button></div>
+</div></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic { renderVals() { return { rootClass: this.props.theme === 'dark' ? 'zk dk' : 'zk' }; } }
+</script>
+</body>
+</html>

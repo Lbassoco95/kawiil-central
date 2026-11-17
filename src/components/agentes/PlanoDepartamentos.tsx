@@ -6,7 +6,7 @@ import {
   agruparPorDepartamento, celdasDe, contarTareas, ANCHO_ISLA_MAX, escenaPara, filasDeTareas, FILTROS_TAREAS, isoPunto, posicionesIslas, resumenDepartamento, TH, TW, DIAS_HECHAS,
   type FiltroTareas, type FilaTarea, type GrupoDepartamento,
 } from "@/lib/agentes/departamentos";
-import { CSS, TONO } from "@/components/agentes/escritorio";
+import { CSS, TONO, pintarAccesorios } from "@/components/agentes/escritorio";
 import { DIAS_COLABORACION, llamadasEntreAgentes, origenDeTarea } from "@/lib/agentes/colaboracion";
 
 // Plano por departamentos (Zen + Glass): una isla isométrica por departamento con sus agentes en su escritorio (los mismos dibujos y animaciones de la
@@ -35,7 +35,7 @@ const pts = (...p: Array<{ x: number; y: number }>) => p.map((q) => `${q.x},${q.
 
 function Agente({ f, x, y, depto, onElegir }: { f: FiguraOficina; x: number; y: number; depto: string; onElegir?: (id: string) => void }) {
   const info = ESTADO_OFICINA[f.estado], c = TONO[info.color] ?? TONO.gris;
-  const sprite = spriteAgente(f.estado, f.id, c.cuerpo);
+  const sprite = spriteAgente(f.estado, f.id, c.cuerpo, f.clave);
   const ancho = ANCHO * PXS, alto = ALTO * PXS, apagado = f.estado === "apagado";
   const nombre = recorta(f.nombre, 11), tagW = Math.max(34, nombre.length * 6.1 + 14);
   const activar = () => onElegir?.(f.id);
@@ -49,6 +49,7 @@ function Agente({ f, x, y, depto, onElegir }: { f: FiguraOficina; x: number; y: 
         <rect className="pl-anillo" x={-ancho / 2 - 6} y={-alto - 22} width={ancho + 12} height={alto + 26} rx={10} fill="rgba(143,180,217,.12)" stroke="#8fb4d9" strokeWidth={1.5} />
         <g opacity={apagado ? 0.55 : 1} transform={`translate(${-ancho / 2},${-alto + 3})`} shapeRendering="crispEdges">
           {sprite.frames.map((fr, k) => <g key={k} className={sprite.frames.length > 1 ? `of-frame of-frame-${k}` : undefined}>{pintarEsc(fr)}</g>)}
+          {pintarAccesorios(sprite.accesorios, PXS)}
           <g className="of-emote">{pintarEsc(sprite.emote)}</g>
         </g>
         <g transform={`translate(0,${-alto - 8})`}>
