@@ -43,6 +43,24 @@ describe("slack mrkdwn", () => {
     expect(out).not.toContain("<https://");
   });
 
+  it("arma el enlace de Forms en negrita aunque el vínculo vaya partido en varias líneas", () => {
+    const text = [
+      "formulario :point_right: *&lt;https://forms.cloud.microsoft/Pages/ResponsePage.aspx?",
+      "id=bb6BJ-sdgkiGK-",
+      "INvIytYC8vmvz4QRAqmYEZNSvq1ZUM1owREY5NJZTQUVJTFU2ODUwVUUQ2UFFXT",
+      "S4u|/Intercambio Kawiil 18 de diciembre: Rellenar formulario&gt;*",
+    ].join("\n");
+    const out = html(text);
+    expect(out).toContain(
+      'href="https://forms.cloud.microsoft/Pages/ResponsePage.aspx?id=bb6BJ-sdgkiGK-INvIytYC8vmvz4QRAqmYEZNSvq1ZUM1owREY5NJZTQUVJTFU2ODUwVUUQ2UFFXTS4u"',
+    );
+    expect(out).toContain("/Intercambio Kawiil 18 de diciembre: Rellenar formulario");
+    expect(out).toContain("<strong>");
+    expect(out).toContain("👉");
+    expect(out).not.toContain("&lt;");
+    expect(out).not.toContain(":point_right:");
+  });
+
   it("descodifica entidades de Slack antes de armar el enlace", () => {
     const out = html("&lt;https://drawnames.app/t/30KTrWM|drawnames.app/t/30KTrWM&gt;");
     expect(out).toContain('href="https://drawnames.app/t/30KTrWM"');
