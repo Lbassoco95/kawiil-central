@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
-  accesosDelAgente, INSTRUCCION_REVISION, MAX_VECES, contextoRevision, mensajesDelHilo, raizDelHilo, resumirTarea, revisionesPendientes, validarRevision,
+  accesosDelAgente, opcionesFirma, INSTRUCCION_REVISION, MAX_VECES, contextoRevision, mensajesDelHilo, raizDelHilo, resumirTarea, revisionesPendientes, validarRevision,
 } from "../../supabase/functions/_shared/seguimiento";
 import { ATAJOS, HiloAgente, aLocal } from "@/components/agentes/HiloAgente";
 import { accesosOlvidados } from "@/components/agentes/InstruirAgente";
@@ -151,6 +151,27 @@ describe("<HiloAgente />", () => {
     expect(screen.getByTestId("hilo-mensajes").querySelector("img")).toBeNull();
     expect(screen.getByTestId("hilo-entregables").textContent).toContain("informe-actas.docx");
     expect(invoke).toHaveBeenCalledWith("agente-seguimiento", { body: { action: "hilo", task_id: T } });
+  });
+
+  it("un PDF se puede VER en el navegador (sin forzar la descarga) y un Word solo se descarga", async () => {
+    simular({ mensajes: [...HILO.mensajes.slice(0, 0), { task_id: T, rol: "agente", texto: "Aquí está el oficio.", cuando: "2026-11-09T05:49:00Z", estado: "completed",
+      entregables: [{ nombre: "110_K_6267_2026_VD.pdf", formato: "pdf", bytes: 138032, titulo: "Oficio", creado: "2026-11-09T05:49:00Z" },
+                    { nombre: "informe.docx", formato: "docx", bytes: 20480, titulo: "Informe", creado: "2026-11-09T05:49:00Z" }] }] });
+    const abrir = vi.spyOn(window, "open").mockImplementation(() => null);
+    envolver(<HiloAgente taskId={T} ahora={AHORA} />);
+    expect(screen.queryByTestId(`hilo-ver-${T}-1`)).toBeNull();                                  // el Word no tiene «Ver»
+    fireEvent.click(await screen.findByTestId(`hilo-ver-${T}-0`));
+    await waitFor(() => expect(abrir).toHaveBeenCalled());
+    expect(invoke).toHaveBeenCalledWith("agente-seguimiento", { body: { action: "descargar", task_id: T, indice: 0, ver: true } });
+    fireEvent.click(screen.getByTestId(`hilo-descargar-${T}-0`));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("agente-seguimiento", { body: { action: "descargar", task_id: T, indice: 0 } }));   // «Descargar» no manda `ver`
+    abrir.mockRestore();
+  });
+
+  it("las opciones del enlace firmado: Ver solo aplica a PDF; lo demás fuerza la descarga con su nombre", () => {
+    expect(opcionesFirma({ nombre: "a.pdf", formato: "pdf" }, true)).toBeUndefined();
+    expect(opcionesFirma({ nombre: "a.pdf", formato: "pdf" }, false)).toEqual({ download: "a.pdf" });
+    expect(opcionesFirma({ nombre: "b.docx", formato: "docx" }, true)).toEqual({ download: "b.docx" });
   });
 
   it("descargar pide el enlace por tarea e índice y lo abre en otra pestaña", async () => {

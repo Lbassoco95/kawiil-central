@@ -42,8 +42,8 @@ export const useDetalleSeguimiento = (taskId: string | null) =>
 
 export const useDescargarEntregable = () =>
   useMutation({
-    mutationFn: (v: { taskId: string; indice: number }) =>
-      invocar<{ url: string; nombre: string; expira_en: number }>({ action: "descargar", task_id: v.taskId, indice: v.indice }),
+    mutationFn: (v: { taskId: string; indice: number; ver?: boolean }) =>
+      invocar<{ url: string; nombre: string; expira_en: number }>({ action: "descargar", task_id: v.taskId, indice: v.indice, ...(v.ver ? { ver: true } : {}) }),
     onSuccess: (r) => { window.open(r.url, "_blank", "noopener,noreferrer"); },
   });
 
