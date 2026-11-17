@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { dominiosEscritura } from "../../supabase/functions/_shared/seguimiento";
-import { InstruirAgente } from "@/components/agentes/InstruirAgente";
+import { TrabajosAgente } from "@/components/agentes/TrabajosAgente";
 import { HiloAgente } from "@/components/agentes/HiloAgente";
 import type { AgenteRegistro } from "@/lib/agentes/registro";
 
@@ -21,35 +21,40 @@ describe("sitios donde se puede autorizar escribir", () => {
   });
 });
 
-describe("Instrucciones: autorizar escribir en esta tarea", () => {
-  beforeEach(() => invoke.mockReset());
+describe("Solicitud nueva: autorizar escribir en esta tarea", () => {
+  // La lista de solicitudes del agente llega vacía, así que el formulario de solicitud nueva está abierto.
+  beforeEach(() => { invoke.mockReset(); invoke.mockImplementation(async (_n: string, o: { body?: Record<string, unknown> }) => {
+    const accion = o?.body?.action;
+    const data = accion === "listar" ? { tareas: [] }
+      : accion === "hilo" ? { hilo: { id: T, titulo: "Cargar oficios aprobados", agent_id: "a1", agente: "Vizumi" }, revisiones: [], en_curso: false, mensajes: [] }
+      : accion === "detalle" ? { tarea: { estado: "completed" }, eventos: [], actividad: [] } : { task_id: T };
+    return { data, error: null };
+  }); });
+  const pantalla = (config: Record<string, unknown>) => envolver(<TrabajosAgente agentId="a1" nombre="Vizumi" ahora={new Date()} agente={agente(config)} />);
   const llenar = () => {
-    fireEvent.click(screen.getByTestId("instruir-agente-a1"));
-    fireEvent.change(screen.getByTestId("instruir-titulo"), { target: { value: "Cargar oficios aprobados" } });
-    fireEvent.change(screen.getByTestId("instruir-texto"), { target: { value: "Sube al dashboard los nombres que aprobé." } });
+    fireEvent.change(screen.getByTestId("trabajos-titulo"), { target: { value: "Cargar oficios aprobados" } });
+    fireEvent.change(screen.getByTestId("trabajos-texto"), { target: { value: "Sube al dashboard los nombres que aprobé." } });
   };
   const enviado = () => invoke.mock.calls.find((c) => c[0] === "dispatch-to-agent")?.[1].body;
 
   it("sin navegador habilitado no aparece la casilla", () => {
-    envolver(<InstruirAgente agentes={[agente({})]} />);
+    pantalla({});
     llenar();
     expect(screen.queryByTestId("autorizar-escritura")).toBeNull();
   });
   it("la casilla empieza SIN marcar y, sin marcarla, la tarea no lleva autorización", async () => {
-    invoke.mockResolvedValue({ data: { task_id: "t1" }, error: null });
-    envolver(<InstruirAgente agentes={[agente({ navegador: { activo: true, escritura: [DASH] } })]} />);
+    pantalla({ navegador: { activo: true, escritura: [DASH] } });
     llenar();
     expect((screen.getByTestId(`autorizar-escritura-${DASH}`) as HTMLInputElement).checked).toBe(false);
-    fireEvent.click(screen.getByText(/Enviar|Asignar/i, { selector: "button" }));
+    fireEvent.click(screen.getByTestId("trabajos-enviar"));
     await waitFor(() => expect(enviado()).toBeTruthy());
     expect(enviado().input_context).toBeUndefined();
   });
   it("marcada, la autorización viaja en input_context solo para esa tarea y se limpia al enviar", async () => {
-    invoke.mockResolvedValue({ data: { task_id: "t1" }, error: null });
-    envolver(<InstruirAgente agentes={[agente({ navegador: { activo: true, escritura: [DASH] } })]} />);
+    pantalla({ navegador: { activo: true, escritura: [DASH] } });
     llenar();
     fireEvent.click(screen.getByTestId(`autorizar-escritura-${DASH}`));
-    fireEvent.click(screen.getByText(/Enviar|Asignar/i, { selector: "button" }));
+    fireEvent.click(screen.getByTestId("trabajos-enviar"));
     await waitFor(() => expect(enviado()).toBeTruthy());
     expect(enviado().input_context).toEqual({ escrituras_aprobadas: [DASH] });
     await waitFor(() => expect((screen.getByTestId(`autorizar-escritura-${DASH}`) as HTMLInputElement).checked).toBe(false));

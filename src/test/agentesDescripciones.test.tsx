@@ -3,8 +3,6 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { descripcionAgente, etiquetaOpcion, rolCorto, type AgenteRegistro } from "@/lib/agentes/registro";
 import { FichaAgente, capacidadesAgente } from "@/components/agentes/FichaAgente";
-import { InstruirAgente } from "@/components/agentes/InstruirAgente";
-import { Oficina } from "@/components/agentes/Oficina";
 import { figurasOficina } from "@/lib/agentes/oficina";
 
 const ag = (o: Partial<AgenteRegistro> & { id: string; name: string }): AgenteRegistro => ({
@@ -57,21 +55,3 @@ describe("<FichaAgente />", () => {
   });
 });
 
-describe("Instrucciones: selector con descripción", () => {
-  it("al elegir un agente aparece su ficha", () => {
-    render(<QueryClientProvider client={new QueryClient()}><InstruirAgente agentes={[NELLI, SOCRATES]} /></QueryClientProvider>);
-    expect(screen.queryByTestId("ficha-agente")).toBeNull();
-    fireEvent.click(screen.getByTestId("instruir-agente-s"));
-    expect(screen.getByTestId("ficha-descripcion").textContent).toContain("decisiones litigiosas");
-  });
-});
-
-describe("Oficina: rol bajo el nombre y descripción al elegir", () => {
-  it("cada escritorio dice qué hace y el detalle trae la descripción completa", () => {
-    const figuras = figurasOficina([NELLI, SOCRATES], [], new Date());
-    render(<Oficina figuras={figuras} ahora={new Date()} demo={false} />);
-    expect(screen.getByTestId("oficina-rol-s").textContent).toBe("Jurista para decisiones de litigio");
-    fireEvent.click(screen.getByTestId("oficina-n"));
-    expect(screen.getByTestId("oficina-descripcion").textContent).toContain("prevención de lavado de dinero");
-  });
-});

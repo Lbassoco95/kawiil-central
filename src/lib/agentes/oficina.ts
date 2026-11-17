@@ -1,6 +1,6 @@
 // Mapa «estado real del agente → qué hace en la oficina». Funciones puras, solo lectura.
 // Sin eventos de avance (ai_task_events aún no es legible por los usuarios) el estado se deduce de agent_registry + agent_tasks.
-import { descripcionAgente, esAgenteLegal, nombreAgente, rolCorto, senalAgente, type AgenteRegistro, type TareaAgente } from "./registro";
+import { descripcionAgente, nombreAgente, rolCorto, senalAgente, type AgenteRegistro, type TareaAgente } from "./registro";
 
 export type EstadoOficina = "trabajando" | "celebrando" | "con_error" | "atascado" | "sentado" | "descansando" | "apagado";
 
@@ -50,43 +50,4 @@ export function figurasOficina(agentes: AgenteRegistro[], tareas: TareaAgente[],
       tareasBien: a.tasks_completed ?? 0, tareasMal: a.tasks_failed ?? 0, descripcion: descripcionAgente(a), rol: rolCorto(a),
     }))
     .sort((x, y) => x.nombre.localeCompare(y.nombre));
-}
-
-export type AmbitoOficina = "legales" | "equipo" | "todos";
-// «equipo»: agentes creados desde el Constructor de agentes (config.origen).
-export const esAgenteDelEquipo = (a: Pick<AgenteRegistro, "config">): boolean => a.config?.origen === "constructor_agentes";
-export const filtrarAmbito = (agentes: AgenteRegistro[], ambito: AmbitoOficina): AgenteRegistro[] =>
-  ambito === "legales" ? agentes.filter(esAgenteLegal) : ambito === "equipo" ? agentes.filter(esAgenteDelEquipo) : agentes;
-
-// ── Datos de ejemplo (modo «Demostración»): ficticios, uno por estado, para ver la oficina mientras la VM no escriba. ──
-export function datosDemo(ahora: Date): { agentes: AgenteRegistro[]; tareas: TareaAgente[] } {
-  const iso = (ms: number) => new Date(ahora.getTime() - ms).toISOString();
-  const base = (id: string, name: string, description: string, o: Partial<AgenteRegistro>): AgenteRegistro => ({
-    id, name, display_name: name, description, role: null, status: "idle", kind: "consultable", last_heartbeat: iso(5 * MIN), last_task_at: null,
-    tasks_completed: 12, tasks_failed: 1, ...o,
-  });
-  const agentes = [
-    base("d1", "Actas (ejemplo)", "Redacta actas ordinarias", { status: "working" }),
-    base("d2", "Libros (ejemplo)", "Prepara libros certificados", {}),
-    base("d3", "Seguimiento (ejemplo)", "Da seguimiento a pendientes", {}),
-    base("d4", "Estudios (ejemplo)", "Investiga y resume", { last_heartbeat: iso(3 * 24 * H) }),
-    base("d5", "Revisión (ejemplo)", "Revisa documentos", {}),
-    base("d6", "DOF (ejemplo)", "Vigila publicaciones oficiales", { status: "working", last_heartbeat: iso(5 * H) }),
-    base("d7", "Archivo (ejemplo)", "Ordena el archivo", { last_heartbeat: iso(40 * 24 * H) }),
-  ];
-  const t = (id: string, agent_id: string, status: string, creada: number, ini: number | null, fin: number | null): TareaAgente =>
-    ({ id, agent_id, task_type: "ejemplo", status, created_at: iso(creada), started_at: ini === null ? null : iso(ini), completed_at: fin === null ? null : iso(fin) });
-  const tareas = [
-    t("dt1", "d1", "in_progress", 20 * MIN, 18 * MIN, null),
-    t("dt2", "d2", "completed", 12 * MIN, 11 * MIN, 4 * MIN),
-    t("dt3", "d5", "error", 3 * H, 3 * H, 2 * H),
-  ];
-  return { agentes, tareas };
-}
-
-// Banda «Tu equipo en su escritorio»: quién se ve siempre. Primero los que trabajan o necesitan atención, luego el resto del equipo.
-const PRIORIDAD_BANDA: Record<EstadoOficina, number> = { trabajando: 0, atascado: 1, con_error: 2, celebrando: 3, sentado: 4, descansando: 5, apagado: 6 };
-export function figurasDeLaBanda(figuras: FiguraOficina[], idsEquipo: ReadonlySet<string>, max = 8): FiguraOficina[] {
-  const visibles = figuras.filter((f) => idsEquipo.has(f.id) || f.estado === "trabajando" || f.estado === "atascado" || f.estado === "con_error");
-  return visibles.sort((a, b) => PRIORIDAD_BANDA[a.estado] - PRIORIDAD_BANDA[b.estado] || a.nombre.localeCompare(b.nombre, "es")).slice(0, max);
 }
