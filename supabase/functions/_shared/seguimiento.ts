@@ -52,6 +52,11 @@ export function entregablesDe(taskId: string, result: unknown): Entregable[] {
   return out;
 }
 
+// Opciones del enlace firmado: «Descargar» fuerza la descarga con el nombre del archivo; «Ver» (solo PDF) lo deja abrirse en el navegador.
+export function opcionesFirma(e: { nombre: string; formato: string }, ver: boolean): { download: string } | undefined {
+  return ver && e.formato === "pdf" ? undefined : { download: truncar(e.nombre, 120) };
+}
+
 export const publicos = (es: Entregable[]): EntregablePublico[] => es.map(({ ruta: _ruta, ...resto }) => resto);
 
 export interface EventoPublico { tipo: string; secuencia: number; progreso: number | null; cuando: string; mensaje: string }

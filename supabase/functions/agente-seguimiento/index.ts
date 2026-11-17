@@ -12,6 +12,7 @@ import {
   contextoRevision,
   detalleTarea,
   dominiosEscritura,
+  opcionesFirma,
   accesosDelAgente,
   entregablesDe,
   esUuid,
@@ -35,7 +36,7 @@ import {
  *
  *   action "listar"    → { grupo?: en_curso|terminadas|con_error|canceladas, agent_id?, limite? } → { tareas }
  *   action "detalle"   → { task_id } → { tarea, eventos, actividad }
- *   action "descargar" → { task_id, indice } → { url, nombre, expira_en }   (enlace firmado de 5 minutos)
+ *   action "descargar" → { task_id, indice, ver? } → { url, nombre, expira_en }   (enlace firmado de 5 minutos; ver=true abre un PDF en el navegador en vez de descargarlo)
  *   action "hilo"      → { task_id } → { hilo, mensajes, revisiones, en_curso }   (la solicitud y su conversación; cualquier tarea del hilo sirve)
  *   action "programar_revision" → { task_id, cuando, repetir?, veces?, instruccion? } → { revision }   (una tarea pendiente que la VM ejecuta a su hora)
  *   action "cancelar_revision"  → { task_id } → { ok }   (task_id = la revisión)
@@ -139,7 +140,7 @@ serve(async (req: Request) => {
       if (!Number.isInteger(indice) || indice < 0 || indice >= lista.length) return json({ error: "Ese documento no existe." }, 404);
       const e = lista[indice];
       const { data: firmado, error: errFirma } = await admin.storage.from(BUCKET_ENTREGABLES)
-        .createSignedUrl(e.ruta, EXPIRA_SEGUNDOS, { download: truncar(e.nombre, 120) });
+        .createSignedUrl(e.ruta, EXPIRA_SEGUNDOS, opcionesFirma(e, body.ver === true));
       if (errFirma || !firmado?.signedUrl) {
         console.error("agente-seguimiento firma", errFirma?.message);
         return json({ error: "El documento no está disponible todavía. Inténtalo de nuevo en un momento." }, 404);

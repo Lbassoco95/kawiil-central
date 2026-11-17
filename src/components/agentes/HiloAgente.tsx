@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowDown, CalendarClock, Download, Loader2, Send, X } from "lucide-react";
+import { ArrowDown, CalendarClock, Download, Eye, Loader2, Send, X } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -40,6 +40,11 @@ function Entregables({ m }: { m: MensajeHilo }) {
       {m.entregables.map((e, i) => (
         <li key={e.nombre + i} className="flex flex-wrap items-center gap-2 text-sm">
           <span className="font-medium">{e.nombre}</span><span className="text-xs text-muted-foreground">{tamano(e.bytes)}</span>
+          {e.formato === "pdf" && (
+            <Button size="sm" variant="outline" disabled={descargar.isPending} data-testid={`hilo-ver-${m.task_id}-${i}`} onClick={() => descargar.mutate({ taskId: m.task_id, indice: i, ver: true })}>
+              <Eye className="mr-1 h-3.5 w-3.5" />Ver
+            </Button>
+          )}
           <Button size="sm" variant="outline" disabled={descargar.isPending} data-testid={`hilo-descargar-${m.task_id}-${i}`} onClick={() => descargar.mutate({ taskId: m.task_id, indice: i })}>
             <Download className="mr-1 h-3.5 w-3.5" />Descargar
           </Button>
