@@ -22,6 +22,7 @@ import {
   SILENCIO_REPETIDOS_MIN,
   type Mensaje,
 } from "../_shared/emailPush.ts";
+import { debeResumirConIA, MODELO_POR_DEFECTO, resumirConIA } from "../_shared/emailResumenIA.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -31,6 +32,8 @@ const corsHeaders = {
 const MAX_POR_CUENTA = 10;
 const CONCURRENCIA = 5;
 const TIMEOUT_MS = 12_000;
+/** Tope de llamadas a la IA por corrida (cada una espera como máximo unos segundos). El resto usa el resumen de siempre. */
+const MAX_LLAMADAS_IA_POR_CORRIDA = 5;
 
 type Svc = ReturnType<typeof createClient>;
 type Cuenta =
@@ -196,6 +199,24 @@ Deno.serve(async (req) => {
       return json({ error: "No autorizado" }, 401);
     }
 
+    const cuerpoReq = await req.json().catch(() => ({})) as { probar_ia?: boolean };
+    if (cuerpoReq?.probar_ia === true) {
+      // Prueba de la IA con datos de EJEMPLO (no lee buzones ni crea notificaciones): confirma clave, modelo y respuesta.
+      const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+      const modelo = Deno.env.get("KAWIIL_AI_FAST_MODEL")?.trim() || MODELO_POR_DEFECTO;
+      const ahora = new Date().toISOString();
+      const ejemplo = [
+        { key: "a", from: "Railway", subject: "Build failed for ample-spontaneity", count: 3, latest: ahora },
+        { key: "b", from: "Ana Pérez", subject: "Propuesta Q4 para revisión", count: 1, latest: ahora },
+        { key: "c", from: "Banco", subject: "Estado de cuenta de noviembre", count: 1, latest: ahora },
+      ];
+      const t0 = Date.now();
+      const frase = await resumirConIA(ejemplo, { apiKey, model: modelo });
+      const resultado = { ok: true, probar_ia: true, claveConfigurada: !!apiKey, modelo, usoIA: frase !== null, frase, ms: Date.now() - t0 };
+      console.log("push-email-poller probar_ia:", JSON.stringify(resultado));
+      return json(resultado);
+    }
+
     const svc = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const inicio = new Date();
 
@@ -230,7 +251,7 @@ Deno.serve(async (req) => {
 
     const porUsuario = new Map<string, Mensaje[]>();
     const nuevasMarcas: Array<{ account_key: string; user_id: string; last_checked_at: string; updated_at: string }> = [];
-    const resumen = { cuentas: cuentas.length, inicializadas: 0, sinToken: 0, errores: 0, usuariosAvisados: 0, silenciados: 0 };
+    const resumen = { cuentas: cuentas.length, inicializadas: 0, sinToken: 0, errores: 0, usuariosAvisados: 0, silenciados: 0, resumidosIA: 0, iaSinResumen: 0 };
 
     await pool(cuentas, CONCURRENCIA, async (c) => {
       const desde = marca.get(c.key);
@@ -304,6 +325,7 @@ Deno.serve(async (req) => {
 
       const filas = [];
       const huellas = [];
+      let llamadasIA = 0;
       for (const [userId, lista] of porUsuario) {
         const organizationId = org.get(userId);
         if (!organizationId) continue;
@@ -321,7 +343,22 @@ Deno.serve(async (req) => {
           resumen.silenciados++;
           continue;
         }
-        const aviso = armarAviso(nuevos);
+        let aviso = armarAviso(nuevos);
+        // Con varios temas distintos, la IA redacta una frase corta. Solo recibe REMITENTE y ASUNTO (nunca el cuerpo).
+        // Si no hay clave, falla o se acaba el tiempo, se queda el resumen de siempre: la IA nunca frena un aviso.
+        if (debeResumirConIA(nuevos) && llamadasIA < MAX_LLAMADAS_IA_POR_CORRIDA) {
+          llamadasIA++;
+          const frase = await resumirConIA(nuevos, {
+            apiKey: Deno.env.get("ANTHROPIC_API_KEY"),
+            model: Deno.env.get("KAWIIL_AI_FAST_MODEL")?.trim() || MODELO_POR_DEFECTO,
+          });
+          if (frase) {
+            aviso = { title: aviso.title, body: frase };
+            resumen.resumidosIA++;
+          } else {
+            resumen.iaSinResumen++;
+          }
+        }
         filas.push({
           user_id: userId,
           organization_id: organizationId,
