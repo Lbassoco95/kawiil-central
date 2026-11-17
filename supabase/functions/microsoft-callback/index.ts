@@ -4,10 +4,10 @@ import {
   buildAppReturnUrl,
   parseMicrosoftOAuthState,
   type MicrosoftOAuthState,
+  sanitizeAppOrigin,
   sanitizeReturnPath,
 } from "../_shared/microsoftOAuthState.ts";
-
-const postMessageOrigin = "*";
+import { openerPostMessageScript } from "../_shared/postMessageOrigins.ts";
 
 function escapeHtml(s: string): string {
   return s
@@ -124,10 +124,15 @@ function finishHtml(
       )
       : undefined;
 
+  // Preferir origen allowlisted del state; sin APP_ORIGIN mantiene `*` (compat prod).
+  const preferred = sanitizeAppOrigin(state?.o);
   const postMsg =
     postMessageType === "microsoft-auth-success"
-      ? `window.opener?.postMessage({type:'microsoft-auth-success'},'${postMessageOrigin}');`
-      : `window.opener?.postMessage({type:'microsoft-auth-error',error:${JSON.stringify(postMessageError || "error").replace(/</g, "\\u003c")}},'${postMessageOrigin}');`;
+      ? openerPostMessageScript("{type:'microsoft-auth-success'}", preferred)
+      : openerPostMessageScript(
+        `{type:'microsoft-auth-error',error:${JSON.stringify(postMessageError || "error").replace(/</g, "\\u003c")}}`,
+        preferred,
+      );
 
   const page = renderPage(kind, title, detail, { returnUrl, autoClose: mode === "popup" });
   // Inyectar postMessage justo antes de </body> (evitar HTML anidado / mojibake).

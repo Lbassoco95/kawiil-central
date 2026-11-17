@@ -7,6 +7,57 @@ const corsHeaders = {
 
 // Default org for now — single-tenant setup
 const DEFAULT_ORG_ID = 'a0000000-0000-0000-0000-000000000001'
+const MAX_TIMESTAMP_SKEW_SEC = 5 * 60
+
+function safeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  let out = 0
+  for (let i = 0; i < a.length; i += 1) {
+    out |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  }
+  return out === 0
+}
+
+function toHex(buf: ArrayBuffer): string {
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+async function hmacSha256Hex(key: string, message: string): Promise<string> {
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(key),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  )
+  return toHex(await crypto.subtle.sign('HMAC', cryptoKey, new TextEncoder().encode(message)))
+}
+
+/**
+ * Fail-closed: exige SAVIO_WEBHOOK_SECRET y firma válida.
+ * Acepta: (1) header == secreto compartido, o (2) HMAC-SHA256 hex de body / timestamp.body.
+ */
+async function verifySavioSignature(
+  secret: string,
+  signature: string,
+  timestamp: string | null,
+  rawBody: string,
+): Promise<boolean> {
+  if (safeEqual(signature, secret)) return true
+
+  const candidates = [rawBody]
+  if (timestamp) candidates.push(`${timestamp}.${rawBody}`)
+
+  for (const msg of candidates) {
+    const expected = await hmacSha256Hex(secret, msg)
+    if (safeEqual(signature.toLowerCase(), expected.toLowerCase())) return true
+    if (signature.startsWith('sha256=')) {
+      const hex = signature.slice('sha256='.length)
+      if (safeEqual(hex.toLowerCase(), expected.toLowerCase())) return true
+    }
+  }
+  return false
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -21,28 +72,72 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const payload = await req.json()
-    const eventType = payload?.event || payload?.type || 'unknown'
+    // Compat prod: sin secreto se acepta (como antes) + warning.
+    // Con secreto: fail-closed (firma obligatoria y válida).
+    const webhookSecret = Deno.env.get('SAVIO_WEBHOOK_SECRET')?.trim()
+    const rawBody = await req.text()
 
-    console.log(`Savio webhook received: ${eventType}`, JSON.stringify(payload).substring(0, 500))
-
-    // Optional: verify signature if SAVIO_WEBHOOK_SECRET is set
-    const webhookSecret = Deno.env.get('SAVIO_WEBHOOK_SECRET')
     if (webhookSecret) {
-      const signature = req.headers.get('x-webhook-signature')
-      const timestamp = req.headers.get('x-webhook-timestamp')
+      const signature = req.headers.get('x-webhook-signature')?.trim()
+      const timestamp = req.headers.get('x-webhook-timestamp')?.trim() || null
       if (!signature) {
-        console.warn('Missing webhook signature, but secret is configured')
-        // For now, log but don't reject — can tighten later
+        return new Response(JSON.stringify({ success: false, error: 'missing_signature' }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
       }
+
+      if (timestamp) {
+        const ts = Number(timestamp)
+        const now = Math.floor(Date.now() / 1000)
+        if (!Number.isFinite(ts) || Math.abs(now - ts) > MAX_TIMESTAMP_SKEW_SEC) {
+          return new Response(JSON.stringify({ success: false, error: 'stale_timestamp' }), {
+            status: 401,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          })
+        }
+      }
+
+      const valid = await verifySavioSignature(webhookSecret, signature, timestamp, rawBody)
+      if (!valid) {
+        return new Response(JSON.stringify({ success: false, error: 'invalid_signature' }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+    } else {
+      console.warn(
+        'savio-webhook: SAVIO_WEBHOOK_SECRET no configurado — aceptando sin firma (compat). Configura el secreto y el header x-webhook-signature para endurecer.',
+      )
     }
 
-    // Extract a Savio ID from common payload patterns
-    const savioId = payload?.data?.id || payload?.id || null
+    let payload: Record<string, unknown>
+    try {
+      payload = JSON.parse(rawBody) as Record<string, unknown>
+    } catch {
+      return new Response(JSON.stringify({ success: false, error: 'invalid_json' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    const eventType =
+      (typeof payload?.event === 'string' && payload.event) ||
+      (typeof payload?.type === 'string' && payload.type) ||
+      'unknown'
+
+    console.log(`Savio webhook received: ${eventType}`, rawBody.substring(0, 500))
+
+    const dataObj = payload?.data && typeof payload.data === 'object' && payload.data !== null
+      ? payload.data as Record<string, unknown>
+      : null
+    const savioId =
+      (dataObj && typeof dataObj.id === 'string' ? dataObj.id : null) ||
+      (typeof payload?.id === 'string' ? payload.id : null)
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     )
 
     const { error } = await supabase
@@ -63,7 +158,6 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Process specific event types
     switch (eventType) {
       case 'payment.created':
         console.log('Payment created:', savioId)
@@ -75,7 +169,7 @@ Deno.serve(async (req) => {
         console.log('Invoice deleted:', savioId)
         break
       case 'invoice.status.updated':
-        console.log('Invoice status updated:', savioId, payload?.data?.status)
+        console.log('Invoice status updated:', savioId, dataObj?.status)
         break
       default:
         console.log('Unhandled event type:', eventType)
