@@ -47,3 +47,6 @@ Pruebas: `tools/marketing/prueba_analista_pglite.mjs`; Node `supabase/functions/
 ## Comunicación interna
 - **APLICADA el 16 nov 2026** `marketing_comunicacion_interna` (20261116221332, ya en `supabase/migrations/`; el registro quedó con una segunda versión idéntica, 20261116221334, porque un reinicio de la sesión repitió la llamada; es idempotente y también está en `supabase/migrations/`): tabla `aviso_equipo` (RLS: los usuarios solo leen los publicados; escribe `service_role`), agente `marketing_comunicacion_interna` y alta en `mk_registrar_corrida` / `mk_latido_agente`. Reversa: `tools/marketing/rollback_comunicacion_interna.sql`; prueba: `tools/marketing/prueba_comunicacion_interna_pglite.mjs`. Detalle: `docs/comunicacion-interna.md`.
 - Código (se despliega al fusionar el PR #561): función `comunicacion-interna`, banner de avisos, pestaña Comunicación y el agente en la oficina de Marketing.
+
+## Comunicación interna: implementación alterna revertida (16 nov)
+- Se construyeron dos a la vez; la de `main` (#561) es la oficial. La alterna (agente `marketing_comunicacion`) se aplicó y se **revirtió** el mismo día (`20261116223934` y `20261116225413`, ya en `supabase/migrations/`); estaba vacía. Detalle y lo que se podría rescatar: `docs/marketing-comunicacion-interna.md`; su SQL: `tools/marketing/alternativa_comunicacion_interna/`.
