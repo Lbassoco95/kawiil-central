@@ -6,6 +6,10 @@ import {
   type FormatContext,
   type SlackCustomEmojiMap,
 } from "@/lib/slackFormatting";
+import {
+  slackReactionNamesMatch,
+  SLACK_WORKSPACE_DEFAULT_QUICK_REACTIONS,
+} from "@/lib/slackQuickReactions";
 import type { SlackUserProfile } from "@/hooks/useSlackUserProfiles";
 import { SlackAttachmentPreviewDialog } from "@/components/slack/SlackAttachmentPreviewDialog";
 
@@ -257,7 +261,15 @@ interface Props {
   userMap?: Record<string, SlackUserProfile | undefined>;
   customEmoji?: SlackCustomEmojiMap;
   onOpenThread?: (ts: string) => void;
+  /** Al pasar el cursor por «N respuestas», deja el hilo listo antes del clic. */
+  onPrefetchThread?: (ts: string) => void;
   onReact?: (ts: string, emoji: string) => void;
+  /** Tres reacciones de un clic, como las tiene esta persona en Slack. */
+  quickReactions?: string[];
+  /** Si Slack las tiene apagadas, no se muestran en el hover. */
+  showQuickReactions?: boolean;
+  /** Emojis más usados, al frente del selector. */
+  frequentEmoji?: string[];
   onSaveForLater?: (msg: SlackMessage) => void;
   onCreateTask?: (msg: SlackMessage) => void;
 }
@@ -272,7 +284,11 @@ export function MessageItem({
   userMap,
   customEmoji,
   onOpenThread,
+  onPrefetchThread,
   onReact,
+  quickReactions,
+  showQuickReactions = true,
+  frequentEmoji,
   onSaveForLater,
   onCreateTask,
 }: Props) {
@@ -290,6 +306,24 @@ export function MessageItem({
     () => Object.entries(customEmoji ?? {}).slice(0, 12),
     [customEmoji],
   );
+  const quick = (quickReactions && quickReactions.length > 0
+    ? quickReactions
+    : [...SLACK_WORKSPACE_DEFAULT_QUICK_REACTIONS]
+  ).slice(0, 3);
+  const pickerEmoji = useMemo(() => {
+    const rows: Array<{ name: string; url?: string }> = [];
+    const seen = new Set<string>();
+    const push = (name: string, url?: string) => {
+      const key = name.toLowerCase();
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      rows.push({ name, url });
+    };
+    for (const name of frequentEmoji ?? []) push(name);
+    for (const [name, url] of workspaceEmoji) push(name, url);
+    for (const [name] of EXTRA_EMOJIS) push(name);
+    return rows;
+  }, [frequentEmoji, workspaceEmoji]);
 
   const [previewFile, setPreviewFile] = useState<SlackFile | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -297,8 +331,15 @@ export function MessageItem({
 
   const hasReacted = (name: string) =>
     selfUserId
-      ? (message.reactions?.some(r => r.name === name && r.users?.includes(selfUserId)) ?? false)
+      ? (message.reactions?.some(
+          (r) => slackReactionNamesMatch(r.name, name) && r.users?.includes(selfUserId),
+        ) ?? false)
       : false;
+
+  const threadTs = message.thread_ts || message.ts || "";
+  const prefetchThread = () => {
+    if ((message.reply_count ?? 0) > 0 && threadTs) onPrefetchThread?.(threadTs);
+  };
 
   useEffect(() => {
     if (!showEmojiPicker) return;
@@ -397,7 +438,9 @@ export function MessageItem({
         {(message.reply_count ?? 0) > 0 && (
           <div
             className="sl-thread-reply"
-            onClick={() => onOpenThread?.(message.thread_ts || message.ts || "")}
+            onMouseEnter={prefetchThread}
+            onFocus={prefetchThread}
+            onClick={() => onOpenThread?.(threadTs)}
           >
             <div className="sl-thread-avs">
               {[...Array(Math.min(message.reply_count ?? 0, 3))].map((_, i) => (
@@ -418,27 +461,17 @@ export function MessageItem({
 
       {/* Acciones hover */}
       <div className="sl-msg-actions">
-        <button
-          className={`sl-msg-action sl-quick-react${hasReacted("thumbsup") ? " active" : ""}`}
-          title="Está bien / en revisión"
-          onClick={() => onReact?.(message.ts ?? "", "thumbsup")}
-        >
-          👍
-        </button>
-        <button
-          className={`sl-msg-action sl-quick-react${hasReacted("eyes") ? " active" : ""}`}
-          title="Lo estoy revisando"
-          onClick={() => onReact?.(message.ts ?? "", "eyes")}
-        >
-          👀
-        </button>
-        <button
-          className={`sl-msg-action sl-quick-react${hasReacted("question") ? " active" : ""}`}
-          title="Hay una duda"
-          onClick={() => onReact?.(message.ts ?? "", "question")}
-        >
-          ❓
-        </button>
+        {showQuickReactions && quick.map((emojiName) => (
+          <button
+            key={emojiName}
+            type="button"
+            className={`sl-msg-action sl-quick-react${hasReacted(emojiName) ? " active" : ""}`}
+            title={hasReacted(emojiName) ? "Quitar tu reacción" : `Reaccionar :${emojiName.split("::")[0]}:`}
+            onClick={() => onReact?.(message.ts ?? "", emojiName)}
+          >
+            {slackEmojiToReact(emojiName, customEmoji)}
+          </button>
+        ))}
         {onReact && (
           <div ref={emojiPickerRef} style={{ position: "relative" }}>
             <button
@@ -464,51 +497,35 @@ export function MessageItem({
                   gap: 2,
                   boxShadow: "0 4px 16px hsl(0 0% 0% / 0.15)",
                   minWidth: 176,
+                  maxHeight: 220,
+                  overflowY: "auto",
                 }}
               >
-                {workspaceEmoji.map(([emojiName, url]) => (
+                {pickerEmoji.map((entry) => (
                   <button
-                    key={`ws-${emojiName}`}
-                    title={emojiName}
+                    key={entry.name}
+                    type="button"
+                    title={entry.name.split("::")[0]}
                     onMouseDown={(e) => {
                       e.preventDefault();
-                      onReact(message.ts ?? "", emojiName);
+                      onReact(message.ts ?? "", entry.name);
                       setShowEmojiPicker(false);
                     }}
                     style={{
-                      background: hasReacted(emojiName) ? "hsl(var(--primary) / 0.15)" : "transparent",
-                      border: "none",
-                      borderRadius: 6,
-                      cursor: "pointer",
-                      padding: "4px",
-                      display: "grid",
-                      placeItems: "center",
-                    }}
-                  >
-                    <img src={url} alt="" className="sl-emoji-custom" style={{ width: 20, height: 20 }} />
-                  </button>
-                ))}
-                {EXTRA_EMOJIS.map(([emojiName, char]) => (
-                  <button
-                    key={emojiName}
-                    title={emojiName}
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      onReact(message.ts ?? "", emojiName);
-                      setShowEmojiPicker(false);
-                    }}
-                    style={{
-                      background: hasReacted(emojiName) ? "hsl(var(--primary) / 0.15)" : "transparent",
+                      background: hasReacted(entry.name) ? "hsl(var(--primary) / 0.15)" : "transparent",
                       border: "none",
                       borderRadius: 6,
                       cursor: "pointer",
                       fontSize: 18,
                       lineHeight: 1,
                       padding: "4px",
-                      textAlign: "center",
+                      display: "grid",
+                      placeItems: "center",
                     }}
                   >
-                    {char}
+                    {entry.url
+                      ? <img src={entry.url} alt="" className="sl-emoji-custom" style={{ width: 20, height: 20 }} />
+                      : slackEmojiToReact(entry.name, customEmoji)}
                   </button>
                 ))}
               </div>
@@ -516,7 +533,13 @@ export function MessageItem({
           </div>
         )}
         {onOpenThread && (
-          <button className="sl-msg-action" title="Responder en hilo" onClick={() => onOpenThread(message.thread_ts || message.ts || "")}>
+          <button
+            className="sl-msg-action"
+            title="Responder en hilo"
+            onMouseEnter={prefetchThread}
+            onFocus={prefetchThread}
+            onClick={() => onOpenThread(threadTs)}
+          >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
             </svg>
