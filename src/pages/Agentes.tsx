@@ -18,6 +18,7 @@ import { EnsenarAgente } from "@/components/agentes/EnsenarAgente";
 import { DocumentosAgente } from "@/components/agentes/DocumentosAgente";
 import { SeguimientoAgentes } from "@/components/agentes/SeguimientoAgentes";
 import { TrabajosAgente } from "@/components/agentes/TrabajosAgente";
+import { ListaLpb } from "@/components/agentes/ListaLpb";
 import { agentesDelModulo, esAgenteLegal, resumenServicio } from "@/lib/agentes/registro";
 import { datosDemo, esAgenteDelEquipo, figurasDeLaBanda, figurasOficina, filtrarAmbito, type AmbitoOficina } from "@/lib/agentes/oficina";
 import { BandaEquipo, FigurasContext } from "@/components/agentes/BandaEquipo";
@@ -76,6 +77,7 @@ export default function Agentes() {
             <TabsTrigger value="documentos">Documentos</TabsTrigger>
             <TabsTrigger value="ensenar">Enseñar</TabsTrigger>
             <TabsTrigger value="programar">Programar</TabsTrigger>
+            <TabsTrigger value="lpb">Lista LPB</TabsTrigger>
           </TabsList>
           <TabsContent value="oficina" className="mt-4 space-y-3">
             {!demo && servicio.estado !== "en_linea" && (
@@ -118,6 +120,7 @@ export default function Agentes() {
           <TabsContent value="seguimiento" className="mt-4"><SeguimientoAgentes key={seguir ?? "lista"} ahora={reloj} seleccionInicial={seguir} /></TabsContent>
           <TabsContent value="documentos" className="mt-4"><DocumentosAgente key={conectar ?? "docs"} agenteInicial={conectar ?? undefined} agentes={reales} /></TabsContent>
           <TabsContent value="ensenar" className="mt-4"><EnsenarAgente agentes={reales} tareas={tareas.data ?? []} ahora={reloj} /></TabsContent>
+          <TabsContent value="lpb" className="mt-4"><ListaLpb /></TabsContent>
           <TabsContent value="programar" className="mt-4"><ProgramarAgente key={conectar ?? "prog"} agenteInicial={conectar ?? undefined} agentes={reales} /></TabsContent>
         </Tabs>
       </div>
