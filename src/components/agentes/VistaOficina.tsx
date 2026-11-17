@@ -2,14 +2,14 @@ import { useMemo } from "react";
 import { ChevronLeft } from "lucide-react";
 import { PlanoDepartamentos } from "@/components/agentes/PlanoDepartamentos";
 import { FranjaEnVivo } from "@/components/agentes/FranjaEnVivo";
-import { EscritorioAgente, EstilosOficina } from "@/components/agentes/escritorio";
+import { SalaIsometrica } from "@/components/agentes/SalaIsometrica";
 import { agruparPorDepartamento } from "@/lib/agentes/departamentos";
 import { VISTA_PLANO, type Vista } from "@/lib/agentes/vistas";
 import type { FiguraOficina } from "@/lib/agentes/oficina";
 import type { AgenteRegistro, TareaAgente } from "@/lib/agentes/registro";
 
 // Oficina: plano de islas → isla → agente. La vista actual la decide quien la usa (la página la guarda en la URL).
-// Sobre cualquier vista va la franja «Equipo en vivo». La sala isométrica de cada isla llega en la siguiente fase: mientras tanto la isla se abre como una lista de escritorios.
+// Sobre cualquier vista va la franja «Equipo en vivo». Una isla abierta es su sala isométrica; los agentes de Marketing abren su módulo (su sala es la misma).
 export function VistaOficina({ figuras, agentes, tareas, ahora, vista, onVista, onElegirAgente, alAbrirMarketing }: {
   figuras: FiguraOficina[]; agentes: AgenteRegistro[]; tareas: TareaAgente[]; ahora: Date; vista: Vista; onVista: (v: Vista) => void;
   onElegirAgente: (id: string) => void; alAbrirMarketing?: () => void;
@@ -30,12 +30,7 @@ export function VistaOficina({ figuras, agentes, tareas, ahora, vista, onVista, 
       )}
       {vista.tipo === "isla" ? (
         isla ? (
-          <section className="zen-glass rounded-3xl p-4" aria-label={`Agentes de ${isla.depto.nombre}`} data-testid="isla-agentes">
-            <EstilosOficina />
-            <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-              {isla.figuras.map((f) => <li key={f.id}><EscritorioAgente f={f} onElegir={() => onElegirAgente(f.id)} /></li>)}
-            </ul>
-          </section>
+          <SalaIsometrica depto={isla.depto} figuras={isla.figuras} onElegir={(id) => (isla.depto.clave === "marketing" && alAbrirMarketing ? alAbrirMarketing() : onElegirAgente(id))} />
         ) : <p className="zen-glass rounded-2xl p-4 text-sm text-muted-foreground" data-testid="isla-vacia">Este departamento no tiene agentes en el registro.</p>
       ) : (
         <PlanoDepartamentos figuras={figuras} agentes={agentes} tareas={tareas} ahora={ahora} alAbrirMarketing={alAbrirMarketing} onElegir={onElegirAgente}

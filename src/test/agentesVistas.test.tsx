@@ -53,9 +53,9 @@ describe("VistaOficina", () => {
     const onVista = vi.fn(), onElegirAgente = vi.fn();
     montar({ tipo: "isla", clave: "juridico" }, onVista, onElegirAgente);
     expect(screen.getByTestId("isla-titulo").textContent).toBe("Jurídico");
-    expect(screen.getByTestId("isla-agentes")).toBeTruthy();
-    expect(screen.queryByTestId("escritorio-boton-a2")).toBeNull();   // atl es de Fiscal
-    fireEvent.click(screen.getByTestId("escritorio-boton-a3"));
+    expect(screen.getByTestId("sala-juridico")).toBeTruthy();
+    expect(screen.queryByTestId("sala-agente-a2")).toBeNull();   // atl es de Fiscal
+    fireEvent.click(screen.getByTestId("sala-agente-a3"));
     expect(onElegirAgente).toHaveBeenCalledWith("a3");
     fireEvent.click(screen.getByTestId("volver-plano"));
     expect(onVista).toHaveBeenCalledWith(VISTA_PLANO);
