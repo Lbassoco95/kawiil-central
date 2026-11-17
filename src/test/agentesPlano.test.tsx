@@ -87,7 +87,7 @@ describe("<PlanoDepartamentos />", () => {
     montar();
     expect(screen.getByTestId("isla-juridico")).toBeTruthy();
     const t = screen.getByTestId("tarjeta-juridico");
-    expect(t.getAttribute("aria-label")).toBe("Jurídico: 2 agentes, 1 haciendo, 1 en cola, 0 hechas en 30 días");
+    expect(t.getAttribute("aria-label")).toBe("Jurídico: 2 agentes, 1 haciendo, 1 en cola, 0 hechas en 30 días, trabajando ahora");
     expect(screen.getByTestId("tarjeta-gestoria").getAttribute("aria-label")).toMatch(/1 con error/);
   });
   it("cada agente es un botón con su estado y departamento, y al elegirlo avisa (clic y teclado)", () => {
@@ -173,3 +173,24 @@ describe("isla de Marketing", () => {
   });
 });
 
+describe("islas en vivo", () => {
+  const A = [ag("a1", "amatl"), ag("a2", "atl"), ag("a3", "nelli")];
+  const montar = (tareas: TareaAgente[]) => render(<PlanoDepartamentos figuras={figurasOficina(A, tareas, AHORA)} agentes={A} tareas={tareas} ahora={AHORA} />);
+  it("la isla donde alguien trabaja se ilumina y su tarjeta lo dice; las demás no", () => {
+    montar([ta("t1", "a1", "in_progress")]);
+    expect(screen.getByTestId("isla-juridico").getAttribute("data-activa")).toBe("true");
+    expect(screen.getByTestId("isla-viva-juridico")).toBeTruthy();
+    expect(screen.getByTestId("tarjeta-juridico").getAttribute("aria-label")).toMatch(/trabajando ahora$/);
+    expect(screen.getByTestId("isla-fiscal").getAttribute("data-activa")).toBe("false");
+    expect(screen.queryByTestId("isla-viva-fiscal")).toBeNull();
+    expect(screen.getByTestId("tarjeta-fiscal").getAttribute("aria-label")).not.toMatch(/trabajando ahora/);
+  });
+  it("cuando la tarea termina, la isla deja de iluminarse al llegar los datos nuevos", () => {
+    const { rerender } = montar([ta("t1", "a1", "in_progress")]);
+    expect(screen.getByTestId("isla-juridico").getAttribute("data-activa")).toBe("true");
+    const fin = [ta("t1", "a1", "completed", { completed_at: AHORA.toISOString() })];
+    rerender(<PlanoDepartamentos figuras={figurasOficina(A, fin, AHORA)} agentes={A} tareas={fin} ahora={AHORA} />);
+    expect(screen.getByTestId("isla-juridico").getAttribute("data-activa")).toBe("false");
+    expect(screen.getByTestId("plano-a1").getAttribute("data-estado")).toBe("celebrando");
+  });
+});

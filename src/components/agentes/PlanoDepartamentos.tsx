@@ -19,9 +19,11 @@ const CSS_PLANO = `
 .pl-agente .pl-anillo{opacity:0;transition:opacity .25s ease}
 .pl-agente:hover .pl-anillo,.pl-agente:focus-visible .pl-anillo{opacity:1}
 .pl-agente:focus{outline:none}
+@keyframes pl-pulso{0%,100%{opacity:.45}50%{opacity:1}}
+.pl-viva{animation:pl-pulso 2.4s ease-in-out infinite}
 @keyframes pl-barra{0%{transform:translateX(-100%)}100%{transform:translateX(250%)}}
 .pl-barra{animation:pl-barra 2.4s ease-in-out infinite}
-@media (prefers-reduced-motion: reduce){.pl-barra{animation:none!important;transform:translateX(30%)}}
+@media (prefers-reduced-motion: reduce){.pl-barra{animation:none!important;transform:translateX(30%)}.pl-viva{animation:none!important;opacity:.7}}
 `;
 
 const PXS = 2.6;                       // tamaño de cada píxel del dibujo de un agente en el plano
@@ -62,12 +64,14 @@ function Isla({ g, centro, onElegir }: { g: GrupoDepartamento; centro: { x: numb
   const s = Math.min(1, 350 / ((cols + filas) * TW));
   const A = isoPunto(0, 0, cols, filas), B = isoPunto(cols, 0, cols, filas), C = isoPunto(cols, filas, cols, filas), D = isoPunto(0, filas, cols, filas);
   const baja = (p: { x: number; y: number }) => ({ x: p.x, y: p.y + PROF });
+  const activa = g.figuras.some((f) => f.estado === "trabajando");   // alguien de esta isla está trabajando ahora: la isla se ilumina
   const celdas = g.figuras.map((f, k) => ({ f, i: k % cols, j: Math.floor(k / cols) })).sort((p, q) => p.i + p.j - (q.i + q.j));
   return (
-    <g transform={`translate(${centro.x},${centro.y}) scale(${s})`} data-testid={`isla-${g.depto.clave}`}>
+    <g transform={`translate(${centro.x},${centro.y}) scale(${s})`} data-testid={`isla-${g.depto.clave}`} data-activa={activa ? "true" : "false"}>
       <polygon points={pts(D, C, baja(C), baja(D))} fill={oscurecer(g.depto.tinte, 0.86)} />
       <polygon points={pts(B, C, baja(C), baja(B))} fill={oscurecer(g.depto.tinte, 0.74)} />
       <polygon points={pts(A, B, C, D)} fill={g.depto.tinte} />
+      {activa && <polygon className="pl-viva" points={pts(A, B, C, D)} fill="none" stroke="#5fb37a" strokeWidth={4} strokeLinejoin="round" data-testid={`isla-viva-${g.depto.clave}`} />}
       {Array.from({ length: cols * filas }, (_, k) => {
         const i = k % cols, j = Math.floor(k / cols);
         return <polygon key={k} points={pts(isoPunto(i, j, cols, filas), isoPunto(i + 1, j, cols, filas), isoPunto(i + 1, j + 1, cols, filas), isoPunto(i, j + 1, cols, filas))} fill="none" stroke="rgba(255,255,255,.5)" strokeWidth={1} />;
@@ -82,13 +86,14 @@ function Isla({ g, centro, onElegir }: { g: GrupoDepartamento; centro: { x: numb
 
 const TW_CARD = 208, TH_CARD = 108;
 function Tarjeta({ g, x, y, ahora, tareas }: { g: GrupoDepartamento; x: number; y: number; ahora: Date; tareas: TareaAgente[] }) {
+  const activa = g.figuras.some((f) => f.estado === "trabajando");
   const r = resumenDepartamento(g.figuras.map((f) => f.id), tareas, ahora);
   const stat = (etq: string, n: number, dx: number) => <text key={etq} x={x + dx} y={y + 93} fontSize={9} letterSpacing={0.6} style={{ fill: "#7a6d58" }}>{etq} <tspan fontSize={13} fontWeight={700} style={{ fill: "#3f362a" }}>{n}</tspan></text>;
   return (
-    <g data-testid={`tarjeta-${g.depto.clave}`} role="group" aria-label={`${g.depto.nombre}: ${r.agentes} agentes, ${r.haciendo} haciendo, ${r.enCola} en cola, ${r.hechas} hechas en ${DIAS_HECHAS} días${r.conError ? `, ${r.conError} con error` : ""}`}>
+    <g data-testid={`tarjeta-${g.depto.clave}`} role="group" aria-label={`${g.depto.nombre}: ${r.agentes} agentes, ${r.haciendo} haciendo, ${r.enCola} en cola, ${r.hechas} hechas en ${DIAS_HECHAS} días${r.conError ? `, ${r.conError} con error` : ""}${activa ? ", trabajando ahora" : ""}`}>
       <rect x={x} y={y} width={TW_CARD} height={TH_CARD} rx={18} fill="rgba(255,255,255,.8)" stroke="rgba(120,100,70,.16)" />
       <rect x={x} y={y + 14} width={4} height={26} rx={2} fill={oscurecer(g.depto.tinte, 0.8)} />
-      <circle cx={x + 20} cy={y + 24} r={5} fill={oscurecer(g.depto.tinte, 0.82)} />
+      <circle className={activa ? "pl-viva" : undefined} cx={x + 20} cy={y + 24} r={5} fill={activa ? "#5fb37a" : oscurecer(g.depto.tinte, 0.82)} />
       <text x={x + 32} y={y + 28} fontSize={13} fontWeight={600} style={{ fill: "#3f362a" }}>{recorta(g.depto.nombre, r.conError > 0 ? 15 : 24)}</text>
       {r.conError > 0 && (
         <g><rect x={x + TW_CARD - 74} y={y + 10} width={62} height={18} rx={9} fill="rgba(227,169,176,.35)" /><text x={x + TW_CARD - 43} y={y + 23} textAnchor="middle" fontSize={9.5} fontWeight={600} style={{ fill: "#8c4650" }}>{r.conError} con error</text></g>

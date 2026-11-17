@@ -22,12 +22,15 @@ import { agentesDelModulo, esAgenteLegal, resumenServicio } from "@/lib/agentes/
 import { datosDemo, esAgenteDelEquipo, figurasDeLaBanda, figurasOficina, filtrarAmbito, type AmbitoOficina } from "@/lib/agentes/oficina";
 import { BandaEquipo, FigurasContext } from "@/components/agentes/BandaEquipo";
 import { useAgentesRegistro, useErroresAgentes, useTareasAgentes } from "@/hooks/useAgentesRegistro";
+import { useAgentesEnVivo } from "@/hooks/useAgentesEnVivo";
+import { IndicadorEnVivo } from "@/components/agentes/IndicadorEnVivo";
 
 // Módulo Agentes: oficina y tablas (solo lectura) + Constructor de agentes y envío de instrucciones (solo Dirección, vía funciones).
 // La pantalla no escribe en la base directamente: crear agentes pasa por `agente-constructor` y las instrucciones por `dispatch-to-agent`. Los agentes de Marketing tienen su vista en /marketing.
 export default function Agentes() {
   const agentes = useAgentesRegistro();
   const tareas = useTareasAgentes();
+  const enVivo = useAgentesEnVivo();   // refresca solo cuando un agente empieza o termina algo
   const errores = useErroresAgentes((agentes.data ?? []).filter(esAgenteLegal).map((a) => a.id));
   const [reloj, setReloj] = useState(() => new Date());
   useEffect(() => { const t = setInterval(() => setReloj(new Date()), 60_000); return () => clearInterval(t); }, []);
@@ -58,6 +61,7 @@ export default function Agentes() {
         </p>
         {!demo && <BandaEquipo figuras={banda} onElegir={(id) => { setVerEnOficina(id); setAmbito("todos"); setPestana("oficina"); }} />}
         {!demo && <BarraTareas agentes={reales} onVerSeguimiento={(id) => { setSeguir(id ?? null); setPestana("seguimiento"); }} />}
+        {!demo && <IndicadorEnVivo estado={enVivo} actualizadoEn={Math.max(agentes.dataUpdatedAt, tareas.dataUpdatedAt)} />}
         <Tabs value={pestana} onValueChange={setPestana}>
           <TabsList>
             <TabsTrigger value="oficina">Oficina</TabsTrigger>
