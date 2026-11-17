@@ -60,5 +60,28 @@ for m in filas: marcar_uso(m["id"])   # access_count + 1, last_accessed_at = aho
 Si algo sale mal, **encender** de nuevo la memoria desde la pantalla (o `enabled = true` por la función). No se borra ni se edita nada.
 
 ## 6. Estado actual (para referencia)
-- 79 memorias de 21 agentes, todas activas; 0 apagadas; 0 con `enabled` nulo; 0 vencidas activas.
-- La VM está leyendo y escribiendo memorias hoy (última lectura 16-nov-2026 22:28 UTC). Aún no se ha apagado ninguna, así que **no hay evidencia** de que `enabled` se respete.
+- **Resultado de la prueba B (17-nov-2026): la VM respeta `enabled` al leer** en tareas manuales. Detalle en la sección 7.
+- 80 memorias de 21 agentes al 16-nov (antes de la prueba); 0 con `enabled` nulo; 0 vencidas activas. Al terminar la prueba, Coyolli quedó con 11 memorias, todas activas.
+- Pendiente: los otros caminos (tareas programadas, hilos, otros agentes) y la regla de no volver a aprender lo apagado (secciones 1 y 2); ver la sección 8.
+
+## 7. Resultado de la prueba real (agente de prueba: Coyolli, 17-nov-2026, hora UTC)
+**Por qué Coyolli y por qué es una prueba válida.** Es un agente de consulta sin accesos, fuentes ni escrituras configurados. En producción, el `access_count` de cada memoria coincide con las tareas completadas desde que se creó: **cada tarea completada lee todas las memorias activas del agente**. Por eso, si la VM ignorara `enabled`, la memoria apagada habría subido junto con las demás.
+
+**Procedimiento.** Memoria elegida: `65582416-2d05-4e05-ad48-c27d2e2d41ed` (tipo dato, importancia 0.4, nunca usada). Tarea inocua enviada a Coyolli desde la barra de tareas: responder una palabra, sin consultar sitios ni documentos.
+
+| Paso | Hora | `65582416…` | Las otras 8 activas |
+|---|---|---|---|
+| Estado base | 00:07 | encendida, 0 usos | 8, 7, 6, 5, 4, 3, 2, 1 usos |
+| Se apaga la memoria (vía el mismo cambio de `enabled` y `updated_at` que hace la pantalla) | 00:15 | **apagada**, 0 usos | sin cambio |
+| Tarea 1 (terminó 00:18, 8 s, sin error) | 00:18 | **0 usos, nunca leída** | **+1 cada una** (9, 8, 7, 6, 5, 4, 3, 2) |
+| Se vuelve a encender | 00:30 | encendida, 0 usos | sin cambio |
+| Tarea 2 (terminó 00:32, 9 s, sin error) | 00:32 | **1 uso** | **+1 cada una** (10 … 3) |
+
+**Conclusión.** Apagada, la memoria no se leyó, aunque se apagó 3 minutos antes de la tarea (se descarta una caché larga); encendida, sí se leyó. Quedó probado el control positivo y el negativo. Efecto secundario normal: tras cada tarea la VM creó una memoria nueva para el agente (activa, con 0 usos al crearse).
+
+## 8. Lo que la prueba NO cubre
+- **Un solo agente y tareas manuales.** Faltan las tareas programadas, los hilos de conversación («seguimiento dentro de un hilo») y otros agentes; si la VM tiene un camino distinto para armar contexto, debe usar el mismo filtro (sección 1).
+- **No volver a aprender lo apagado (sección 2, punto 3):** sin probar. Hoy, si la VM aprende lo mismo otra vez, lo guarda como fila nueva y activa.
+- **Vigencia (`expires_at`):** sin probar (no hay memorias vencidas activas).
+- **Caja negra:** el código de la VM no se pudo revisar desde el repositorio; la revisión de código (A) sigue pendiente con quien la mantiene.
+- La consulta de vigilancia continua (3 de `tools/agentes/verificar_memoria_enabled.sql`) sigue dando 0 y debe seguir así.
