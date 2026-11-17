@@ -69,6 +69,8 @@ export function parseMovementDate(value: unknown): string | null {
   if (m) return toIsoDate(Number(m[1]), Number(m[2]), Number(m[3]));
   m = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/.exec(s);
   if (m) return toIsoDate(Number(m[3]), Number(m[2]), Number(m[1]));
+  m = /^(\d{1,2})[/-](\d{1,2})[/-](\d{2})$/.exec(s);
+  if (m) return toIsoDate(2000 + Number(m[3]), Number(m[2]), Number(m[1]));
   m = /^(\d{1,2})[\s/-]+([a-z]{3,10})[\s/-]+(\d{4})$/.exec(s);
   if (m && MONTHS[m[2]]) return toIsoDate(Number(m[3]), MONTHS[m[2]], Number(m[1]));
   return null;
@@ -196,8 +198,11 @@ export function parseBankBuffer(buf: ArrayBuffer): ParsedSheet[] {
 /**
  * Texto copiado y pegado desde la app del banco (columnas separadas por tab, ; o |).
  * Con encabezado usa los nombres; sin encabezado asume: Fecha, Descripción, [Referencia], Cargo, Abono, [Saldo].
+ * También lee la lista de la app (Fondeadora): un movimiento por bloque, no por columnas.
  */
 export function parsePastedMovements(text: string): ParsedSheet | null {
+  const feed = parseFondeadoraFeed(text);
+  if (feed) return feed;
   const lines = text.split(/\r?\n/).filter((l) => l.trim());
   if (lines.length === 0) return null;
   const sep = lines.some((l) => l.includes("\t")) ? "\t" : lines.some((l) => l.includes("|")) ? "|" : ";";
@@ -214,6 +219,96 @@ export function parsePastedMovements(text: string): ParsedSheet | null {
   if (cols.date === undefined) return null;
   const { movements, skipped } = buildMovements(rows, cols, 0);
   return movements.length ? { sheetName: "Pegado", openingBalance: null, movements, skippedRows: skipped } : null;
+}
+
+const FEED_SECTION = /^(hoy|ayer|esta semana|este mes|este ano|semana pasada|mes pasado|anteriores)$/;
+
+/** Fecha y hora de un renglón de la app: "17/11/26・12:54 pm". */
+function parseFeedStamp(line: string): { date: string; minutes: number } | null {
+  const s = line.trim().toLowerCase().replace(/\./g, "").replace(/\s+/g, " ");
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})\s*(?:[-–—・·•∙⋅･|]\s*|\s+)(\d{1,2}):(\d{2})(?:\s*([ap])\s*m)?$/.exec(s);
+  if (!m) return null;
+  let y = Number(m[3]);
+  if (y < 100) y += 2000;
+  const date = toIsoDate(y, Number(m[2]), Number(m[1]));
+  if (!date) return null;
+  let hh = Number(m[4]);
+  const mm = Number(m[5]);
+  if (mm > 59 || hh > 23) return null;
+  const ap = m[6];
+  if (ap === "p" && hh < 12) hh += 12;
+  if (ap === "a" && hh === 12) hh = 0;
+  return { date, minutes: hh * 60 + mm };
+}
+
+function parseSignedAmount(line: string): { debit: number; credit: number } | null {
+  const s = line.trim().replace(/[−–—]/g, "-").replace(/\s+/g, "");
+  const m = /^([+-])\$?([\d,]+(?:\.\d{1,2})?)$/.exec(s);
+  if (!m) return null;
+  const n = parseMoney(m[2]);
+  if (n == null || n <= 0) return null;
+  return m[1] === "-" ? { debit: n, credit: 0 } : { debit: 0, credit: n };
+}
+
+/**
+ * Lista copiada desde la app de Fondeadora. Cada movimiento ocupa varios renglones
+ * (ícono, descripción, fecha con hora, monto con signo y, a veces, la tarjeta).
+ * La app los muestra del más nuevo al más viejo; aquí quedan en orden cronológico.
+ */
+function parseFondeadoraFeed(text: string): ParsedSheet | null {
+  const lines = text.split(/\r?\n/).map((l) => l.replace(/[\u00a0\u200B-\u200D\uFEFF]/g, " ").trim()).filter((l) => l.length > 0);
+  if (!lines.some((l) => parseFeedStamp(l))) return null;
+  const isNoise = (line: string) => {
+    const n = norm(line);
+    return FEED_SECTION.test(n) || /^movement\s+img$/.test(n) || /^[・·•∙⋅･.]+$/.test(line);
+  };
+  const cardDigits = (line: string) => /^\*{1,4}\s*(\d{3,4})$/.exec(line)?.[1] ?? null;
+  const isInitial = (line: string) => /^[\p{L}]$/u.test(line);
+  const raw: { date: string; minutes: number; description: string; reference: string | null; debit: number; credit: number }[] = [];
+  let datesSeen = 0;
+  let i = 0;
+  while (i < lines.length) {
+    if (isNoise(lines[i]) || isInitial(lines[i]) || cardDigits(lines[i])) { i++; continue; }
+    const desc: string[] = [];
+    while (i < lines.length && !parseFeedStamp(lines[i])) {
+      if (!isNoise(lines[i]) && !isInitial(lines[i]) && !cardDigits(lines[i])) desc.push(lines[i].replace(/\s+/g, " ").trim());
+      i++;
+    }
+    if (i >= lines.length) break;
+    const stamp = parseFeedStamp(lines[i]);
+    if (!stamp) { i++; continue; }
+    datesSeen++;
+    i++;
+    while (i < lines.length && isNoise(lines[i])) i++;
+    const amt = i < lines.length ? parseSignedAmount(lines[i]) : null;
+    if (!amt) continue;
+    i++;
+    let cardName: string | null = null;
+    let last4: string | null = null;
+    while (i < lines.length) {
+      const line = lines[i];
+      if (isNoise(line) || parseFeedStamp(line)) break;
+      if (/^[・·•∙⋅･.]+$/.test(line)) { i++; continue; }
+      const digits = cardDigits(line);
+      if (digits) { last4 = digits; i++; continue; }
+      if (isInitial(line)) { i++; continue; }
+      if (lines.slice(i + 1, i + 4).some((l) => parseFeedStamp(l))) break;
+      if (!cardName) { cardName = line; i++; continue; }
+      break;
+    }
+    const description = desc.join(" ").replace(/\s+/g, " ").trim();
+    if (!description) continue;
+    raw.push({
+      ...stamp, description, debit: amt.debit, credit: amt.credit,
+      reference: cardName ? (last4 ? `${cardName} **${last4}` : cardName) : null,
+    });
+  }
+  if (raw.length === 0) return null;
+  raw.sort((a, b) => a.date.localeCompare(b.date) || a.minutes - b.minutes);
+  return {
+    sheetName: "Pegado", openingBalance: null, skippedRows: Math.max(0, datesSeen - raw.length),
+    movements: movementsFromRaw(raw.map(({ date, description, reference, debit, credit }) => ({ date, description, reference, debit, credit, balance: null }))),
+  };
 }
 
 /** Nombre de cuenta sugerido a partir del nombre de la hoja ("Fondeadora", "Banregio"…). */

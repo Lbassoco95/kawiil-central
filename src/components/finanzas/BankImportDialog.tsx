@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Camera, FileSpreadsheet, ClipboardPaste, Loader2, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -32,6 +32,8 @@ interface SheetChoice {
 }
 
 const money = (n: number) => n.toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 });
+const pesos = (n: number) => n.toLocaleString("es-MX", { style: "currency", currency: "MXN" });
+const dia = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString("es-MX", { day: "numeric", month: "short" });
 const looksIrrelevant = (name: string) => /navidad|apuntes|control/i.test(name);
 /** Hojas de tesorería de terceros conocidas (impuestos de clientes) y banco donde viven. */
 const THIRD_PARTY_SHEET = /gonzalo|pcr|nuup/i;
@@ -46,6 +48,7 @@ export function BankImportDialog({ open, onOpenChange }: { open: boolean; onOpen
   const [commitments, setCommitments] = useState<ParsedCommitment[]>([]);
   const [commitKinds, setCommitKinds] = useState<Record<string, boolean>>({});
   const fileRef = useRef<HTMLInputElement>(null);
+  const scrollerRef = useRef<HTMLDivElement>(null);
   const [accountOpen, setAccountOpen] = useState(false);
 
   const [choices, setChoices] = useState<SheetChoice[]>([]);
@@ -139,19 +142,38 @@ export function BankImportDialog({ open, onOpenChange }: { open: boolean; onOpen
 
   async function importPaste() {
     const sheet = parsePastedMovements(pasteText);
-    if (!sheet) { toast.error("No pude leer los movimientos. Copia las columnas Fecha, Descripción, Cargo y Abono."); return; }
+    if (!sheet) { toast.error("No pude leer los movimientos. Copia la lista de la app del banco, o una tabla con Fecha, Descripción, Cargo y Abono."); return; }
     if (!pasteAccountId) { toast.error("Elige la cuenta destino."); return; }
+    const useReference = sheet.movements.some((m) => categoryFromReference(m.reference));
     setBusy(true);
-    try { await run([{ sheet, accountId: pasteAccountId, useReference: false }], "pegado"); setPasteText(""); }
+    try { await run([{ sheet, accountId: pasteAccountId, useReference }], "pegado"); setPasteText(""); }
     finally { setBusy(false); }
   }
 
   const pastePreview = useMemo(() => (pasteText.trim() ? parsePastedMovements(pasteText) : null), [pasteText]);
+  const pasteStats = useMemo(() => {
+    if (!pastePreview) return null;
+    const movs = pastePreview.movements;
+    return {
+      cargos: movs.reduce((a, m) => a + m.debit, 0),
+      abonos: movs.reduce((a, m) => a + m.credit, 0),
+      labeled: movs.some((m) => categoryFromReference(m.reference)),
+      recientes: movs.slice(-3).reverse().map((m) => ({
+        key: m.dedupeKey, date: m.date, description: m.description,
+        amount: m.credit > 0 ? m.credit : -m.debit,
+        category: categoryFromReference(m.reference),
+      })),
+    };
+  }, [pastePreview]);
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (el) el.scrollLeft = 0;
+  }, [open, pasteText]);
   const included = choices.filter((c) => c.include);
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) reset(); onOpenChange(o); }}>
-      <DialogContent className="max-w-3xl max-h-[88vh] overflow-y-auto">
+      <DialogContent ref={scrollerRef} className="sm:max-w-4xl max-h-[88vh] overflow-x-hidden overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Cargar movimientos de bancos</DialogTitle>
           <DialogDescription>
@@ -159,8 +181,8 @@ export function BankImportDialog({ open, onOpenChange }: { open: boolean; onOpen
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="excel">
-          <TabsList>
+        <Tabs defaultValue="excel" className="min-w-0">
+          <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1">
             <TabsTrigger value="excel" className="gap-1.5 text-xs"><FileSpreadsheet className="h-3.5 w-3.5" /> Excel contable</TabsTrigger>
             <TabsTrigger value="estado" className="gap-1.5 text-xs"><FileSpreadsheet className="h-3.5 w-3.5" /> Estado de cuenta del banco</TabsTrigger>
             <TabsTrigger value="captura" className="gap-1.5 text-xs"><Camera className="h-3.5 w-3.5" /> Captura de pantalla</TabsTrigger>
@@ -246,9 +268,9 @@ export function BankImportDialog({ open, onOpenChange }: { open: boolean; onOpen
           <TabsContent value="captura"><ScreenshotImportTab /></TabsContent>
 
           <TabsContent value="pegar" className="space-y-3">
-            <div className="flex gap-2">
+            <div className="flex min-w-0 gap-2">
               <Select value={pasteAccountId} onValueChange={setPasteAccountId}>
-                <SelectTrigger className="h-9"><SelectValue placeholder={accounts.length ? "Cuenta destino (ej. Fondeadora)" : "Aún no hay cuentas: crea la primera →"} /></SelectTrigger>
+                <SelectTrigger className="h-9 min-w-0 flex-1"><SelectValue placeholder={accounts.length ? "Cuenta destino (ej. Fondeadora)" : "Aún no hay cuentas: crea la primera →"} /></SelectTrigger>
                 <SelectContent>
                   {accounts.filter((a) => a.is_active).map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
                 </SelectContent>
@@ -257,13 +279,28 @@ export function BankImportDialog({ open, onOpenChange }: { open: boolean; onOpen
             </div>
             <Textarea
               value={pasteText} onChange={(e) => setPasteText(e.target.value)} rows={8}
-              placeholder={"Pega aquí desde la app del banco o desde Excel:\nFecha\tDescripción\tReferencia\tCargo\tAbono\tSaldo\n04 de nov 2026\tCompra en DLO*UBER RIDES\t\t119.91\t\t36267.60"}
+              placeholder={"Pega la lista de la app (Fondeadora) o una tabla de Excel:\nCompra en GAMMA.APP\n17/11/26 · 12:54 pm\n-$472.50\n\nFecha\tDescripción\tCargo\tAbono\n04/11/2026\tPago renta\t5000"}
               className="font-mono text-xs"
             />
-            {pastePreview && (
+            {pastePreview && pasteStats && (
+              <div className="rounded-xl border border-border/60 p-3 space-y-1.5">
+                <p className="text-xs text-muted-foreground">
+                  Leí {pastePreview.movements.length} {pastePreview.movements.length === 1 ? "movimiento" : "movimientos"},
+                  del {dia(pastePreview.movements[0].date)} al {dia(pastePreview.movements[pastePreview.movements.length - 1].date)}.
+                  Cargos {pesos(pasteStats.cargos)} · abonos {pesos(pasteStats.abonos)}.
+                  {pasteStats.labeled && " Las que traen tarjeta salen clasificadas."}
+                  {pastePreview.skippedRows > 0 && ` ${pastePreview.skippedRows} filas no se pudieron leer.`}
+                </p>
+                <ul className="text-xs text-muted-foreground space-y-0.5">
+                  {pasteStats.recientes.map((m) => (
+                    <li key={m.key} className="truncate">{dia(m.date)} · {m.description} · {pesos(m.amount)}{m.category ? ` · ${m.category}` : ""}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {pasteText.trim() && !pastePreview && (
               <p className="text-xs text-muted-foreground">
-                Leí {pastePreview.movements.length} movimientos
-                {pastePreview.skippedRows > 0 && ` (${pastePreview.skippedRows} filas ignoradas)`}.
+                No reconocí movimientos en este pegado. Copia la lista desde la app del banco, o una tabla con Fecha, Descripción, Cargo y Abono.
               </p>
             )}
             <Button onClick={importPaste} disabled={busy || !pastePreview} className="w-full">
