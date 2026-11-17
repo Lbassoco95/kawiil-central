@@ -49,9 +49,9 @@ Si el cliente muestra "Failed to send a request to the Edge Function", suele ser
 
 **Checklist operativo CSF/32D (SATgo):** `SATGO_API_KEY` (o Vault `satgo_api_key`); CIEC secret ≥32; tabla `moffin_client_sat_ciec`; desplegar **`satgo-query`**, **`satgo-monthly`**, **`moffin-query`** (69-B), **`moffin-sat-ciec`**. Resumen: [`.env.example`](../../.env.example).
 
-OAuth Slack por usuario (`slack-user-auth` / `slack-user-callback`): en **Project Settings → Edge Functions → Secrets** del proyecto Supabase deben existir al menos `SLACK_CLIENT_ID` y `SLACK_CLIENT_SECRET` (de la app en [api.slack.com/apps](https://api.slack.com/apps)). Sin `SLACK_CLIENT_ID`, la función responde 500 con `Slack OAuth not configured`. Opcional: `SLACK_USER_SCOPES` (si no, usa los del código).
+OAuth Slack por usuario (`slack-user-auth` / `slack-user-callback`): en **Project Settings → Edge Functions → Secrets** del proyecto Supabase deben existir al menos `SLACK_CLIENT_ID` y `SLACK_CLIENT_SECRET` (de la app en [api.slack.com/apps](https://api.slack.com/apps)). Sin `SLACK_CLIENT_ID`, la función responde 500 con `Slack OAuth not configured`. Opcional: `SLACK_USER_SCOPES` (si no, usa los del código). El inicio de sesión siempre añade `emoji:read` para ver los emojis subidos al workspace.
 
-La Edge `slack-api` expone acciones entre otras: `conversations.list`, `conversations.history`, `conversations.members`, `conversations.members.batch`, `conversations.replies`, `conversations.info`, `chat.postMessage`, `users.info.batch` (JWT en gateway según `supabase/config.toml`).
+La Edge `slack-api` expone acciones entre otras: `conversations.list`, `conversations.history`, `conversations.members`, `conversations.members.batch`, `conversations.replies`, `conversations.info`, `chat.postMessage`, `users.info.batch`, `emoji.list`, `emoji.add` (JWT en gateway según `supabase/config.toml`).
 
 ## Si algo se rompe despues de publicar desde Lovable:
 
