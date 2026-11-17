@@ -5,6 +5,7 @@ import { FranjaEnVivo } from "@/components/agentes/FranjaEnVivo";
 import { SalaIsometrica } from "@/components/agentes/SalaIsometrica";
 import { PanelAgente } from "@/components/agentes/PanelAgente";
 import { agruparPorDepartamento } from "@/lib/agentes/departamentos";
+import { nombreAgente } from "@/lib/agentes/registro";
 import { actividadDe, agentesQueEsperan } from "@/lib/agentes/actividad";
 import { VISTA_PLANO, type PestanaEscritorio, type Vista } from "@/lib/agentes/vistas";
 import type { FiguraOficina } from "@/lib/agentes/oficina";
@@ -20,6 +21,7 @@ export function VistaOficina({ figuras, agentes, tareas, ahora, vista, onVista, 
   const grupos = useMemo(() => agruparPorDepartamento(figuras, agentes), [figuras, agentes]);
   const deptoDe = useMemo(() => new Map(grupos.flatMap((g) => g.figuras.map((f) => [f.id, g.depto.nombre] as const))), [grupos]);
   const esperan = useMemo(() => agentesQueEsperan(tareas), [tareas]);
+  const archivados = useMemo(() => agentes.filter((a) => a.status === "archived").sort((x, y) => nombreAgente(x).localeCompare(nombreAgente(y), "es")), [agentes]);
   const figuraAgente = vista.tipo === "agente" ? figuras.find((f) => f.id === vista.id) : undefined;
   const agenteSel = vista.tipo === "agente" ? agentes.find((a) => a.id === vista.id) : undefined;
   const isla = vista.tipo === "isla" ? grupos.find((g) => g.depto.clave === vista.clave) : vista.tipo === "agente" ? grupos.find((g) => g.figuras.some((f) => f.id === vista.id)) : undefined;
@@ -45,6 +47,12 @@ export function VistaOficina({ figuras, agentes, tareas, ahora, vista, onVista, 
     <div className="space-y-3" data-testid="vista-oficina" data-vista={vista.tipo === "plano" ? "plano" : vista.tipo === "isla" ? `isla:${vista.clave}` : `agente:${vista.id}`}>
       <FranjaEnVivo figuras={figuras} departamentoDe={(id) => deptoDe.get(id) ?? "Otros"} onElegir={alElegir} esperan={esperan} actividad={(f) => actividadDe(f.id, f.estado, tareas)} />
       {migas}
+      {vista.tipo === "plano" && (
+        <p className="px-1 text-sm text-muted-foreground" data-testid="resumen-agentes">
+          {figuras.length} {figuras.length === 1 ? "agente" : "agentes"} en {grupos.length} {grupos.length === 1 ? "isla" : "islas"}
+          {archivados.length > 0 && ` · ${archivados.length} ${archivados.length === 1 ? "archivado" : "archivados"} (abajo)`}
+        </p>
+      )}
       {vista.tipo === "plano" ? (
         <PlanoDepartamentos figuras={figuras} agentes={agentes} tareas={tareas} ahora={ahora} alAbrirMarketing={alAbrirMarketing} onElegir={onElegirAgente}
           onAbrirIsla={(clave) => onVista({ tipo: "isla", clave })} />
@@ -61,6 +69,17 @@ export function VistaOficina({ figuras, agentes, tareas, ahora, vista, onVista, 
             ? <div className="min-w-0 xl:sticky xl:top-3 xl:max-h-[calc(100vh-1.5rem)] xl:overflow-y-auto"><PanelAgente figura={figuraAgente} agente={agenteSel} agentes={agentes} tareas={tareas} ahora={ahora} pestana={pestana} onPestana={(p) => onPestana?.(p)} onVolver={() => onVista({ tipo: "isla", clave: isla.depto.clave })} /></div>
             : <p className="zen-glass rounded-2xl p-4 text-sm text-muted-foreground" data-testid="agente-no-existe">No encontramos a ese agente en el registro.</p>}
         </div>
+      )}
+      {vista.tipo === "plano" && (
+        <details className="zen-glass rounded-2xl p-3 text-sm" data-testid="archivados">
+          <summary className="cursor-pointer font-medium">Agentes archivados ({archivados.length})</summary>
+          {archivados.length === 0 ? <p className="mt-2 text-muted-foreground">No hay agentes archivados.</p> : (
+            <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="Agentes archivados">
+              {archivados.map((a) => <li key={a.id} className="rounded-full border border-border/60 px-2.5 py-1 text-xs" data-testid={`archivado-${a.id}`}>{nombreAgente(a)} <span className="text-foreground/70">· archivado</span></li>)}
+            </ul>
+          )}
+          <p className="mt-2 text-xs text-foreground/70">Los archivados no tienen sala. Un agente de la VM aparece aquí solo cuando se registra: lo hace solo al arrancar la VM. Si falta alguno, aún no se ha registrado.</p>
+        </details>
       )}
     </div>
   );

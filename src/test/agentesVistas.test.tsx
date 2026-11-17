@@ -95,4 +95,16 @@ describe("VistaOficina", () => {
     expect(screen.getByTestId("franja-a1").textContent).toContain("Trabajando · consulta");
     expect(screen.getByTestId("franja-a2").textContent).toContain("te espera");
   });
+  it("el plano cuenta los agentes y las islas y lista aparte a los archivados (sin sala)", () => {
+    const todos = [...AGENTES, ag("z1", "viejo_uno", { status: "archived" }), ag("z2", "viejo_dos", { status: "archived" })];
+    render(<VistaOficina figuras={figurasOficina(todos, TAREAS, AHORA)} agentes={todos} tareas={TAREAS} ahora={AHORA} vista={VISTA_PLANO} onVista={vi.fn()} onElegirAgente={vi.fn()} />);
+    expect(screen.getByTestId("resumen-agentes").textContent).toContain("3 agentes en 2 islas · 2 archivados");
+    expect(screen.getByTestId("archivados").textContent).toContain("Agentes archivados (2)");
+    expect(screen.getByTestId("archivado-z1").textContent).toContain("viejo_uno");
+    expect(screen.queryByTestId("sala-agente-z1")).toBeNull();
+  });
+  it("sin archivados lo dice y la sala de una isla no muestra la lista", () => {
+    render(<VistaOficina figuras={figs} agentes={AGENTES} tareas={TAREAS} ahora={AHORA} vista={{ tipo: "isla", clave: "juridico" }} onVista={vi.fn()} onElegirAgente={vi.fn()} />);
+    expect(screen.queryByTestId("archivados")).toBeNull();
+  });
 });

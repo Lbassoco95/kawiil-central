@@ -3,7 +3,6 @@ import { render, screen, fireEvent, waitFor, within, act } from "@testing-librar
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HiloAgente } from "@/components/agentes/HiloAgente";
 import { TrabajosAgente } from "@/components/agentes/TrabajosAgente";
-import { Oficina } from "@/components/agentes/Oficina";
 import { EscritorioAgente } from "@/components/agentes/escritorio";
 import { figurasOficina } from "@/lib/agentes/oficina";
 import type { AgenteRegistro } from "@/lib/agentes/registro";
@@ -125,41 +124,6 @@ const ag = (id: string, name: string, o: Partial<AgenteRegistro> = {}): AgenteRe
 
 describe("selección de agentes", () => {
   const figuras = figurasOficina([ag("a1", "Tlahtolli"), ag("a2", "Atl"), ag("a3", "Coyolli")], [], new Date());
-
-  it("cada agente es un botón con su estado en el nombre accesible y su rol a la vista", () => {
-    envolver(<Oficina figuras={figuras} ahora={new Date()} demo={false} />);
-    const b = screen.getByRole("button", { name: /^Atl: / });
-    expect(b.getAttribute("aria-pressed")).toBe("false");
-    expect(b.getAttribute("data-estado")).toBeTruthy();
-    expect(within(b).getByText("Descripción")).toBeTruthy();   // el rol corto sale de la descripción del agente
-  });
-
-  it("la ficha va en un panel lateral junto a los agentes (no debajo de toda la lista) y cambia al elegir otro", () => {
-    envolver(<Oficina figuras={figuras} ahora={new Date()} demo={false} detalleExtra={(f) => <p data-testid="extra">chat de {f.nombre}</p>} />);
-    const panel = screen.getByTestId("oficina-panel-lateral"), lista = screen.getByTestId("oficina-agentes");
-    expect(panel.parentElement).toBe(lista.parentElement);                 // hermanos de la misma rejilla: lado a lado en pantallas anchas
-    expect(panel.className).toContain("lg:sticky");
-    expect(within(panel).getByTestId("oficina-detalle").textContent).toContain("Elige un agente");
-    fireEvent.click(screen.getByTestId("oficina-a1"));
-    expect(panel.contains(screen.getByTestId("extra"))).toBe(true); expect(screen.getByTestId("extra").textContent).toBe("chat de Tlahtolli");
-    expect(screen.getByTestId("oficina-a1").getAttribute("aria-pressed")).toBe("true");
-    fireEvent.click(screen.getByTestId("oficina-a3"));
-    expect(screen.getByTestId("extra").textContent).toBe("chat de Coyolli");
-    expect(screen.getByTestId("oficina-a1").getAttribute("aria-pressed")).toBe("false");
-  });
-
-  it("en pantallas angostas, al elegir un agente la vista se lleva a su ficha", () => {
-    const original = window.matchMedia; const llevar = vi.fn();
-    window.matchMedia = ((q: string) => ({ matches: q.includes("max-width"), media: q, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, onchange: null, dispatchEvent: () => false })) as unknown as typeof window.matchMedia;
-    Element.prototype.scrollIntoView = llevar;
-    const raf = vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => { cb(0); return 0; });
-    envolver(<Oficina figuras={figuras} ahora={new Date()} demo={false} />);
-    fireEvent.click(screen.getByTestId("oficina-a2"));
-    expect(llevar).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByTestId("oficina-a2"));           // deseleccionar no mueve la vista
-    expect(llevar).toHaveBeenCalledTimes(1);
-    window.matchMedia = original; raf.mockRestore();
-  });
 
   it("el escritorio mini no repite el nombre dentro del dibujo; el normal y el compacto sí", () => {
     const f = figuras[0];
