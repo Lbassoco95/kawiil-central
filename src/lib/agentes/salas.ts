@@ -26,10 +26,13 @@ const lugaresLibres = (n: number): Array<[number, number]> => {
 const cerca = (a: [number, number], b: [number, number]) => Math.abs(a[0] - b[0]) < PASO - 0.4 && Math.abs(a[1] - b[1]) < PASO - 0.4;
 
 /** Acomoda a los agentes de una isla. `clave` de cada uno = nombre real en el registro. */
-export function distribuirSala<T>(deptoClave: string, items: T[], claveDe: (t: T) => string): SalaCalculada<T> {
+/** `zonaDe`: nombre de zona de cada agente que no está en el diseño (por ejemplo, el catálogo de Louis); sin él, los nuevos van a «Equipo nuevo». */
+export function distribuirSala<T>(deptoClave: string, items: T[], claveDe: (t: T) => string, zonaDe?: (t: T) => string): SalaCalculada<T> {
   const d = SALAS[deptoClave];
   const conocidos = items.filter((t) => d?.posiciones[claveDe(t)]);
-  const nuevos = items.filter((t) => !d?.posiciones[claveDe(t)]);
+  const nombreZona = (t: T) => zonaDe?.(t) || "Equipo nuevo";
+  // Los nuevos se ordenan por zona para que cada zona quede en lugares contiguos.
+  const nuevos = items.filter((t) => !d?.posiciones[claveDe(t)]).sort((a, b) => nombreZona(a).localeCompare(nombreZona(b), "es"));
   let n = d?.n ?? 6;
   const ocupados: Array<[number, number]> = conocidos.map((t) => d.posiciones[claveDe(t)]);
   const sitios = (m: number) => lugaresLibres(m).filter((p) => !ocupados.some((o) => cerca(o, p)));
@@ -45,7 +48,6 @@ export function distribuirSala<T>(deptoClave: string, items: T[], claveDe: (t: T
     return { nombre, claves: ps.map((p) => p.clave), u0: Math.min(...ps.map((p) => p.u)) - 1.3, v0: Math.min(...ps.map((p) => p.v)) - 1.3, u1: Math.max(...ps.map((p) => p.u)) + 1.3, v1: Math.max(...ps.map((p) => p.v)) + 1.3 };
   };
   const zonas = (d?.zonas ?? []).map(([nombre, cs]) => caja(cs, nombre)).filter((z): z is ZonaSala => z !== null);
-  const nuevaZona = caja(nuevos.map(claveDe), "Equipo nuevo");
-  if (nuevaZona) zonas.push(nuevaZona);
+  for (const nombre of [...new Set(nuevos.map(nombreZona))]) { const z = caja(nuevos.filter((t) => nombreZona(t) === nombre).map(claveDe), nombre); if (z) zonas.push(z); }
   return { n, puestos, zonas };
 }

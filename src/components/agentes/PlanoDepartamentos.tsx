@@ -139,7 +139,7 @@ function Barra({ grupo }: { grupo: FilaTarea["grupo"] }) {
 }
 
 // `alAbrirMarketing`: Marketing tiene su módulo aparte (/marketing). Su isla es un resumen: al elegir uno de sus agentes o tareas se abre ese módulo en vez de la Oficina.
-export function PlanoDepartamentos({ figuras, agentes, tareas, ahora, onElegir, alAbrirMarketing, onAbrirIsla }: { figuras: FiguraOficina[]; agentes: AgenteRegistro[]; tareas: TareaAgente[]; ahora: Date; onElegir?: (id: string) => void; alAbrirMarketing?: () => void; onAbrirIsla?: (clave: string) => void }) {
+export function PlanoDepartamentos({ figuras, agentes, tareas, ahora, onElegir, alAbrirMarketing, onAbrirIsla, sinTareas = false }: { figuras: FiguraOficina[]; agentes: AgenteRegistro[]; tareas: TareaAgente[]; ahora: Date; onElegir?: (id: string) => void; alAbrirMarketing?: () => void; onAbrirIsla?: (clave: string) => void; sinTareas?: boolean }) {
   const [filtro, setFiltro] = useState<FiltroTareas>("todas");
   const grupos = useMemo(() => agruparPorDepartamento(figuras, agentes), [figuras, agentes]);
   const ids = useMemo(() => new Set(figuras.map((f) => f.id)), [figuras]);
@@ -160,7 +160,7 @@ export function PlanoDepartamentos({ figuras, agentes, tareas, ahora, onElegir, 
   if (figuras.length === 0) return <p className="zen-glass rounded-2xl p-6 text-sm text-muted-foreground">No hay agentes en el registro para mostrar en el plano.</p>;
   const escena = escenaPara(grupos.length), hub = escena.hub;
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_21rem] lg:items-start" data-testid="plano">
+    <div className={`grid gap-4 lg:items-start ${sinTareas ? "" : "lg:grid-cols-[minmax(0,1fr)_21rem]"}`} data-testid="plano">
       <style>{CSS}{CSS_PLANO}</style>
       <div className="zen-glass min-w-0 overflow-x-auto rounded-3xl p-2">
         <svg viewBox={`0 0 ${escena.ancho} ${escena.alto}`} className="mx-auto w-full min-w-[640px]" role="group" aria-label="Plano de departamentos">
@@ -204,7 +204,7 @@ export function PlanoDepartamentos({ figuras, agentes, tareas, ahora, onElegir, 
         )}
       </div>
 
-      <aside className="zen-glass min-w-0 rounded-3xl p-4 lg:sticky lg:top-3 lg:max-h-[calc(100vh-1.5rem)] lg:overflow-y-auto" aria-label="Estado de tareas" data-testid="plano-tareas">
+      {!sinTareas && <aside className="zen-glass min-w-0 rounded-3xl p-4 lg:sticky lg:top-3 lg:max-h-[calc(100vh-1.5rem)] lg:overflow-y-auto" aria-label="Estado de tareas" data-testid="plano-tareas">
         <h2 className="text-lg font-medium">Estado de tareas</h2>
         <p className="mb-3 text-xs text-muted-foreground">Por agente y estado; no se muestran los textos de las tareas.</p>
         <div className="mb-3 flex flex-wrap gap-1.5 text-xs" role="group" aria-label="Filtrar tareas por estado">
@@ -247,7 +247,7 @@ export function PlanoDepartamentos({ figuras, agentes, tareas, ahora, onElegir, 
             </ul>
           )}
         </section>
-      </aside>
+      </aside>}
     </div>
   );
 }

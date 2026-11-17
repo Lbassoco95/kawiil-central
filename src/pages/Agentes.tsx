@@ -7,6 +7,8 @@ import { AgentesRegistro } from "@/components/marketing/AgentesRegistro";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarraTareas } from "@/components/agentes/BarraTareas";
 import { VistaOficina } from "@/components/agentes/VistaOficina";
+import { SelectorNivel, VistaCatalogo } from "@/components/agentes/NivelesOficina";
+import { leerNivel, type NivelOficina } from "@/lib/agentes/louis";
 import { ConstructorAgentes } from "@/components/agentes/ConstructorAgentes";
 import { ListaLpb } from "@/components/agentes/ListaLpb";
 import { FigurasContext } from "@/components/agentes/BandaEquipo";
@@ -48,6 +50,9 @@ export default function Agentes() {
   const seccion: Seccion = (viejo ? viejo.pestana : params.get(SECCION_PARAM)) === "administrar" ? "administrar" : "oficina";
   const vista = useMemo(() => leerVista(params.get("vista")), [params]);
   const pestanaEscritorio = leerPestanaEscritorio(params.get("tab"));
+  const nivel = leerNivel(params.get("nivel"));
+  // Cambiar de nivel vuelve al plano de ese nivel (las islas y los agentes no son los mismos).
+  const cambiarNivel = (n: NivelOficina) => setParams((p) => { const x = new URLSearchParams(p); if (n === "kawiil") x.delete("nivel"); else x.set("nivel", n); x.delete("vista"); x.delete("tab"); return x; });
   const cambiarSeccion = (s: string) => setParams((p) => { const n = new URLSearchParams(p); if (s === "administrar") n.set(SECCION_PARAM, "administrar"); else n.delete(SECCION_PARAM); return n; });
   const cambiarVista = (v: Vista, tab?: PestanaEscritorio) => setParams((p) => {
     const n = new URLSearchParams(p); const x = escribirVista(v);
@@ -89,12 +94,14 @@ export default function Agentes() {
             <TabsTrigger value="administrar" className="text-foreground/75 data-[state=active]:text-foreground" data-testid="seccion-administrar">Administrar</TabsTrigger>
           </TabsList>
           <TabsContent value="oficina" className="mt-4 space-y-3">
-            {servicio.estado !== "en_linea" && (
+            <SelectorNivel nivel={nivel} onNivel={cambiarNivel} />
+            {nivel !== "kawiil" && <VistaCatalogo nivel={nivel} vista={vista} onVista={(v) => cambiarVista(v)} />}
+            {nivel === "kawiil" && servicio.estado !== "en_linea" && (
               <p className="zen-glass rounded-2xl p-3 text-sm" data-testid="oficina-sin-servicio">
                 El servicio de agentes no da señal reciente, así que la oficina muestra el último estado conocido.
               </p>
             )}
-            {cargando ? <p className="text-sm text-muted-foreground">Leyendo el registro de agentes…</p>
+            {nivel !== "kawiil" ? null : cargando ? <p className="text-sm text-muted-foreground">Leyendo el registro de agentes…</p>
               : agentes.isError ? <p className="text-sm text-muted-foreground">No pudimos leer el registro de agentes. Inténtalo de nuevo.</p>
               : <VistaOficina figuras={todasLasFiguras} agentes={agentes.data ?? []} tareas={tareas.data ?? []} ahora={reloj} vista={vista} onVista={(v) => cambiarVista(v)}
                   alAbrirMarketing={() => navegar("/marketing")} onElegirAgente={(id) => cambiarVista({ tipo: "agente", id })} pestana={pestanaEscritorio} onPestana={cambiarPestanaEscritorio} />}

@@ -14,6 +14,21 @@ export const DEPARTAMENTOS: Record<string, Departamento> = {
   gestoria: { clave: "gestoria", nombre: "Gestoría y documentos", tinte: "#f0cfca" },
   marketing: { clave: "marketing", nombre: "Marketing", tinte: "#c9e4de" },
   otros: { clave: "otros", nombre: "Otros", tinte: "#e1dacb" },
+  // Catálogo de Louis (OpenClaw): niveles 2 y 3 del plano. Sus agentes no están en el registro; ver lib/agentes/louis.ts.
+  l_especialidades: { clave: "l_especialidades", nombre: "Especialidades por materia", tinte: "#d8cbe6" },
+  l_documentos: { clave: "l_documentos", nombre: "Documentos, cumplimiento y seguridad", tinte: "#cfe3cc" },
+  l_clientes: { clave: "l_clientes", nombre: "Clientes", tinte: "#f0cfca" },
+  l_negocio: { clave: "l_negocio", nombre: "Negocio y equipo", tinte: "#c9e4de" },
+  l_operacion: { clave: "l_operacion", nombre: "Operación", tinte: "#efdcb8" },
+  l_revision: { clave: "l_revision", nombre: "Revisión de Donna", tinte: "#cbdceb" },
+  i_laboral: { clave: "i_laboral", nombre: "Laboral", tinte: "#cfe3cc" },
+  i_corporativo: { clave: "i_corporativo", nombre: "Corporativo", tinte: "#d8cbe6" },
+  i_comercial: { clave: "i_comercial", nombre: "Comercial", tinte: "#efdcb8" },
+  i_pi: { clave: "i_pi", nombre: "Propiedad intelectual", tinte: "#f0cfca" },
+  i_ia: { clave: "i_ia", nombre: "Gobernanza de IA", tinte: "#cbdceb" },
+  i_privacidad: { clave: "i_privacidad", nombre: "Privacidad", tinte: "#c9e4de" },
+  i_regulatorio: { clave: "i_regulatorio", nombre: "Regulatorio", tinte: "#e1dacb" },
+  i_producto: { clave: "i_producto", nombre: "Producto", tinte: "#f2d6bd" },
 };
 
 // Asignación de los agentes actuales por su nombre. Es una decisión de organización, no un dato de la base: se corrige aquí o, sin tocar el código,
@@ -44,7 +59,7 @@ export function departamentoDe(a: Pick<AgenteRegistro, "name" | "description" | 
   return DEPARTAMENTOS.otros;
 }
 
-export const MAX_ISLAS = 7;
+export const MAX_ISLAS = 8;
 export interface GrupoDepartamento { depto: Departamento; figuras: FiguraOficina[] }
 
 const PESO_ESTADO: Record<string, number> = { trabajando: 0, atascado: 1, con_error: 1, celebrando: 2, sentado: 3, descansando: 4, apagado: 5 };

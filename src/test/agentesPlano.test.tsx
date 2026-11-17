@@ -148,11 +148,11 @@ describe("isla de Marketing", () => {
   const figsTodos = figurasOficina(TODOS, TAREAS_MK, AHORA);
   const montar = (o: { onElegir?: (id: string) => void; alAbrirMarketing?: () => void } = {}) => render(<PlanoDepartamentos figuras={figsTodos} agentes={TODOS} tareas={TAREAS_MK} ahora={AHORA} {...o} />);
 
-  it("Marketing es su propio departamento y caben hasta 7 islas sin juntar ninguna en Otros", () => {
+  it("Marketing es su propio departamento y caben hasta 8 islas sin juntar ninguna en Otros", () => {
     const g = agruparPorDepartamento(figsTodos, TODOS);
     expect(g.map((x) => x.depto.clave)).toContain("marketing");
     expect(g.find((x) => x.depto.clave === "marketing")!.figuras).toHaveLength(2);
-    expect(MAX_ISLAS).toBe(7);
+    expect(MAX_ISLAS).toBe(8);
     expect(g.length).toBe(6);
   });
   it("dibuja la isla y su tarjeta con cifras propias", () => {

@@ -67,4 +67,15 @@ describe("página Agentes con dos pestañas", () => {
     fireEvent.click(screen.getByTestId("stub-constructor"));
     expect(screen.getByTestId("stub-oficina").textContent).toBe("agente:rutinas");
   });
+  it("el nivel Louis o Internacional muestra el catálogo y no la oficina del registro", () => {
+    montar("/agentes?nivel=louis");
+    expect(screen.getByTestId("vista-catalogo").getAttribute("data-nivel")).toBe("louis");
+    expect(screen.queryByTestId("stub-oficina")).toBeNull();
+    fireEvent.click(screen.getByTestId("nivel-internacional"));
+    expect(screen.getByTestId("url").textContent).toBe("?nivel=internacional");
+    expect(screen.getByTestId("vista-catalogo").getAttribute("data-nivel")).toBe("internacional");
+    fireEvent.click(screen.getByTestId("nivel-kawiil"));
+    expect(screen.getByTestId("url").textContent).toBe("");
+    expect(screen.getByTestId("stub-oficina")).toBeTruthy();
+  });
 });

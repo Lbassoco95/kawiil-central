@@ -10,6 +10,8 @@ import type { Departamento } from "@/lib/agentes/departamentos";
 const TW = 96, TH = 48, PX = 4.2, PARED = 120, MARGEN = 30;
 const P = (u: number, v: number) => ({ x: (u - v) * (TW / 2), y: (u + v) * (TH / 2) });
 const pts = (...q: Array<{ x: number; y: number }>) => q.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+// Con zonas propias (catálogo de Louis) cada zona lleva su color para distinguirlas; sin ellas, todas usan el tinte del departamento.
+const COLORES_ZONA = ["#8fb4d9", "#e3a9b0", "#9cc5a1", "#e0b341", "#b9a3d6", "#e8a77a"];
 const recorta = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 
 const CSS_SALA = `
@@ -45,9 +47,9 @@ function Puesto({ f, x, y, onElegir, elegido, texto }: { f: FiguraOficina; x: nu
 }
 
 // `etiqueta`: texto del estado si no es el de la oficina (Marketing usa el suyo). `elegidoId`: agente con el aro fijo.
-export function SalaIsometrica({ depto, figuras, onElegir, elegidoId, etiqueta }: { depto: Departamento; figuras: FiguraOficina[]; onElegir?: (id: string) => void; elegidoId?: string | null; etiqueta?: (f: FiguraOficina) => string }) {
+export function SalaIsometrica({ depto, figuras, onElegir, elegidoId, etiqueta, zonaDe }: { depto: Departamento; figuras: FiguraOficina[]; onElegir?: (id: string) => void; elegidoId?: string | null; etiqueta?: (f: FiguraOficina) => string; zonaDe?: (f: FiguraOficina) => string }) {
   const texto = (f: FiguraOficina) => etiqueta?.(f) || ESTADO_OFICINA[f.estado].etiqueta;
-  const sala = useMemo(() => distribuirSala(depto.clave, figuras, (f) => f.clave), [depto.clave, figuras]);
+  const sala = useMemo(() => distribuirSala(depto.clave, figuras, (f) => f.clave, zonaDe), [depto.clave, figuras, zonaDe]);
   const n = sala.n;
   // En pantallas angostas la sala se desliza de lado: se empieza viéndola por el centro, no por una esquina.
   const caja = useRef<HTMLDivElement>(null);
@@ -56,6 +58,7 @@ export function SalaIsometrica({ depto, figuras, onElegir, elegidoId, etiqueta }
   const sube = (p: { x: number; y: number }) => ({ x: p.x, y: p.y - PARED });
   const ancho = n * TW + MARGEN * 2, alto = n * TH + PARED + 40 + MARGEN;
   const ox = n * (TW / 2) + MARGEN, oy = PARED + MARGEN;
+  const colorDe = (nombre: string): string => (zonaDe ? COLORES_ZONA[Math.max(0, sala.zonas.findIndex((z) => z.nombre === nombre)) % COLORES_ZONA.length] : depto.tinte);
   const orden = [...sala.puestos].sort((a, b) => a.u + a.v - (b.u + b.v));
   const ventana = (desde: number, hasta: number, lado: "i" | "d") => {
     const f = (t: number, z: number) => { const p = lado === "d" ? P(t, 0) : P(0, t); return { x: p.x, y: p.y - z }; };
@@ -79,7 +82,7 @@ export function SalaIsometrica({ depto, figuras, onElegir, elegidoId, etiqueta }
           {Array.from({ length: n * n }, (_, k) => { const i = k % n, j = Math.floor(k / n); return (i + j) % 2 === 0 ? null : <polygon key={k} points={pts(P(i, j), P(i + 1, j), P(i + 1, j + 1), P(i, j + 1))} style={{ fill: "var(--sl-piso2)" }} />; })}
           {sala.zonas.map((z) => {
             const u0 = Math.max(0.15, z.u0), v0 = Math.max(0.15, z.v0), u1 = Math.min(n - 0.15, z.u1), v1 = Math.min(n - 0.15, z.v1);
-            return <polygon key={z.nombre} data-testid={`zona-${z.nombre}`} points={pts(P(u0, v0), P(u1, v0), P(u1, v1), P(u0, v1))} fill={depto.tinte} opacity={0.55} stroke={oscurecer(depto.tinte, 0.75)} strokeWidth={1.5} strokeDasharray="6 5" />;
+            return <polygon key={z.nombre} data-testid={`zona-${z.nombre}`} points={pts(P(u0, v0), P(u1, v0), P(u1, v1), P(u0, v1))} fill={colorDe(z.nombre)} opacity={zonaDe ? 0.38 : 0.55} stroke={zonaDe ? colorDe(z.nombre) : oscurecer(depto.tinte, 0.75)} strokeWidth={1.5} strokeDasharray="6 5" />;
           })}
           {orden.map(({ item, u, v }) => { const p = P(u, v); return <Puesto key={item.id} f={item} x={p.x} y={p.y + TH * 0.5} onElegir={onElegir} elegido={item.id === elegidoId} texto={texto(item)} />; })}
         </g>
@@ -89,7 +92,7 @@ export function SalaIsometrica({ depto, figuras, onElegir, elegidoId, etiqueta }
       <ul className="mt-2 grid gap-2 px-2 pb-2 sm:grid-cols-2" aria-label={`Zonas de ${depto.nombre}`} data-testid="sala-zonas">
         {sala.zonas.map((z) => (
           <li key={z.nombre} className="rounded-2xl border border-border/50 bg-background/40 p-2.5">
-            <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-foreground/75">{z.nombre}</p>
+            <p className="mb-1.5 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-foreground/75">{zonaDe && <span aria-hidden className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: colorDe(z.nombre) }} />}{z.nombre}</p>
             <ul className="flex flex-wrap gap-1.5">
               {z.claves.map((c) => { const f = figuras.find((x) => x.clave === c)!; return (
                 <li key={f.id}>

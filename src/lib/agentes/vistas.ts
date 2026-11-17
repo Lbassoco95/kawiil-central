@@ -7,13 +7,15 @@ import { DEPARTAMENTOS } from "./departamentos";
 
 export type Vista = { tipo: "plano" } | { tipo: "isla"; clave: string } | { tipo: "agente"; id: string };
 export const VISTA_PLANO: Vista = { tipo: "plano" };
+const CATALOGO = /^louis:[a-z0-9-]{1,80}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function leerVista(param: string | null | undefined): Vista {
   if (!param) return VISTA_PLANO;
-  const [tipo, valor] = param.split(":");
+  const corte = param.indexOf(":"), tipo = corte < 0 ? param : param.slice(0, corte), valor = corte < 0 ? "" : param.slice(corte + 1);
   if (tipo === "isla" && valor && Object.prototype.hasOwnProperty.call(DEPARTAMENTOS, valor)) return { tipo: "isla", clave: valor };
   if (tipo === "agente" && valor && UUID.test(valor)) return { tipo: "agente", id: valor.toLowerCase() };
+  if (tipo === "agente" && CATALOGO.test(valor)) return { tipo: "agente", id: valor };   // agente del catálogo de Louis (niveles 2 y 3)
   return VISTA_PLANO;   // cualquier valor raro vuelve al plano: nunca una pantalla vacía
 }
 export const escribirVista = (v: Vista): string | null => (v.tipo === "plano" ? null : v.tipo === "isla" ? `isla:${v.clave}` : `agente:${v.id}`);
