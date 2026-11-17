@@ -10,6 +10,29 @@ function rawErrorMessage(err: unknown): string {
   return String(err ?? "").trim();
 }
 
+type ServiceWorkerHost = { ready: Promise<ServiceWorkerRegistration> };
+
+/**
+ * Devuelve el registro cuando ya tiene un service worker ACTIVO. Si ya lo tiene, no espera;
+ * si no, espera a `navigator.serviceWorker.ready` con un tope para no quedarse colgado.
+ */
+export async function waitForActiveServiceWorker(
+  reg: Pick<ServiceWorkerRegistration, "active">,
+  timeoutMs = 10_000,
+  host: ServiceWorkerHost = navigator.serviceWorker,
+): Promise<ServiceWorkerRegistration> {
+  if (reg.active) return reg as ServiceWorkerRegistration;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error("service worker: tiempo de espera agotado")), timeoutMs);
+  });
+  try {
+    return await Promise.race([host.ready, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 /** Mensaje en español para errores típicos de SW / PushManager (p. ej. permiso denegado). */
 export function formatPushRegistrationUserMessage(err: unknown): string {
   const raw = rawErrorMessage(err);
@@ -25,7 +48,12 @@ export function formatPushRegistrationUserMessage(err: unknown): string {
   ) {
     return "El navegador bloqueó el registro de avisos con la app cerrada. Concede «Notificaciones» para este sitio (candado en la barra de direcciones), recarga si hace falta, y vuelve a pulsar «Registrar push».";
   }
-  if (m.includes("failed to update a serviceworker") || m.includes("serviceworker")) {
+  if (
+    m.includes("failed to update a serviceworker") ||
+    m.includes("serviceworker") ||
+    m.includes("service worker") ||
+    m.includes("tiempo de espera")
+  ) {
     return "No se pudo registrar el trabajador en segundo plano. Prueba en una ventana normal (no modo incógnito), HTTPS, y recargando la página.";
   }
   return raw;
@@ -58,6 +86,9 @@ export async function registerWebPushSubscription(): Promise<void> {
   let reg: ServiceWorkerRegistration;
   try {
     reg = await navigator.serviceWorker.register("/sw.js");
+    // La primera vez el trabajador aún se está instalando: Safari/Chrome rechazan suscribir sin uno activo
+    // («Subscribing for push requires an active service worker»). Esperamos a que quede activo.
+    reg = await waitForActiveServiceWorker(reg);
   } catch (e) {
     throw new Error(formatPushRegistrationUserMessage(e));
   }
