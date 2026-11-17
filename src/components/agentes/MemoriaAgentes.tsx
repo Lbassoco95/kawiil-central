@@ -37,10 +37,10 @@ function Fila({ m, ahora, ocupado, onCambiar }: { m: MemoriaPublica; ahora: Date
   );
 }
 
-export function MemoriaAgentes({ agentes, ahora }: { agentes: AgenteRegistro[]; ahora: Date }) {
+export function MemoriaAgentes({ agentes, ahora, agenteInicial, fijo = false }: { agentes: AgenteRegistro[]; ahora: Date; agenteInicial?: string; fijo?: boolean }) {
   const memorias = useMemoriasAgentes();
   const cambiar = useCambiarMemoria();
-  const [agenteId, setAgenteId] = useState("");
+  const [agenteId, setAgenteId] = useState(agenteInicial ?? "");
   const [trabajando, setTrabajando] = useState<string | null>(null);
   const lista = useMemo(() => agentes.filter((a) => a.status !== "archived"), [agentes]);
   const porAgente = useMemo(() => {
@@ -65,7 +65,7 @@ export function MemoriaAgentes({ agentes, ahora }: { agentes: AgenteRegistro[]; 
         <p className="text-xs text-muted-foreground">Puedes apagar una memoria que esté mal y volver a encenderla; no se borra ni se edita nada.</p>
       </div>
       {memorias.isLoading ? <p className="text-sm text-muted-foreground" role="status">Leyendo la memoria de los agentes…</p>
-        : memorias.isError ? <p role="alert" className="zen-glass rounded-2xl p-3 text-sm text-destructive" data-testid="memoria-error">{(memorias.error as Error).message}</p> : (
+        : memorias.isError ? <p role="alert" className="zen-glass rounded-2xl p-3 text-sm text-destructive dark:text-red-300" data-testid="memoria-error">{(memorias.error as Error).message}</p> : (
           <>
             <ul className="flex flex-wrap gap-2 text-xs text-muted-foreground" aria-label="Resumen de memorias" data-testid="memoria-resumen">
               <li className="rounded-full border border-border/50 px-2.5 py-0.5">Memorias: {total.total}</li>
@@ -73,9 +73,9 @@ export function MemoriaAgentes({ agentes, ahora }: { agentes: AgenteRegistro[]; 
               {total.apagadas > 0 && <li className="rounded-full border border-border/50 px-2.5 py-0.5">Apagadas: {total.apagadas}</li>}
               {total.vencidas > 0 && <li className="rounded-full border border-border/50 px-2.5 py-0.5">Vencidas: {total.vencidas}</li>}
             </ul>
-            <div className="zen-glass rounded-3xl p-4">
+            {!fijo && <div className="zen-glass rounded-3xl p-4">
               <SelectorAgentes agentes={lista} valor={agenteId} onCambio={setAgenteId} testid="mem-sel" etiqueta="Agente" detalle={detalle} />
-            </div>
+            </div>}
             {elegido && (
               <section className="zen-glass space-y-2 rounded-3xl p-4" aria-label={`Memoria de ${nombreAgente(elegido)}`} data-testid="memoria-panel">
                 <h2 className="text-base font-medium">Memoria de {nombreAgente(elegido)}</h2>

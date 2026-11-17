@@ -6,7 +6,7 @@ import {
   agruparPorDepartamento, celdasDe, contarTareas, ANCHO_ISLA_MAX, escenaPara, filasDeTareas, FILTROS_TAREAS, isoPunto, posicionesIslas, resumenDepartamento, TH, TW, DIAS_HECHAS,
   type FiltroTareas, type FilaTarea, type GrupoDepartamento,
 } from "@/lib/agentes/departamentos";
-import { CSS, TONO } from "@/components/agentes/escritorio";
+import { CSS, TONO, pintarAccesorios } from "@/components/agentes/escritorio";
 import { DIAS_COLABORACION, llamadasEntreAgentes, origenDeTarea } from "@/lib/agentes/colaboracion";
 
 // Plano por departamentos (Zen + Glass): una isla isométrica por departamento con sus agentes en su escritorio (los mismos dibujos y animaciones de la
@@ -16,6 +16,8 @@ import { DIAS_COLABORACION, llamadasEntreAgentes, origenDeTarea } from "@/lib/ag
 // el código y los colores son propios de Kawiil.
 
 const CSS_PLANO = `
+.pl-isla-hit:hover{fill:rgba(255,255,255,.18)}
+.pl-isla-hit:focus-visible{outline:none;stroke:#8fb4d9;stroke-width:3}
 .pl-agente .pl-anillo{opacity:0;transition:opacity .25s ease}
 .pl-agente:hover .pl-anillo,.pl-agente:focus-visible .pl-anillo{opacity:1}
 .pl-agente:focus{outline:none}
@@ -35,7 +37,7 @@ const pts = (...p: Array<{ x: number; y: number }>) => p.map((q) => `${q.x},${q.
 
 function Agente({ f, x, y, depto, onElegir }: { f: FiguraOficina; x: number; y: number; depto: string; onElegir?: (id: string) => void }) {
   const info = ESTADO_OFICINA[f.estado], c = TONO[info.color] ?? TONO.gris;
-  const sprite = spriteAgente(f.estado, f.id, c.cuerpo);
+  const sprite = spriteAgente(f.estado, f.id, c.cuerpo, f.clave);
   const ancho = ANCHO * PXS, alto = ALTO * PXS, apagado = f.estado === "apagado";
   const nombre = recorta(f.nombre, 11), tagW = Math.max(34, nombre.length * 6.1 + 14);
   const activar = () => onElegir?.(f.id);
@@ -49,6 +51,7 @@ function Agente({ f, x, y, depto, onElegir }: { f: FiguraOficina; x: number; y: 
         <rect className="pl-anillo" x={-ancho / 2 - 6} y={-alto - 22} width={ancho + 12} height={alto + 26} rx={10} fill="rgba(143,180,217,.12)" stroke="#8fb4d9" strokeWidth={1.5} />
         <g opacity={apagado ? 0.55 : 1} transform={`translate(${-ancho / 2},${-alto + 3})`} shapeRendering="crispEdges">
           {sprite.frames.map((fr, k) => <g key={k} className={sprite.frames.length > 1 ? `of-frame of-frame-${k}` : undefined}>{pintarEsc(fr)}</g>)}
+          {pintarAccesorios(sprite.accesorios, PXS)}
           <g className="of-emote">{pintarEsc(sprite.emote)}</g>
         </g>
         <g transform={`translate(0,${-alto - 8})`}>
@@ -60,7 +63,7 @@ function Agente({ f, x, y, depto, onElegir }: { f: FiguraOficina; x: number; y: 
   );
 }
 
-function Isla({ g, centro, activa, onElegir }: { g: GrupoDepartamento; centro: { x: number; y: number }; activa: boolean; onElegir?: (id: string) => void }) {
+function Isla({ g, centro, activa, onElegir, onAbrir }: { g: GrupoDepartamento; centro: { x: number; y: number }; activa: boolean; onElegir?: (id: string) => void; onAbrir?: (clave: string) => void }) {
   const { cols, filas } = celdasDe(g.figuras.length);
   const s = Math.min(1, ANCHO_ISLA_MAX / ((cols + filas) * TW));
   const A = isoPunto(0, 0, cols, filas), B = isoPunto(cols, 0, cols, filas), C = isoPunto(cols, filas, cols, filas), D = isoPunto(0, filas, cols, filas);
@@ -71,7 +74,13 @@ function Isla({ g, centro, activa, onElegir }: { g: GrupoDepartamento; centro: {
       <polygon points={pts(D, C, baja(C), baja(D))} fill={oscurecer(g.depto.tinte, 0.86)} />
       <polygon points={pts(B, C, baja(C), baja(B))} fill={oscurecer(g.depto.tinte, 0.74)} />
       <polygon points={pts(A, B, C, D)} fill={g.depto.tinte} />
-      {activa && <polygon className="pl-viva" points={pts(A, B, C, D)} fill="rgba(95,179,122,.22)" stroke="#3f9d63" strokeWidth={5} strokeLinejoin="round" data-testid={`isla-viva-${g.depto.clave}`} />}
+      {onAbrir && (
+        // Toda la isla se puede tocar (el piso y su orilla); los agentes se dibujan encima y conservan su propio clic. La transformación va anulada por index.css.
+        <polygon className="pl-isla-hit" role="button" tabIndex={0} data-testid={`isla-abrir-${g.depto.clave}`} style={{ cursor: "pointer", transform: "none", pointerEvents: "all" }} fill="transparent"
+          points={pts(A, B, baja(B), baja(C), baja(D), D)} aria-label={`Abrir la isla ${g.depto.nombre}: ${g.figuras.length} ${g.figuras.length === 1 ? "agente" : "agentes"}${activa ? ", trabajando ahora" : ""}`}
+          onClick={() => onAbrir(g.depto.clave)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onAbrir(g.depto.clave); } }} />
+      )}
+      {activa && <polygon className="pl-viva" style={{ pointerEvents: "none" }} points={pts(A, B, C, D)} fill="rgba(95,179,122,.22)" stroke="#3f9d63" strokeWidth={5} strokeLinejoin="round" data-testid={`isla-viva-${g.depto.clave}`} />}
       {Array.from({ length: cols * filas }, (_, k) => {
         const i = k % cols, j = Math.floor(k / cols);
         return <polygon key={k} points={pts(isoPunto(i, j, cols, filas), isoPunto(i + 1, j, cols, filas), isoPunto(i + 1, j + 1, cols, filas), isoPunto(i, j + 1, cols, filas))} fill="none" stroke="rgba(255,255,255,.5)" strokeWidth={1} />;
@@ -85,12 +94,12 @@ function Isla({ g, centro, activa, onElegir }: { g: GrupoDepartamento; centro: {
 }
 
 const TW_CARD = 208, TH_CARD = 108;
-function Tarjeta({ g, x, y, ahora, tareas, activa }: { g: GrupoDepartamento; x: number; y: number; ahora: Date; tareas: TareaAgente[]; activa: boolean }) {
+function Tarjeta({ g, x, y, ahora, tareas, activa, onAbrir }: { g: GrupoDepartamento; x: number; y: number; ahora: Date; tareas: TareaAgente[]; activa: boolean; onAbrir?: (clave: string) => void }) {
   const r = resumenDepartamento(g.figuras.map((f) => f.id), tareas, ahora);
   const stat = (etq: string, n: number, dx: number) => <text key={etq} x={x + dx} y={y + 93} fontSize={9} letterSpacing={0.6} style={{ fill: "#7a6d58" }}>{etq} <tspan fontSize={13} fontWeight={700} style={{ fill: "#3f362a" }}>{n}</tspan></text>;
   return (
     <g data-testid={`tarjeta-${g.depto.clave}`} role="group" aria-label={`${g.depto.nombre}: ${r.agentes} agentes, ${r.haciendo} haciendo, ${r.enCola} en cola, ${r.hechas} hechas en ${DIAS_HECHAS} días${r.conError ? `, ${r.conError} con error` : ""}${activa ? ", trabajando ahora" : ""}`}>
-      <rect x={x} y={y} width={TW_CARD} height={TH_CARD} rx={18} fill="rgba(255,255,255,.8)" stroke="rgba(120,100,70,.16)" />
+      <rect x={x} y={y} width={TW_CARD} height={TH_CARD} rx={18} fill="rgba(255,255,255,.8)" stroke="rgba(120,100,70,.16)" style={onAbrir ? { cursor: "pointer" } : undefined} onClick={onAbrir ? () => onAbrir(g.depto.clave) : undefined} />
       <rect x={x} y={y + 14} width={4} height={26} rx={2} fill={oscurecer(g.depto.tinte, 0.8)} />
       <circle className={activa ? "pl-viva" : undefined} cx={x + 20} cy={y + 24} r={5} fill={activa ? "#5fb37a" : oscurecer(g.depto.tinte, 0.82)} />
       <text x={x + 32} y={y + 28} fontSize={13} fontWeight={600} style={{ fill: "#3f362a" }}>{recorta(g.depto.nombre, r.conError > 0 ? 15 : 24)}</text>
@@ -112,10 +121,10 @@ function Tarjeta({ g, x, y, ahora, tareas, activa }: { g: GrupoDepartamento; x: 
 }
 
 const ESTADO_TAREA: Record<FilaTarea["grupo"], { t: string; pastilla: string; barra: string }> = {
-  en_curso: { t: "En curso", pastilla: "border-sky-300/70 bg-sky-100/60 text-sky-900", barra: "bg-sky-300" },
-  en_cola: { t: "En cola", pastilla: "border-amber-300/70 bg-amber-100/60 text-amber-900", barra: "bg-amber-200" },
-  terminadas: { t: "Terminada", pastilla: "border-emerald-300/70 bg-emerald-100/60 text-emerald-900", barra: "bg-emerald-300" },
-  con_error: { t: "Con error", pastilla: "border-rose-300/70 bg-rose-100/60 text-rose-900", barra: "bg-rose-300" },
+  en_curso: { t: "En curso", pastilla: "border-sky-300/70 bg-sky-100/60 text-sky-900 dark:border-sky-400/50 dark:bg-sky-400/20 dark:text-sky-100", barra: "bg-sky-300" },
+  en_cola: { t: "En cola", pastilla: "border-amber-300/70 bg-amber-100/60 text-amber-900 dark:border-amber-400/50 dark:bg-amber-400/20 dark:text-amber-100", barra: "bg-amber-200" },
+  terminadas: { t: "Terminada", pastilla: "border-emerald-300/70 bg-emerald-100/60 text-emerald-900 dark:border-emerald-400/50 dark:bg-emerald-400/20 dark:text-emerald-100", barra: "bg-emerald-300" },
+  con_error: { t: "Con error", pastilla: "border-rose-300/70 bg-rose-100/60 text-rose-900 dark:border-rose-400/50 dark:bg-rose-400/20 dark:text-rose-100", barra: "bg-rose-300" },
 };
 
 function Barra({ grupo }: { grupo: FilaTarea["grupo"] }) {
@@ -130,7 +139,7 @@ function Barra({ grupo }: { grupo: FilaTarea["grupo"] }) {
 }
 
 // `alAbrirMarketing`: Marketing tiene su módulo aparte (/marketing). Su isla es un resumen: al elegir uno de sus agentes o tareas se abre ese módulo en vez de la Oficina.
-export function PlanoDepartamentos({ figuras, agentes, tareas, ahora, onElegir, alAbrirMarketing }: { figuras: FiguraOficina[]; agentes: AgenteRegistro[]; tareas: TareaAgente[]; ahora: Date; onElegir?: (id: string) => void; alAbrirMarketing?: () => void }) {
+export function PlanoDepartamentos({ figuras, agentes, tareas, ahora, onElegir, alAbrirMarketing, onAbrirIsla }: { figuras: FiguraOficina[]; agentes: AgenteRegistro[]; tareas: TareaAgente[]; ahora: Date; onElegir?: (id: string) => void; alAbrirMarketing?: () => void; onAbrirIsla?: (clave: string) => void }) {
   const [filtro, setFiltro] = useState<FiltroTareas>("todas");
   const grupos = useMemo(() => agruparPorDepartamento(figuras, agentes), [figuras, agentes]);
   const ids = useMemo(() => new Set(figuras.map((f) => f.id)), [figuras]);
@@ -181,11 +190,11 @@ export function PlanoDepartamentos({ figuras, agentes, tareas, ahora, onElegir, 
               </g>
             );
           })}
-          {grupos.map((g, k) => <Isla key={g.depto.clave} g={g} centro={posiciones[k]} activa={activaDe(g)} onElegir={elegir} />)}
+          {grupos.map((g, k) => <Isla key={g.depto.clave} g={g} centro={posiciones[k]} activa={activaDe(g)} onElegir={elegir} onAbrir={onAbrirIsla} />)}
           {grupos.map((g, k) => {
             const { cols, filas: fl } = celdasDe(g.figuras.length), s = Math.min(1, ANCHO_ISLA_MAX / ((cols + fl) * TW)), mitad = ((cols + fl) * TH * s) / 2, p = posiciones[k];
             const y = p.fila === "arriba" ? Math.max(12, p.y - mitad - TH_CARD - 92) : Math.min(escena.alto - TH_CARD - 10, p.y + mitad + PROF + 22);
-            return <Tarjeta key={"t" + g.depto.clave} g={g} x={p.x - TW_CARD / 2} y={y} ahora={ahora} tareas={visibles} activa={activaDe(g)} />;
+            return <Tarjeta key={"t" + g.depto.clave} g={g} x={p.x - TW_CARD / 2} y={y} ahora={ahora} tareas={visibles} activa={activaDe(g)} onAbrir={onAbrirIsla} />;
           })}
         </svg>
         {idsMarketing.size > 0 && (
@@ -218,7 +227,7 @@ export function PlanoDepartamentos({ figuras, agentes, tareas, ahora, onElegir, 
                       <span className="truncate font-medium">{t.agente}</span>
                       <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] ${e.pastilla}`}>{e.t}</span>
                     </span>
-                    <span className="block truncate text-xs text-muted-foreground">{t.tipo} · {cuandoRelativo(t.fin ?? t.creada, ahora)}{origenes.get(t.id) ? ` · pedida por ${origenes.get(t.id) === "desconocido" ? "otra tarea" : nombreDe.get(origenes.get(t.id)!) ?? "otro agente"}` : ""}</span>
+                    <span className="block truncate text-xs text-foreground/70">{t.tipo} · {cuandoRelativo(t.fin ?? t.creada, ahora)}{origenes.get(t.id) ? ` · pedida por ${origenes.get(t.id) === "desconocido" ? "otra tarea" : nombreDe.get(origenes.get(t.id)!) ?? "otro agente"}` : ""}</span>
                     <Barra grupo={t.grupo} />
                   </button>
                 </li>

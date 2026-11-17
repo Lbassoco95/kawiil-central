@@ -4,6 +4,7 @@ import {
   cumplimiento, nombreAgente, senalAgente, ultimaTareaDe,
   type AgenteRegistro, type Cumplimiento, type Senal, type TareaMarketing,
 } from "./agentesRegistroLogica";
+import type { EstadoOficina, FiguraOficina } from "@/lib/agentes/oficina";
 
 export type Animacion = "escribiendo" | "leyendo" | "descansando" | "error" | "sin_datos" | "pensando";
 export type ColorPastilla = "verde" | "amarillo" | "rojo" | "gris";
@@ -11,21 +12,18 @@ export type ColorPastilla = "verde" | "amarillo" | "rojo" | "gris";
 // Una corrida de estos agentes dura segundos: durante los 30 minutos siguientes el personaje «acaba de trabajar».
 export const VENTANA_RECIENTE_MS = 30 * 60_000;
 
-// Aspecto de cada personaje (dibujado aparte; no se usa arte de terceros) y su sitio en la oficina.
-export interface Aspecto { corto: string; pelo: string; ropa: string; x: number; y: number; trabajo: Exclude<Animacion, "descansando" | "error" | "sin_datos"> }
+// Nombre corto y tipo de trabajo de cada personaje. El dibujo y el sitio en la sala son los de la sala isométrica (lib/agentes/personajes y salas).
+export interface Aspecto { corto: string; trabajo: Exclude<Animacion, "descansando" | "error" | "sin_datos"> }
 export const ASPECTO: Record<string, Aspecto> = {
-  marketing_vigilante: { corto: "Vigilante", pelo: "#5a3b25", ropa: "#6f9d7a", x: 80, y: 84, trabajo: "escribiendo" },
-  marketing_informe_diario: { corto: "Informe", pelo: "#222222", ropa: "#6d9bc3", x: 215, y: 84, trabajo: "leyendo" },
-  marketing_vigia: { corto: "Vigía", pelo: "#b07a3a", ropa: "#b8a98a", x: 350, y: 84, trabajo: "leyendo" },
-  marketing_analista: { corto: "Analista", pelo: "#3a2a1a", ropa: "#9b7b4f", x: 520, y: 84, trabajo: "escribiendo" },
-  // El CMO se sienta en su propia franja «Dirección», encima del Analista; el resto del equipo baja DESPLAZA_CMO píxeles (ver personajes()).
-  marketing_cmo: { corto: "CMO", pelo: "#2a1f3a", ropa: "#6b5b95", x: 520, y: 48, trabajo: "escribiendo" },
-  // El Investigador web se sienta a la derecha del Analista (zona Análisis).
-  marketing_investigador: { corto: "Investigador", pelo: "#1f3a3a", ropa: "#5b8a95", x: 585, y: 84, trabajo: "leyendo" },
-  // Comunicación interna: redacta los avisos para el equipo; se sienta en la segunda fila, a la derecha del Vigía.
-  marketing_comunicacion_interna: { corto: "Comunicación", pelo: "#6b3a2a", ropa: "#c98a5b", x: 450, y: 140, trabajo: "escribiendo" },
+  marketing_vigilante: { corto: "Vigilante", trabajo: "escribiendo" },
+  marketing_informe_diario: { corto: "Informe", trabajo: "leyendo" },
+  marketing_vigia: { corto: "Vigía", trabajo: "leyendo" },
+  marketing_analista: { corto: "Analista", trabajo: "escribiendo" },
+  marketing_cmo: { corto: "CMO", trabajo: "escribiendo" },
+  marketing_investigador: { corto: "Investigador", trabajo: "leyendo" },
+  marketing_comunicacion_interna: { corto: "Comunicación", trabajo: "escribiendo" },
 };
-const ASPECTO_POR_DEFECTO: Aspecto = { corto: "Agente", pelo: "#444444", ropa: "#999999", x: 300, y: 84, trabajo: "leyendo" };
+const ASPECTO_POR_DEFECTO: Aspecto = { corto: "Agente", trabajo: "leyendo" };
 export const aspectoDe = (a: Pick<AgenteRegistro, "name">): Aspecto => ASPECTO[a.name] ?? ASPECTO_POR_DEFECTO;
 
 export interface EstadoVisual {
@@ -66,20 +64,23 @@ export function personajes(agentes: AgenteRegistro[], tareas: TareaMarketing[], 
   return agentes
     .filter((a) => a.name.startsWith("marketing_") && a.kind === "system" && a.status !== "archived")
     .sort((x, y) => (ORDEN.indexOf(x.name) + 99) % 99 - (ORDEN.indexOf(y.name) + 99) % 99 || x.name.localeCompare(y.name))
-    .map((a, _i, todos) => {
-      const hayCmo = todos.some((x) => x.name === "marketing_cmo");
+    .map((a) => {
       const propias = tareas.filter((t) => t.agent_id === a.id).sort((p, q) => (q.completed_at ?? "").localeCompare(p.completed_at ?? ""));
       const ultima = ultimaTareaDe(a, tareas);
-      const base = aspectoDe(a), aspecto = hayCmo && a.name !== "marketing_cmo" ? { ...base, y: base.y + DESPLAZA_CMO } : base;
+      const aspecto = aspectoDe(a);
       return { id: a.id, clave: a.name, nombre: nombreAgente(a), aspecto, estado: estadoVisual(a, ultima, ahora, a.id === pensandoId), ultima, historial: propias.slice(0, 5) };
     });
 }
 
-// ¿Qué personaje está bajo el clic? (coordenadas del lienzo lógico)
-export const ANCHO = 640, ALTO = 210, DESPLAZA_CMO = 90;
-// Con el CMO la oficina gana una franja arriba («Dirección»): el lienzo es DESPLAZA_CMO píxeles más alto.
-export const hayCmo = (lista: Array<Pick<PersonajeOficina, "clave">>): boolean => lista.some((p) => p.clave === "marketing_cmo");
-export const altoOficina = (lista: Array<Pick<PersonajeOficina, "clave">>): number => ALTO + (hayCmo(lista) ? DESPLAZA_CMO : 0);
-export function personajeEn(x: number, y: number, lista: PersonajeOficina[]): PersonajeOficina | undefined {
-  return lista.find((p) => x >= p.aspecto.x - 22 && x <= p.aspecto.x + 38 && y >= p.aspecto.y - 34 && y <= p.aspecto.y + 62);
+// Marketing en la sala isométrica: cada personaje se dibuja con el estado de oficina que más se le parece; la etiqueta que se lee sigue siendo la de Marketing.
+//   pensando → trabajando · acaba de trabajar → terminó · con «!» (error, atraso, meta sin cumplir) → algo falló · sin datos → sin señal · el resto → disponible.
+export function estadoDeSala(e: EstadoVisual): EstadoOficina {
+  if (e.animacion === "pensando") return "trabajando";
+  if (e.burbuja === "!" || e.animacion === "error") return "con_error";
+  if (e.animacion === "sin_datos") return "apagado";
+  if (e.animacion === "escribiendo" || e.animacion === "leyendo") return "celebrando";
+  return "sentado";
+}
+export function figurasDeSala(lista: PersonajeOficina[]): FiguraOficina[] {
+  return lista.map((p) => ({ id: p.id, clave: p.clave, nombre: p.nombre, estado: estadoDeSala(p.estado), ultimoLatido: null, ultimaTareaAt: p.ultima?.completed_at ?? null, tareasBien: 0, tareasMal: 0, descripcion: "", rol: "" }));
 }

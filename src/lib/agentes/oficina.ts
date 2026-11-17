@@ -38,7 +38,7 @@ export function estadoOficina(a: AgenteRegistro, tareas: TareaAgente[], ahora: D
 }
 
 export interface FiguraOficina {
-  id: string; nombre: string; estado: EstadoOficina; ultimoLatido: string | null; ultimaTareaAt: string | null;
+  id: string; clave: string; nombre: string; estado: EstadoOficina; ultimoLatido: string | null; ultimaTareaAt: string | null;
   tareasBien: number; tareasMal: number; descripcion: string; rol: string;
 }
 
@@ -46,7 +46,7 @@ export function figurasOficina(agentes: AgenteRegistro[], tareas: TareaAgente[],
   return agentes
     .filter((a) => a.status !== "archived")
     .map((a) => ({
-      id: a.id, nombre: nombreAgente(a), estado: estadoOficina(a, tareas, ahora), ultimoLatido: a.last_heartbeat, ultimaTareaAt: a.last_task_at,
+      id: a.id, clave: a.name, nombre: nombreAgente(a), estado: estadoOficina(a, tareas, ahora), ultimoLatido: a.last_heartbeat, ultimaTareaAt: a.last_task_at,
       tareasBien: a.tasks_completed ?? 0, tareasMal: a.tasks_failed ?? 0, descripcion: descripcionAgente(a), rol: rolCorto(a),
     }))
     .sort((x, y) => x.nombre.localeCompare(y.nombre));

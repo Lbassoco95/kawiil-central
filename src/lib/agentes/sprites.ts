@@ -1,17 +1,20 @@
 // Sprites de pixel art propios de la oficina (dibujados aquí, sin imágenes externas: no hay licencias de terceros).
-// Cada sprite es una cuadrícula de 20 × 21 píxeles que se arma con rectángulos; la figura cambia según el estado.
+// Cada sprite es una cuadrícula de 20 × 23 píxeles que se arma con rectángulos; la figura cambia según el estado.
+// Formato único para todos los agentes: cara y cabello propios, escritorio de madera con patas, monitor de pantalla azul y accesorios que los distinguen.
 import type { EstadoOficina } from "./oficina";
+import { aspectoFijoDe, dibujoAccesorios, type DibujoAccesorio, type EstiloPelo } from "./personajes";
+export type { EstiloPelo } from "./personajes";
 
 export interface Pix { x: number; y: number; c: string }
 export interface Rect { x: number; y: number; w: number; h: number; c: string }
-export interface SpriteAgente { ancho: number; alto: number; frames: Rect[][]; emote: Rect[] }
+/** `accesorios` está en unidades de 5 por celda (como si la celda midiera 5): al dibujar se multiplica por escala/5. */
+export interface SpriteAgente { ancho: number; alto: number; frames: Rect[][]; emote: Rect[]; accesorios: DibujoAccesorio[] }
 
-export const ANCHO = 20, ALTO = 21;
+export const ANCHO = 20, ALTO = 23;
 
 const PIELES = ["#f1dcc2", "#e6c29a", "#c99468", "#8f5d3d"];
 const PELOS = ["#4a3b2c", "#2b2723", "#8b5a2b", "#b0652a", "#6e6a66"];
-const OJO = "#3d3226", BOCA = "#8a4b43", ESCRITORIO = "#d9c7a8", ESCRITORIO_SOMBRA = "#bfa882", PORTATIL = "#9aa3ad", PORTATIL_SOMBRA = "#7c858f";
-export type EstiloPelo = "corto" | "largo" | "mono" | "rizado";
+const OJO = "#3d3226", BOCA = "#8a4b43", MADERA = "#dcb98f", MADERA_SOMBRA = "#c49a68", MADERA_BORDE = "#b58a5a", PATA = "#9b7550", MARCO = "#59636f", PANTALLA = "#bfe3ea";
 const ESTILOS: EstiloPelo[] = ["corto", "largo", "mono", "rizado"];
 
 function hash(s: string): number { let h = 2166136261; for (const ch of s) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
@@ -93,9 +96,9 @@ function personaje(a: Aspecto, ojos: Ojos, boca: Boca, brazos: Brazos, dy = 0): 
 }
 
 function escritorio(estado: EstadoOficina): Pix[] {
-  const p: Pix[] = [...rect(1, 17, 18, 17, ESCRITORIO), ...rect(1, 18, 18, 20, ESCRITORIO_SOMBRA)];
-  // Portátil visto por detrás (la pantalla mira al agente)
-  p.push(...rect(7, 14, 12, 16, PORTATIL), ...rect(7, 16, 12, 16, PORTATIL_SOMBRA));
+  // Mesa de madera con patas; el monitor azul mira al agente (se ve por detrás: marco y pantalla).
+  const p: Pix[] = [...rect(1, 17, 18, 17, MADERA), ...rect(1, 18, 18, 19, MADERA_SOMBRA), ...rect(1, 20, 18, 20, MADERA_BORDE), ...rect(2, 21, 3, 22, PATA), ...rect(16, 21, 17, 22, PATA)];
+  p.push(...rect(6, 13, 13, 13, MARCO), ...rect(6, 14, 6, 15, MARCO), ...rect(13, 14, 13, 15, MARCO), ...rect(7, 14, 12, 15, PANTALLA), ...rect(6, 16, 13, 16, MARCO));
   if (estado === "trabajando") p.push(...dot(9, 15, "#7fd1a0"), ...dot(10, 15, "#7fd1a0"));
   if (estado === "sentado" || estado === "celebrando") p.push(...rect(16, 15, 17, 16, "#b5835a"), ...dot(18, 15, "#b5835a"));  // taza
   return p;
@@ -114,13 +117,18 @@ function glifo(g: string, x0: number, y0: number, c: string): Pix[] {
   return o;
 }
 
-export function aspectoDe(id: string, camisa: string): Aspecto {
+export function aspectoDe(id: string, camisa: string, clave?: string | null): Aspecto & { accesorios: string[] } {
+  const fijo = aspectoFijoDe(clave);
+  if (fijo) return { piel: fijo.piel, pelo: fijo.pelo, estilo: fijo.estilo, camisa, accesorios: fijo.accesorios };
   const h = hash(id);
-  return { piel: PIELES[h % PIELES.length], pelo: PELOS[(h >>> 3) % PELOS.length], estilo: ESTILOS[(h >>> 6) % ESTILOS.length], camisa };
+  // Un agente nuevo (sin aspecto en el diseño) recibe, además, un accesorio elegido por su id para distinguirse a primera vista.
+  const accesorios = [["glasses"], ["glasses_sq"], ["headband"], ["badge"], ["scarf"], ["earring"], [], []][(h >>> 9) % 8];
+  return { piel: PIELES[h % PIELES.length], pelo: PELOS[(h >>> 3) % PELOS.length], estilo: ESTILOS[(h >>> 6) % ESTILOS.length], camisa, accesorios };
 }
 
-export function spriteAgente(estado: EstadoOficina, id: string, camisa: string): SpriteAgente {
-  const a = aspectoDe(id, camisa), esc = escritorio(estado);
+/** `clave` = nombre real del agente en el registro (`agent_registry.name`): si está en el diseño usa su aspecto fijo. */
+export function spriteAgente(estado: EstadoOficina, id: string, camisa: string, clave?: string | null): SpriteAgente {
+  const { accesorios, ...a } = aspectoDe(id, camisa, clave), esc = escritorio(estado);
   const arma = (...capas: Pix[][]) => aRects(capas.flat());
   let frames: Rect[][], emote: Pix[] = [];
   switch (estado) {
@@ -143,5 +151,5 @@ export function spriteAgente(estado: EstadoOficina, id: string, camisa: string):
     default: // apagado
       frames = [arma(personaje(a, "cerrados", "dormida", "reposo", 1), esc)];
   }
-  return { ancho: ANCHO, alto: ALTO, frames, emote: aRects(emote) };
+  return { ancho: ANCHO, alto: ALTO, frames, emote: aRects(emote), accesorios: dibujoAccesorios(accesorios, a.pelo).map((d) => (estado === "descansando" || estado === "apagado" ? { ...d, y: d.y + 5 } : d)) };
 }

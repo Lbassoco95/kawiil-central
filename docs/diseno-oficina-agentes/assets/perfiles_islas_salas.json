@@ -1,0 +1,806 @@
+{
+ "perfiles": {
+  "amatl": {
+   "arquetipo": "La archivista meticulosa",
+   "habla": "Pausada y precisa",
+   "frase": "«Antes de guardarlo, lo reviso dos veces.»",
+   "rasgos": [
+    "Ordenada",
+    "Paciente",
+    "Detallista"
+   ],
+   "cuida": "Que cada fecha y cada folio coincidan",
+   "aspecto": "Lentes redondos y gafete; cabello cobrizo"
+  },
+  "tlahtoani": {
+   "arquetipo": "El litigante firme",
+   "habla": "Directo y seguro",
+   "frase": "«Vamos por lo importante primero.»",
+   "rasgos": [
+    "Firme",
+    "Estratégico",
+    "Claro"
+   ],
+   "cuida": "Que el argumento se sostenga",
+   "aspecto": "Bigote y bufanda morada"
+  },
+  "tepantli": {
+   "arquetipo": "La guardiana prudente",
+   "habla": "Cuidadosa, sin prisa",
+   "frase": "«Antes de firmar, revisemos la facultad.»",
+   "rasgos": [
+    "Cauta",
+    "Protectora",
+    "Rigurosa"
+   ],
+   "cuida": "Que ningún poder esté vencido",
+   "aspecto": "Lentes cuadrados; cabello gris"
+  },
+  "tequitl": {
+   "arquetipo": "El apoyo incansable",
+   "habla": "Amable y servicial",
+   "frase": "«Dime qué necesitas y lo preparo.»",
+   "rasgos": [
+    "Servicial",
+    "Constante",
+    "Tranquilo"
+   ],
+   "cuida": "Que nada se quede sin atender",
+   "aspecto": "Diadema naranja"
+  },
+  "atl": {
+   "arquetipo": "El fiscalista fluido",
+   "habla": "Sereno y ordenado",
+   "frase": "«Hagamos que el calendario trabaje por ti.»",
+   "rasgos": [
+    "Sereno",
+    "Ordenado",
+    "Previsor"
+   ],
+   "cuida": "Que ningún vencimiento llegue sorpresa",
+   "aspecto": "Gafete; flequillo oscuro"
+  },
+  "teocuitl": {
+   "arquetipo": "El contador de las cifras",
+   "habla": "Exacto y breve",
+   "frase": "«Los números primero; la opinión después.»",
+   "rasgos": [
+    "Exacto",
+    "Minucioso",
+    "Discreto"
+   ],
+   "cuida": "Que cuadre al centavo",
+   "aspecto": "Lentes cuadrados y gafete"
+  },
+  "balam": {
+   "arquetipo": "El vigilante de la nómina",
+   "habla": "Directo, sin rodeos",
+   "frase": "«Si algo no cuadra, te lo digo ya.»",
+   "rasgos": [
+    "Directo",
+    "Alerta",
+    "Leal"
+   ],
+   "cuida": "Que nadie cobre de más ni de menos",
+   "aspecto": "Barba oscura"
+  },
+  "ollin": {
+   "arquetipo": "La conciliadora ágil",
+   "habla": "Rápida y práctica",
+   "frase": "«Dame el estado de cuenta y lo cuadramos.»",
+   "rasgos": [
+    "Ágil",
+    "Práctica",
+    "Curiosa"
+   ],
+   "cuida": "Que cada movimiento tenga su par",
+   "aspecto": "Aretes y diadema rosa"
+  },
+  "metztli": {
+   "arquetipo": "La tesorera tranquila",
+   "habla": "Calmada y reservada",
+   "frase": "«Con calma; el dinero no se mueve solo.»",
+   "rasgos": [
+    "Calmada",
+    "Reservada",
+    "Cuidadosa"
+   ],
+   "cuida": "Que la caja siempre tenga colchón",
+   "aspecto": "Bufanda gris; cabello canoso"
+  },
+  "nelli": {
+   "arquetipo": "La oficial rigurosa",
+   "habla": "Formal y clara",
+   "frase": "«Si no hay evidencia, no hay conclusión.»",
+   "rasgos": [
+    "Rigurosa",
+    "Imparcial",
+    "Franca"
+   ],
+   "cuida": "Que cada alerta quede sustentada",
+   "aspecto": "Lentes redondos; cabello largo oscuro"
+  },
+  "vizumi": {
+   "arquetipo": "El revisor de listas",
+   "habla": "Neutral y puntual",
+   "frase": "«Reviso la lista y te digo qué coincide.»",
+   "rasgos": [
+    "Puntual",
+    "Neutral",
+    "Constante"
+   ],
+   "cuida": "Que ninguna coincidencia se pase",
+   "aspecto": "Lentes cuadrados y gafete"
+  },
+  "yollotl": {
+   "arquetipo": "La gestora cálida",
+   "habla": "Cercana y paciente",
+   "frase": "«Yo me encargo del trámite; tú, tranquilo.»",
+   "rasgos": [
+    "Cálida",
+    "Paciente",
+    "Perseverante"
+   ],
+   "cuida": "Que el trámite llegue a buen fin",
+   "aspecto": "Aretes; cabello negro corto"
+  },
+  "coyolli": {
+   "arquetipo": "El de los libros alegres",
+   "habla": "Animado y claro",
+   "frase": "«¡Listo el libro! Revisa la última hoja.»",
+   "rasgos": [
+    "Alegre",
+    "Puntual",
+    "Cuidadoso"
+   ],
+   "cuida": "Que los libros estén al día",
+   "aspecto": "Arete y gafete dorados"
+  },
+  "tlahtolli": {
+   "arquetipo": "La redactora cuidadosa",
+   "habla": "Clara y sin adornos",
+   "frase": "«Lo digo corto y con los hechos.»",
+   "rasgos": [
+    "Clara",
+    "Concisa",
+    "Atenta"
+   ],
+   "cuida": "Que el texto se entienda a la primera",
+   "aspecto": "Lentes redondos; cabello castaño"
+  },
+  "tochtli": {
+   "arquetipo": "El de los documentos al vuelo",
+   "habla": "Rápido y ordenado",
+   "frase": "«Ya lo tengo; ahí va.»",
+   "rasgos": [
+    "Veloz",
+    "Ordenado",
+    "Resolutivo"
+   ],
+   "cuida": "Que el documento salga a tiempo",
+   "aspecto": "Diadema azul"
+  },
+  "socrates": {
+   "arquetipo": "El que pregunta",
+   "habla": "Curioso, con preguntas",
+   "frase": "«¿Y qué dice exactamente la norma?»",
+   "rasgos": [
+    "Curioso",
+    "Paciente",
+    "Reflexivo"
+   ],
+   "cuida": "Que la pregunta correcta llegue primero",
+   "aspecto": "Barba y cabello canoso"
+  },
+  "legal_archivist": {
+   "arquetipo": "El archivero minucioso",
+   "habla": "Pausada, ordenada",
+   "frase": "«Cada documento en su lugar.»",
+   "rasgos": [
+    "Ordenado",
+    "Metódico",
+    "Sereno"
+   ],
+   "cuida": "Que el acervo se encuentre rápido",
+   "aspecto": "Lentes redondos y bufanda café"
+  },
+  "antinomia": {
+   "arquetipo": "La detectora de contradicciones",
+   "habla": "Precisa y crítica",
+   "frase": "«Estas dos normas no se llevan bien.»",
+   "rasgos": [
+    "Crítica",
+    "Aguda",
+    "Justa"
+   ],
+   "cuida": "Que ninguna contradicción pase",
+   "aspecto": "Lentes cuadrados; cabello rubio"
+  },
+  "legal_dof_watchdog": {
+   "arquetipo": "La vigía del DOF",
+   "habla": "Alerta y breve",
+   "frase": "«Salió algo hoy; te lo resumo.»",
+   "rasgos": [
+    "Alerta",
+    "Constante",
+    "Breve"
+   ],
+   "cuida": "Que ningún cambio al DOF se te escape",
+   "aspecto": "Diadema roja; cabello negro"
+  },
+  "estratega": {
+   "arquetipo": "El estratega sereno",
+   "habla": "Reflexivo y ordenado",
+   "frase": "«Hay tres caminos; te muestro el mejor.»",
+   "rasgos": [
+    "Reflexivo",
+    "Estratégico",
+    "Sobrio"
+   ],
+   "cuida": "Que cada opción tenga su costo",
+   "aspecto": "Bigote; cabello oscuro"
+  },
+  "vinculo": {
+   "arquetipo": "La que une normas y casos",
+   "habla": "Cercana y clara",
+   "frase": "«Esto se conecta con aquello.»",
+   "rasgos": [
+    "Integradora",
+    "Clara",
+    "Atenta"
+   ],
+   "cuida": "Que cada caso apunte a su norma",
+   "aspecto": "Arete y bufanda verde"
+  },
+  "verificador": {
+   "arquetipo": "El verificador atento",
+   "habla": "Literal y cuidadoso",
+   "frase": "«Revisé la publicación: coincide con lo aprobado.»",
+   "rasgos": [
+    "Atento",
+    "Literal",
+    "Paciente"
+   ],
+   "cuida": "Que lo publicado sea lo aprobado",
+   "aspecto": "Lentes redondos"
+  },
+  "mk_cmo": {
+   "arquetipo": "La directora que ordena",
+   "habla": "Clara y decidida",
+   "frase": "«Prioricemos: tres cosas hoy.»",
+   "rasgos": [
+    "Decidida",
+    "Ordenada",
+    "Visionaria"
+   ],
+   "cuida": "Que Marketing avance sin desperdicio",
+   "aspecto": "Lentes cuadrados y bufanda morada"
+  },
+  "mk_vig": {
+   "arquetipo": "El vigilante del colchón",
+   "habla": "Alerta y concreto",
+   "frase": "«El colchón baja; esto lo explica.»",
+   "rasgos": [
+    "Alerta",
+    "Concreto",
+    "Constante"
+   ],
+   "cuida": "Que el presupuesto no se agote",
+   "aspecto": "Barba; cabello oscuro"
+  },
+  "mk_inf": {
+   "arquetipo": "El informador de cada mañana",
+   "habla": "Breve y ordenado",
+   "frase": "«Lo de ayer, en un minuto.»",
+   "rasgos": [
+    "Breve",
+    "Puntual",
+    "Claro"
+   ],
+   "cuida": "Que el resumen sea útil",
+   "aspecto": "Diadema naranja"
+  },
+  "mk_via": {
+   "arquetipo": "La vigía madrugadora",
+   "habla": "Rápida y atenta",
+   "frase": "«7:30: todo bajo control.»",
+   "rasgos": [
+    "Madrugadora",
+    "Atenta",
+    "Rápida"
+   ],
+   "cuida": "Que la revisión salga a su hora",
+   "aspecto": "Aretes; cabello cobrizo"
+  },
+  "mk_ana": {
+   "arquetipo": "La analista paciente",
+   "habla": "Explica con calma",
+   "frase": "«Te muestro por qué cambió el resultado.»",
+   "rasgos": [
+    "Paciente",
+    "Curiosa",
+    "Clara"
+   ],
+   "cuida": "Que cada número tenga su causa",
+   "aspecto": "Lentes redondos"
+  },
+  "mk_inv": {
+   "arquetipo": "El investigador curioso",
+   "habla": "Directo y documentado",
+   "frase": "«Encontré tres fuentes que coinciden.»",
+   "rasgos": [
+    "Curioso",
+    "Documentado",
+    "Directo"
+   ],
+   "cuida": "Que cada dato tenga fuente",
+   "aspecto": "Bigote"
+  },
+  "mk_com": {
+   "arquetipo": "La voz de la marca",
+   "habla": "Cálida y cuidada",
+   "frase": "«Así lo diríamos sin perder el tono.»",
+   "rasgos": [
+    "Cálida",
+    "Cuidada",
+    "Creativa"
+   ],
+   "cuida": "Que el mensaje suene a Kawiil",
+   "aspecto": "Bufanda rosa"
+  }
+ },
+ "nombres": {
+  "socrates": "Sócrates",
+  "antinomia": "Antinomia",
+  "estratega": "Estratega",
+  "vinculo": "Vínculo",
+  "vizumi": "Vizumi — Listas y KYC",
+  "verificador": "Verificador de Metricool",
+  "legal_archivist": "Archivero",
+  "legal_dof_watchdog": "Vigía DOF",
+  "mk_cmo": "Director de marketing (CMO)",
+  "mk_vig": "Vigilante del colchón",
+  "mk_inf": "Informe diario",
+  "mk_via": "Vigía 7:30",
+  "mk_ana": "Analista",
+  "mk_inv": "Investigador web",
+  "mk_com": "Comunicaciones"
+ },
+ "accesorios": {
+  "amatl": [
+   "glasses",
+   "badge"
+  ],
+  "tlahtoani": [
+   "mustache",
+   "scarf:#7a4a8a"
+  ],
+  "tepantli": [
+   "glasses_sq"
+  ],
+  "tequitl": [
+   "headband:#d98a4a"
+  ],
+  "atl": [
+   "badge"
+  ],
+  "teocuitl": [
+   "glasses_sq",
+   "badge"
+  ],
+  "balam": [
+   "beard"
+  ],
+  "ollin": [
+   "earring",
+   "headband:#c96a78"
+  ],
+  "metztli": [
+   "scarf:#9aa3ad"
+  ],
+  "nelli": [
+   "glasses"
+  ],
+  "yollotl": [
+   "earring"
+  ],
+  "coyolli": [
+   "earring:#e0b030",
+   "badge:#e0b030"
+  ],
+  "tlahtolli": [
+   "glasses"
+  ],
+  "tochtli": [
+   "headband:#4a8ac9"
+  ],
+  "legal_archivist": [
+   "glasses",
+   "scarf:#8a6a4a"
+  ],
+  "legal_dof_watchdog": [
+   "headband:#d94a4a"
+  ],
+  "socrates": [
+   "beard"
+  ],
+  "antinomia": [
+   "glasses_sq"
+  ],
+  "estratega": [
+   "mustache"
+  ],
+  "vinculo": [
+   "earring",
+   "scarf:#4a9a8a"
+  ],
+  "vizumi": [
+   "glasses_sq",
+   "badge"
+  ],
+  "verificador": [
+   "glasses"
+  ],
+  "mk_cmo": [
+   "glasses_sq",
+   "scarf:#6e4a9a"
+  ],
+  "mk_vig": [
+   "beard"
+  ],
+  "mk_inf": [
+   "headband:#e0903a"
+  ],
+  "mk_via": [
+   "earring"
+  ],
+  "mk_ana": [
+   "glasses"
+  ],
+  "mk_inv": [
+   "mustache"
+  ],
+  "mk_com": [
+   "scarf:#d96a8a"
+  ]
+ },
+ "islas": [
+  {
+   "nombre": "Jurídico",
+   "archivo": "IslaJuridico",
+   "agentes": [
+    "amatl",
+    "tlahtoani",
+    "tepantli",
+    "tequitl"
+   ]
+  },
+  {
+   "nombre": "Fiscal y finanzas",
+   "archivo": "IslaFiscal",
+   "agentes": [
+    "atl",
+    "balam",
+    "teocuitl",
+    "ollin",
+    "metztli"
+   ]
+  },
+  {
+   "nombre": "Acervo legal",
+   "archivo": "IslaAcervo",
+   "agentes": [
+    "socrates",
+    "legal_archivist",
+    "antinomia",
+    "legal_dof_watchdog",
+    "estratega",
+    "vinculo"
+   ]
+  },
+  {
+   "nombre": "Gestoría y documentos",
+   "archivo": "IslaGestoria",
+   "agentes": [
+    "yollotl",
+    "coyolli",
+    "tlahtolli",
+    "tochtli"
+   ]
+  },
+  {
+   "nombre": "Cumplimiento",
+   "archivo": "IslaCumplimiento",
+   "agentes": [
+    "nelli",
+    "vizumi"
+   ]
+  },
+  {
+   "nombre": "Otros",
+   "archivo": "IslaOtros",
+   "agentes": [
+    "verificador"
+   ]
+  },
+  {
+   "nombre": "Marketing",
+   "archivo": "IslaMarketing",
+   "agentes": [
+    "mk_cmo",
+    "mk_vig",
+    "mk_inf",
+    "mk_via",
+    "mk_ana",
+    "mk_inv",
+    "mk_com"
+   ]
+  }
+ ],
+ "distribucion_sala": {
+  "Jurídico": {
+   "N": 7,
+   "posiciones": {
+    "tlahtoani": [
+     1.8,
+     1.8
+    ],
+    "amatl": [
+     4.9,
+     1.8
+    ],
+    "tepantli": [
+     1.8,
+     4.9
+    ],
+    "tequitl": [
+     4.9,
+     4.9
+    ]
+   },
+   "zonas": [
+    [
+     "Dirección",
+     [
+      "tlahtoani"
+     ]
+    ],
+    [
+     "Archivo",
+     [
+      "amatl"
+     ]
+    ],
+    [
+     "Poderes y apoyo",
+     [
+      "tepantli",
+      "tequitl"
+     ]
+    ]
+   ]
+  },
+  "Gestoría y documentos": {
+   "N": 7,
+   "posiciones": {
+    "yollotl": [
+     1.8,
+     1.8
+    ],
+    "coyolli": [
+     4.9,
+     1.8
+    ],
+    "tlahtolli": [
+     1.8,
+     4.9
+    ],
+    "tochtli": [
+     4.9,
+     4.9
+    ]
+   },
+   "zonas": [
+    [
+     "Gestoría",
+     [
+      "yollotl",
+      "coyolli"
+     ]
+    ],
+    [
+     "Redacción y documentos",
+     [
+      "tlahtolli",
+      "tochtli"
+     ]
+    ]
+   ]
+  },
+  "Fiscal y finanzas": {
+   "N": 9,
+   "posiciones": {
+    "atl": [
+     1.6,
+     1.6
+    ],
+    "balam": [
+     4.5,
+     1.6
+    ],
+    "teocuitl": [
+     7.4,
+     1.6
+    ],
+    "ollin": [
+     1.6,
+     4.5
+    ],
+    "metztli": [
+     4.5,
+     4.5
+    ]
+   },
+   "zonas": [
+    [
+     "Fiscal y contabilidad",
+     [
+      "atl",
+      "balam",
+      "teocuitl"
+     ]
+    ],
+    [
+     "Conciliación y finanzas",
+     [
+      "ollin",
+      "metztli"
+     ]
+    ]
+   ]
+  },
+  "Acervo legal": {
+   "N": 9,
+   "posiciones": {
+    "socrates": [
+     1.6,
+     1.6
+    ],
+    "legal_archivist": [
+     4.5,
+     1.6
+    ],
+    "antinomia": [
+     7.4,
+     1.6
+    ],
+    "legal_dof_watchdog": [
+     1.6,
+     4.5
+    ],
+    "estratega": [
+     4.5,
+     4.5
+    ],
+    "vinculo": [
+     7.4,
+     4.5
+    ]
+   },
+   "zonas": [
+    [
+     "Consulta",
+     [
+      "socrates",
+      "legal_archivist",
+      "antinomia"
+     ]
+    ],
+    [
+     "Vigilancia y estrategia",
+     [
+      "legal_dof_watchdog",
+      "estratega",
+      "vinculo"
+     ]
+    ]
+   ]
+  },
+  "Cumplimiento": {
+   "N": 6,
+   "posiciones": {
+    "nelli": [
+     1.6,
+     3.0
+    ],
+    "vizumi": [
+     4.4,
+     3.0
+    ]
+   },
+   "zonas": [
+    [
+     "Listas y KYC",
+     [
+      "nelli",
+      "vizumi"
+     ]
+    ]
+   ]
+  },
+  "Otros": {
+   "N": 5,
+   "posiciones": {
+    "verificador": [
+     2.5,
+     2.5
+    ]
+   },
+   "zonas": [
+    [
+     "Verificación",
+     [
+      "verificador"
+     ]
+    ]
+   ]
+  },
+  "Marketing": {
+   "N": 9,
+   "posiciones": {
+    "mk_cmo": [
+     4.5,
+     1.6
+    ],
+    "mk_vig": [
+     1.6,
+     4.5
+    ],
+    "mk_inf": [
+     4.5,
+     4.5
+    ],
+    "mk_via": [
+     7.4,
+     4.5
+    ],
+    "mk_ana": [
+     1.6,
+     7.4
+    ],
+    "mk_inv": [
+     4.5,
+     7.4
+    ],
+    "mk_com": [
+     7.4,
+     7.4
+    ]
+   },
+   "zonas": [
+    [
+     "Dirección",
+     [
+      "mk_cmo"
+     ]
+    ],
+    [
+     "Monitoreo",
+     [
+      "mk_vig",
+      "mk_inf",
+      "mk_via"
+     ]
+    ],
+    [
+     "Análisis y comunicación",
+     [
+      "mk_ana",
+      "mk_inv",
+      "mk_com"
+     ]
+    ]
+   ]
+  }
+ }
+}
