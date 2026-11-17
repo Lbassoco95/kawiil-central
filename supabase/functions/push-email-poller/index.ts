@@ -14,6 +14,14 @@
  * Despliegue: `supabase functions deploy push-email-poller --no-verify-jwt`.
  */
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  agruparMensajes,
+  armarAviso,
+  desdeEfectivo,
+  separarRepetidos,
+  SILENCIO_REPETIDOS_MIN,
+  type Mensaje,
+} from "../_shared/emailPush.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -25,8 +33,6 @@ const CONCURRENCIA = 5;
 const TIMEOUT_MS = 12_000;
 
 type Svc = ReturnType<typeof createClient>;
-type Mensaje = { received: string; from: string; subject: string };
-
 type Cuenta =
   | { key: string; userId: string; kind: "ms_token"; row: { access_token: string; refresh_token: string; expires_at: string } }
   | {
@@ -224,7 +230,7 @@ Deno.serve(async (req) => {
 
     const porUsuario = new Map<string, Mensaje[]>();
     const nuevasMarcas: Array<{ account_key: string; user_id: string; last_checked_at: string; updated_at: string }> = [];
-    const resumen = { cuentas: cuentas.length, inicializadas: 0, sinToken: 0, errores: 0, usuariosAvisados: 0 };
+    const resumen = { cuentas: cuentas.length, inicializadas: 0, sinToken: 0, errores: 0, usuariosAvisados: 0, silenciados: 0 };
 
     await pool(cuentas, CONCURRENCIA, async (c) => {
       const desde = marca.get(c.key);
@@ -243,7 +249,8 @@ Deno.serve(async (req) => {
         return;
       }
 
-      const desdeIso = new Date(desde).toISOString();
+      // Solo la última hora como máximo: tras una caída o un buzón dormido no se avisan correos viejos.
+      const desdeIso = desdeEfectivo(desde, inicio.getTime());
       let mensajes: Mensaje[];
       try {
         mensajes = c.kind === "linked" && c.provider === "google"
@@ -272,45 +279,86 @@ Deno.serve(async (req) => {
       if (error) console.error("push-email-poller upsert estado:", error.message);
     }
 
-    // Una notificación agrupada por usuario
+    // Una notificación agrupada por usuario, sin repetir lo que ya se avisó hace poco
     const userIds = [...porUsuario.keys()];
     if (userIds.length) {
       const { data: perfiles } = await svc.from("profiles").select("user_id, organization_id").in("user_id", userIds);
       const org = new Map((perfiles ?? []).map((p) => [p.user_id as string, p.organization_id as string]));
 
+      // Qué remitente+asunto ya se avisó en los últimos SILENCIO_REPETIDOS_MIN minutos (filas `dg:<usuario>:<clave>`).
+      const corte = new Date(inicio.getTime() - SILENCIO_REPETIDOS_MIN * 60_000).toISOString();
+      const { data: avisadas } = await svc
+        .from("email_push_state")
+        .select("account_key, user_id")
+        .like("account_key", "dg:%")
+        .gte("last_checked_at", corte)
+        .in("user_id", userIds);
+      const yaAvisadasPorUsuario = new Map<string, Set<string>>();
+      for (const r of avisadas ?? []) {
+        const clave = String(r.account_key).split(":")[2];
+        if (!clave) continue;
+        const set = yaAvisadasPorUsuario.get(r.user_id as string) ?? new Set<string>();
+        set.add(clave);
+        yaAvisadasPorUsuario.set(r.user_id as string, set);
+      }
+
       const filas = [];
+      const huellas = [];
       for (const [userId, lista] of porUsuario) {
         const organizationId = org.get(userId);
         if (!organizationId) continue;
         // Misma bandeja conectada por dos vías → no contar dos veces el mismo correo.
         const vistos = new Set<string>();
-        const unicos = lista
-          .filter((m) => {
-            const k = `${m.received}|${m.from}|${m.subject}`;
-            if (vistos.has(k)) return false;
-            vistos.add(k);
-            return true;
-          })
-          .sort((a, b) => (a.received < b.received ? 1 : -1));
-        const n = unicos.length;
-        const primero = unicos[0];
-        const masDeLaCuenta = n >= MAX_POR_CUENTA ? "+" : "";
+        const unicos = lista.filter((m) => {
+          const k = `${m.received}|${m.from}|${m.subject}`;
+          if (vistos.has(k)) return false;
+          vistos.add(k);
+          return true;
+        });
+        // Agrupa (p. ej. 6 avisos iguales de Railway = 1 grupo) y deja fuera lo ya avisado hace poco.
+        const { nuevos } = separarRepetidos(agruparMensajes(unicos), yaAvisadasPorUsuario.get(userId) ?? new Set());
+        if (nuevos.length === 0) {
+          resumen.silenciados++;
+          continue;
+        }
+        const aviso = armarAviso(nuevos);
         filas.push({
           user_id: userId,
           organization_id: organizationId,
           type: "email_new",
-          title: n === 1 ? "Correo nuevo" : `${n}${masDeLaCuenta} correos nuevos`,
-          body: (n === 1 ? `${primero.from}: ${primero.subject}` : `${primero.from}: ${primero.subject} y ${n - 1} más`).slice(0, 200),
+          title: aviso.title,
+          body: aviso.body,
           entity_type: "email",
           is_read: false,
         });
+        for (const g of nuevos) {
+          huellas.push({
+            account_key: `dg:${userId}:${g.key}`,
+            user_id: userId,
+            last_checked_at: inicio.toISOString(),
+            updated_at: inicio.toISOString(),
+          });
+        }
       }
       if (filas.length) {
         const { error } = await svc.from("notifications").insert(filas);
-        if (error) console.error("push-email-poller insert notifications:", error.message);
-        else resumen.usuariosAvisados = filas.length;
+        if (error) {
+          console.error("push-email-poller insert notifications:", error.message);
+        } else {
+          resumen.usuariosAvisados = filas.length;
+          const { error: e2 } = await svc.from("email_push_state").upsert(huellas, { onConflict: "account_key" });
+          if (e2) console.error("push-email-poller upsert huellas:", e2.message);
+        }
       }
     }
+
+    // Limpieza: huellas de avisos con más de 3 h ya no sirven.
+    const { error: eLimpieza } = await svc
+      .from("email_push_state")
+      .delete()
+      .like("account_key", "dg:%")
+      .lt("last_checked_at", new Date(inicio.getTime() - 3 * 3_600_000).toISOString());
+    if (eLimpieza) console.warn("push-email-poller limpieza:", eLimpieza.message);
 
     return json({ ok: true, ...resumen });
   } catch (e) {

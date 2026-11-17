@@ -9,7 +9,7 @@ self.addEventListener("push", (event) => {
   const title = data.title || "Kawiil";
   const options = {
     body: data.body || "",
-    icon: "/icon-192.png",
+    icon: "/icon-192.png?v=4",
     badge: "/icon-32.png",
     tag: data.tag || `kawiil-${Date.now()}`,
     renotify: true,
