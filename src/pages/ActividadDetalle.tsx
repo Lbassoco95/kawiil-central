@@ -11,6 +11,7 @@ import { ActivityFormDialog } from "@/components/actividades/ActivityFormDialog"
 import { ActivityTasksCard } from "@/components/actividades/ActivityTasksCard";
 import { ActivityAttendeesCard } from "@/components/actividades/ActivityAttendeesCard";
 import { ActivityProvidersCard } from "@/components/actividades/ActivityProvidersCard";
+import { ActivityAccessCard } from "@/components/actividades/ActivityAccessCard";
 import { useActivity, useDeleteActivity } from "@/hooks/useActivities";
 import { useConfirmVenue } from "@/hooks/useActivityExtras";
 import { useActivityTasks } from "@/hooks/useActivities";
@@ -50,11 +51,7 @@ const ActividadDetalle = () => {
   const { isTransformador, isLoading: roleLoading } = useUserRole();
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  // Módulo exclusivo para G4 (transformador).
-  if (!roleLoading && !isTransformador) {
-    return <Navigate to="/" replace />;
-  }
-
+  // El acceso lo decide la base: si no administras esta actividad, no se devuelve y cae en "no encontrada".
   if (isLoading) {
     return (
       <AppLayout>
@@ -93,12 +90,14 @@ const ActividadDetalle = () => {
                 </Button>
               }
             />
-            <Button
-              variant="ghost" size="sm" className="text-destructive"
-              onClick={() => setConfirmOpen(true)}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
+            {isTransformador && (
+              <Button
+                variant="ghost" size="sm" className="text-destructive"
+                onClick={() => setConfirmOpen(true)}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         </div>
 
@@ -180,6 +179,7 @@ const ActividadDetalle = () => {
                 <TabsTrigger value="pendientes">Pendientes</TabsTrigger>
                 <TabsTrigger value="asistentes">Asistentes</TabsTrigger>
                 <TabsTrigger value="proveedores">Proveedores</TabsTrigger>
+                {isTransformador && <TabsTrigger value="equipo">Equipo y visibilidad</TabsTrigger>}
               </TabsList>
               <TabsContent value="pendientes" className="mt-4">
                 <ActivityTasksCard activityId={activity.id} />
@@ -190,6 +190,11 @@ const ActividadDetalle = () => {
               <TabsContent value="proveedores" className="mt-4">
                 <ActivityProvidersCard activityId={activity.id} />
               </TabsContent>
+              {isTransformador && (
+                <TabsContent value="equipo" className="mt-4">
+                  <ActivityAccessCard activity={activity} />
+                </TabsContent>
+              )}
             </Tabs>
           </div>
         </div>

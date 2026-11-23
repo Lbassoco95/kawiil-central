@@ -61,6 +61,7 @@ import EmailTemplatesContabilidad from "./pages/contabilidad/EmailTemplatesConta
 import ContratoPublico from "./pages/ContratoPublico";
 import PortalCliente from "./pages/PortalCliente";
 import InvitacionPublica from "./pages/InvitacionPublica";
+import MisInvitaciones from "./pages/MisInvitaciones";
 
 const queryClient = new QueryClient();
 
@@ -105,6 +106,7 @@ const App = () => (
               <Route path="/proyectos/:id" element={<ProtectedRoute><ProyectoDetalle /></ProtectedRoute>} />
               <Route path="/actividades" element={<ProtectedRoute><Actividades /></ProtectedRoute>} />
               <Route path="/actividades/:id" element={<ProtectedRoute><ActividadDetalle /></ProtectedRoute>} />
+              <Route path="/mis-invitaciones" element={<ProtectedRoute><MisInvitaciones /></ProtectedRoute>} />
               <Route path="/tareas" element={<ProtectedRoute><Tareas /></ProtectedRoute>} />
               <Route
                 path="/calendario"

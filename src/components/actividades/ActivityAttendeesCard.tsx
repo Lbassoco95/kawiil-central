@@ -19,6 +19,7 @@ import { normalizeWhatsappNumber } from "@/lib/whatsapp";
 import { FoodCountDialog } from "@/components/actividades/FoodCountDialog";
 import { InviteMessageDialog } from "@/components/actividades/InviteMessageDialog";
 import { useActivityTasks } from "@/hooks/useActivities";
+import { useProfiles } from "@/hooks/useTasks";
 import {
   ATTENDEE_CONFIRMED_OPTIONS, ATTENDEE_CONFIRMED_STYLES, ATTENDEE_CONFIRMED_LABELS,
   type AttendeeConfirmed,
@@ -36,7 +37,9 @@ function AttendeeDialog({
   const createAttendee = useCreateActivityAttendee();
   const updateAttendee = useUpdateActivityAttendee();
 
+  const { data: profiles } = useProfiles();
   const [name, setName] = useState("");
+  const [linkedUser, setLinkedUser] = useState<string>("none");
   const [confirmed, setConfirmed] = useState<string>("pendiente");
   const [dietary, setDietary] = useState("");
   const [phone, setPhone] = useState("");
@@ -50,6 +53,7 @@ function AttendeeDialog({
   useEffect(() => {
     if (!open) return;
     setName(attendee?.name ?? "");
+    setLinkedUser(attendee?.user_id ?? "none");
     setConfirmed(attendee?.confirmed ?? "pendiente");
     setDietary(attendee?.dietary_restriction ?? "");
     setPhone(attendee?.phone ?? "");
@@ -66,6 +70,7 @@ function AttendeeDialog({
   const handleSubmit = () => {
     const payload = {
       name: name.trim(),
+      user_id: linkedUser === "none" ? null : linkedUser,
       confirmed,
       dietary_restriction: dietary.trim() || null,
       phone: phone.trim() || null,
@@ -96,6 +101,23 @@ function AttendeeDialog({
             <Label htmlFor="att-name">Nombre *</Label>
             <Input id="att-name" placeholder="Ej: Viri"
               value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label>Cuenta de Kawiil (para que vea su invitación)</Label>
+            <Select value={linkedUser} onValueChange={setLinkedUser}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Sin cuenta (invitado externo)</SelectItem>
+                {(profiles ?? []).map((p) => (
+                  <SelectItem key={p.user_id} value={p.user_id}>
+                    {p.full_name || p.email}{p.email && p.full_name ? ` · ${p.email}` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Si lo ligas a su cuenta, esa persona verá en “Mis invitaciones” solo la suya, cuando la actividad sea visible para el equipo.
+            </p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="att-phone">Teléfono / WhatsApp</Label>

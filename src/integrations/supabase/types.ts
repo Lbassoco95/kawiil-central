@@ -111,6 +111,8 @@ export type Database = {
           organization_id: string
           responsible_user_id: string | null
           status: string
+          team_announcement: string | null
+          team_visible: boolean
           updated_at: string
           venue_confirmed: boolean
           venue_provider_id: string | null
@@ -132,6 +134,8 @@ export type Database = {
           organization_id: string
           responsible_user_id?: string | null
           status?: string
+          team_announcement?: string | null
+          team_visible?: boolean
           updated_at?: string
           venue_confirmed?: boolean
           venue_provider_id?: string | null
@@ -153,6 +157,8 @@ export type Database = {
           organization_id?: string
           responsible_user_id?: string | null
           status?: string
+          team_announcement?: string | null
+          team_visible?: boolean
           updated_at?: string
           venue_confirmed?: boolean
           venue_provider_id?: string | null
@@ -479,6 +485,38 @@ export type Database = {
             columns: ["provider_id"]
             isOneToOne: false
             referencedRelation: "activity_providers"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      activity_managers: {
+        Row: {
+          activity_id: string
+          created_at: string
+          created_by: string
+          organization_id: string
+          user_id: string
+        }
+        Insert: {
+          activity_id: string
+          created_at?: string
+          created_by: string
+          organization_id: string
+          user_id: string
+        }
+        Update: {
+          activity_id?: string
+          created_at?: string
+          created_by?: string
+          organization_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_managers_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
             referencedColumns: ["id"]
           }
         ]
@@ -5962,6 +6000,33 @@ export type Database = {
       }
     }
     Functions: {
+      can_manage_activity: {
+        Args: { _activity_id: string }
+        Returns: boolean
+      }
+      is_g4: {
+        Args: { _uid: string }
+        Returns: boolean
+      }
+      mis_invitaciones: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          activity_id: string
+          activity_name: string
+          announcement: string | null
+          attendee_id: string
+          confirmed: string
+          event_date: string | null
+          event_time: string | null
+          extra_guests_requested: number
+          extra_guests_status: string
+          has_plus_one: boolean
+          location: string | null
+          plus_one_confirmed: string
+          responded: boolean
+          rsvp_token: string
+        }[]
+      }
       scheduled_mail_job_status: {
         Args: { p_job_ids: string[] }
         Returns: {
