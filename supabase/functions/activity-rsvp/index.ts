@@ -2,7 +2,8 @@
 // El invitado entra con su enlace personal (/invitacion/<token>).
 //   action: "info"    -> datos del evento + lo que ya respondió
 //   action: "respond" -> guarda su respuesta y, si pide +1, deja la solicitud pendiente
-// La solicitud de +1 NO suma como acompañante hasta que alguien del equipo la aprueba en el admin.
+// El +1 va incluido en la invitación (no requiere aprobación). Los invitados EXTRA (más allá del +1)
+// quedan como solicitud y NO cuentan hasta que alguien del equipo los aprueba en el admin.
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -55,9 +56,12 @@ Deno.serve(async (req) => {
         confirmed: att.confirmed,
         dietary: att.dietary_restriction,
         responded: !!att.rsvp_responded_at,
-        plus_one_status: att.plus_one_status,
+        has_plus_one: att.has_plus_one,
         plus_one_name: att.plus_one_name,
         plus_one_dietary: att.plus_one_dietary,
+        extra_guests_requested: att.extra_guests_requested,
+        extra_guests_status: att.extra_guests_status,
+        extra_guests_note: att.extra_guests_note,
       },
     });
 
@@ -76,20 +80,42 @@ Deno.serve(async (req) => {
       };
 
       if (body.attending === "no") {
-        // Sin asistencia no hay +1: se cancela cualquier solicitud en curso.
-        if (att.plus_one_status === "solicitado") update.plus_one_status = "none";
-      } else if (att.plus_one_status === "aprobado") {
-        // +1 ya aprobado: solo puede completar nombre y alergias.
-        update.plus_one_name = clean(body.plus_one_name, 120) ?? att.plus_one_name;
-        update.plus_one_dietary = clean(body.plus_one_dietary, 200);
-      } else if (body.want_plus_one === true) {
-        const plusName = clean(body.plus_one_name, 120);
-        if (!plusName) return json({ error: "Escribe el nombre de tu acompañante." }, 400);
-        update.plus_one_status = "solicitado";
-        update.plus_one_name = plusName;
-        update.plus_one_dietary = clean(body.plus_one_dietary, 200);
-      } else if (att.plus_one_status === "solicitado") {
-        update.plus_one_status = "none"; // retiró su solicitud
+        // Sin asistencia no hay acompañante ni extras.
+        update.has_plus_one = false;
+        update.plus_one_status = "none";
+        update.plus_one_confirmed = "pendiente";
+        update.extra_guests_requested = 0;
+        update.extra_guests_status = "none";
+        update.extra_guests_note = null;
+      } else {
+        // +1 incluido: se activa o se apaga desde la página, sin aprobación.
+        if (body.want_plus_one === false) {
+          update.has_plus_one = false;
+          update.plus_one_status = "none";
+          update.plus_one_confirmed = "pendiente";
+          update.plus_one_name = null;
+          update.plus_one_dietary = null;
+        } else {
+          update.has_plus_one = true;
+          update.plus_one_status = "aprobado";
+          update.plus_one_confirmed = "si";
+          update.plus_one_name = clean(body.plus_one_name, 120);
+          update.plus_one_dietary = clean(body.plus_one_dietary, 200);
+        }
+
+        // Invitados extra: solicitud que requiere aprobación.
+        const pedidos = Math.max(0, Math.min(10, Math.floor(Number(body.extra_guests) || 0)));
+        if (pedidos === 0) {
+          update.extra_guests_requested = 0;
+          update.extra_guests_status = "none";
+          update.extra_guests_note = null;
+        } else {
+          update.extra_guests_requested = pedidos;
+          update.extra_guests_note = clean(body.extra_note, 300);
+          const sinCambio = att.extra_guests_status === "aprobado" && att.extra_guests_requested === pedidos;
+          update.extra_guests_status = sinCambio ? "aprobado"
+            : (att.extra_guests_status === "rechazado" && att.extra_guests_requested === pedidos ? "rechazado" : "solicitado");
+        }
       }
 
       const { error: upErr } = await admin.from("activity_attendees").update(update).eq("id", att.id);

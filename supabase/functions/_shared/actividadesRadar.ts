@@ -16,7 +16,7 @@ export interface RadarActividad {
 export interface RadarAsistente {
   confirmed: string; // si | no | pendiente
   rsvp_responded_at: string | null;
-  plus_one_status: string; // none | solicitado | aprobado | rechazado
+  extra_guests_status: string; // none | solicitado | aprobado | rechazado
 }
 export interface RadarProveedor { category: string; status: string; advance: number | null; }
 export interface RadarTarea { due_date: string | null; status: string; }
@@ -46,10 +46,10 @@ export function evaluarActividad(
   const cerca = dias !== null && dias <= 7;
   const pronto = dias !== null && dias <= 21;
 
-  // 1) Solicitudes de +1: siempre requieren una acción de quien aprueba.
-  const porAprobar = asistentes.filter((x) => x.plus_one_status === "solicitado").length;
+  // 1) Solicitudes de invitados extra: siempre requieren una acción de quien aprueba.
+  const porAprobar = asistentes.filter((x) => x.extra_guests_status === "solicitado").length;
   if (porAprobar > 0) {
-    out.push({ clave: "plus_uno", momento: "ahora", texto: `${n(porAprobar, "solicitud de +1 espera", "solicitudes de +1 esperan")} tu aprobación` });
+    out.push({ clave: "plus_uno", momento: "ahora", texto: `${n(porAprobar, "solicitud de invitados extra espera", "solicitudes de invitados extra esperan")} tu aprobación` });
   }
 
   // 2) Datos del evento.
