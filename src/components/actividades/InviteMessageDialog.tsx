@@ -10,7 +10,7 @@ import { formatMX } from "@/lib/dateUtils";
 import { copyText } from "@/lib/clipboard";
 import { useActivity } from "@/hooks/useActivities";
 import { useActivityAttendees } from "@/hooks/useActivityExtras";
-import { inviteeMessage, rsvpUrl, type InviteFields } from "@/lib/activityInviteMessage";
+import { inviteeMessage, rsvpUrl, withLink, LINK_PLACEHOLDER, type InviteFields } from "@/lib/activityInviteMessage";
 import { normalizeWhatsappNumber, whatsappUrl, personalizeGreeting, firstName } from "@/lib/whatsapp";
 
 type ActivityInfo = {
@@ -58,15 +58,15 @@ export function InviteMessageDialog({ activityId }: { activityId: string }) {
   const withoutPhone = recipients.filter((r) => !normalizeWhatsappNumber(r.phone));
 
   const linkFor = (r: Recipient) => rsvpUrl(window.location.origin, r.token);
-  // Mensaje personal: el texto del cuadro (editable) con el enlace del invitado al final.
-  const bodyFor = (r: Recipient) => `${text.trimEnd()}\n\n${linkFor(r)}`;
+  // Mensaje personal: el texto del cuadro (editable) con el enlace del invitado en lugar del marcador.
+  const bodyFor = (r: Recipient) => personalizeGreeting(withLink(text, linkFor(r)), r.person);
 
   const sendTo = (r: Recipient, number: string) =>
-    openWhatsApp(whatsappUrl(personalizeGreeting(bodyFor(r), r.person), number));
+    openWhatsApp(whatsappUrl(bodyFor(r), number));
 
-  const copyLink = async (r: Recipient) => {
-    const ok = await copyText(linkFor(r));
-    if (ok) toast.success(`Enlace de ${r.label} copiado.`);
+  const copyInvitation = async (r: Recipient) => {
+    const ok = await copyText(bodyFor(r));
+    if (ok) toast.success(`Invitación de ${r.label} copiada. Pégala en WhatsApp, correo o Slack.`);
     else toast.error("No se pudo copiar. Inténtalo de nuevo.");
   };
 
@@ -82,7 +82,7 @@ export function InviteMessageDialog({ activityId }: { activityId: string }) {
         <DialogHeader>
           <DialogTitle>Mensaje para los invitados</DialogTitle>
           <DialogDescription>
-            Toma la fecha y la sede de la actividad. Puedes editarlo antes de enviarlo; el enlace personal se agrega solo.
+            Toma la fecha y la sede de la actividad. Puedes editarlo antes de enviarlo; donde dice {LINK_PLACEHOLDER} va el enlace personal de cada invitado.
           </DialogDescription>
         </DialogHeader>
         {faltantes.length > 0 && (
@@ -120,8 +120,8 @@ export function InviteMessageDialog({ activityId }: { activityId: string }) {
                         <Send className="mr-1.5 h-3 w-3" />WhatsApp
                       </Button>
                     ) : null}
-                    <Button type="button" size="sm" variant="outline" className="h-8" onClick={() => copyLink(r)}>
-                      <Link2 className="mr-1.5 h-3 w-3" />Copiar enlace
+                    <Button type="button" size="sm" variant="outline" className="h-8" onClick={() => copyInvitation(r)}>
+                      <Link2 className="mr-1.5 h-3 w-3" />Copiar invitación
                     </Button>
                   </div>
                 </div>
@@ -130,7 +130,7 @@ export function InviteMessageDialog({ activityId }: { activityId: string }) {
           </div>
           {withoutPhone.length > 0 && (
             <p className="text-xs text-muted-foreground">
-              Sin teléfono válido: {withoutPhone.map((r) => r.label).join(", ")}. Copia su enlace o agrega el teléfono al editar al asistente.
+              Sin teléfono válido: {withoutPhone.map((r) => r.label).join(", ")}. Copia su invitación o agrega el teléfono al editar al asistente.
             </p>
           )}
         </div>

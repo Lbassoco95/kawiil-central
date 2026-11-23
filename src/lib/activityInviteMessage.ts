@@ -21,9 +21,19 @@ const details = (f: InviteFields) => [
 /** Enlace personal de confirmación de un asistente. */
 export const rsvpUrl = (origin: string, token: string) => `${origin}/invitacion/${token}`;
 
+/** Marcador del enlace personal dentro del mensaje; se sustituye por persona al enviar o copiar. */
+export const LINK_PLACEHOLDER = "{enlace}";
+
+/** Pone el enlace personal en el mensaje; si se borró el marcador, lo agrega al final. */
+export function withLink(text: string, link: string): string {
+  return text.includes(LINK_PLACEHOLDER)
+    ? text.split(LINK_PLACEHOLDER).join(link)
+    : `${text.trimEnd()}\n\n${link}`;
+}
+
 /**
- * Mensaje para el invitado. Termina invitando a confirmar; quien lo envía le agrega
- * debajo el enlace personal, donde confirma asistencia, alergias y si lleva +1.
+ * Mensaje para el invitado. Termina invitando a confirmar con el marcador del enlace personal,
+ * donde la persona confirma asistencia, alergias y si lleva +1.
  */
 export function inviteeMessage(f: InviteFields): string {
   return [
@@ -35,5 +45,6 @@ export function inviteeMessage(f: InviteFields): string {
     "",
     "El evento es +1: puedes venir con un acompañante.",
     "Confirma tu asistencia aquí; ahí mismo nos dices si tú o tu acompañante son alérgicos a algo 👇",
+    LINK_PLACEHOLDER,
   ].join("\n");
 }
