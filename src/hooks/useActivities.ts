@@ -125,6 +125,85 @@ export type ActivityTask = Tables<"tasks">;
  * así las invalidaciones de useCreateTask/useUpdateTask/useDeleteTask (que
  * invalidan ["tasks"]) refrescan también esta lista automáticamente.
  */
+export type TaskPeople = { responsables: string[]; equipo: string[] };
+
+/** Responsables adicionales y equipo (task_assignees) de las tareas dadas: taskId → personas. */
+export function useActivityTaskAssignees(taskIds: string[]) {
+  const { user } = useAuth();
+  const key = [...taskIds].sort().join(",");
+  return useQuery({
+    queryKey: ["task-assignees-bulk", "activity", key],
+    queryFn: async () => {
+      const map: Record<string, TaskPeople> = {};
+      if (taskIds.length === 0) return map;
+      const { data, error } = await supabase
+        .from("task_assignees").select("task_id, user_id, assignment_role").in("task_id", taskIds);
+      if (error) throw error;
+      for (const r of data ?? []) {
+        const e = (map[r.task_id] ??= { responsables: [], equipo: [] });
+        (r.assignment_role === "responsable" ? e.responsables : e.equipo).push(r.user_id);
+      }
+      return map;
+    },
+    enabled: !!user && taskIds.length > 0,
+  });
+}
+
+/** Usuarios con acceso al módulo de Actividades (G4 / transformador): los únicos que pueden ser responsables. */
+export function useActivityManagerIds() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["activity-manager-ids"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("user_roles").select("user_id").eq("role", "transformador");
+      if (error) throw error;
+      return new Set((data ?? []).map((r) => r.user_id));
+    },
+    enabled: !!user,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
+ * Deja a `responsables` y `equipo` como las personas de la tarea: el primer responsable va en
+ * tasks.assigned_to (así sigue saliendo en el perfil y en "Mis tareas"); el resto de responsables
+ * y el equipo van en task_assignees con su assignment_role.
+ * Devuelve los user_id que se sumaron (para avisarles).
+ */
+export async function syncTaskAssignees(
+  taskId: string, responsables: string[], equipo: string[],
+): Promise<string[]> {
+  const resp = [...new Set(responsables)];
+  const [primary, ...extraResp] = resp;
+  const team = [...new Set(equipo)].filter((u) => !resp.includes(u));
+  const wanted = new Map<string, string>([
+    ...extraResp.map((u) => [u, "responsable"] as [string, string]),
+    ...team.map((u) => [u, "equipo"] as [string, string]),
+  ]);
+  const { data: current, error } = await supabase
+    .from("task_assignees").select("user_id, assignment_role").eq("task_id", taskId);
+  if (error) throw error;
+  const have = new Map((current ?? []).map((r) => [r.user_id, r.assignment_role]));
+  const toRemove = [...have].filter(([u, r]) => wanted.get(u) !== r).map(([u]) => u);
+  const toAdd = [...wanted].filter(([u, r]) => have.get(u) !== r);
+  if (toRemove.length) {
+    const { error: e } = await supabase
+      .from("task_assignees").delete().eq("task_id", taskId).in("user_id", toRemove);
+    if (e) throw e;
+  }
+  if (toAdd.length) {
+    const { error: e } = await supabase.from("task_assignees").insert(
+      toAdd.map(([user_id, assignment_role]) => ({ task_id: taskId, user_id, assignment_role })),
+    );
+    if (e) throw e;
+  }
+  const { error: e2 } = await supabase
+    .from("tasks").update({ assigned_to: primary ?? null }).eq("id", taskId);
+  if (e2) throw e2;
+  return toAdd.map(([u]) => u).filter((u) => !have.has(u));
+}
+
 export function useActivityTasks(activityId?: string) {
   const { user } = useAuth();
   return useQuery({

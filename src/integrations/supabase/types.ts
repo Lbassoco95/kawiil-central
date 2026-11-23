@@ -5320,18 +5320,21 @@ export type Database = {
       }
       task_assignees: {
         Row: {
+          assignment_role: string
           created_at: string
           id: string
           task_id: string
           user_id: string
         }
         Insert: {
+          assignment_role?: string
           created_at?: string
           id?: string
           task_id: string
           user_id: string
         }
         Update: {
+          assignment_role?: string
           created_at?: string
           id?: string
           task_id?: string
