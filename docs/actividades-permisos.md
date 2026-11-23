@@ -14,7 +14,7 @@ Función de apoyo: `can_manage_activity(activity_id)`; `is_g4(uid)`.
 ## Qué cubre
 `activities`, `activity_attendees`, `activity_providers`, `activity_files`, `activity_provider_items`,
 `activity_provider_comments`, `activity_file_votes` y las **tareas ligadas a una actividad** (`tasks.activity_id`).
-Las tareas ligadas las ve quien administra la actividad, la persona asignada y quien la creó; el resto de las tareas de la
+Las tareas ligadas las ve quien administra la actividad, la persona asignada (responsable o equipo de apoyo) y quien la creó; el resto de las tareas de la
 organización no cambia.
 
 ## Qué ve un kawiiler invitado (no administra)
