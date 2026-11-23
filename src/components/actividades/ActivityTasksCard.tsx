@@ -1,4 +1,6 @@
 import { Fragment, useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,11 +17,13 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
-import { Plus, Pencil, Trash2, ListChecks, Images, UserCheck, CheckCircle2, RotateCcw } from "lucide-react";
+import { Plus, Pencil, Trash2, ListChecks, Images, UserCheck, CheckCircle2, RotateCcw, X } from "lucide-react";
 import { formatDateMX } from "@/lib/dateUtils";
 import { TASK_STATUS_CONFIG, PRIORITY_CONFIG } from "@/lib/statusStyles";
 import { useProfiles, useCreateTask, useUpdateTask, useDeleteTask } from "@/hooks/useTasks";
-import { useActivityTasks, useActivity, type ActivityTask } from "@/hooks/useActivities";
+import { useActivityTasks, useActivity, useActivityTaskAssignees, syncTaskAssignees, type ActivityTask } from "@/hooks/useActivities";
+import { useAuth } from "@/contexts/AuthContext";
+import { createNotifications } from "@/lib/notificationHelpers";
 import { useActivityFileCounts } from "@/hooks/useActivityFiles";
 import { TaskFilesDialog } from "@/components/actividades/TaskFilesDialog";
 import { RubroSelect } from "@/components/actividades/RubroSelect";
@@ -51,9 +55,9 @@ const SCOPE_OPTIONS: { value: TaskScope; label: string }[] = [
 const ATTENDEE_SUGGESTIONS = ["Confirmar asistencia", "Confirmar acompañante (+1)", "Pedir restricciones alimentarias"];
 
 function TaskDialog({
-  activityId, task, trigger, providers, rubros, attendees, defaultCategory = "", defaultProviderId = "", defaultAttendeeId = "", defaultScope, venueProviderId,
+  activityId, task, taskAssigneeIds = [], trigger, providers, rubros, attendees, defaultCategory = "", defaultProviderId = "", defaultAttendeeId = "", defaultScope, venueProviderId,
 }: {
-  activityId: string; task?: ActivityTask; trigger: React.ReactNode;
+  activityId: string; task?: ActivityTask; taskAssigneeIds?: string[]; trigger: React.ReactNode;
   providers: ActivityProvider[]; rubros: { value: string; label: string }[];
   attendees: ActivityAttendee[];
   defaultCategory?: string; defaultProviderId?: string; defaultAttendeeId?: string;
@@ -62,6 +66,8 @@ function TaskDialog({
   const isEdit = !!task;
   const [open, setOpen] = useState(false);
   const { data: profiles } = useProfiles();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const createTask = useCreateTask();
   const updateTask = useUpdateTask();
   const createProvider = useCreateActivityProvider();
@@ -73,7 +79,7 @@ function TaskDialog({
   const [isVenue, setIsVenue] = useState(false);
 
   const [title, setTitle] = useState("");
-  const [assignedTo, setAssignedTo] = useState("");
+  const [assignees, setAssignees] = useState<string[]>([]);
   const [dueDate, setDueDate] = useState("");
   const [priority, setPriority] = useState("media");
   const [status, setStatus] = useState<string>("pendiente");
@@ -85,7 +91,7 @@ function TaskDialog({
   useEffect(() => {
     if (!open) return;
     setTitle(task?.title ?? "");
-    setAssignedTo(task?.assigned_to ?? "");
+    setAssignees([...new Set([task?.assigned_to, ...taskAssigneeIds].filter((x): x is string => !!x))]);
     setDueDate(task?.due_date ?? "");
     setPriority(task?.priority ?? "media");
     setStatus(task?.status ?? "pendiente");
@@ -103,7 +109,7 @@ function TaskDialog({
     setIsVenue(!!pv && !!venueProviderId && venueProviderId === pv.id);
     // Solo al abrir: si dependiera de `providers`, crear un proveedor aquí reiniciaría el formulario.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, task, defaultCategory, defaultProviderId, defaultAttendeeId, defaultScope]);
+  }, [open, task, taskAssigneeIds.join(","), defaultCategory, defaultProviderId, defaultAttendeeId, defaultScope]);
 
   const providerOptions = providers
     .filter((p) => !category || p.category === category)
@@ -153,7 +159,9 @@ function TaskDialog({
   const effectiveStatus = confirmsVenueNow ? "completada" : status;
 
   const profileOptions = (profiles || []).map((p) => ({ value: p.user_id, label: p.full_name }));
-  const isPending = createTask.isPending || updateTask.isPending;
+  const availableProfiles = profileOptions.filter((p) => !assignees.includes(p.value));
+  const [syncing, setSyncing] = useState(false);
+  const isPending = syncing || createTask.isPending || updateTask.isPending;
 
   const handleSubmit = () => {
     applyVenue();
@@ -162,7 +170,7 @@ function TaskDialog({
         {
           id: task!.id,
           title: title.trim(),
-          assigned_to: assignedTo || null,
+          assigned_to: assignees[0] ?? null,
           due_date: dueDate || null,
           priority,
           status: effectiveStatus,
@@ -170,13 +178,37 @@ function TaskDialog({
           activity_provider_id: scope === "rubro" ? providerId || null : null,
           activity_attendee_id: scope === "asistentes" ? attendeeId || null : null,
         },
-        { onSuccess: () => setOpen(false) },
+        {
+          onSuccess: async () => {
+            setSyncing(true);
+            try {
+              const added = await syncTaskAssignees(task!.id, assignees);
+              const extraAdded = added.filter((u) => u !== user?.id);
+              if (extraAdded.length) {
+                createNotifications(extraAdded.map((uid) => ({
+                  user_id: uid, type: "task_assigned",
+                  title: `Te asignaron la tarea "${title.trim()}"`,
+                  entity_type: "task" as const, entity_id: task!.id, source_user_id: user!.id,
+                })));
+              }
+              queryClient.invalidateQueries({ queryKey: ["tasks"] });
+              queryClient.invalidateQueries({ queryKey: ["task-assignees-bulk"] });
+              queryClient.invalidateQueries({ queryKey: ["task-assignees", task!.id] });
+              setOpen(false);
+            } catch (e) {
+              toast.error("No se pudieron guardar todos los responsables: " + (e as Error).message);
+            } finally {
+              setSyncing(false);
+            }
+          },
+        },
       );
     } else {
       createTask.mutate(
         {
           title: title.trim(),
-          assigned_to: assignedTo || undefined,
+          assigned_to: assignees[0] || undefined,
+          additional_assignees: assignees.slice(1),
           due_date: dueDate || undefined,
           priority,
           status: effectiveStatus,
@@ -316,14 +348,28 @@ function TaskDialog({
             </div>
           )}
           <div className="space-y-2">
-            <Label>Responsable (quién lo hace)</Label>
+            <Label>Responsables (quién lo hace)</Label>
+            {assignees.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {assignees.map((uid) => (
+                  <Badge key={uid} variant="secondary" className="gap-1 text-xs">
+                    {(profiles || []).find((p) => p.user_id === uid)?.full_name || "—"}
+                    <button type="button" aria-label="Quitar responsable"
+                      onClick={() => setAssignees((a) => a.filter((x) => x !== uid))}>
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+            )}
             <SearchableSelect
-              options={profileOptions} value={assignedTo}
-              onValueChange={setAssignedTo}
-              placeholder="Sin responsable" searchPlaceholder="Buscar persona..."
+              options={availableProfiles} value=""
+              onValueChange={(v) => v && setAssignees((a) => (a.includes(v) ? a : [...a, v]))}
+              placeholder={assignees.length ? "Agregar otra persona..." : "Sin responsable"}
+              searchPlaceholder="Buscar persona..."
             />
             <p className="text-xs text-muted-foreground">
-              Aparecerá en las tareas y el perfil de la persona asignada.
+              Puedes asignar a varias personas. Aparecerá en las tareas y el perfil de cada una.
             </p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -384,6 +430,9 @@ export function ActivityTasksCard({ activityId }: { activityId: string }) {
   const attendeeById = new Map(attendees.map((a) => [a.id, a]));
   const createConfirmations = useCreateAttendeeConfirmationTasks();
   const list = tasks ?? [];
+  const { data: extraAssignees } = useActivityTaskAssignees(list.map((t) => t.id));
+  const assigneesOf = (t: ActivityTask) =>
+    [...new Set([t.assigned_to, ...(extraAssignees?.[t.id] ?? [])].filter((x): x is string => !!x))];
   const providerById = new Map(providers.map((p) => [p.id, p]));
   const catOf = (t: ActivityTask) =>
     t.activity_attendee_id ? "__asistentes__" : t.activity_category || (t.activity_provider_id ? providerById.get(t.activity_provider_id)?.category : "") || "";
@@ -459,7 +508,7 @@ export function ActivityTasksCard({ activityId }: { activityId: string }) {
               <TableHeader>
                 <TableRow>
                   <TableHead>Pendiente</TableHead>
-                  <TableHead>Responsable</TableHead>
+                  <TableHead>Responsables</TableHead>
                   <TableHead>Estatus</TableHead>
                   <TableHead>Fecha límite</TableHead>
                   <TableHead>Cotizaciones</TableHead>
@@ -534,7 +583,9 @@ export function ActivityTasksCard({ activityId }: { activityId: string }) {
                           </Badge>
                         )}
                       </TableCell>
-                      <TableCell>{nameFor(t.assigned_to)}</TableCell>
+                      <TableCell>
+                        {assigneesOf(t).length ? assigneesOf(t).map(nameFor).join(", ") : "—"}
+                      </TableCell>
                       <TableCell>
                         <Select
                           value={t.status}
@@ -588,7 +639,7 @@ export function ActivityTasksCard({ activityId }: { activityId: string }) {
                           )}
                           <TaskDialog
                             activityId={activityId}
-                            task={t}
+                            task={t} taskAssigneeIds={extraAssignees?.[t.id] ?? []}
                             providers={providers} rubros={rubros} attendees={attendees} venueProviderId={activityData?.venue_confirmed ? activityData.venue_provider_id : null}
                             trigger={
                               <Button size="icon" variant="ghost" className="h-7 w-7">

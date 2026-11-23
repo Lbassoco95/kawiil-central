@@ -125,6 +125,55 @@ export type ActivityTask = Tables<"tasks">;
  * así las invalidaciones de useCreateTask/useUpdateTask/useDeleteTask (que
  * invalidan ["tasks"]) refrescan también esta lista automáticamente.
  */
+/** Responsables adicionales (task_assignees) de las tareas dadas: taskId → user_ids. */
+export function useActivityTaskAssignees(taskIds: string[]) {
+  const { user } = useAuth();
+  const key = [...taskIds].sort().join(",");
+  return useQuery({
+    queryKey: ["task-assignees-bulk", "activity", key],
+    queryFn: async () => {
+      const map: Record<string, string[]> = {};
+      if (taskIds.length === 0) return map;
+      const { data, error } = await supabase
+        .from("task_assignees").select("task_id, user_id").in("task_id", taskIds);
+      if (error) throw error;
+      for (const r of data ?? []) (map[r.task_id] ??= []).push(r.user_id);
+      return map;
+    },
+    enabled: !!user && taskIds.length > 0,
+  });
+}
+
+/**
+ * Deja a `userIds` como los responsables de la tarea: el primero va en tasks.assigned_to
+ * (así sigue saliendo en el perfil y en "Mis tareas") y el resto en task_assignees.
+ * Devuelve los user_id que se agregaron, para avisarles.
+ */
+export async function syncTaskAssignees(taskId: string, userIds: string[]): Promise<string[]> {
+  const [primary, ...extra] = [...new Set(userIds)];
+  const { data: current, error } = await supabase
+    .from("task_assignees").select("user_id").eq("task_id", taskId);
+  if (error) throw error;
+  const have = new Set((current ?? []).map((r) => r.user_id));
+  const want = new Set(extra);
+  const toAdd = extra.filter((u) => !have.has(u));
+  const toRemove = [...have].filter((u) => !want.has(u));
+  if (toRemove.length) {
+    const { error: e } = await supabase
+      .from("task_assignees").delete().eq("task_id", taskId).in("user_id", toRemove);
+    if (e) throw e;
+  }
+  if (toAdd.length) {
+    const { error: e } = await supabase
+      .from("task_assignees").insert(toAdd.map((user_id) => ({ task_id: taskId, user_id })));
+    if (e) throw e;
+  }
+  const { error: e2 } = await supabase
+    .from("tasks").update({ assigned_to: primary ?? null }).eq("id", taskId);
+  if (e2) throw e2;
+  return toAdd;
+}
+
 export function useActivityTasks(activityId?: string) {
   const { user } = useAuth();
   return useQuery({
