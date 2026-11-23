@@ -16,7 +16,7 @@ import {
   AlertTriangle, CalendarClock, ArrowRight,
   AtSign, CheckCheck, MessageSquare, ClipboardList, DollarSign, Activity,
   Bot, BrainCircuit, Settings, Sparkles, Lightbulb, Bell,
-  PenTool, Leaf,
+  PenTool, Leaf, PartyPopper,
 } from "lucide-react";
 import { PageHeader, type PageHeaderStat } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -88,6 +88,9 @@ function getNotificationCtas(
   if (m.type === "kawiilito_cierre") {
     ctas.push({ key: "open_dashboard", label: "Cerrar mi día", primary: true });
   }
+  if (m.type === "actividades_radar") {
+    ctas.push({ key: "open_actividad", label: m.entity_id ? "Ver actividad" : "Ver actividades", primary: true });
+  }
   if (m.type === "knowledge_sync" || m.type.startsWith("knowledge")) {
     ctas.push({ key: "open_knowledge", label: "Ver agente", primary: true });
   }
@@ -114,6 +117,7 @@ function getNotificationIcon(type: string) {
   if (type === "improvement_suggestion") return <Lightbulb className="h-3.5 w-3.5 text-amber-500" />;
   if (type === "ai_proactive_tip") return <Sparkles className="h-3.5 w-3.5 text-sky-500" />;
   if (type === "kawiilito_cierre") return <Sparkles className="h-3.5 w-3.5 text-orange-500" />;
+  if (type === "actividades_radar") return <PartyPopper className="h-3.5 w-3.5 text-pink-500" />;
   if (type === "agent_task_completed" || type === "agent_task_failed")
     return <MessageSquare className="h-3.5 w-3.5 text-sky-600 dark:text-sky-300" />;
   if (type === "esign") return <PenTool className="h-3.5 w-3.5 text-primary" />;
@@ -767,7 +771,9 @@ export default function Notificaciones() {
       return;
     }
 
-    if (m.type === "esign") {
+    if (m.type === "actividades_radar") {
+      navigate(m.entity_id ? `/actividades/${m.entity_id}` : "/actividades");
+    } else if (m.type === "esign") {
       navigate("/firmas");
     } else if (m.entity_type === "project" && m.entity_id) {
       navigate(`/proyectos/${m.entity_id}?tab=comentarios`);

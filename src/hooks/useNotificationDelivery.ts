@@ -66,6 +66,7 @@ function effectiveNotificationTitle(row: NotifRow): string {
       improvement_suggestion: "Sugerencia de mejora",
       ai_proactive_tip: "Sugerencia de IA",
       kawiilito_cierre: "Kawiilito · Cierre del día",
+      actividades_radar: "Kawiilito · Actividades",
       reminders_hourly_digest: "Recordatorios pendientes",
       reminders_daily_digest: "Recordatorios (resumen diario)",
       agent_task_completed: "Asistente · Tarea de agente completada",

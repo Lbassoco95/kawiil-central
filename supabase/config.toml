@@ -133,6 +133,8 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = false
   [functions.kawiilito-cierre]
     verify_jwt = false
+  [functions.actividades-radar]
+    verify_jwt = false
   [functions.refresh-weekday-phrases]
     verify_jwt = false
   [functions.render-office-document]

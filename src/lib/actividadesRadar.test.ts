@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  construirMensajeRadar, diasHasta, evaluarActividad,
+  construirMensajeRadar, diasHasta, esLunes, evaluarActividad, fechaMexico, resumenesConAviso,
   type RadarActividad, type RadarAsistente,
 } from "../../supabase/functions/_shared/actividadesRadar";
 
@@ -93,5 +93,34 @@ describe("construirMensajeRadar", () => {
     expect(m.title).toBe("Kawiilito · Actividades por atender");
     expect(m.body).toContain("Leo, esto pide tu atención");
     expect(m.body).toContain("Navidad Kawiil (mañana): 1 solicitud de invitados extra espera tu aprobación.");
+  });
+});
+
+describe("fechaMexico / esLunes", () => {
+  it("usa la fecha de México (UTC-6) y no la de UTC", () => {
+    // 03:00 UTC del 14-dic todavía es 13-dic en CDMX
+    expect(fechaMexico(new Date("2026-12-14T03:00:00Z"))).toBe("2026-12-13");
+    expect(fechaMexico(new Date("2026-12-14T14:37:00Z"))).toBe("2026-12-14");
+  });
+  it("detecta el lunes", () => {
+    expect(esLunes("2026-12-14")).toBe(true);
+    expect(esLunes("2026-12-15")).toBe(false);
+  });
+});
+
+describe("resumenesConAviso", () => {
+  const act = (id: string, momento: "ahora" | "pronto") =>
+    ({ id, name: id, dias: 5, hallazgos: [{ clave: "x", momento, texto: "algo" }] });
+  it("entre semana deja solo las actividades con algo 'ahora'", () => {
+    expect(resumenesConAviso([act("a", "ahora"), act("b", "pronto")], false).map((r) => r.id)).toEqual(["a"]);
+  });
+  it("el lunes incluye también lo 'pronto'", () => {
+    expect(resumenesConAviso([act("a", "ahora"), act("b", "pronto")], true).map((r) => r.id)).toEqual(["a", "b"]);
+  });
+  it("mezcla en una actividad: entre semana quita lo 'pronto' pero conserva lo 'ahora'", () => {
+    const r = { id: "a", name: "a", dias: 3, hallazgos: [
+      { clave: "x", momento: "pronto" as const, texto: "p" }, { clave: "y", momento: "ahora" as const, texto: "n" },
+    ] };
+    expect(resumenesConAviso([r], false)[0].hallazgos.map((h) => h.clave)).toEqual(["y"]);
   });
 });

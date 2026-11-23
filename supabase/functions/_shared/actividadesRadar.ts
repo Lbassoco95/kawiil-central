@@ -103,25 +103,39 @@ export function evaluarActividad(
 
 export interface RadarActividadResumen { id: string; name: string; dias: number | null; hallazgos: Hallazgo[]; }
 
+/** Fecha de hoy en Ciudad de México (YYYY-MM-DD), sin horario de verano: UTC-6 fijo. */
+export function fechaMexico(ahora: Date): string {
+  return new Date(ahora.getTime() - 6 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+/** ¿La fecha (YYYY-MM-DD) cae en lunes? */
+export function esLunes(ymd: string): boolean {
+  return new Date(Date.UTC(+ymd.slice(0, 4), +ymd.slice(5, 7) - 1, +ymd.slice(8, 10))).getUTCDay() === 1;
+}
+
 /**
- * Mensaje agrupado por momento. null = nada que decir (no se molesta).
- * Calma: lunes se incluye lo "pronto"; el resto de los días solo lo que es "ahora".
+ * Hallazgos que sí se avisan hoy. Calma: entre semana solo lo "ahora"; los lunes también lo "pronto".
+ * Devuelve solo las actividades con algo que decir.
  */
+export function resumenesConAviso(resumenes: RadarActividadResumen[], lunes: boolean): RadarActividadResumen[] {
+  return resumenes
+    .map((r) => ({ ...r, hallazgos: r.hallazgos.filter((h) => h.momento === "ahora" || lunes) }))
+    .filter((r) => r.hallazgos.length > 0);
+}
+
+/** Mensaje agrupado por actividad. null = nada que decir (no se molesta). */
 export function construirMensajeRadar(
-  nombre: string, resumenes: RadarActividadResumen[], esLunes: boolean,
+  nombre: string, resumenes: RadarActividadResumen[], lunes: boolean,
 ): { title: string; body: string } | null {
-  const lineas: string[] = [];
-  let hayAhora = false;
-  for (const r of resumenes) {
-    const ahora = r.hallazgos.filter((h) => h.momento === "ahora");
-    const pronto = esLunes ? r.hallazgos.filter((h) => h.momento === "pronto") : [];
-    if (ahora.length === 0 && pronto.length === 0) continue;
-    if (ahora.length > 0) hayAhora = true;
+  const con = resumenesConAviso(resumenes, lunes);
+  if (con.length === 0) return null;
+  const hayAhora = con.some((r) => r.hallazgos.some((h) => h.momento === "ahora"));
+  const lineas = con.map((r) => {
     const cuando = r.dias === null ? "" : r.dias === 0 ? " (hoy)" : r.dias === 1 ? " (mañana)" : ` (en ${r.dias} días)`;
-    const partes = [...ahora, ...pronto].slice(0, 4).map((h) => h.texto);
-    lineas.push(`${r.name}${cuando}: ${partes.join("; ")}.`);
-  }
-  if (lineas.length === 0) return null;
+    // "ahora" primero y máximo 4 por actividad: pocas cosas a la vez.
+    const orden = [...r.hallazgos].sort((a, b) => Number(b.momento === "ahora") - Number(a.momento === "ahora"));
+    return `${r.name}${cuando}: ${orden.slice(0, 4).map((h) => h.texto).join("; ")}.`;
+  });
   const saludo = nombre ? `${nombre}, ` : "";
   return {
     title: hayAhora ? "Kawiilito · Actividades por atender" : "Kawiilito · Actividades de la semana",
