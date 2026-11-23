@@ -104,6 +104,7 @@ export type Database = {
           event_date: string | null
           event_time: string | null
           id: string
+          invite_image_url: string | null
           location: string | null
           name: string
           notes: string | null
@@ -124,6 +125,7 @@ export type Database = {
           event_date?: string | null
           event_time?: string | null
           id?: string
+          invite_image_url?: string | null
           location?: string | null
           name: string
           notes?: string | null
@@ -144,6 +146,7 @@ export type Database = {
           event_date?: string | null
           event_time?: string | null
           id?: string
+          invite_image_url?: string | null
           location?: string | null
           name?: string
           notes?: string | null
@@ -173,6 +176,9 @@ export type Database = {
           plus_one_dietary: string | null
           plus_one_name: string | null
           plus_one_phone: string | null
+          plus_one_status: string
+          rsvp_responded_at: string | null
+          rsvp_token: string
           updated_at: string
           user_id: string | null
         }
@@ -192,6 +198,9 @@ export type Database = {
           plus_one_dietary?: string | null
           plus_one_name?: string | null
           plus_one_phone?: string | null
+          plus_one_status?: string
+          rsvp_responded_at?: string | null
+          rsvp_token?: string
           updated_at?: string
           user_id?: string | null
         }
@@ -211,6 +220,9 @@ export type Database = {
           plus_one_dietary?: string | null
           plus_one_name?: string | null
           plus_one_phone?: string | null
+          plus_one_status?: string
+          rsvp_responded_at?: string | null
+          rsvp_token?: string
           updated_at?: string
           user_id?: string | null
         }
