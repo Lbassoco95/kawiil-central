@@ -18,7 +18,13 @@ const details = (f: InviteFields) => [
   `📍 Lugar: ${f.lugar?.trim() || "por confirmar"}`,
 ];
 
-/** Mensaje para el invitado (menciona que puede ir con acompañante). */
+/** Enlace personal de confirmación de un asistente. */
+export const rsvpUrl = (origin: string, token: string) => `${origin}/invitacion/${token}`;
+
+/**
+ * Mensaje para el invitado. Termina invitando a confirmar; quien lo envía le agrega
+ * debajo el enlace personal, donde confirma asistencia, alergias y si lleva +1.
+ */
 export function inviteeMessage(f: InviteFields): string {
   return [
     "¡Hola! 👋",
@@ -28,24 +34,6 @@ export function inviteeMessage(f: InviteFields): string {
     ...details(f),
     "",
     "El evento es +1: puedes venir con un acompañante.",
-    "Por favor confírmanos tu asistencia, el nombre de tu acompañante y si tú o tu acompañante tienen alguna restricción alimentaria.",
-    "",
-    "¡Gracias!",
-  ].join("\n");
-}
-
-/** Mensaje para el acompañante (+1): dice quién lo invitó y no le pide datos de otra persona. */
-export function companionMessage(f: InviteFields, inviteeFirstName: string): string {
-  const quien = inviteeFirstName.trim() || "Un invitado";
-  return [
-    "¡Hola! 👋",
-    "",
-    `${quien} te invitó como su acompañante a ${f.name}.`,
-    "",
-    ...details(f),
-    "",
-    "Por favor confírmanos tu asistencia y si tienes alguna restricción alimentaria.",
-    "",
-    "¡Gracias!",
+    "Confirma tu asistencia aquí; ahí mismo nos dices si tú o tu acompañante son alérgicos a algo 👇",
   ].join("\n");
 }
