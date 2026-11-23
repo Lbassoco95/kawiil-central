@@ -47,8 +47,9 @@ const Actividades = () => {
       .map((t) => ({ type: t, label: ACTIVITY_TYPE_LABELS[t], items: map.get(t)! }));
   }, [list]);
 
-  // Módulo exclusivo para G4 (transformador).
-  if (!roleLoading && !isTransformador) {
+  // G4 ve todo. Un ayudante o responsable asignado entra solo si la base le devuelve alguna actividad
+  // (la base filtra por permisos); sin actividades asignadas no hay nada que mostrar aquí.
+  if (!roleLoading && !isTransformador && !isLoading && list.length === 0) {
     return <Navigate to="/" replace />;
   }
 
@@ -63,7 +64,7 @@ const Actividades = () => {
           title="Actividades"
           description="Control y seguimiento de actividades internas del despacho: convivencias, capacitaciones/cursos y eventos del equipo. No son trabajos de cliente."
           stats={heroStats}
-          actions={<ActivityFormDialog />}
+          actions={isTransformador ? <ActivityFormDialog /> : undefined}
         />
 
         {isLoading ? (
@@ -75,9 +76,11 @@ const Actividades = () => {
               <p className="text-muted-foreground">
                 Aún no hay actividades. Crea la primera (por ejemplo, la convivencia de Fin de Año).
               </p>
-              <div className="flex justify-center">
-                <ActivityFormDialog />
-              </div>
+              {isTransformador && (
+                <div className="flex justify-center">
+                  <ActivityFormDialog />
+                </div>
+              )}
             </CardContent>
           </Card>
         ) : (

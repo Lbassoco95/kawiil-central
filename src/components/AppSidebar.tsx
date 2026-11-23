@@ -17,6 +17,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   PartyPopper,
+  Ticket,
   PenTool,
   Search,
   Settings,
@@ -32,6 +33,7 @@ import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useHasManagedActivities, useMisInvitaciones } from "@/hooks/useActivityExtras";
 import { useUnreadCount } from "@/hooks/useMentionNotifications";
 import { useUnreadEmailCount } from "@/hooks/useMicrosoft";
 import { useSlackChannelNotificationBadges } from "@/hooks/useSlackChannelNotificationBadges";
@@ -81,6 +83,7 @@ const NAV_GROUPS: NavGroup[] = [
         tooltip: "Múuch': sesiones, grabaciones, minutas IA y acuerdos → tareas",
       },
       { title: "Actividades", url: "/actividades", icon: PartyPopper, view: "actividades", g4Only: true },
+      { title: "Mis invitaciones", url: "/mis-invitaciones", icon: Ticket, view: "invitaciones" },
       { title: "Calendario", url: "/microsoft365/calendario", icon: Calendar, view: "calendario", moduleKey: "calendario" },
       { title: "Clientes", url: "/clientes", icon: Users, view: "clientes" },
     ],
@@ -237,13 +240,18 @@ function SidebarBody({
 }) {
   const { hasModule, hasModuleStrict, isError: modulesError, refetch: refetchModules } = useModulePermissions();
   const { isTransformador } = useUserRole();
+  // Actividades: G4 siempre; un ayudante o responsable asignado la ve con solo sus actividades.
+  const { data: manejaActividades } = useHasManagedActivities(!isTransformador);
+  // "Mis invitaciones" solo aparece si hay alguna invitación visible para esta persona.
+  const { data: misInvitaciones } = useMisInvitaciones();
   const getBadge = useNavBadges();
 
   const visibleGroups = NAV_GROUPS
     .map((g) => ({
       ...g,
       items: g.items.filter(
-        (i) => (!i.moduleKey || (i.estricto ? hasModuleStrict(i.moduleKey) : hasModule(i.moduleKey))) && (!i.g4Only || isTransformador),
+        (i) => (!i.moduleKey || (i.estricto ? hasModuleStrict(i.moduleKey) : hasModule(i.moduleKey))) && (!i.g4Only || isTransformador || (i.view === "actividades" && !!manejaActividades))
+          && (i.view !== "invitaciones" || (misInvitaciones?.length ?? 0) > 0),
       ),
     }))
     .filter((g) => g.items.length > 0);

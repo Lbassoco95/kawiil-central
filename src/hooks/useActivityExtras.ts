@@ -8,7 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useUpdateTask } from "@/hooks/useTasks";
 import { isVenueConfirmationTitle, venueText } from "@/lib/activityTypes";
 import { toast } from "sonner";
-import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
+import type { Database, Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 
 export type ActivityAttendee = Tables<"activity_attendees">;
 export type ActivityProvider = Tables<"activity_providers">;
@@ -399,5 +399,95 @@ export function useMarkProviderUnavailable() {
       );
     },
     onError: (e: Error) => toast.error("Error al marcar como no disponible: " + e.message),
+  });
+}
+
+// ─── Ayudantes por actividad y "mis invitaciones" ────────────────────────────
+export type ActivityManager = Tables<"activity_managers">;
+
+/** Kawiilers que G4 asignó para administrar una actividad (la ven y la manejan solo a ella). */
+export function useActivityManagers(activityId?: string) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["activity-managers", activityId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("activity_managers")
+        .select("*")
+        .eq("activity_id", activityId!)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return data as ActivityManager[];
+    },
+    enabled: !!user && !!activityId,
+  });
+}
+
+export function useAddActivityManager() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: async ({ activityId, userId }: { activityId: string; userId: string }) => {
+      const organization_id = await getOrgId(user!.id);
+      const { error } = await supabase
+        .from("activity_managers")
+        .insert({ activity_id: activityId, user_id: userId, organization_id, created_by: user!.id });
+      if (error) throw error;
+      return activityId;
+    },
+    onSuccess: (activityId) => {
+      queryClient.invalidateQueries({ queryKey: ["activity-managers", activityId] });
+      toast.success("Ayudante asignado");
+    },
+    onError: (e: Error) => toast.error("No se pudo asignar: " + e.message),
+  });
+}
+
+export function useRemoveActivityManager() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ activityId, userId }: { activityId: string; userId: string }) => {
+      const { error } = await supabase
+        .from("activity_managers").delete().eq("activity_id", activityId).eq("user_id", userId);
+      if (error) throw error;
+      return activityId;
+    },
+    onSuccess: (activityId) => {
+      queryClient.invalidateQueries({ queryKey: ["activity-managers", activityId] });
+      toast.success("Ayudante quitado");
+    },
+    onError: (e: Error) => toast.error("No se pudo quitar: " + e.message),
+  });
+}
+
+export type MiInvitacion = Database["public"]["Functions"]["mis_invitaciones"]["Returns"][number];
+
+/** La invitación propia de cada kawiiler (solo actividades que G4 marcó visibles para el equipo). */
+export function useMisInvitaciones() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["mis-invitaciones", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("mis_invitaciones");
+      if (error) throw error;
+      return (data ?? []) as MiInvitacion[];
+    },
+    enabled: !!user,
+    staleTime: 60 * 1000,
+  });
+}
+
+/** ¿Administra alguna actividad (como responsable o ayudante)? La base solo devuelve las suyas. */
+export function useHasManagedActivities(enabled = true) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["has-managed-activities", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("activities").select("id").limit(1);
+      if (error) throw error;
+      return (data ?? []).length > 0;
+    },
+    enabled: !!user && enabled,
+    staleTime: 60 * 1000,
   });
 }
