@@ -26,5 +26,7 @@ Ve: si su invitación está confirmada o rechazada, su +1, el estado de sus invi
 está confirmada) y el **anuncio** que G4 escribe. No ve a los demás invitados, proveedores, presupuesto ni nada más.
 
 ## Pendiente conocido
-- Los archivos de actividades viven en Storage; sus políticas de bucket no se revisaron en este cambio.
+- Archivos de actividades en Storage (bucket `documents`, ruta `<org>/<actividad>/<archivo>`): protegidos con políticas restrictivas
+  (`20261123070000_actividades_storage_proteccion.sql`): solo quien administra la actividad los ve, sube o borra. El resto del
+  bucket `documents` sigue abierto a cualquier usuario con sesión (decisión pendiente, afecta Documentos y clientes).
 - Hay asistentes de arranque ligados a la misma cuenta (p. ej. “Habib” y “Fernando”); corregir desde *Cuenta de Kawiil*.
