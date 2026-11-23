@@ -166,6 +166,9 @@ export type Database = {
           created_at: string
           created_by: string
           dietary_restriction: string | null
+          extra_guests_note: string | null
+          extra_guests_requested: number
+          extra_guests_status: string
           has_plus_one: boolean
           id: string
           name: string
@@ -188,6 +191,9 @@ export type Database = {
           created_at?: string
           created_by: string
           dietary_restriction?: string | null
+          extra_guests_note?: string | null
+          extra_guests_requested?: number
+          extra_guests_status?: string
           has_plus_one?: boolean
           id?: string
           name: string
@@ -210,6 +216,9 @@ export type Database = {
           created_at?: string
           created_by?: string
           dietary_restriction?: string | null
+          extra_guests_note?: string | null
+          extra_guests_requested?: number
+          extra_guests_status?: string
           has_plus_one?: boolean
           id?: string
           name?: string

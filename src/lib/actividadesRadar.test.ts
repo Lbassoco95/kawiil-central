@@ -10,7 +10,7 @@ const act = (o: Partial<RadarActividad> = {}): RadarActividad => ({
   venue_confirmed: false, location: null, ...o,
 });
 const inv = (o: Partial<RadarAsistente> = {}): RadarAsistente => ({
-  confirmed: "pendiente", rsvp_responded_at: null, plus_one_status: "none", ...o,
+  confirmed: "pendiente", rsvp_responded_at: null, extra_guests_status: "none", ...o,
 });
 const claves = (h: { clave: string }[]) => h.map((x) => x.clave);
 
@@ -41,8 +41,8 @@ describe("evaluarActividad", () => {
   it("sin fecha: avisa una vez", () => {
     expect(claves(evaluarActividad(act({ event_date: null }), [], [], [], HOY))).toEqual(["sin_fecha"]);
   });
-  it("+1 por aprobar siempre es 'ahora', aunque falte mucho", () => {
-    const h = evaluarActividad(act({ event_date: "2027-03-01" }), [inv({ plus_one_status: "solicitado" })], [], [], HOY);
+  it("Invitados extra por aprobar siempre es 'ahora', aunque falte mucho", () => {
+    const h = evaluarActividad(act({ event_date: "2027-03-01" }), [inv({ extra_guests_status: "solicitado" })], [], [], HOY);
     expect(h).toEqual([expect.objectContaining({ clave: "plus_uno", momento: "ahora" })]);
   });
   it("invitados sin responder solo a ≤14 días; quien ya respondió no cuenta", () => {
@@ -89,9 +89,9 @@ describe("construirMensajeRadar", () => {
     expect(construirMensajeRadar("Leo", [r(h)], true)!.title).toBe("Kawiilito · Actividades de la semana");
   });
   it("incluye nombre, momento y texto", () => {
-    const m = construirMensajeRadar("Leo", [r([{ clave: "plus_uno", momento: "ahora", texto: "1 solicitud de +1 espera tu aprobación" }], 1)], false)!;
+    const m = construirMensajeRadar("Leo", [r([{ clave: "plus_uno", momento: "ahora", texto: "1 solicitud de invitados extra espera tu aprobación" }], 1)], false)!;
     expect(m.title).toBe("Kawiilito · Actividades por atender");
     expect(m.body).toContain("Leo, esto pide tu atención");
-    expect(m.body).toContain("Navidad Kawiil (mañana): 1 solicitud de +1 espera tu aprobación.");
+    expect(m.body).toContain("Navidad Kawiil (mañana): 1 solicitud de invitados extra espera tu aprobación.");
   });
 });

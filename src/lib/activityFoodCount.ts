@@ -12,6 +12,9 @@ export interface FoodAttendee {
   plus_one_name: string | null;
   plus_one_confirmed: string;
   plus_one_dietary: string | null;
+  /** Invitados extra (más allá del +1): solo cuentan si fueron aprobados. */
+  extra_guests_requested?: number;
+  extra_guests_status?: string;
 }
 
 export type FoodPersonKind = "asistente" | "acompañante";
@@ -60,6 +63,11 @@ function peopleOf(a: FoodAttendee): FoodPerson[] {
       clean(a.plus_one_name) || `Acompañante de ${clean(a.name)}`,
       "acompañante", a.plus_one_confirmed, a.plus_one_dietary,
     );
+  }
+  // Invitados extra aprobados: van con el invitado y comparten su confirmación.
+  const extras = a.extra_guests_status === "aprobado" ? (a.extra_guests_requested ?? 0) : 0;
+  for (let i = 1; i <= extras; i++) {
+    add(`Invitado extra ${i} de ${clean(a.name)}`, "acompañante", a.confirmed, null);
   }
   return out;
 }

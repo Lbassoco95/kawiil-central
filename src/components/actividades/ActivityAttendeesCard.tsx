@@ -64,7 +64,6 @@ function AttendeeDialog({
   const isPending = createAttendee.isPending || updateAttendee.isPending;
 
   const handleSubmit = () => {
-    const keepRequest = !hasPlusOne && attendee?.plus_one_status === "solicitado";
     const payload = {
       name: name.trim(),
       confirmed,
@@ -72,12 +71,10 @@ function AttendeeDialog({
       phone: phone.trim() || null,
       notes: notes.trim() || null,
       has_plus_one: hasPlusOne,
-      // Si se edita a mano, el estado de la solicitud se alinea con el interruptor.
-      plus_one_status: hasPlusOne ? "aprobado" : (attendee?.plus_one_status === "solicitado" || attendee?.plus_one_status === "rechazado" ? attendee.plus_one_status : "none"),
-      // Una solicitud pendiente conserva el nombre y las alergias que dejó el invitado.
-      plus_one_name: hasPlusOne || keepRequest ? plusName.trim() || null : null,
+      plus_one_status: hasPlusOne ? "aprobado" : "none",
+      plus_one_name: hasPlusOne ? plusName.trim() || null : null,
       plus_one_confirmed: hasPlusOne ? plusConfirmed : "pendiente",
-      plus_one_dietary: hasPlusOne || keepRequest ? plusDietary.trim() || null : null,
+      plus_one_dietary: hasPlusOne ? plusDietary.trim() || null : null,
       plus_one_phone: hasPlusOne ? plusPhone.trim() || null : null,
     };
     if (isEdit) {
@@ -198,10 +195,11 @@ export function ActivityAttendeesCard({ activityId }: { activityId: string }) {
   const { data: tasks } = useActivityTasks(activityId);
   const list = attendees ?? [];
   // Personas = asistentes + acompañantes (cuenta para comida, lugares, souvenirs).
-  const personas = list.reduce((n, a) => n + 1 + (a.has_plus_one ? 1 : 0), 0);
+  const extras = (a: ActivityAttendee) => (a.extra_guests_status === "aprobado" ? a.extra_guests_requested : 0);
+  const personas = list.reduce((n, a) => n + 1 + (a.has_plus_one ? 1 : 0) + extras(a), 0);
   const confirmados = list.reduce(
-    (n, a) => n + (a.confirmed === "si" ? 1 : 0) + (a.has_plus_one && a.plus_one_confirmed === "si" ? 1 : 0), 0);
-  const porAprobar = list.filter((a) => a.plus_one_status === "solicitado").length;
+    (n, a) => n + (a.confirmed === "si" ? 1 + extras(a) : 0) + (a.has_plus_one && a.plus_one_confirmed === "si" ? 1 : 0), 0);
+  const porAprobar = list.filter((a) => a.extra_guests_status === "solicitado").length;
   const pendCount: Record<string, { done: number; total: number }> = {};
   for (const t of tasks ?? []) {
     if (!t.activity_attendee_id) continue;
@@ -223,7 +221,7 @@ export function ActivityAttendeesCard({ activityId }: { activityId: string }) {
           )}
           {porAprobar > 0 && (
             <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-800">
-              {porAprobar} {porAprobar === 1 ? "solicitud" : "solicitudes"} de +1 por aprobar
+              {porAprobar} {porAprobar === 1 ? "solicitud" : "solicitudes"} de invitados extra por aprobar
             </Badge>
           )}
         </CardTitle>
@@ -291,54 +289,67 @@ export function ActivityAttendeesCard({ activityId }: { activityId: string }) {
                       </Select>
                     </TableCell>
                     <TableCell>
-                      {a.has_plus_one ? (
-                        <div className="space-y-1">
-                          <span className="block text-sm">{a.plus_one_name || "Por definir"}</span>
-                          {a.plus_one_phone && (
-                            <span className="block text-xs text-muted-foreground">{a.plus_one_phone}</span>
-                          )}
-                          <Select
-                            value={a.plus_one_confirmed}
-                            onValueChange={(v) => updateAttendee.mutate({ id: a.id, plus_one_confirmed: v })}
-                          >
-                            <SelectTrigger className="h-7 w-[130px] text-xs">
-                              <Badge
-                                variant="outline"
-                                className={ATTENDEE_CONFIRMED_STYLES[a.plus_one_confirmed as AttendeeConfirmed]}
-                              >
-                                {ATTENDEE_CONFIRMED_LABELS[a.plus_one_confirmed as AttendeeConfirmed] ?? a.plus_one_confirmed}
-                              </Badge>
-                            </SelectTrigger>
-                            <SelectContent>
-                              {ATTENDEE_CONFIRMED_OPTIONS.map((o) => (
-                                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      ) : a.plus_one_status === "solicitado" ? (
-                        <div className="space-y-1.5 rounded-md border border-amber-200 bg-amber-50 p-2">
-                          <p className="text-xs font-medium text-amber-900">Pide +1: {a.plus_one_name || "sin nombre"}</p>
-                          <div className="flex gap-1.5">
-                            <Button size="sm" className="h-7 px-2 text-xs" disabled={updateAttendee.isPending}
-                              onClick={() => updateAttendee.mutate({
-                                id: a.id, has_plus_one: true, plus_one_status: "aprobado", plus_one_confirmed: "si",
-                              })}>
-                              <Check className="mr-1 h-3 w-3" />Aprobar
-                            </Button>
-                            <Button size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={updateAttendee.isPending}
-                              onClick={() => updateAttendee.mutate({ id: a.id, plus_one_status: "rechazado" })}>
-                              <X className="mr-1 h-3 w-3" />Rechazar
-                            </Button>
+                      <div className="space-y-1.5">
+                        {a.has_plus_one ? (
+                          <div className="space-y-1">
+                            <span className="block text-sm">{a.plus_one_name || "Por definir"}</span>
+                            {a.plus_one_phone && (
+                              <span className="block text-xs text-muted-foreground">{a.plus_one_phone}</span>
+                            )}
+                            <Select
+                              value={a.plus_one_confirmed}
+                              onValueChange={(v) => updateAttendee.mutate({ id: a.id, plus_one_confirmed: v })}
+                            >
+                              <SelectTrigger className="h-7 w-[130px] text-xs">
+                                <Badge
+                                  variant="outline"
+                                  className={ATTENDEE_CONFIRMED_STYLES[a.plus_one_confirmed as AttendeeConfirmed]}
+                                >
+                                  {ATTENDEE_CONFIRMED_LABELS[a.plus_one_confirmed as AttendeeConfirmed] ?? a.plus_one_confirmed}
+                                </Badge>
+                              </SelectTrigger>
+                              <SelectContent>
+                                {ATTENDEE_CONFIRMED_OPTIONS.map((o) => (
+                                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           </div>
-                        </div>
-                      ) : a.plus_one_status === "rechazado" ? (
-                        <span className="text-xs text-muted-foreground">+1 rechazado</span>
-                      ) : "—"}
+                        ) : "—"}
+                        {a.extra_guests_status === "solicitado" && (
+                          <div className="space-y-1.5 rounded-md border border-amber-200 bg-amber-50 p-2">
+                            <p className="text-xs font-medium text-amber-900">
+                              Pide {a.extra_guests_requested} {a.extra_guests_requested === 1 ? "invitado extra" : "invitados extra"}
+                            </p>
+                            {a.extra_guests_note && (
+                              <p className="text-xs text-amber-900/80">{a.extra_guests_note}</p>
+                            )}
+                            <div className="flex gap-1.5">
+                              <Button size="sm" className="h-7 px-2 text-xs" disabled={updateAttendee.isPending}
+                                onClick={() => updateAttendee.mutate({ id: a.id, extra_guests_status: "aprobado" })}>
+                                <Check className="mr-1 h-3 w-3" />Aprobar
+                              </Button>
+                              <Button size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={updateAttendee.isPending}
+                                onClick={() => updateAttendee.mutate({ id: a.id, extra_guests_status: "rechazado" })}>
+                                <X className="mr-1 h-3 w-3" />Rechazar
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                        {a.extra_guests_status === "aprobado" && (
+                          <div className="text-xs text-emerald-800">
+                            +{a.extra_guests_requested} extra {a.extra_guests_requested === 1 ? "aprobado" : "aprobados"}
+                            {a.extra_guests_note && <span className="block text-muted-foreground">{a.extra_guests_note}</span>}
+                          </div>
+                        )}
+                        {a.extra_guests_status === "rechazado" && (
+                          <span className="block text-xs text-muted-foreground">Extra rechazado</span>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       {a.dietary_restriction || "—"}
-                      {(a.has_plus_one || a.plus_one_status === "solicitado") && a.plus_one_dietary && (
+                      {a.has_plus_one && a.plus_one_dietary && (
                         <span className="block text-xs text-muted-foreground">+1: {a.plus_one_dietary}</span>
                       )}
                     </TableCell>

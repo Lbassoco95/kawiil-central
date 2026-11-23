@@ -15,8 +15,10 @@ type Info = {
   };
   guest: {
     first_name: string; confirmed: "si" | "no" | "pendiente"; dietary: string | null;
-    responded: boolean; plus_one_status: "none" | "solicitado" | "aprobado" | "rechazado";
+    responded: boolean; has_plus_one: boolean;
     plus_one_name: string | null; plus_one_dietary: string | null;
+    extra_guests_requested: number; extra_guests_status: "none" | "solicitado" | "aprobado" | "rechazado";
+    extra_guests_note: string | null;
   };
 };
 
@@ -34,16 +36,23 @@ export default function InvitacionPublica() {
 
   const [attending, setAttending] = useState<"si" | "no" | null>(null);
   const [dietary, setDietary] = useState("");
-  const [wantPlus, setWantPlus] = useState(false);
+  // El +1 va incluido: arranca encendido y la persona lo puede apagar ("voy solo").
+  const [wantPlus, setWantPlus] = useState(true);
   const [plusName, setPlusName] = useState("");
   const [plusDietary, setPlusDietary] = useState("");
+  const [wantExtra, setWantExtra] = useState(false);
+  const [extraCount, setExtraCount] = useState(1);
+  const [extraNote, setExtraNote] = useState("");
   const [website, setWebsite] = useState(""); // honeypot
 
   const hydrate = useCallback((d: Info) => {
     setInfo(d);
     setAttending(d.guest.responded && d.guest.confirmed !== "pendiente" ? d.guest.confirmed : null);
     setDietary(d.guest.dietary ?? "");
-    setWantPlus(d.guest.plus_one_status === "solicitado" || d.guest.plus_one_status === "aprobado");
+    setWantPlus(d.guest.responded ? d.guest.has_plus_one : true);
+    setWantExtra(d.guest.extra_guests_requested > 0);
+    setExtraCount(d.guest.extra_guests_requested > 0 ? d.guest.extra_guests_requested : 1);
+    setExtraNote(d.guest.extra_guests_note ?? "");
     setPlusName(d.guest.plus_one_name ?? "");
     setPlusDietary(d.guest.plus_one_dietary ?? "");
   }, []);
@@ -66,8 +75,10 @@ export default function InvitacionPublica() {
     const { data, error: err } = await supabase.functions.invoke("activity-rsvp", {
       body: {
         action: "respond", token, attending, dietary,
-        want_plus_one: attending === "si" && wantPlus,
-        plus_one_name: plusName, plus_one_dietary: plusDietary, website,
+        want_plus_one: wantPlus,
+        plus_one_name: plusName, plus_one_dietary: plusDietary,
+        extra_guests: attending === "si" && wantExtra ? extraCount : 0,
+        extra_note: extraNote, website,
       },
     });
     setSaving(false);
@@ -94,8 +105,7 @@ export default function InvitacionPublica() {
   }
 
   const { activity, guest } = info;
-  const plusApproved = guest.plus_one_status === "aprobado";
-  const plusRequested = guest.plus_one_status === "solicitado";
+  const extraStatus = guest.extra_guests_status;
   const when = [
     activity.event_date ? formatMX(activity.event_date, "EEEE d 'de' MMMM") : null,
     activity.event_time ? `${activity.event_time.slice(0, 5)} h` : null,
@@ -122,8 +132,8 @@ export default function InvitacionPublica() {
               <p>
                 {attending === "no"
                   ? "Gracias por avisarnos. Te vamos a extrañar."
-                  : plusRequested
-                    ? "Listo, quedaste confirmado. Tu solicitud de acompañante está en revisión; te avisamos en cuanto la aprueben."
+                  : extraStatus === "solicitado"
+                    ? "Listo, quedaste confirmado. Tu solicitud de invitaciones adicionales está en revisión; te avisamos en cuanto la aprueben."
                     : "Listo, quedaste confirmado. ¡Te esperamos!"}
               </p>
             </div>
@@ -153,43 +163,77 @@ export default function InvitacionPublica() {
                 <div className="space-y-5">
                   <div className="space-y-2">
                     <Label htmlFor="rsvp-diet">¿Eres alérgico o tienes alguna restricción alimentaria?</Label>
-                    <Input id="rsvp-diet" maxLength={200} placeholder="Ej: alergia a los mariscos, vegetariano… (déjalo vacío si no)"
+                    <Input id="rsvp-diet" maxLength={200} placeholder="Ej: mariscos, vegetariano… (vacío si no)"
                       value={dietary} onChange={(e) => setDietary(e.target.value)} />
                   </div>
 
                   <div className="space-y-3 rounded-2xl border border-[#e6dccb] p-3">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <Label htmlFor="rsvp-plus">¿Quieres llevar a alguien más?</Label>
+                        <Label htmlFor="rsvp-plus">Vengo con mi +1</Label>
                         <p className="text-xs text-[#6b6354]">
-                          {plusApproved ? "Tu acompañante ya está aprobado."
-                            : "Es una invitación +1. Mandamos la solicitud y el equipo la aprueba."}
+                          Tu invitación incluye un acompañante. Apágalo si vas solo.
                         </p>
                       </div>
-                      <Switch id="rsvp-plus" checked={wantPlus} disabled={plusApproved}
-                        onCheckedChange={setWantPlus} />
+                      <Switch id="rsvp-plus" checked={wantPlus} onCheckedChange={setWantPlus} />
                     </div>
                     {wantPlus && (
                       <div className="space-y-3">
                         <div className="space-y-2">
                           <Label htmlFor="rsvp-plus-name">Nombre de tu acompañante</Label>
-                          <Input id="rsvp-plus-name" maxLength={120} value={plusName}
-                            onChange={(e) => setPlusName(e.target.value)} />
+                          <Input id="rsvp-plus-name" maxLength={120} placeholder="Si aún no lo sabes, puedes dejarlo vacío"
+                            value={plusName} onChange={(e) => setPlusName(e.target.value)} />
                         </div>
                         <div className="space-y-2">
                           <Label htmlFor="rsvp-plus-diet">¿Tu acompañante es alérgico a algo?</Label>
                           <Input id="rsvp-plus-diet" maxLength={200} placeholder="Déjalo vacío si no"
                             value={plusDietary} onChange={(e) => setPlusDietary(e.target.value)} />
                         </div>
-                        {plusRequested && !done && (
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-3 rounded-2xl border border-[#e6dccb] p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <Label htmlFor="rsvp-extra">¿Necesitas más invitaciones?</Label>
+                        <p className="text-xs text-[#6b6354]">
+                          Si quieres llevar a alguien más aparte de tu +1, manda la solicitud y el equipo la aprueba.
+                        </p>
+                      </div>
+                      <Switch id="rsvp-extra" checked={wantExtra} onCheckedChange={setWantExtra} />
+                    </div>
+                    {wantExtra && (
+                      <div className="space-y-3">
+                        <div className="space-y-2">
+                          <Label htmlFor="rsvp-extra-count">¿Cuántas más?</Label>
+                          <div className="flex items-center gap-3">
+                            <Button type="button" variant="outline" size="icon" className="h-9 w-9 rounded-full"
+                              disabled={extraCount <= 1} onClick={() => setExtraCount((c) => Math.max(1, c - 1))}>−</Button>
+                            <span id="rsvp-extra-count" className="w-6 text-center text-lg font-semibold">{extraCount}</span>
+                            <Button type="button" variant="outline" size="icon" className="h-9 w-9 rounded-full"
+                              disabled={extraCount >= 5} onClick={() => setExtraCount((c) => Math.min(5, c + 1))}>+</Button>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="rsvp-extra-note">¿Quiénes son? (y si son alérgicos a algo)</Label>
+                          <Input id="rsvp-extra-note" maxLength={300} value={extraNote}
+                            onChange={(e) => setExtraNote(e.target.value)} />
+                        </div>
+                        {extraStatus === "solicitado" && (
                           <p className="flex items-center gap-1.5 text-xs text-amber-800">
                             <Clock3 className="h-3.5 w-3.5" /> Tu solicitud está en revisión.
                           </p>
                         )}
+                        {extraStatus === "aprobado" && (
+                          <p className="flex items-center gap-1.5 text-xs text-emerald-800">
+                            <CheckCircle2 className="h-3.5 w-3.5" /> Aprobadas. ¡Las esperamos!
+                          </p>
+                        )}
+                        {extraStatus === "rechazado" && (
+                          <p className="text-xs text-[#6b6354]">Por ahora no pudimos aprobar invitaciones adicionales.</p>
+                        )}
                       </div>
-                    )}
-                    {guest.plus_one_status === "rechazado" && !wantPlus && (
-                      <p className="text-xs text-[#6b6354]">Por ahora no pudimos aprobar a tu acompañante.</p>
                     )}
                   </div>
                 </div>
@@ -201,7 +245,7 @@ export default function InvitacionPublica() {
 
               {error && <p className="text-sm text-rose-700">{error}</p>}
               <Button className="h-12 w-full rounded-2xl" onClick={submit}
-                disabled={!attending || saving || (attending === "si" && wantPlus && !plusName.trim())}>
+                disabled={!attending || saving}>
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : guest.responded || done ? "Actualizar respuesta" : "Enviar respuesta"}
               </Button>
             </>
