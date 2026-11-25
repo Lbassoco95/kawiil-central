@@ -15,7 +15,7 @@ Todo sale de `agent_registry.config`; **no hay migración**.
 - `creado_por`: hoy el Constructor escribe el id de la persona como texto (sigue valiendo, cuenta como «persona»). Cuando **un agente** crea a otro, la VM debe escribir:
   `config.creado_por = { "tipo": "agente", "id": "<agent_registry.id del creador>", "para": "<motivo, texto corto>" }` y `config.creado_en = "<fecha ISO>"`.
 - Una oficina existe cuando un agente activo tiene al menos un agente activo con `creado_por.tipo = "agente"` apuntando a él. El agente creado vive en la sala del departamento de su creador.
-- «Solo lectura» **no se deduce**: la pantalla solo lo muestra si el registro trae `config.modo = "solo_lectura"` (ver pendientes).
+- **Solo lectura (decisión de Dirección, 25 nov):** todo agente creado por otro agente empieza en Solo lectura y una persona lo habilita (`config.habilitado = { por, en }`, escrito por `agente-constructor`, acción `habilitar`). También cuenta como Solo lectura `config.modo = "solo_lectura"`. **Pausar:** `config.pausado = { por, en }` (acción `pausar`); `dispatch-to-agent` rechaza (409) las tareas de un agente pausado y quita accesos y permisos de escritura de las de un agente en Solo lectura. Lo que ocurre dentro de la VM lo debe hacer valer la VM: `docs/agentes-vm-requisitos.md`.
 - Las llamadas entre agentes salen de `agent_tasks.source_task_id` (R5; la VM aún no las hace).
 
 ## Supuestos
@@ -30,12 +30,11 @@ Todo sale de `agent_registry.config`; **no hay migración**.
 
 ## Cambios respecto al diseño
 - El letrero de la oficina va al pie (esquina frontal), no en la esquina superior, para que ningún escritorio lo tape.
-- «Pausarlo» aparece desactivado («por activar») hasta que Dirección decida los permisos.
-- El aviso no afirma «empieza en Solo lectura»: dice «Permisos: aún sin definir por Dirección».
+- «Pausarlo» está activo (y «Reanudarlo»); el aviso dice que el agente empieza en Solo lectura y ofrece «Habilitarlo» con confirmación. **Estas acciones escriben solo cuando la función `agente-constructor` esté desplegada** (se publica al fusionar a `main`, fuera de 6:30–7:00 CDMX); en una vista previa fallarán con «Acción no válida» mientras tanto.
 - Las pestañas de agentes abiertos usan `?a=` en la dirección (ids separados por coma).
 
 ## Decisiones pendientes de Dirección (dejadas desactivadas o marcadas)
-Permisos de un agente creado por otro (propuesta: Solo lectura; igual o menores que el creador) · cuántos agentes puede crear cada agente / quién no puede crear · cuántos agentes se ven a la vez · permisos del agente llamado · origen de los requerimientos de la autoridad · color de cada oficina · aviso al llegar a 6 agentes en una oficina (`R1.d.5`: **no implementado**, esperando decisión).
+~~Permisos de un agente creado por otro~~ (decidido: Solo lectura hasta que una persona lo habilite) · cuántos agentes puede crear cada agente / quién no puede crear · cuántos agentes se ven a la vez · permisos del agente llamado · origen de los requerimientos de la autoridad · color de cada oficina · aviso al llegar a 6 agentes en una oficina (`R1.d.5`: **no implementado**, esperando decisión).
 
 ## Cambio de datos en producción (NO aplicado; requiere confirmación)
 Para que Vigilante SITI aparezca en la «Oficina de Vizumi» hay que escribir, en **una** fila de `agent_registry` (la de Vigilante SITI), solo estas dos claves dentro de `config` (se fusionan con lo que ya tenga; no se tocan otras columnas ni otras filas):

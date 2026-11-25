@@ -22,6 +22,7 @@ import {
   type EjemploTarea,
 } from "../_shared/habilidades.ts";
 import { validarFuentesDocs } from "../_shared/fuentesDocs.ts";
+import { conHabilitacion, conPausa } from "../_shared/agentePermisos.ts";
 
 /**
  * agente-constructor
@@ -37,6 +38,8 @@ import { validarFuentesDocs } from "../_shared/fuentesDocs.ts";
  *   action "cuentas_agente"     → { agent_id, activa } → { activa }   (interruptor: el agente puede leer correo y calendario de las cuentas vinculadas; solo lectura)
  *   action "fuentes_documentos" → { agent_id, fuentes } → { fuentes }   (reemplaza config.fuentes_docs; solo identificadores; cualquier agente consultable activo)
  *   action "programar" → { agent_id, programacion } → { programacion } (fusiona config.programacion; solo agentes del constructor)
+ *   action "pausar" → { agent_id, pausado } → { ok }       (config.pausado: dispatch-to-agent no le da tareas mientras esté pausado)
+ *   action "habilitar" → { agent_id } → { ok }             (config.habilitado: quita el Solo lectura de un agente creado por otro agente)
  *
  * Seguridad:
  *   - verify_jwt=true; el usuario sale del JWT, nunca del body.
@@ -290,6 +293,26 @@ serve(async (req: Request) => {
       if (errUp) { console.error("agente-constructor: cuentas", errUp.message); return json({ error: "No se pudo guardar." }, 500); }
       console.log(`agente-constructor cuentas_agente ${agentId} activa=${body.activa} por=${userData.user.id}`);
       return json({ activa: body.activa });
+    }
+
+    // ── Pausar / reanudar y habilitar (Solo lectura) ───────────────────────────────────────────────
+    // Solo Dirección. Pausar no borra nada: marca `config.pausado` y `dispatch-to-agent` deja de darle tareas hasta reanudar.
+    // Habilitar quita el Solo lectura de un agente creado por otro agente (`config.habilitado`); no concede nada nuevo por sí solo.
+    if (body.action === "pausar" || body.action === "habilitar") {
+      const agentId = typeof body.agent_id === "string" ? body.agent_id : "";
+      if (!agentId || (body.action === "pausar" && typeof body.pausado !== "boolean")) return json({ error: "Faltan datos." }, 400);
+      const { data: ag, error: errAg } = await admin.from("agent_registry").select("id, kind, status, config").eq("id", agentId).eq("organization_id", ORG_AGENTES).maybeSingle();
+      if (errAg) { console.error("agente-constructor: lee agente", errAg.message); return json({ error: "No se pudo leer el agente." }, 500); }
+      if (!ag) return json({ error: "Agente no encontrado." }, 404);
+      if (ag.kind !== "consultable" || ag.status === "archived") return json({ error: "Solo se pueden configurar agentes consultables activos." }, 403);
+      const ahora = new Date();
+      let nuevo: Record<string, unknown>;
+      if (body.action === "pausar") nuevo = conPausa(ag.config, body.pausado as boolean, userId, ahora);
+      else { const r = conHabilitacion(ag.config, userId, ahora); if (!r.ok) return json({ error: r.error }, 409); nuevo = r.config; }
+      const { error: errUp } = await admin.from("agent_registry").update({ config: nuevo, updated_at: ahora.toISOString() }).eq("id", agentId);
+      if (errUp) { console.error("agente-constructor: permisos", errUp.message); return json({ error: "No se pudo guardar." }, 500); }
+      console.log(`agente-constructor ${body.action} ${agentId}${body.action === "pausar" ? ` pausado=${body.pausado}` : ""} por=${userId}`);
+      return json({ ok: true });
     }
 
     return json({ error: "Acción no válida." }, 400);

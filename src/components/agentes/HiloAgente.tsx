@@ -128,7 +128,8 @@ function Revisiones({ taskId, ahora, lista }: { taskId: string; ahora: Date; lis
   );
 }
 
-export function HiloAgente({ taskId, ahora, claseAlto = "h-[min(64vh,42rem)] min-h-[22rem]" }: { taskId: string; ahora: Date; claseAlto?: string }) {
+// `sinCuadro`: sin cuadro para escribir (la vista «Varios a la vez» trae uno solo para todos los agentes marcados, R3.3).
+export function HiloAgente({ taskId, ahora, claseAlto = "h-[min(64vh,42rem)] min-h-[22rem]", sinCuadro = false }: { taskId: string; ahora: Date; claseAlto?: string; sinCuadro?: boolean }) {
   const q = useHilo(taskId);
   const instruir = useInstruirAgente();
   const qc = useQueryClient();
@@ -195,6 +196,7 @@ export function HiloAgente({ taskId, ahora, claseAlto = "h-[min(64vh,42rem)] min
             </button>
           )}
         </div>
+        {!sinCuadro && (
         <div className="relative z-10 max-h-[55%] shrink-0 space-y-2 overflow-y-auto border-t border-border/40 bg-background p-2" data-testid="hilo-escribir">
           <PermisosTarea texto={texto} accesos={q.data?.accesos ?? []} aprobados={aprobados} onAccesos={setAprobados} sitios={q.data?.escritura_dominios ?? []} escribir={escribir} onEscribir={setEscribir} />
           {instruir.isError && <p role="alert" className="text-sm text-destructive">{(instruir.error as Error).message}</p>}
@@ -209,6 +211,7 @@ export function HiloAgente({ taskId, ahora, claseAlto = "h-[min(64vh,42rem)] min
           </div>
           <p className="px-1 text-[11px] text-muted-foreground">Enter envía · Shift+Enter agrega una línea</p>
         </div>
+        )}
       </div>
       {ultimaTarea && (
         <details className="rounded-2xl border border-border/60 p-3 text-sm" data-testid="hilo-avance">

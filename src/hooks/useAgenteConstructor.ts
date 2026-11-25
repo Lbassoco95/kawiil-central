@@ -131,3 +131,15 @@ export function usePermitirDrive() {
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ["cuentas-drive"] }); void qc.invalidateQueries({ queryKey: ["linked-accounts"] }); },
   });
 }
+
+// Pausar / reanudar un agente y habilitar a uno que empezó en Solo lectura (creado por otro agente). Solo Dirección; solo escribe `config.pausado` / `config.habilitado`
+// a través de `agente-constructor`. «Pausar» hace que `dispatch-to-agent` deje de darle tareas hasta reanudar.
+export type AccionPermiso = "pausar" | "reanudar" | "habilitar";
+export function usePermisosAgente() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { agent_id: string; accion: AccionPermiso }) =>
+      invocar<{ ok: boolean }>(v.accion === "habilitar" ? { action: "habilitar", agent_id: v.agent_id } : { action: "pausar", agent_id: v.agent_id, pausado: v.accion === "pausar" }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["agentes-registro"] }); },
+  });
+}

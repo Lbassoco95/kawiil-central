@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { contextoSeguro, estaPausado } from "../_shared/agentePermisos.ts";
 
 /**
  * dispatch-to-agent
@@ -194,7 +195,7 @@ serve(async (req: Request) => {
     // por rol/permiso, agregar la validación aquí.
     const { data: agent, error: agentError } = await supabaseAdmin
       .from("agent_registry")
-      .select("id, name, organization_id")
+      .select("id, name, organization_id, config")
       .eq("id", agent_id)
       .maybeSingle();
 
@@ -207,6 +208,10 @@ serve(async (req: Request) => {
     }
     if (!agent) {
       return jsonResponse({ error: `Agent with id ${agent_id} not found` }, 404);
+    }
+    // Un agente pausado por una persona no recibe tareas hasta que se reanude.
+    if (estaPausado(agent.config)) {
+      return jsonResponse({ error: "El agente está pausado. Reanúdalo para darle tareas." }, 409);
     }
 
     const vmPayload: Record<string, unknown> = {
@@ -222,7 +227,8 @@ serve(async (req: Request) => {
     if (typeof client_id === "string" && client_id) vmPayload.client_id = client_id;
     if (typeof project_id === "string" && project_id) vmPayload.project_id = project_id;
     if (input_context && typeof input_context === "object") {
-      vmPayload.input_context = input_context;
+      // Un agente en Solo lectura (creado por otro agente y aún no habilitado) no recibe accesos ni permisos de escritura, aunque se marquen.
+      vmPayload.input_context = contextoSeguro(input_context, agent.config);
     }
     if (Array.isArray(attachment_refs)) {
       vmPayload.attachment_refs = attachment_refs;

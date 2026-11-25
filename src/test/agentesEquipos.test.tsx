@@ -16,6 +16,8 @@ vi.mock("@/components/agentes/TrabajosAgente", () => ({ TrabajosAgente: ({ agent
 const tareasSeg = vi.hoisted(() => ({ data: [] as unknown[], isLoading: false, isError: false }));
 vi.mock("@/hooks/useSeguimientoAgentes", () => ({ useTareasSeguimiento: () => tareasSeg }));
 const registro = vi.hoisted(() => ({ agentes: [] as unknown[], tareas: [] as unknown[] }));
+const permisos = vi.hoisted(() => ({ mutate: vi.fn() }));
+vi.mock("@/hooks/useAgenteConstructor", () => ({ usePermisosAgente: () => ({ mutate: permisos.mutate, isPending: false, isError: false, error: null }) }));
 vi.mock("@/hooks/useAgentesRegistro", () => ({
   useAgentesRegistro: () => ({ data: registro.agentes, isLoading: false, isError: false, dataUpdatedAt: 0 }),
   useTareasAgentes: () => ({ data: registro.tareas, isLoading: false, isError: false, dataUpdatedAt: 0 }),
@@ -27,6 +29,7 @@ import { agruparPorDepartamento, DEPARTAMENTOS } from "@/lib/agentes/departament
 import { figurasOficina } from "@/lib/agentes/oficina";
 import { leerVista, escribirVista } from "@/lib/agentes/vistas";
 import { urlChat, leerAbiertos, estadoVisible } from "@/lib/agentes/chat";
+import { soloLectura, estaPausado, conPausa, conHabilitacion, contextoSeguro } from "../../supabase/functions/_shared/agentePermisos";
 import { SalaIsometrica } from "@/components/agentes/SalaIsometrica";
 import { OficinaEquipo } from "@/components/agentes/OficinaEquipo";
 import { ResumenConversacion } from "@/components/agentes/ResumenConversacion";
@@ -155,25 +158,85 @@ describe("R1.b/c · pantalla de la oficina", () => {
   });
 });
 
-describe("R1.e.4 · aviso cuando un agente crea a otro", () => {
-  beforeEach(() => localStorage.clear());
-  it("dice quién, para qué, cuándo y permisos; ofrece ver la oficina y revisar permisos; «Pausar» queda desactivado", () => {
+describe("R1.e.4 · aviso cuando un agente crea a otro (empieza en Solo lectura)", () => {
+  beforeEach(() => { localStorage.clear(); permisos.mutate.mockReset(); });
+  const montarAviso = (agentes = AGENTES, ver = vi.fn(), rev = vi.fn()) => render(<MemoryRouter><AvisoAgentesCreados agentes={agentes as never} ahora={AHORA} onVerOficina={ver} onRevisarPermisos={rev} /></MemoryRouter>);
+  it("dice quién, para qué y cuándo, y que empieza en Solo lectura; ofrece ver la oficina y revisar permisos", () => {
     const ver = vi.fn(), rev = vi.fn();
-    render(<MemoryRouter><AvisoAgentesCreados agentes={AGENTES} ahora={AHORA} onVerOficina={ver} onRevisarPermisos={rev} /></MemoryRouter>);
+    montarAviso(AGENTES, ver, rev);
     const a = screen.getByTestId(`aviso-creado-${V}`).textContent!;
     expect(a).toContain("Vizumi creó a Vigilante SITI");
     expect(a).toContain("Para qué: Revisar cada día SITI AA y SITI PLD");
-    expect(a).toContain("Permisos: aún sin definir por Dirección");
+    expect(screen.getByTestId(`aviso-permisos-texto-${V}`).textContent).toContain("Empieza en Solo lectura");
     fireEvent.click(screen.getByTestId(`aviso-ver-${V}`)); expect(ver).toHaveBeenCalledWith(J);
     fireEvent.click(screen.getByTestId(`aviso-permisos-${V}`)); expect(rev).toHaveBeenCalledWith(V);
-    expect((screen.getByTestId(`aviso-pausar-${V}`) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByTestId(`aviso-visto-${V}`));
     expect(screen.queryByTestId("aviso-creados")).toBeNull();
   });
+  it("«Pausarlo» está activo y pausa al agente; si ya está pausado ofrece «Reanudarlo»", () => {
+    montarAviso();
+    const b = screen.getByTestId(`aviso-pausar-${V}`) as HTMLButtonElement;
+    expect(b.disabled).toBe(false);
+    expect(b.textContent).toBe("Pausarlo");
+    fireEvent.click(b);
+    expect(permisos.mutate).toHaveBeenCalledWith({ agent_id: V, accion: "pausar" });
+  });
+  it("un agente pausado lo dice y se puede reanudar", () => {
+    const pausado = AGENTES.map((a) => (a.id === V ? { ...a, config: { ...a.config, pausado: { por: "p", en: hace(5) } } } : a));
+    montarAviso(pausado);
+    expect(screen.getByTestId(`aviso-permisos-texto-${V}`).textContent).toContain("Pausado");
+    fireEvent.click(screen.getByTestId(`aviso-pausar-${V}`));
+    expect(permisos.mutate).toHaveBeenCalledWith({ agent_id: V, accion: "reanudar" });
+  });
+  it("habilitarlo pide confirmación y solo entonces escribe", () => {
+    montarAviso();
+    fireEvent.click(screen.getByTestId(`aviso-habilitar-${V}`));
+    expect(permisos.mutate).not.toHaveBeenCalled();
+    expect(screen.getByTestId(`aviso-confirmar-${V}`).textContent).toContain("Dejará de estar en Solo lectura");
+    fireEvent.click(screen.getByTestId(`aviso-habilitar-si-${V}`));
+    expect(permisos.mutate.mock.calls[0][0]).toEqual({ agent_id: V, accion: "habilitar" });
+  });
+  it("ya habilitado: lo dice y no ofrece habilitar", () => {
+    const hab = AGENTES.map((a) => (a.id === V ? { ...a, config: { ...a.config, habilitado: { por: "persona", en: hace(5) } } } : a));
+    montarAviso(hab);
+    expect(screen.getByTestId(`aviso-permisos-texto-${V}`).textContent).toContain("habilitados por una persona");
+    expect(screen.queryByTestId(`aviso-habilitar-${V}`)).toBeNull();
+  });
   it("no avisa de agentes creados por personas ni de creaciones de hace más de 14 días", () => {
     const viejos = AGENTES.map((a) => (a.id === V ? { ...a, config: { ...a.config, creado_en: hace(60 * 24 * 30) } } : a));
-    const { container } = render(<MemoryRouter><AvisoAgentesCreados agentes={viejos} ahora={AHORA} onVerOficina={() => {}} onRevisarPermisos={() => {}} /></MemoryRouter>);
+    const { container } = montarAviso(viejos);
     expect(container.textContent).toBe("");
+  });
+});
+
+describe("Solo lectura y pausa (decisión de Dirección)", () => {
+  it("todo agente creado por otro agente es Solo lectura hasta que una persona lo habilita; lo creado por una persona, no", () => {
+    expect(soloLectura(AGENTES[1].config)).toBe(true);
+    expect(soloLectura({ ...AGENTES[1].config, habilitado: { por: "p", en: hace(1) } })).toBe(false);
+    expect(soloLectura({ creado_por: "uuid-persona" })).toBe(false);
+    expect(soloLectura(null)).toBe(false);
+    expect(soloLectura({ modo: "solo_lectura" })).toBe(true);
+  });
+  it("pausar y reanudar solo tocan `pausado` y dejan quién y cuándo", () => {
+    const c = conPausa({ a: 1 }, true, "p", AHORA);
+    expect(c).toEqual({ a: 1, pausado: { por: "p", en: AHORA.toISOString() } });
+    expect(estaPausado(c)).toBe(true);
+    expect(conPausa(c, false, "p", AHORA)).toEqual({ a: 1 });
+  });
+  it("habilitar solo aplica a quien está en Solo lectura y no toca lo demás", () => {
+    expect(conHabilitacion({ x: 1 }, "p", AHORA)).toEqual({ ok: false, error: "Este agente no está en Solo lectura." });
+    const r = conHabilitacion({ x: 1, modo: "solo_lectura" }, "p", AHORA);
+    expect(r.ok && r.config).toEqual({ x: 1, habilitado: { por: "p", en: AHORA.toISOString() } });
+  });
+  it("una tarea para un agente en Solo lectura no lleva accesos ni escritura, aunque se marquen", () => {
+    const ctx = { hilo_id: "h", accesos_aprobados: ["SITI"], escrituras_aprobadas: ["siti.gob.mx"] };
+    expect(contextoSeguro(ctx, AGENTES[1].config)).toEqual({ hilo_id: "h" });
+    expect(contextoSeguro(ctx, AGENTES[0].config)).toEqual(ctx);   // un agente que no es Solo lectura conserva lo que la persona autorizó
+  });
+  it("la pestaña dice «Pausado» y «Solo lectura» con palabra y marca", () => {
+    expect(estadoVisible("sentado", 0, true, true).texto).toBe("Pausado");
+    expect(estadoVisible("sentado", 3, true, false).texto).toBe("Te necesita");
+    expect(estadoVisible("sentado", 0, true).marca).toBe("◇");
   });
 });
 
@@ -233,7 +296,7 @@ describe("ayudas del chat", () => {
     expect(urlChat(V, { conv: T0, abiertos: [J] })).toBe(`/agentes/chat/${V}?conv=${T0}&a=${encodeURIComponent(`${V},${J}`)}`);
     expect(leerAbiertos(`${V},${V},basura,${J}`)).toEqual([V, J]);
   });
-  it("«Solo lectura» no se deduce: solo si el registro lo dice", () => {
+  it("estados con palabra y marca", () => {
     expect(estadoVisible("sentado", 0).texto).toBe("Disponible");
     expect(estadoVisible("sentado", 0, true).texto).toBe("Solo lectura");
     expect(estadoVisible("con_error", 0).texto).toBe("Con error");

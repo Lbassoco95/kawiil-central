@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { EscritorioAgente, EstilosOficina } from "@/components/agentes/escritorio";
 import { SALAS } from "@/lib/agentes/salas";
 import { departamentoDe } from "@/lib/agentes/departamentos";
-import { estadoVisible, esSoloLectura, urlChat } from "@/lib/agentes/chat";
+import { estadoVisible, esPausado, esSoloLectura, urlChat } from "@/lib/agentes/chat";
 import { llamadasDeOficina, resumenLlamadas, textoAgentes, type Oficina } from "@/lib/agentes/equipos";
 import { esperasDe } from "@/lib/agentes/actividad";
 import { nombreAgente, type AgenteRegistro, type TareaAgente } from "@/lib/agentes/registro";
@@ -18,7 +18,7 @@ const MARCA_LLAMADA = { en_curso: "●", terminada: "✓", con_error: "✕", otr
 
 function Estado({ f, esperas, agente }: { f?: FiguraOficina; esperas: number; agente?: AgenteRegistro }) {
   if (!f) return null;
-  const e = estadoVisible(f.estado, esperas, esSoloLectura(agente?.config));
+  const e = estadoVisible(f.estado, esperas, esSoloLectura(agente?.config), esPausado(agente?.config));
   return <span className="inline-flex items-center gap-1 rounded-full border border-border/60 px-2 py-0.5 text-xs" data-testid={`oficina-estado-${f.id}`}><span aria-hidden>{e.marca}</span>{e.texto}</span>;
 }
 
@@ -64,7 +64,8 @@ export function OficinaEquipo({ oficina, jefe, agentes, figuras, tareas, ahora, 
           <ul className="space-y-2">
             {oficina.miembros.map(({ agente, creacion }) => (
               <li key={agente.id} className="rounded-2xl border border-border/50 bg-background/50 p-3" data-testid={`oficina-miembro-${agente.id}`}>
-                <p className="flex flex-wrap items-center gap-2 text-sm font-medium">{nombreAgente(agente)} <Estado f={fig(agente.id)} esperas={esperasDe(agente.id, tareas)} agente={agente} /></p>
+                <p className="flex flex-wrap items-center gap-2 text-sm font-medium">{nombreAgente(agente)} <Estado f={fig(agente.id)} esperas={esperasDe(agente.id, tareas)} agente={agente} />
+                  {esSoloLectura(agente.config) && <span className="rounded-full border border-violet-300/70 px-2 py-0.5 text-xs font-normal" data-testid={`oficina-solo-lectura-${agente.id}`}>◇ Solo lectura</span>}</p>
                 <p className="text-xs text-muted-foreground">Creado por {oficina.jefeNombre} · {fecha(creacion.cuando)}</p>
                 {creacion.para && <p className="text-xs">Para qué: <span className="text-muted-foreground">{creacion.para}</span></p>}
                 <div className="mt-2 flex flex-wrap gap-2">
