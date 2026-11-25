@@ -2,6 +2,7 @@
 // Funciones puras: reciben las filas y la hora, no leen ni escriben nada. Solo cuenta agentes y tareas (nunca títulos ni textos de tareas).
 import { nombreAgente, type AgenteRegistro, type TareaAgente } from "./registro";
 import type { FiguraOficina } from "./oficina";
+import { oficinasDe, oficinaDeMiembro, type Oficina } from "./equipos";
 
 export interface Departamento { clave: string; nombre: string; tinte: string }
 
@@ -45,26 +46,35 @@ export function departamentoDe(a: Pick<AgenteRegistro, "name" | "description" | 
 }
 
 export const MAX_ISLAS = 7;
-export interface GrupoDepartamento { depto: Departamento; figuras: FiguraOficina[] }
+// `figuras` incluye a los agentes de las oficinas de equipo (cuentan en la isla); `oficinas` son las que dirigen agentes de esta isla.
+export interface GrupoDepartamento { depto: Departamento; figuras: FiguraOficina[]; oficinas: Oficina[] }
 
 const PESO_ESTADO: Record<string, number> = { trabajando: 0, atascado: 1, con_error: 1, celebrando: 2, sentado: 3, descansando: 4, apagado: 5 };
 
 /** Agrupa las figuras por departamento: la isla más poblada primero; con más de 7 departamentos, las más chicas se juntan en «Otros». */
 export function agruparPorDepartamento(figuras: FiguraOficina[], agentes: AgenteRegistro[]): GrupoDepartamento[] {
-  const deAgente = new Map(agentes.map((a) => [a.id, departamentoDe(a)]));
+  // Un agente creado por otro agente vive en la oficina de su creador, dentro de la sala del departamento del creador.
+  const oficinas = oficinasDe(agentes), porId = new Map(agentes.map((a) => [a.id, a]));
+  const deAgente = new Map(agentes.map((a) => {
+    const of = oficinaDeMiembro(a.id, oficinas), jefe = of ? porId.get(of.jefeId) : undefined;
+    return [a.id, departamentoDe(jefe ?? a)] as const;
+  }));
   const mapa = new Map<string, GrupoDepartamento>();
   for (const f of figuras) {
     const d = deAgente.get(f.id) ?? DEPARTAMENTOS.otros;
-    (mapa.get(d.clave) ?? mapa.set(d.clave, { depto: d, figuras: [] }).get(d.clave)!).figuras.push(f);
+    (mapa.get(d.clave) ?? mapa.set(d.clave, { depto: d, figuras: [], oficinas: [] }).get(d.clave)!).figuras.push(f);
   }
   let grupos = [...mapa.values()].sort((x, y) => (x.depto.clave === "otros" ? 1 : 0) - (y.depto.clave === "otros" ? 1 : 0) || y.figuras.length - x.figuras.length || x.depto.nombre.localeCompare(y.depto.nombre));
   if (grupos.length > MAX_ISLAS) {
     const resto = grupos.slice(MAX_ISLAS - 1), otros = grupos.slice(0, MAX_ISLAS - 1);
     const juntos = [...resto.flatMap((g) => g.figuras), ...(otros.find((g) => g.depto.clave === "otros")?.figuras ?? [])];
-    grupos = [...otros.filter((g) => g.depto.clave !== "otros"), { depto: DEPARTAMENTOS.otros, figuras: juntos }].slice(0, MAX_ISLAS);
+    grupos = [...otros.filter((g) => g.depto.clave !== "otros"), { depto: DEPARTAMENTOS.otros, figuras: juntos, oficinas: [] }].slice(0, MAX_ISLAS);
     grupos = grupos.filter((g, i, v) => v.findIndex((h) => h.depto.clave === g.depto.clave) === i);
   }
-  return grupos.map((g) => ({ ...g, figuras: [...g.figuras].sort((p, q) => PESO_ESTADO[p.estado] - PESO_ESTADO[q.estado] || p.nombre.localeCompare(q.nombre)) }));
+  return grupos.map((g) => ({
+    ...g, figuras: [...g.figuras].sort((p, q) => PESO_ESTADO[p.estado] - PESO_ESTADO[q.estado] || p.nombre.localeCompare(q.nombre)),
+    oficinas: oficinas.filter((o) => g.figuras.some((f) => f.id === o.jefeId)),
+  }));
 }
 
 // ── Cifras de cada departamento ───────────────────────────────────────────────────────────────────────────────────────

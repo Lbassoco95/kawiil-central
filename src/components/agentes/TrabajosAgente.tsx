@@ -14,11 +14,13 @@ import { ETIQUETA_ESTADO } from "@/components/agentes/SeguimientoAgentes";
 
 // Panel de la Oficina cuando eliges a un agente: sus conversaciones en una lista compacta, el chat abierto (con altura fija y su propio scroll) y,
 // plegada, una solicitud nueva (abierta solo si el agente aún no tiene conversaciones). Con entregables y revisiones programadas. Solo Dirección.
-export function TrabajosAgente({ agentId, nombre, ahora, agente }: { agentId: string; nombre: string; ahora: Date; agente?: AgenteRegistro }) {
+// `convInicial` y `onConv` permiten que la conversación abierta viva en la dirección de la pantalla de chat (`?conv=`). `claseAlto`: altura del chat abierto.
+export function TrabajosAgente({ agentId, nombre, ahora, agente, convInicial = null, onConv, claseAlto }: { agentId: string; nombre: string; ahora: Date; agente?: AgenteRegistro; convInicial?: string | null; onConv?: (id: string | null) => void; claseAlto?: string }) {
   const q = useTareasSeguimiento("todas", agentId);
   const instruir = useInstruirAgente();
   const qc = useQueryClient();
-  const [elegida, setElegida] = useState<string | null>(null);
+  const [elegida, setElegidaLocal] = useState<string | null>(convInicial);
+  const setElegida = (id: string | null) => { setElegidaLocal(id); onConv?.(id); };
   const [titulo, setTitulo] = useState("");
   const [texto, setTexto] = useState("");
   const [nuevaAbierta, setNuevaAbierta] = useState(false);
@@ -27,7 +29,7 @@ export function TrabajosAgente({ agentId, nombre, ahora, agente }: { agentId: st
   // Autorizaciones de ESTA solicitud (accesos de 1Password y escritura en sitios): solo etiqueta y dominio; nunca la referencia.
   const accesos = etiquetasAccesos(agente);
   const sitiosEscritura = dominiosEscritura(agente?.config);
-  useEffect(() => { setElegida(null); setTitulo(""); setTexto(""); setNuevaAbierta(false); setAprobados([]); setEscribir([]); instruir.reset(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [agentId]);
+  useEffect(() => { setElegidaLocal(convInicial); setTitulo(""); setTexto(""); setNuevaAbierta(false); setAprobados([]); setEscribir([]); instruir.reset(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [agentId]);
 
   // Solo las solicitudes originales: los seguimientos y las revisiones viven dentro de su conversación.
   const solicitudes = (q.data ?? []).filter((t) => !t.hilo);
@@ -44,7 +46,7 @@ export function TrabajosAgente({ agentId, nombre, ahora, agente }: { agentId: st
       <div className="zen-glass space-y-2 rounded-2xl p-3">
         <div className="flex items-center justify-between gap-2">
           <p className="text-sm font-medium">Conversaciones con {nombre}</p>
-          <Button type="button" size="sm" variant="outline" aria-expanded={formularioVisible} aria-controls="trabajos-nueva" data-testid="trabajos-nueva-abrir" onClick={() => setNuevaAbierta((v) => !v)}>
+          <Button type="button" size="sm" variant="outline" className="max-md:min-h-11" aria-expanded={formularioVisible} aria-controls="trabajos-nueva" data-testid="trabajos-nueva-abrir" onClick={() => setNuevaAbierta((v) => !v)}>
             <Plus className="mr-1 h-3.5 w-3.5" aria-hidden />Nueva
           </Button>
         </div>
@@ -58,8 +60,8 @@ export function TrabajosAgente({ agentId, nombre, ahora, agente }: { agentId: st
                   <button type="button" aria-pressed={elegida === t.id} data-testid={`trabajo-${t.id}`} onClick={() => setElegida(elegida === t.id ? null : t.id)}
                     title={`${t.titulo || "Solicitud sin título"} · ${ETIQUETA_ESTADO[t.estado]?.texto ?? t.estado}`}
                     className={elegida
-                      ? `max-w-[15rem] truncate rounded-full border px-3 py-1 text-xs ${elegida === t.id ? "border-primary/60 bg-primary/10 font-medium" : "border-border/50"}`
-                      : `w-full rounded-xl border px-2.5 py-1.5 text-left text-sm ${elegida === t.id ? "border-primary/60 bg-primary/5" : "border-border/50"}`}>
+                      ? `max-w-[15rem] truncate rounded-full border px-3 py-1 text-xs max-md:min-h-11 ${elegida === t.id ? "border-primary/60 bg-primary/10 font-medium" : "border-border/50"}`
+                      : `w-full rounded-xl border px-2.5 py-1.5 text-left text-sm max-md:min-h-11 ${elegida === t.id ? "border-primary/60 bg-primary/5" : "border-border/50"}`}>
                     {elegida ? (t.titulo || "Solicitud sin título") : (
                       <>
                         <span className="flex flex-wrap items-center gap-2"><span className="font-medium">{t.titulo || "Solicitud sin título"}</span>
@@ -73,7 +75,7 @@ export function TrabajosAgente({ agentId, nombre, ahora, agente }: { agentId: st
             </ul>
           )}
       </div>
-      {elegida && <div className="zen-glass rounded-2xl p-3"><HiloAgente key={elegida} taskId={elegida} ahora={ahora} claseAlto="h-[min(64vh,42rem)] min-h-[22rem] lg:h-[calc(100vh-21rem)]" /></div>}
+      {elegida && <div className="zen-glass rounded-2xl p-3"><HiloAgente key={elegida} taskId={elegida} ahora={ahora} claseAlto={claseAlto ?? "h-[min(64vh,42rem)] min-h-[22rem] lg:h-[calc(100vh-21rem)]"} /></div>}
       <div id="trabajos-nueva" className={`zen-glass space-y-2 rounded-2xl p-4 ${formularioVisible ? "" : "hidden"}`} data-testid="trabajos-nueva">
         <p className="flex items-center gap-1 text-sm font-medium"><ChevronDown className="h-4 w-4" aria-hidden />Nueva solicitud para {nombre}</p>
         <Input value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Título (por ejemplo: Revisión de libros corporativos)" data-testid="trabajos-titulo" />

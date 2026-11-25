@@ -1,0 +1,132 @@
+{
+  "v": 3,
+  "createdOnFiles": {
+    "v": 1,
+    "at": "2026-11-24T23:10:00Z"
+  },
+  "title": "Agentes: directorio, conversación y tareas",
+  "launch": {
+    "view": "canvas"
+  },
+  "pages": [],
+  "boards": {
+    "Main.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 1320,
+      "title": "1. Agentes: vista de islas (producción) con lo nuevo",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Oficina.dc.html": {
+      "x": 1520,
+      "y": 0,
+      "w": 1440,
+      "h": 1420,
+      "title": "2. Sala de Cumplimiento: oficina, equipos y chat",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Lista.dc.html": {
+      "x": 0,
+      "y": 1680,
+      "w": 1440,
+      "h": 1260,
+      "title": "3. Directorio en lista",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Conversacion.dc.html": {
+      "x": 1520,
+      "y": 1680,
+      "w": 1440,
+      "h": 1040,
+      "title": "4. Conversación con un agente",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Tareas.dc.html": {
+      "x": 0,
+      "y": 3060,
+      "w": 1440,
+      "h": 1180,
+      "title": "5. Tareas y errores",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Barra.dc.html": {
+      "x": 1520,
+      "y": 3060,
+      "w": 224,
+      "h": 900,
+      "title": "Componente: barra lateral"
+    },
+    "Trabajo.dc.html": {
+      "x": 3040,
+      "y": 0,
+      "w": 1440,
+      "h": 1180,
+      "title": "6. Espacio de trabajo con pestañas",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Movil.dc.html": {
+      "x": 0,
+      "y": 4400,
+      "w": 1760,
+      "h": 980,
+      "title": "7. Versión móvil: sala, chat y espacio de trabajo",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Equipo.dc.html": {
+      "x": 3040,
+      "y": 1320,
+      "w": 1440,
+      "h": 1800,
+      "title": "8. Oficina de Vizumi dentro de la sala",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Crear.dc.html": {
+      "x": 1840,
+      "y": 4400,
+      "w": 1440,
+      "h": 1060,
+      "title": "9. Crear un agente: tres caminos",
+      "expand": "fill",
+      "is_interactive": true
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "Oficina.dc.html",
+    "Equipo.dc.html",
+    "Lista.dc.html",
+    "Conversacion.dc.html",
+    "Tareas.dc.html",
+    "Trabajo.dc.html",
+    "Movil.dc.html",
+    "Crear.dc.html",
+    "Barra.dc.html"
+  ],
+  "notes": {
+    "titulo": {
+      "x": 0,
+      "y": -300,
+      "text": "Agentes de Kawiil OS: cómo elegir, platicar y dar seguimiento",
+      "kind": "title1",
+      "maxW": 2960
+    }
+  },
+  "designSystems": [
+    {
+      "title": "Kawiil OS Design System",
+      "namespace": "kawiil-os",
+      "artifact": "https://claude.ai/code/artifact/f00ade69-61b0-4dbf-8138-41c7f039de58",
+      "version": "1792883720-a5de",
+      "copiedAt": "2026-11-24T23:10:00Z"
+    }
+  ]
+}

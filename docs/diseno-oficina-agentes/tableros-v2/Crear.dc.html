@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Crear un agente: tres caminos</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="ds/kawiil-os/colors_and_type.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+*{box-sizing:border-box}
+.k{font-family:Inter,system-ui,sans-serif;color:hsl(228 20% 14%);font-size:14px;line-height:1.5}
+.mut{color:hsl(230 9% 38%)}
+.soft{background:hsl(0 0% 98.5%);border:1px solid hsl(220 13% 90%);border-radius:28px;box-shadow:0 1px 2px rgb(15 23 42 / .04),0 14px 32px -18px rgb(15 23 42 / .12)}
+.in{background:#fff;border:1px solid hsl(220 13% 90%);border-radius:20px}
+.pillb{display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:0 16px;border-radius:9999px;border:1px solid hsl(220 13% 88%);background:#fff;color:hsl(228 20% 14%);font:500 13px Inter,system-ui,sans-serif;text-decoration:none;cursor:pointer;white-space:nowrap}
+.pillb:hover{border-color:hsl(215 80% 60% / .5);background:hsl(215 100% 98%)}
+.btnp{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 22px;border-radius:9999px;border:0;background:hsl(215 85% 42%);color:#fff;font:600 14px Inter,system-ui,sans-serif;cursor:pointer;text-decoration:none}
+.micro{font-size:11.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:hsl(230 9% 38%)}
+a:focus-visible,button:focus-visible{outline:2px solid hsl(215 85% 45%);outline-offset:2px}
+</style>
+</helmet>
+<div class="k" style="display:flex;flex-wrap:wrap;min-height:1060px;background:hsl(220 14% 96%)">
+  <dc-import name="Barra" active="agentes" h="1060" hint-size="224px,1060px"></dc-import>
+  <main style="flex:999 1 560px;min-width:0;max-width:1216px;padding:28px 32px 48px;display:flex;flex-direction:column;gap:18px">
+
+    <header>
+      <h1 class="gradient-text" style="margin:0;font-size:30px;font-weight:700;letter-spacing:-.02em;line-height:1.15">Crear un agente</h1>
+      <p class="mut" style="margin:4px 0 0;font-size:13px">Hay tres caminos. Todos dejan registro de quién lo creó y para qué. Datos de muestra.</p>
+    </header>
+
+    <section aria-label="Quién lo crea" style="display:flex;flex-wrap:wrap;gap:16px;align-items:stretch">
+      <article class="soft" style="flex:1 1 300px;min-width:0;padding:20px;display:flex;flex-direction:column;gap:12px">
+        <span class="micro">Camino 1</span>
+        <h2 style="margin:0;font-size:19px;font-weight:700">Lo creo yo</h2>
+        <p style="margin:0">Cuéntale al Constructor qué necesitas. Él arma la ficha del agente y tú la revisas.</p>
+        <p class="mut" style="margin:0;font-size:13.5px">El agente queda en el equipo principal de la sala que elijas.</p>
+        <a href="Crear.dc.html" class="btnp" style="margin-top:auto">Empezar con el Constructor</a>
+      </article>
+
+      <article class="soft" style="flex:1 1 300px;min-width:0;padding:20px;display:flex;flex-direction:column;gap:12px">
+        <span class="micro">Camino 2</span>
+        <h2 style="margin:0;font-size:19px;font-weight:700">Se lo pido a un agente</h2>
+        <p style="margin:0">Elige qué agente lo crea y dile qué necesitas.</p>
+        <div role="group" aria-label="Agente que lo crea" style="display:flex;flex-wrap:wrap;gap:8px">
+          <a href="Crear.dc.html" class="pillb" style="border:2px solid hsl(255 45% 52%);background:hsl(255 60% 98%);font-weight:600"><img src="/_blob/6789b4817d843ed755ec32c0e1f97334" alt="" width="24" height="24" style="width:24px;height:24px;border-radius:9999px;object-fit:cover">Vizumi</a>
+          <a href="Crear.dc.html" class="pillb"><img src="/_blob/8ccbae3c0aa76c63567672b1000c9280" alt="" width="24" height="24" style="width:24px;height:24px;border-radius:9999px;object-fit:cover">Nelli</a>
+          <a href="Crear.dc.html" class="pillb">Otro agente…</a>
+        </div>
+        <p class="mut" style="margin:0;font-size:13.5px">El agente nuevo aparece en la oficina de quien lo creó.</p>
+        <a href="Trabajo.dc.html" class="btnp" style="margin-top:auto">Pedirle a Vizumi que lo cree</a>
+      </article>
+
+      <article class="soft" style="flex:1 1 300px;min-width:0;padding:20px;display:flex;flex-direction:column;gap:12px;background:hsl(255 60% 98.5%);border-color:hsl(255 40% 85%)">
+        <span class="micro">Camino 3</span>
+        <h2 style="margin:0;font-size:19px;font-weight:700">Un agente lo crea solo</h2>
+        <p style="margin:0">Cualquier agente puede crear otro cuando su trabajo lo necesita. No hay botón: tú recibes el aviso.</p>
+        <p class="mut" style="margin:0;font-size:13.5px">El agente nuevo aparece en la oficina de su creador y reporta a él.</p>
+        <span style="margin-top:auto;display:inline-flex;align-items:center;gap:6px;font-weight:600;color:hsl(255 45% 32%)"><span style="width:8px;height:8px;border-radius:9999px;background:hsl(255 45% 50%)" aria-hidden="true"></span>Automático, con aviso</span>
+      </article>
+    </section>
+
+    <section class="soft" aria-label="Aviso de un agente creado por otro agente" style="padding:20px;display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px"><span class="micro">Cuando un agente crea a otro</span><span class="mut" style="font-size:12.5px">Así lo ves en pantalla</span></div>
+      <div class="in" style="padding:16px;display:flex;flex-wrap:wrap;gap:14px 20px;align-items:center;border:2px solid hsl(255 45% 52%);background:hsl(255 60% 99%)">
+        <img src="/_blob/6789b4817d843ed755ec32c0e1f97334" alt="" width="52" height="52" style="width:52px;height:52px;border-radius:9999px;object-fit:cover;background:hsl(220 14% 95%)">
+        <div style="flex:1 1 320px;line-height:1.4">
+          <strong style="font-size:15.5px">Vizumi creó a [Nombre del agente nuevo]</strong>
+          <div style="font-size:13.5px">Para qué: <span class="mut">[Motivo que dio Vizumi]</span></div>
+          <div class="mut" style="font-size:13px">Oficina de Vizumi · [fecha y hora] · empieza en Solo lectura</div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          <a href="Equipo.dc.html" class="pillb" style="font-weight:600">Ver en la oficina</a>
+          <a href="Trabajo.dc.html" class="pillb" style="font-weight:600">Revisar permisos</a>
+          <button type="button" class="pillb">Pausarlo</button>
+        </div>
+      </div>
+      <p class="mut" style="margin:0;font-size:13px">El aviso queda en pantalla y en el historial de la oficina. No sale por correo ni por mensajes.</p>
+    </section>
+
+    <section class="soft" aria-label="Reglas" style="padding:20px;display:flex;flex-direction:column;gap:10px">
+      <span class="micro">Reglas de creación</span>
+      <ul style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px">
+        <li>Toda creación queda registrada: quién la hizo, cuándo y para qué.</li>
+        <li>Un agente creado por otro agente reporta a su creador y vive en su oficina.</li>
+        <li>Un agente creado por una persona vive en el equipo principal de la sala.</li>
+        <li><strong>Propuesta:</strong> todo agente nuevo empieza en Solo lectura. Una persona le da los permisos.</li>
+        <li><strong>Por decidir:</strong> cuántos agentes puede crear cada agente y si alguno no puede crear.</li>
+      </ul>
+    </section>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1060}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EscritorioAgente, EstilosOficina } from "@/components/agentes/escritorio";
-import { TrabajosAgente } from "@/components/agentes/TrabajosAgente";
+import { ResumenConversacion } from "@/components/agentes/ResumenConversacion";
 import { MemoriaAgentes } from "@/components/agentes/MemoriaAgentes";
 import { EnsenarAgente, ensenable } from "@/components/agentes/EnsenarAgente";
 import { CalendarioRutinas } from "@/components/agentes/CalendarioRutinas";
@@ -14,8 +14,8 @@ import { descripcionAgente, nombreAgente, type AgenteRegistro, type TareaAgente 
 import type { FiguraOficina } from "@/lib/agentes/oficina";
 import type { PestanaEscritorio } from "@/lib/agentes/vistas";
 
-// Escritorio del agente (panel derecho): lo de ESTE agente en cinco pestañas, con los componentes que ya existían (conversaciones, memoria, enseñar,
-// rutinas, documentos). El perfil se lee de las propuestas iniciales (personajesDatos.ts): editarlo con versiones es una fase aparte que confirma Dirección.
+// Escritorio del agente (panel derecho): lo de ESTE agente en cinco pestañas, con los componentes que ya existían (memoria, enseñar, rutinas, documentos).
+// «Conversaciones» solo resume la última y lleva a su chat aparte (R2.b): aquí no se escribe. El perfil se lee de las propuestas iniciales (personajesDatos.ts): editarlo con versiones es una fase aparte que confirma Dirección.
 // Solo Dirección escribe, y siempre a través de las funciones de cada pestaña; este panel no escribe nada por su cuenta.
 export const PESTANAS_ESCRITORIO: Array<{ v: PestanaEscritorio; t: string }> = [
   { v: "conversaciones", t: "Conversaciones" }, { v: "perfil", t: "Perfil" }, { v: "aprendizaje", t: "Aprendizaje" }, { v: "rutinas", t: "Rutinas" }, { v: "documentos", t: "Documentos" },
@@ -72,6 +72,24 @@ function Aprendizaje({ agente, tareas, ahora }: { agente: AgenteRegistro; tareas
   );
 }
 
+// Contenido de cada sección del escritorio (menos «Conversaciones», que vive en el chat). Lo usan el panel de la sala y el chat en el celular (R7: las secciones se recorren de lado).
+export function SeccionAgente({ seccion, agente, f, tareas, ahora }: { seccion: Exclude<PestanaEscritorio, "conversaciones">; agente: AgenteRegistro; f: FiguraOficina; tareas: TareaAgente[]; ahora: Date }) {
+  const propias = tareas.filter((t) => t.agent_id === agente.id);
+  if (seccion === "perfil") return <Perfil agente={agente} f={f} />;
+  if (seccion === "aprendizaje") return <Aprendizaje agente={agente} tareas={tareas} ahora={ahora} />;
+  if (seccion === "rutinas") {
+    return (
+      <div className="space-y-3" data-testid="pestana-rutinas-contenido">
+        <CalendarioRutinas agentes={[agente]} tareas={propias} ahora={ahora} onProgramar={() => document.getElementById("programar-aqui")?.scrollIntoView?.({ behavior: "smooth" })} />
+        <div id="programar-aqui" className="scroll-mt-4">
+          {programable(agente) ? <ProgramarAgente agentes={[agente]} agenteInicial={agente.id} fijo /> : <Nota id="programar-no">Solo se pueden programar agentes creados desde el Constructor con cadencia diaria o semanal.</Nota>}
+        </div>
+      </div>
+    );
+  }
+  return documentable(agente) ? <DocumentosAgente agentes={[agente]} agenteInicial={agente.id} fijo /> : <Nota id="documentos-no">Los agentes de sistema no tienen documentos propios.</Nota>;
+}
+
 export function PanelAgente({ figura: f, agente, agentes, tareas, ahora, pestana, onPestana, onVolver }: {
   figura: FiguraOficina; agente: AgenteRegistro; agentes: AgenteRegistro[]; tareas: TareaAgente[]; ahora: Date; pestana: PestanaEscritorio; onPestana: (p: PestanaEscritorio) => void; onVolver?: () => void;
 }) {
@@ -104,21 +122,11 @@ export function PanelAgente({ figura: f, agente, agentes, tareas, ahora, pestana
           {PESTANAS_ESCRITORIO.map((p) => <TabsTrigger key={p.v} value={p.v} className="text-foreground/75 data-[state=active]:text-foreground" data-testid={`pestana-${p.v}`}>{p.t}</TabsTrigger>)}
         </TabsList>
         <TabsContent value="conversaciones" className="mt-3 space-y-3">
-          {!sistema && <TrabajosAgente agentId={agente.id} nombre={f.nombre} ahora={ahora} agente={agente} />}
+          {!sistema && <ResumenConversacion agentId={agente.id} nombre={f.nombre} ahora={ahora} />}
           {sistema && !esComunicacion && <Nota id="conv-sistema">Este agente de Marketing trabaja por su cuenta; sus seguimientos están en <Link className="underline" to="/marketing">Marketing</Link>.</Nota>}
           {esComunicacion && <ComunicacionInterna />}
         </TabsContent>
-        <TabsContent value="perfil" className="mt-3"><Perfil agente={agente} f={f} /></TabsContent>
-        <TabsContent value="aprendizaje" className="mt-3"><Aprendizaje agente={agente} tareas={tareas} ahora={ahora} /></TabsContent>
-        <TabsContent value="rutinas" className="mt-3 space-y-3" data-testid="pestana-rutinas-contenido">
-          <CalendarioRutinas agentes={[agente]} tareas={propias} ahora={ahora} onProgramar={() => document.getElementById("programar-aqui")?.scrollIntoView?.({ behavior: "smooth" })} />
-          <div id="programar-aqui" className="scroll-mt-4">
-            {programable(agente) ? <ProgramarAgente agentes={[agente]} agenteInicial={agente.id} fijo /> : <Nota id="programar-no">Solo se pueden programar agentes creados desde el Constructor con cadencia diaria o semanal.</Nota>}
-          </div>
-        </TabsContent>
-        <TabsContent value="documentos" className="mt-3">
-          {documentable(agente) ? <DocumentosAgente agentes={[agente]} agenteInicial={agente.id} fijo /> : <Nota id="documentos-no">Los agentes de sistema no tienen documentos propios.</Nota>}
-        </TabsContent>
+        {(["perfil", "aprendizaje", "rutinas", "documentos"] as const).map((v) => <TabsContent key={v} value={v} className="mt-3"><SeccionAgente seccion={v} agente={agente} f={f} tareas={tareas} ahora={ahora} /></TabsContent>)}
       </Tabs>
     </section>
   );

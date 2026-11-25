@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef } from "react";
 import { spriteAgente, ANCHO, ALTO, oscurecer } from "@/lib/agentes/sprites";
 import { ESTADO_OFICINA, type FiguraOficina } from "@/lib/agentes/oficina";
-import { distribuirSala } from "@/lib/agentes/salas";
+import { distribuirSala, distribuirOficinas } from "@/lib/agentes/salas";
 import { CSS, TONO, pintarAccesorios } from "@/components/agentes/escritorio";
 import type { Departamento } from "@/lib/agentes/departamentos";
+import { textoAgentes } from "@/lib/agentes/equipos";
 
 // Sala isométrica de una isla (pixel art, Zen + Glass): piso, dos paredes, zonas con alfombra y cada agente en su escritorio con el nombre debajo.
 // Es la misma sala en Agentes y en Marketing. Solo lectura: lo que se ve es agente y estado (nunca textos de tareas); un clic abre al agente.
@@ -44,10 +45,19 @@ function Puesto({ f, x, y, onElegir, elegido, texto }: { f: FiguraOficina; x: nu
   );
 }
 
+// Oficina de equipo dibujada dentro de la sala: piso de otro color, letrero con el nombre del jefe y el número de agentes, un escritorio por agente y un lugar libre.
+export interface OficinaEnSala { clave: string; nombre: string; tinte: string; figuras: FiguraOficina[] }
+
 // `etiqueta`: texto del estado si no es el de la oficina (Marketing usa el suyo). `elegidoId`: agente con el aro fijo.
-export function SalaIsometrica({ depto, figuras, onElegir, elegidoId, etiqueta }: { depto: Departamento; figuras: FiguraOficina[]; onElegir?: (id: string) => void; elegidoId?: string | null; etiqueta?: (f: FiguraOficina) => string }) {
+// `oficinas` + `onAbrirOficina`: oficinas de equipo (R1.b). `hrefPestana`: si se da, cada agente de la lista lleva «Abrir en pestaña» (R2.1).
+export function SalaIsometrica({ depto, figuras, onElegir, elegidoId, etiqueta, oficinas = [], onAbrirOficina, hrefPestana }: {
+  depto: Departamento; figuras: FiguraOficina[]; onElegir?: (id: string) => void; elegidoId?: string | null; etiqueta?: (f: FiguraOficina) => string;
+  oficinas?: OficinaEnSala[]; onAbrirOficina?: (clave: string) => void; hrefPestana?: (id: string) => string;
+}) {
   const texto = (f: FiguraOficina) => etiqueta?.(f) || ESTADO_OFICINA[f.estado].etiqueta;
-  const sala = useMemo(() => distribuirSala(depto.clave, figuras, (f) => f.clave), [depto.clave, figuras]);
+  const base = useMemo(() => distribuirSala(depto.clave, figuras, (f) => f.clave), [depto.clave, figuras]);
+  const ext = useMemo(() => distribuirOficinas(base, oficinas.map((o) => ({ clave: o.clave, items: o.figuras }))), [base, oficinas]);
+  const sala = useMemo(() => ({ ...base, n: ext.n }), [base, ext.n]);
   const n = sala.n;
   // En pantallas angostas la sala se desliza de lado: se empieza viéndola por el centro, no por una esquina.
   const caja = useRef<HTMLDivElement>(null);
@@ -56,17 +66,18 @@ export function SalaIsometrica({ depto, figuras, onElegir, elegidoId, etiqueta }
   const sube = (p: { x: number; y: number }) => ({ x: p.x, y: p.y - PARED });
   const ancho = n * TW + MARGEN * 2, alto = n * TH + PARED + 40 + MARGEN;
   const ox = n * (TW / 2) + MARGEN, oy = PARED + MARGEN;
-  const orden = [...sala.puestos].sort((a, b) => a.u + a.v - (b.u + b.v));
+  const colocadas = ext.oficinas.map((c) => ({ c, of: oficinas.find((o) => o.clave === c.clave)! }));
+  const orden = [...sala.puestos.map((p) => ({ item: p.item, u: p.u, v: p.v })), ...colocadas.flatMap(({ c }) => c.escritorios.filter((e) => e.item).map((e) => ({ item: e.item as FiguraOficina, u: e.u, v: e.v })))].sort((a, b) => a.u + a.v - (b.u + b.v));
   const ventana = (desde: number, hasta: number, lado: "i" | "d") => {
     const f = (t: number, z: number) => { const p = lado === "d" ? P(t, 0) : P(0, t); return { x: p.x, y: p.y - z }; };
     return <polygon points={pts(f(desde, 40), f(hasta, 40), f(hasta, 88), f(desde, 88))} style={{ fill: "var(--sl-ventana)", stroke: "var(--sl-borde)" }} />;
   };
   const activa = figuras.some((f) => f.estado === "trabajando");
   return (
-    <div className="sl zen-glass rounded-3xl p-2" data-testid={`sala-${depto.clave}`} data-activa={activa ? "true" : "false"}>
+    <div className="sl zen-glass flex flex-col rounded-3xl p-2" data-testid={`sala-${depto.clave}`} data-activa={activa ? "true" : "false"}>
       <style>{CSS}{CSS_SALA}</style>
-      <p className="px-2 pt-1 text-[11px] text-muted-foreground sm:hidden">Desliza para ver toda la sala; abajo está la lista de agentes.</p>
-      <div ref={caja} className="overflow-x-auto">
+      <p className="order-2 px-2 pt-1 text-[11px] text-muted-foreground sm:hidden">Plano de la sala (desliza para verlo completo). La lista de agentes está arriba.</p>
+      <div ref={caja} className="order-3 overflow-x-auto sm:order-none">
       <svg viewBox={`0 0 ${ancho} ${alto}`} className="mx-auto w-full min-w-[620px] max-w-[980px]" role="group" aria-label={`Sala de ${depto.nombre}`} shapeRendering="geometricPrecision">
         <g transform={`translate(${ox},${oy})`}>
           <polygon points={pts(A, B, sube(B), sube(A))} style={{ fill: "var(--sl-pared-d)", stroke: "var(--sl-borde)" }} />
@@ -81,22 +92,74 @@ export function SalaIsometrica({ depto, figuras, onElegir, elegidoId, etiqueta }
             const u0 = Math.max(0.15, z.u0), v0 = Math.max(0.15, z.v0), u1 = Math.min(n - 0.15, z.u1), v1 = Math.min(n - 0.15, z.v1);
             return <polygon key={z.nombre} data-testid={`zona-${z.nombre}`} points={pts(P(u0, v0), P(u1, v0), P(u1, v1), P(u0, v1))} fill={depto.tinte} opacity={0.55} stroke={oscurecer(depto.tinte, 0.75)} strokeWidth={1.5} strokeDasharray="6 5" />;
           })}
+          {colocadas.map(({ c, of }) => {
+            const u0 = Math.max(0.15, c.u0), v0 = Math.max(0.15, c.v0), u1 = Math.min(n - 0.15, c.u1), v1 = Math.min(n - 0.15, c.v1);
+            return (
+              <g key={of.clave} data-testid={`oficina-${of.clave}`}>
+                <polygon points={pts(P(u0, v0), P(u1, v0), P(u1, v1), P(u0, v1))} fill={of.tinte} opacity={0.9} stroke={oscurecer(of.tinte, 0.6)} strokeWidth={2} strokeDasharray="6 4" />
+                {c.escritorios.filter((e) => !e.item).map((e, k) => { const p = P(e.u, e.v); return (
+                  <g key={`libre-${k}`} transform={`translate(${p.x},${p.y + TH * 0.5})`} data-testid={`oficina-libre-${of.clave}`}>
+                    <rect x={-44} y={-26} width={88} height={34} rx={17} fill="rgba(255,255,255,.55)" stroke={oscurecer(of.tinte, 0.5)} strokeWidth={1.5} strokeDasharray="5 4" />
+                    <text x={0} y={-5} textAnchor="middle" fontSize={11.5} fontWeight={600} style={{ fill: "var(--sl-texto)" }}>Lugar libre</text>
+                  </g>); })}
+              </g>
+            );
+          })}
           {orden.map(({ item, u, v }) => { const p = P(u, v); return <Puesto key={item.id} f={item} x={p.x} y={p.y + TH * 0.5} onElegir={onElegir} elegido={item.id === elegidoId} texto={texto(item)} />; })}
+          {/* Los letreros se dibujan al final para que ningún escritorio los tape. */}
+          {colocadas.map(({ c, of }) => {
+            const u1 = Math.min(n - 0.15, c.u1), v1 = Math.min(n - 0.15, c.v1);
+            const etiquetaAgentes = `${textoAgentes(of.figuras.length)}${onAbrirOficina ? " · Entrar" : ""}`;
+            const abrir = () => onAbrirOficina?.(of.clave), ancho = Math.max(150, of.nombre.length * 7.4 + 24);
+            const cartel = { x: P(u1, v1).x - ancho / 2, y: P(u1, v1).y + 22 };   // al pie de la oficina (esquina frontal): ningún escritorio lo tapa
+            return (
+              <g key={`letrero-${of.clave}`}>
+                {/* La posición va en un <g> aparte: index.css aplica transform a todo [role="button"]:active y borraría el translate. */}
+                <g transform={`translate(${cartel.x},${cartel.y})`}>
+                  <g role="button" tabIndex={onAbrirOficina ? 0 : -1} data-testid={`oficina-letrero-${of.clave}`} style={{ cursor: onAbrirOficina ? "pointer" : "default", transform: "none" }}
+                    aria-label={`${of.nombre}: ${etiquetaAgentes}`} onClick={abrir} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); abrir(); } }}>
+                    <rect x={0} y={-4} width={ancho} height={40} rx={14} style={{ fill: "var(--sl-etq)" }} stroke={oscurecer(of.tinte, 0.45)} strokeWidth={2} />
+                    <text x={12} y={12} fontSize={12.5} fontWeight={700} style={{ fill: "var(--sl-texto)" }}>{of.nombre}</text>
+                    <text x={12} y={28} fontSize={11} style={{ fill: "var(--sl-texto)", opacity: 0.85 }}>{etiquetaAgentes}</text>
+                  </g>
+                </g>
+              </g>
+            );
+          })}
         </g>
       </svg>
       </div>
       {/* La lista repite lo que se ve en la sala: sirve con teclado y lector de pantalla, y en el celular, donde el dibujo se ve chico. */}
-      <ul className="mt-2 grid gap-2 px-2 pb-2 sm:grid-cols-2" aria-label={`Zonas de ${depto.nombre}`} data-testid="sala-zonas">
+      <ul className="order-1 mb-2 grid gap-2 px-2 pb-2 sm:order-none sm:mb-0 sm:mt-2 sm:grid-cols-2" aria-label={`Zonas de ${depto.nombre}`} data-testid="sala-zonas">
         {sala.zonas.map((z) => (
           <li key={z.nombre} className="rounded-2xl border border-border/50 bg-background/40 p-2.5">
             <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-foreground/75">{z.nombre}</p>
             <ul className="flex flex-wrap gap-1.5">
               {z.claves.map((c) => { const f = figuras.find((x) => x.clave === c)!; return (
-                <li key={f.id}>
-                  <button type="button" onClick={() => onElegir?.(f.id)} disabled={!onElegir} data-testid={`sala-lista-${f.id}`} className="rounded-full border border-border/60 px-2.5 py-1 text-xs enabled:hover:bg-background/70">
+                <li key={f.id} className="inline-flex items-center gap-1">
+                  <button type="button" onClick={() => onElegir?.(f.id)} disabled={!onElegir} data-testid={`sala-lista-${f.id}`} className="min-h-11 rounded-full border border-border/60 px-3 py-1 text-xs enabled:hover:bg-background/70 sm:min-h-8 sm:px-2.5">
                     <span className="font-medium">{f.nombre}</span> <span className="text-foreground/70">· {texto(f)}</span>
                   </button>
+                  {hrefPestana && <a href={hrefPestana(f.id)} target="_blank" rel="noopener noreferrer" data-testid={`sala-pestana-${f.id}`} className="hidden rounded-full px-2 py-1 text-xs underline sm:inline" aria-label={`Abrir a ${f.nombre} en pestaña nueva`}>Abrir en pestaña</a>}
                 </li>); })}
+            </ul>
+          </li>
+        ))}
+        {oficinas.map((o) => (
+          <li key={o.clave} className="rounded-2xl border p-2.5" style={{ borderColor: o.tinte, background: `${o.tinte}55` }} data-testid={`lista-oficina-${o.clave}`}>
+            <p className="mb-1.5 flex flex-wrap items-center gap-2 text-xs font-medium uppercase tracking-wide text-foreground/75">
+              <span>{o.nombre}</span><span className="font-normal normal-case text-foreground/70">· {textoAgentes(o.figuras.length)}</span>
+              {onAbrirOficina && <button type="button" onClick={() => onAbrirOficina(o.clave)} data-testid={`lista-oficina-abrir-${o.clave}`} className="min-h-11 rounded-full border border-border/60 bg-background/70 px-3 py-1 text-xs normal-case sm:min-h-8 sm:px-2.5">Entrar a la oficina</button>}
+            </p>
+            <ul className="flex flex-wrap gap-1.5">
+              {o.figuras.map((f) => (
+                <li key={f.id} className="inline-flex items-center gap-1">
+                  <button type="button" onClick={() => onElegir?.(f.id)} disabled={!onElegir} data-testid={`sala-lista-${f.id}`} className="min-h-11 rounded-full border border-border/60 bg-background/70 px-3 py-1 text-xs sm:min-h-8 sm:px-2.5">
+                    <span className="font-medium">{f.nombre}</span> <span className="text-foreground/70">· {texto(f)}</span>
+                  </button>
+                  {hrefPestana && <a href={hrefPestana(f.id)} target="_blank" rel="noopener noreferrer" data-testid={`sala-pestana-${f.id}`} className="hidden rounded-full px-2 py-1 text-xs underline sm:inline" aria-label={`Abrir a ${f.nombre} en pestaña nueva`}>Abrir en pestaña</a>}
+                </li>
+              ))}
             </ul>
           </li>
         ))}

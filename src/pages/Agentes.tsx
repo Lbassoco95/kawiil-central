@@ -11,6 +11,8 @@ import { ConstructorAgentes } from "@/components/agentes/ConstructorAgentes";
 import { ListaLpb } from "@/components/agentes/ListaLpb";
 import { FigurasContext } from "@/components/agentes/BandaEquipo";
 import { IndicadorEnVivo } from "@/components/agentes/IndicadorEnVivo";
+import { AvisoAgentesCreados } from "@/components/agentes/AvisoAgentesCreados";
+import { urlChat } from "@/lib/agentes/chat";
 import { agentesDelModulo, esAgenteLegal, resumenServicio } from "@/lib/agentes/registro";
 import { figurasOficina } from "@/lib/agentes/oficina";
 import { destinoDePestanaVieja, escribirVista, leerPestanaEscritorio, leerVista, type PestanaEscritorio, type Vista } from "@/lib/agentes/vistas";
@@ -65,10 +67,10 @@ export default function Agentes() {
   const figurasReales = useMemo(() => figurasOficina(reales, tareas.data ?? [], reloj), [reales, tareas.data, reloj]);
   const cargando = agentes.isLoading;
 
-  // Desde la barra de tareas: «Abrir la conversación» lleva al escritorio del agente que recibió esa tarea.
+  // Desde la barra de tareas: «Abrir la conversación» lleva al chat del agente que recibió esa tarea (pantalla de chat aparte, R2.b).
   const abrirConversacion = (taskId?: string) => {
     const t = (tareas.data ?? []).find((x) => x.id === taskId);
-    if (t?.agent_id) cambiarVista({ tipo: "agente", id: t.agent_id }, "conversaciones"); else cambiarVista({ tipo: "plano" });
+    if (t?.agent_id) navegar(urlChat(t.agent_id, { conv: t.id })); else cambiarVista({ tipo: "plano" });
   };
   // Desde el Constructor: Instrucciones / Documentos / Programar de un agente recién creado → su escritorio, en la pestaña que corresponde.
   const irAlEscritorio = (pestanaVieja: string, id: string) => cambiarVista({ tipo: "agente", id }, destinoDePestanaVieja(pestanaVieja)?.escritorio ?? "conversaciones");
@@ -82,6 +84,7 @@ export default function Agentes() {
           Los agentes de Marketing se ven en <Link className="underline" to="/marketing">Marketing → Agentes</Link>.
         </p>
         <BarraTareas agentes={reales} onVerSeguimiento={abrirConversacion} />
+        <AvisoAgentesCreados agentes={agentes.data ?? []} ahora={reloj} onVerOficina={(id) => cambiarVista({ tipo: "oficina", id })} onRevisarPermisos={(id) => cambiarVista({ tipo: "agente", id }, "perfil")} />
         <IndicadorEnVivo estado={enVivo} actualizadoEn={Math.max(agentes.dataUpdatedAt, tareas.dataUpdatedAt)} />
         <Tabs value={seccion} onValueChange={cambiarSeccion}>
           <TabsList>
@@ -97,7 +100,7 @@ export default function Agentes() {
             {cargando ? <p className="text-sm text-muted-foreground">Leyendo el registro de agentes…</p>
               : agentes.isError ? <p className="text-sm text-muted-foreground">No pudimos leer el registro de agentes. Inténtalo de nuevo.</p>
               : <VistaOficina figuras={todasLasFiguras} agentes={agentes.data ?? []} tareas={tareas.data ?? []} ahora={reloj} vista={vista} onVista={(v) => cambiarVista(v)}
-                  alAbrirMarketing={() => navegar("/marketing")} onElegirAgente={(id) => cambiarVista({ tipo: "agente", id })} pestana={pestanaEscritorio} onPestana={cambiarPestanaEscritorio} />}
+                  alAbrirMarketing={() => navegar("/marketing")} onElegirAgente={(id) => cambiarVista({ tipo: "agente", id })} onAbrirChat={(id) => navegar(urlChat(id))} pestana={pestanaEscritorio} onPestana={cambiarPestanaEscritorio} />}
           </TabsContent>
           <TabsContent value="administrar" className="mt-4 space-y-6">
             <section aria-label="Crear agente" className="space-y-3" data-testid="administrar-crear">
