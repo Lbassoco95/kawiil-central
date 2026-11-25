@@ -173,6 +173,18 @@ describe("R1.e.4 · aviso cuando un agente crea a otro (empieza en Solo lectura)
     fireEvent.click(screen.getByTestId(`aviso-visto-${V}`));
     expect(screen.queryByTestId("aviso-creados")).toBeNull();
   });
+  it("las aclaraciones separan lo que Kawiil hace valer de lo que depende de la VM, sin prometer de más", () => {
+    const pausado = AGENTES.map((a) => (a.id === V ? { ...a, config: { ...a.config, pausado: { por: "p", en: hace(5) } } } : a));
+    montarAviso(pausado);
+    for (const e of ["solo_lectura", "pausado"]) {
+      const t = screen.getByTestId(`aclaracion-${e}-${V}`).textContent!;
+      expect(t).toContain("Lo que Kawiil hace valer");
+      expect(t).toContain("Lo que depende de la VM (no está garantizado desde aquí)");
+    }
+    expect(screen.getByTestId(`aviso-permisos-texto-${V}`).textContent).not.toMatch(/no puede escribir|no recibe tareas/);
+    expect(screen.getByTestId(`aclaracion-pausado-${V}`).textContent).toContain("programadas");
+    expect(screen.getByTestId(`aclaracion-solo_lectura-${V}`).textContent).toContain("1Password");
+  });
   it("«Pausarlo» está activo y pausa al agente; si ya está pausado ofrece «Reanudarlo»", () => {
     montarAviso();
     const b = screen.getByTestId(`aviso-pausar-${V}`) as HTMLButtonElement;

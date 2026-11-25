@@ -1,7 +1,7 @@
 // Espacio de trabajo (R3 y R4): varias conversaciones a la vez y la lista «En curso». Funciones puras, solo lectura.
 import { ETIQUETA_EVENTO, type ActividadPublica, type EventoPublico, type ResumenTarea } from "../../../supabase/functions/_shared/seguimiento";
 
-// DECISIÓN PENDIENTE DE DIRECCIÓN: cuántos agentes se ven a la vez. El requisito y el diseño proponen dos; se usa ese valor de forma provisional.
+// Decisión de Dirección (26 nov 2026): se ven dos agentes a la vez.
 export const MAX_A_LA_VEZ = 2;
 export type ModoEspacio = "una" | "varios";
 export const leerModo = (p: string | null | undefined): ModoEspacio => (p === "varios" ? "varios" : "una");

@@ -4,6 +4,7 @@ import path from "path";
 
 export default defineConfig({
   plugins: [react()],
+  define: { __PRUEBA_DISPONIBLE__: false },
   test: {
     environment: "jsdom",
     globals: true,

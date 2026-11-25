@@ -16,7 +16,9 @@ Campos de cada pendiente:
 | `estado`, `creado_en`, `resuelto_en`, `resuelto_por` | `abierto` → `cumplido` o `cancelado` |
 
 Mientras haya un pendiente abierto, la tarea queda en `waiting_approval`; al cumplirse vuelve a `queued` o `in_progress`.
-**Dónde guardarlo (a decidir con Dirección):** una tabla nueva `agent_pendientes` (la migración la haría `kawiil-central`, con confirmación) o, de forma provisional, `agent_tasks.execution_metadata.pendiente`. **Hoy la pantalla solo ve `waiting_approval` sin motivo**; por eso «falta una captura» y «permiso bloqueado» no aparecen.
+**Dónde guardarlo (decisión del equipo de Kawiil, 26 nov; falta la revisión de quien mantiene la VM):** dos tablas nuevas, `agent_pendientes` y `agent_pendientes_historial`, propuestas en `supabase/pendientes/agent_pendientes.sql` (**no aplicadas**: se aplican solo con confirmación de Dirección; reversa en `tools/agentes/rollback_agent_pendientes.sql`; prueba en `tools/agentes/prueba_pendientes_pglite.mjs`). Por qué: *trazable* (cada pendiente apunta a su agente, tarea y conversación), *con historial* (el historial se llena solo y no se puede editar ni borrar; un pendiente no se borra ni se reabre, se cierra), *sin datos de clientes ni secretos* (motivo de 5 a 240 caracteres con un candado contra contraseñas, tokens y referencias `op://`; la VM debe limpiar además). La escribe solo la VM (`service_role`); Dirección solo lee.
+**Hoy la pantalla solo ve `waiting_approval` sin motivo**; por eso «falta una captura» y «permiso bloqueado» no aparecen. Cuando la tabla exista y la VM escriba en ella, la pantalla leerá de ahí (pendiente de hacer del lado de Kawiil).
+**Preguntas para quien mantiene la VM:** ¿está de acuerdo con tipos y campos? ¿puede escribir con `service_role` y cerrar el pendiente al cumplirse? ¿prefiere otro nombre de columna? (Esta propuesta no se pudo consultar con nadie: no hay un responsable nombrado ni acceso a su repositorio.)
 
 ## 2. Requerimientos de la autoridad (origen pendiente de decisión)
 Si `resuelve.tipo = "autoridad"`: `folio`, `autoridad`, `plazo` (fecha) y `estado`. Si no se pudo leer folio o plazo, marcar `plazo_leido = false`: la pantalla lo muestra como «Sin plazo leído» y pide revisión de una persona. Nunca se muestra uno sin folio y plazo.
@@ -27,7 +29,7 @@ Si `resuelve.tipo = "autoridad"`: `folio`, `autoridad`, `plazo` (fecha) y `estad
 - Por decidir: cuántos agentes puede crear cada agente y cuáles no pueden crear.
 
 ## 4. Pausa
-Si `config.pausado` existe, no ejecutar tareas programadas, llamadas de otros agentes ni tareas nuevas. `dispatch-to-agent` ya rechaza (409) las tareas manuales de un agente pausado.
+Al registrarse o actualizarse, **no sobrescribir** las claves `config.pausado`, `config.habilitado`, `config.creado_por` ni `config.creado_en` (son de Kawiil y de las personas). Si `config.pausado` existe, no ejecutar tareas programadas, llamadas de otros agentes ni tareas nuevas. `dispatch-to-agent` ya rechaza (409) las tareas manuales de un agente pausado.
 
 ## 5. Llamadas entre agentes (R5, aún no existen)
 Herramienta «consultar a otro agente»: la tarea nueva lleva `source_task_id`. Límites: hasta 6 turnos, una llamada a la vez por conversación, el agente llamado no llama a un tercero, 2 salas abiertas por persona. Cada llamada queda en `agent_activity_logs` (quién, a quién, cuándo, resultado) y se puede detener. Permisos del agente llamado: solo los propios (propuesta; decisión pendiente). Si le falta uno, debe quedar como pendiente (punto 1).

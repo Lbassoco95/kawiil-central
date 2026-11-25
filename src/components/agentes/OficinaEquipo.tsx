@@ -5,6 +5,7 @@ import { departamentoDe } from "@/lib/agentes/departamentos";
 import { estadoVisible, esPausado, esSoloLectura, urlChat } from "@/lib/agentes/chat";
 import { llamadasDeOficina, resumenLlamadas, textoAgentes, type Oficina } from "@/lib/agentes/equipos";
 import { esperasDe } from "@/lib/agentes/actividad";
+import { AclaracionEstado } from "@/components/agentes/AclaracionEstado";
 import { nombreAgente, type AgenteRegistro, type TareaAgente } from "@/lib/agentes/registro";
 import type { FiguraOficina } from "@/lib/agentes/oficina";
 
@@ -68,6 +69,8 @@ export function OficinaEquipo({ oficina, jefe, agentes, figuras, tareas, ahora, 
                   {esSoloLectura(agente.config) && <span className="rounded-full border border-violet-300/70 px-2 py-0.5 text-xs font-normal" data-testid={`oficina-solo-lectura-${agente.id}`}>◇ Solo lectura</span>}</p>
                 <p className="text-xs text-muted-foreground">Creado por {oficina.jefeNombre} · {fecha(creacion.cuando)}</p>
                 {creacion.para && <p className="text-xs">Para qué: <span className="text-muted-foreground">{creacion.para}</span></p>}
+                {esSoloLectura(agente.config) && <AclaracionEstado estado="solo_lectura" id={agente.id} />}
+                {esPausado(agente.config) && <AclaracionEstado estado="pausado" id={agente.id} />}
                 <div className="mt-2 flex flex-wrap gap-2">
                   <Link to={urlChat(agente.id)} className="inline-flex min-h-11 items-center rounded-full border border-border/60 px-4 text-sm" data-testid={`oficina-chat-${agente.id}`}>Abrir el chat</Link>
                   <a href={urlChat(agente.id)} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center rounded-full border border-border/60 px-4 text-sm">Abrir en pestaña</a>

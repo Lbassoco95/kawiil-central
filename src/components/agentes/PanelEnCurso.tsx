@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { cuandoRelativo } from "@/lib/agentes/registro";
 import { ETIQUETA_ESTADO } from "@/lib/agentes/etiquetas";
@@ -31,13 +32,18 @@ function Fila({ c, abiertos, ahora }: { c: ConversacionEnCurso; abiertos: string
   );
 }
 
-export function PanelEnCurso({ abiertos, ahora }: { abiertos: string[]; ahora: Date }) {
+// `plegable`: en el celular la lista empieza plegada para no quitarle pantalla al chat (R7).
+export function PanelEnCurso({ abiertos, ahora, plegable = false }: { abiertos: string[]; ahora: Date; plegable?: boolean }) {
   const q = useTareasSeguimiento("todas");
   const lista = conversacionesEnCurso(q.data ?? []);
+  const [abierto, setAbierto] = useState(false);
+  const visible = !plegable || abierto;
   return (
     <section className="zen-glass space-y-2 rounded-3xl p-3" aria-label="En curso" data-testid="en-curso">
-      <h2 className="text-sm font-medium">En curso · {lista.length}<span className="ml-2 text-xs font-normal text-muted-foreground">se actualiza solo</span></h2>
-      {q.isLoading ? <p className="text-sm text-muted-foreground">Leyendo lo que va en curso…</p>
+      {plegable
+        ? <button type="button" onClick={() => setAbierto((v) => !v)} aria-expanded={abierto} className="flex min-h-11 w-full items-center text-left text-sm font-medium" data-testid="en-curso-alternar">En curso · {lista.length}<span className="ml-2 text-xs font-normal text-muted-foreground">{abierto ? "ocultar" : "ver"}</span></button>
+        : <h2 className="text-sm font-medium">En curso · {lista.length}<span className="ml-2 text-xs font-normal text-muted-foreground">se actualiza solo</span></h2>}
+      {!visible ? null : q.isLoading ? <p className="text-sm text-muted-foreground">Leyendo lo que va en curso…</p>
         : q.isError ? <p role="alert" className="text-sm text-destructive">{(q.error as Error).message}</p>
         : lista.length === 0 ? <p className="text-sm text-muted-foreground" data-testid="en-curso-vacio">Nada en curso ahora.</p>
         : <ul className="grid gap-2 md:grid-cols-2 xl:grid-cols-3" aria-label="Conversaciones en curso">{lista.map((c) => <Fila key={c.conversacion} c={c} abiertos={abiertos} ahora={ahora} />)}</ul>}

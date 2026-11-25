@@ -8,6 +8,7 @@ import { OficinaEquipo } from "@/components/agentes/OficinaEquipo";
 import { idsEnOficinas } from "@/lib/agentes/equipos";
 import { urlChat } from "@/lib/agentes/chat";
 import { totalPendientes } from "@/lib/agentes/pendientes";
+import { useEsMovil } from "@/hooks/useEsMovil";
 import type { OficinaEnSala } from "@/components/agentes/SalaIsometrica";
 import { agruparPorDepartamento } from "@/lib/agentes/departamentos";
 import { nombreAgente } from "@/lib/agentes/registro";
@@ -19,10 +20,12 @@ import type { AgenteRegistro, TareaAgente } from "@/lib/agentes/registro";
 // Oficina: plano de islas → sala de la isla → escritorio del agente (panel a la derecha). La vista actual la decide quien la usa (la página la guarda en la URL).
 // Sobre cualquier vista va la franja «Equipo en vivo». Los agentes de Marketing abren su módulo, salvo «Comunicación interna», cuyo escritorio vive aquí.
 const ABRE_AQUI = new Set(["marketing_comunicacion_interna"]);
-export function VistaOficina({ figuras, agentes, tareas, ahora, vista, onVista, onElegirAgente, alAbrirMarketing, pestana = "conversaciones", onPestana }: {
+export function VistaOficina({ figuras, agentes, tareas, ahora, vista, onVista, onElegirAgente, alAbrirMarketing, pestana = "conversaciones", onPestana, onAbrirChat }: {
   figuras: FiguraOficina[]; agentes: AgenteRegistro[]; tareas: TareaAgente[]; ahora: Date; vista: Vista; onVista: (v: Vista) => void;
   onElegirAgente: (id: string) => void; alAbrirMarketing?: () => void; pestana?: PestanaEscritorio; onPestana?: (p: PestanaEscritorio) => void;
+  onAbrirChat?: (id: string) => void;   // R7: en el celular, tocar a un agente abre su chat a pantalla completa en vez del panel de la sala
 }) {
+  const movil = useEsMovil();
   const grupos = useMemo(() => agruparPorDepartamento(figuras, agentes), [figuras, agentes]);
   const deptoDe = useMemo(() => new Map(grupos.flatMap((g) => g.figuras.map((f) => [f.id, g.depto.nombre] as const))), [grupos]);
   const esperan = useMemo(() => agentesQueEsperan(tareas), [tareas]);
@@ -41,7 +44,7 @@ export function VistaOficina({ figuras, agentes, tareas, ahora, vista, onVista, 
   // Un agente de Marketing abre su módulo; el resto abre su escritorio.
   const alElegir = (id: string) => {
     const f = figuras.find((x) => x.id === id);
-    if (f && isla?.depto.clave === "marketing" && !ABRE_AQUI.has(f.clave) && alAbrirMarketing) alAbrirMarketing(); else onElegirAgente(id);
+    if (f && isla?.depto.clave === "marketing" && !ABRE_AQUI.has(f.clave) && alAbrirMarketing) alAbrirMarketing(); else if (movil && onAbrirChat) onAbrirChat(id); else onElegirAgente(id);
   };
   const migas = vista.tipo !== "plano" && (
     <nav aria-label="Dónde estás" className="flex flex-wrap items-center gap-2 text-sm">
@@ -72,7 +75,7 @@ export function VistaOficina({ figuras, agentes, tareas, ahora, vista, onVista, 
         </p>
       )}
       {vista.tipo === "plano" ? (
-        <PlanoDepartamentos figuras={figuras} agentes={agentes} tareas={tareas} ahora={ahora} alAbrirMarketing={alAbrirMarketing} onElegir={onElegirAgente}
+        <PlanoDepartamentos figuras={figuras} agentes={agentes} tareas={tareas} ahora={ahora} alAbrirMarketing={alAbrirMarketing} onElegir={(id) => (movil && onAbrirChat ? onAbrirChat(id) : onElegirAgente(id))}
           onAbrirIsla={(clave) => onVista({ tipo: "isla", clave })} />
       ) : !isla || (vista.tipo === "oficina" && !oficinaSel) ? (
         <p className="zen-glass rounded-2xl p-4 text-sm text-muted-foreground" data-testid={vista.tipo === "agente" ? "agente-no-existe" : vista.tipo === "oficina" ? "oficina-no-existe" : "isla-vacia"}>

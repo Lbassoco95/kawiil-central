@@ -50,3 +50,6 @@ Pruebas: `tools/marketing/prueba_analista_pglite.mjs`; Node `supabase/functions/
 
 ## Comunicación interna: implementación alterna revertida (16 nov)
 - Se construyeron dos a la vez; la de `main` (#561) es la oficial. La alterna (agente `marketing_comunicacion`) se aplicó y se **revirtió** el mismo día (`20261116223934` y `20261116225413`, ya en `supabase/migrations/`); estaba vacía. Detalle y lo que se podría rescatar: `docs/marketing-comunicacion-interna.md`; su SQL: `tools/marketing/alternativa_comunicacion_interna/`.
+
+## Pendientes de los agentes (26 nov 2026)
+- `agent_pendientes.sql`: tablas `agent_pendientes` y `agent_pendientes_historial` (RLS: solo Dirección lee; solo la VM escribe; historial que solo se agrega). **NO APLICADA.** Reversa: `tools/agentes/rollback_agent_pendientes.sql`. Prueba: `tools/agentes/prueba_pendientes_pglite.mjs`. Contexto: `docs/agentes-vm-requisitos.md`.

@@ -39,7 +39,8 @@ function FilaPendiente({ p, ahora }: { p: Pendiente; ahora: Date }) {
   );
 }
 
-export function PanelRequerimientos({ mensajes, ahora = new Date() }: { mensajes: MensajeHilo[]; ahora?: Date }) {
+// `ocultarEnMovil`: en el celular el panel va aparte, en su propia pantalla (botón «Requerimientos» del chat). `pantalla`: es esa pantalla (sin plegar).
+export function PanelRequerimientos({ mensajes, ahora = new Date(), ocultarEnMovil = false, pantalla = false }: { mensajes: MensajeHilo[]; ahora?: Date; ocultarEnMovil?: boolean; pantalla?: boolean }) {
   const lista = useTareasSeguimiento("todas");
   const pendientes = pendientesDeTi(lista.data ?? []);
   const docs = documentosDelHilo(mensajes).length;
@@ -47,16 +48,16 @@ export function PanelRequerimientos({ mensajes, ahora = new Date() }: { mensajes
   const [pestana, setPestana] = useState<Pestana>("pendientes");
   const tabs: Array<{ v: Pestana; t: string; n: number | null }> = [{ v: "pendientes", t: "Pendientes de ti", n: pendientes.length }, { v: "autoridad", t: "De la autoridad", n: null }, { v: "documentos", t: "Documentos", n: docs }];
   return (
-    <section className="shrink-0 border-b border-border/40 bg-background text-sm" aria-label="Requerimientos" data-testid="requerimientos">
-      <button type="button" onClick={() => setAbierto((v) => !v)} aria-expanded={abierto} className="flex min-h-11 w-full items-center gap-2 px-3 text-left text-xs font-medium" data-testid="requerimientos-resumen">
+    <section className={`shrink-0 bg-background text-sm ${pantalla ? "" : "border-b border-border/40"} ${ocultarEnMovil ? "max-md:hidden" : ""}`} aria-label="Requerimientos" data-testid="requerimientos">
+      <button type="button" onClick={() => !pantalla && setAbierto((v) => !v)} aria-expanded={abierto || pantalla} className="flex min-h-11 w-full items-center gap-2 px-3 text-left text-xs font-medium" data-testid="requerimientos-resumen">
         Requerimientos · {textoPendientes(pendientes.length)} · {docs} {docs === 1 ? "documento" : "documentos"}
       </button>
-      {abierto && (
+      {(abierto || pantalla) && (
         <div className="space-y-2 px-3 pb-3">
           <div role="tablist" aria-label="Requerimientos" className="flex flex-wrap gap-1">
             {tabs.map((x) => (
               <button key={x.v} type="button" role="tab" aria-selected={pestana === x.v} onClick={() => setPestana(x.v)} data-testid={`req-tab-${x.v}`}
-                className={`min-h-9 rounded-full border px-3 text-xs ${pestana === x.v ? "border-primary/60 bg-primary/10 font-medium" : "border-border/60"}`}>
+                className={`min-h-9 rounded-full border px-3 text-xs max-md:min-h-11 ${pestana === x.v ? "border-primary/60 bg-primary/10 font-medium" : "border-border/60"}`}>
                 {x.t}{x.n !== null ? ` · ${x.n}` : ""}
               </button>
             ))}

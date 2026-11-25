@@ -93,7 +93,7 @@ describe("R3 · espacio de trabajo", () => {
   const Ruta = () => { const l = useLocation(); return <span data-testid="ruta">{decodeURIComponent(l.pathname + l.search)}</span>; };
   const montar = (url: string) => render(
     <QueryClientProvider client={new QueryClient()}><MemoryRouter initialEntries={[url]}><Routes><Route path="/agentes/chat/:agenteId" element={<><AgentesChat /><Ruta /></>} /></Routes></MemoryRouter></QueryClientProvider>);
-  const pantalla = (ancha: boolean) => { window.matchMedia = ((q: string) => ({ matches: ancha, media: q, addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, onchange: null, dispatchEvent: () => false })) as never; };
+  const pantalla = (ancha: boolean) => { window.matchMedia = ((q: string) => ({ matches: q.includes("max-width") ? !ancha : ancha, media: q, addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, onchange: null, dispatchEvent: () => false })) as never; };
   beforeEach(() => {
     pantalla(true);
     est.registro = [ag(A, "vizumi"), ag(B, "nelli"), ag(C, "atl")]; est.tareas = []; est.todas = []; est.detalle = {};

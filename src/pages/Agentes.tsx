@@ -100,7 +100,7 @@ export default function Agentes() {
             {cargando ? <p className="text-sm text-muted-foreground">Leyendo el registro de agentes…</p>
               : agentes.isError ? <p className="text-sm text-muted-foreground">No pudimos leer el registro de agentes. Inténtalo de nuevo.</p>
               : <VistaOficina figuras={todasLasFiguras} agentes={agentes.data ?? []} tareas={tareas.data ?? []} ahora={reloj} vista={vista} onVista={(v) => cambiarVista(v)}
-                  alAbrirMarketing={() => navegar("/marketing")} onElegirAgente={(id) => cambiarVista({ tipo: "agente", id })} pestana={pestanaEscritorio} onPestana={cambiarPestanaEscritorio} />}
+                  alAbrirMarketing={() => navegar("/marketing")} onElegirAgente={(id) => cambiarVista({ tipo: "agente", id })} onAbrirChat={(id) => navegar(urlChat(id))} pestana={pestanaEscritorio} onPestana={cambiarPestanaEscritorio} />}
           </TabsContent>
           <TabsContent value="administrar" className="mt-4 space-y-6">
             <section aria-label="Crear agente" className="space-y-3" data-testid="administrar-crear">

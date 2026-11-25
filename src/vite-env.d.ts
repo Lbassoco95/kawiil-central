@@ -10,3 +10,6 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+/** true solo en vistas previas y desarrollo: habilita el modo de prueba del módulo Agentes (src/pruebas). */
+declare const __PRUEBA_DISPONIBLE__: boolean;

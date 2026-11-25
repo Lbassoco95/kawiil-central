@@ -184,7 +184,7 @@ export function HiloAgente({ taskId, ahora, claseAlto = "h-[min(64vh,42rem)] min
             {figura && <p className="truncate text-xs text-muted-foreground" data-testid="hilo-estado-agente">{en_curso ? (figura.estado === "trabajando" ? "En su escritorio, trabajando en esto ahora." : "Esperando su turno: empieza en cuanto esté libre.") : ESTADO_OFICINA[figura.estado].frase}</p>}
           </div>
         </div>
-        <PanelRequerimientos mensajes={mensajes} ahora={ahora} />
+        <PanelRequerimientos mensajes={mensajes} ahora={ahora} ocultarEnMovil />
         <div className="relative flex min-h-[8rem] flex-1 flex-col overflow-hidden">
           <div ref={lista} onScroll={alScroll} className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain p-3" aria-live="polite" role="log" aria-label="Conversación" data-testid="hilo-mensajes">
             {mensajes.map((m, i) => <Burbuja key={`${m.task_id}-${m.rol}-${i}`} m={m} ahora={ahora} />)}
@@ -205,7 +205,7 @@ export function HiloAgente({ taskId, ahora, claseAlto = "h-[min(64vh,42rem)] min
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); enviar(); } }}
               placeholder={en_curso ? "Espera a que termine para escribirle de nuevo…" : `Escríbele a ${hilo.agente}: un cambio, otro documento…`}
               disabled={en_curso} data-testid="hilo-texto" aria-label={`Mensaje para ${hilo.agente}`} />
-            <Button onClick={enviar} disabled={!texto.trim() || instruir.isPending || en_curso} data-testid="hilo-enviar" aria-label="Enviar mensaje">
+            <Button onClick={enviar} disabled={!texto.trim() || instruir.isPending || en_curso} data-testid="hilo-enviar" aria-label="Enviar mensaje" className="max-md:min-h-11 max-md:min-w-11">
               {instruir.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}<span className="ml-2 hidden sm:inline">Enviar</span>
             </Button>
           </div>

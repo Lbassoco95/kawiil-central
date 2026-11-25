@@ -72,6 +72,24 @@ function Aprendizaje({ agente, tareas, ahora }: { agente: AgenteRegistro; tareas
   );
 }
 
+// Contenido de cada sección del escritorio (menos «Conversaciones», que vive en el chat). Lo usan el panel de la sala y el chat en el celular (R7: las secciones se recorren de lado).
+export function SeccionAgente({ seccion, agente, f, tareas, ahora }: { seccion: Exclude<PestanaEscritorio, "conversaciones">; agente: AgenteRegistro; f: FiguraOficina; tareas: TareaAgente[]; ahora: Date }) {
+  const propias = tareas.filter((t) => t.agent_id === agente.id);
+  if (seccion === "perfil") return <Perfil agente={agente} f={f} />;
+  if (seccion === "aprendizaje") return <Aprendizaje agente={agente} tareas={tareas} ahora={ahora} />;
+  if (seccion === "rutinas") {
+    return (
+      <div className="space-y-3" data-testid="pestana-rutinas-contenido">
+        <CalendarioRutinas agentes={[agente]} tareas={propias} ahora={ahora} onProgramar={() => document.getElementById("programar-aqui")?.scrollIntoView?.({ behavior: "smooth" })} />
+        <div id="programar-aqui" className="scroll-mt-4">
+          {programable(agente) ? <ProgramarAgente agentes={[agente]} agenteInicial={agente.id} fijo /> : <Nota id="programar-no">Solo se pueden programar agentes creados desde el Constructor con cadencia diaria o semanal.</Nota>}
+        </div>
+      </div>
+    );
+  }
+  return documentable(agente) ? <DocumentosAgente agentes={[agente]} agenteInicial={agente.id} fijo /> : <Nota id="documentos-no">Los agentes de sistema no tienen documentos propios.</Nota>;
+}
+
 export function PanelAgente({ figura: f, agente, agentes, tareas, ahora, pestana, onPestana, onVolver }: {
   figura: FiguraOficina; agente: AgenteRegistro; agentes: AgenteRegistro[]; tareas: TareaAgente[]; ahora: Date; pestana: PestanaEscritorio; onPestana: (p: PestanaEscritorio) => void; onVolver?: () => void;
 }) {
@@ -108,17 +126,7 @@ export function PanelAgente({ figura: f, agente, agentes, tareas, ahora, pestana
           {sistema && !esComunicacion && <Nota id="conv-sistema">Este agente de Marketing trabaja por su cuenta; sus seguimientos están en <Link className="underline" to="/marketing">Marketing</Link>.</Nota>}
           {esComunicacion && <ComunicacionInterna />}
         </TabsContent>
-        <TabsContent value="perfil" className="mt-3"><Perfil agente={agente} f={f} /></TabsContent>
-        <TabsContent value="aprendizaje" className="mt-3"><Aprendizaje agente={agente} tareas={tareas} ahora={ahora} /></TabsContent>
-        <TabsContent value="rutinas" className="mt-3 space-y-3" data-testid="pestana-rutinas-contenido">
-          <CalendarioRutinas agentes={[agente]} tareas={propias} ahora={ahora} onProgramar={() => document.getElementById("programar-aqui")?.scrollIntoView?.({ behavior: "smooth" })} />
-          <div id="programar-aqui" className="scroll-mt-4">
-            {programable(agente) ? <ProgramarAgente agentes={[agente]} agenteInicial={agente.id} fijo /> : <Nota id="programar-no">Solo se pueden programar agentes creados desde el Constructor con cadencia diaria o semanal.</Nota>}
-          </div>
-        </TabsContent>
-        <TabsContent value="documentos" className="mt-3">
-          {documentable(agente) ? <DocumentosAgente agentes={[agente]} agenteInicial={agente.id} fijo /> : <Nota id="documentos-no">Los agentes de sistema no tienen documentos propios.</Nota>}
-        </TabsContent>
+        {(["perfil", "aprendizaje", "rutinas", "documentos"] as const).map((v) => <TabsContent key={v} value={v} className="mt-3"><SeccionAgente seccion={v} agente={agente} f={f} tareas={tareas} ahora={ahora} /></TabsContent>)}
       </Tabs>
     </section>
   );

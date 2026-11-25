@@ -74,10 +74,10 @@ export function SalaIsometrica({ depto, figuras, onElegir, elegidoId, etiqueta, 
   };
   const activa = figuras.some((f) => f.estado === "trabajando");
   return (
-    <div className="sl zen-glass rounded-3xl p-2" data-testid={`sala-${depto.clave}`} data-activa={activa ? "true" : "false"}>
+    <div className="sl zen-glass flex flex-col rounded-3xl p-2" data-testid={`sala-${depto.clave}`} data-activa={activa ? "true" : "false"}>
       <style>{CSS}{CSS_SALA}</style>
-      <p className="px-2 pt-1 text-[11px] text-muted-foreground sm:hidden">Desliza para ver toda la sala; abajo está la lista de agentes.</p>
-      <div ref={caja} className="overflow-x-auto">
+      <p className="order-2 px-2 pt-1 text-[11px] text-muted-foreground sm:hidden">Plano de la sala (desliza para verlo completo). La lista de agentes está arriba.</p>
+      <div ref={caja} className="order-3 overflow-x-auto sm:order-none">
       <svg viewBox={`0 0 ${ancho} ${alto}`} className="mx-auto w-full min-w-[620px] max-w-[980px]" role="group" aria-label={`Sala de ${depto.nombre}`} shapeRendering="geometricPrecision">
         <g transform={`translate(${ox},${oy})`}>
           <polygon points={pts(A, B, sube(B), sube(A))} style={{ fill: "var(--sl-pared-d)", stroke: "var(--sl-borde)" }} />
@@ -130,17 +130,17 @@ export function SalaIsometrica({ depto, figuras, onElegir, elegidoId, etiqueta, 
       </svg>
       </div>
       {/* La lista repite lo que se ve en la sala: sirve con teclado y lector de pantalla, y en el celular, donde el dibujo se ve chico. */}
-      <ul className="mt-2 grid gap-2 px-2 pb-2 sm:grid-cols-2" aria-label={`Zonas de ${depto.nombre}`} data-testid="sala-zonas">
+      <ul className="order-1 mb-2 grid gap-2 px-2 pb-2 sm:order-none sm:mb-0 sm:mt-2 sm:grid-cols-2" aria-label={`Zonas de ${depto.nombre}`} data-testid="sala-zonas">
         {sala.zonas.map((z) => (
           <li key={z.nombre} className="rounded-2xl border border-border/50 bg-background/40 p-2.5">
             <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-foreground/75">{z.nombre}</p>
             <ul className="flex flex-wrap gap-1.5">
               {z.claves.map((c) => { const f = figuras.find((x) => x.clave === c)!; return (
                 <li key={f.id} className="inline-flex items-center gap-1">
-                  <button type="button" onClick={() => onElegir?.(f.id)} disabled={!onElegir} data-testid={`sala-lista-${f.id}`} className="min-h-8 rounded-full border border-border/60 px-2.5 py-1 text-xs enabled:hover:bg-background/70">
+                  <button type="button" onClick={() => onElegir?.(f.id)} disabled={!onElegir} data-testid={`sala-lista-${f.id}`} className="min-h-11 rounded-full border border-border/60 px-3 py-1 text-xs enabled:hover:bg-background/70 sm:min-h-8 sm:px-2.5">
                     <span className="font-medium">{f.nombre}</span> <span className="text-foreground/70">· {texto(f)}</span>
                   </button>
-                  {hrefPestana && <a href={hrefPestana(f.id)} target="_blank" rel="noopener noreferrer" data-testid={`sala-pestana-${f.id}`} className="rounded-full px-2 py-1 text-xs underline" aria-label={`Abrir a ${f.nombre} en pestaña nueva`}>Abrir en pestaña</a>}
+                  {hrefPestana && <a href={hrefPestana(f.id)} target="_blank" rel="noopener noreferrer" data-testid={`sala-pestana-${f.id}`} className="hidden rounded-full px-2 py-1 text-xs underline sm:inline" aria-label={`Abrir a ${f.nombre} en pestaña nueva`}>Abrir en pestaña</a>}
                 </li>); })}
             </ul>
           </li>
@@ -149,15 +149,15 @@ export function SalaIsometrica({ depto, figuras, onElegir, elegidoId, etiqueta, 
           <li key={o.clave} className="rounded-2xl border p-2.5" style={{ borderColor: o.tinte, background: `${o.tinte}55` }} data-testid={`lista-oficina-${o.clave}`}>
             <p className="mb-1.5 flex flex-wrap items-center gap-2 text-xs font-medium uppercase tracking-wide text-foreground/75">
               <span>{o.nombre}</span><span className="font-normal normal-case text-foreground/70">· {textoAgentes(o.figuras.length)}</span>
-              {onAbrirOficina && <button type="button" onClick={() => onAbrirOficina(o.clave)} data-testid={`lista-oficina-abrir-${o.clave}`} className="min-h-8 rounded-full border border-border/60 bg-background/70 px-2.5 py-1 text-xs normal-case">Entrar a la oficina</button>}
+              {onAbrirOficina && <button type="button" onClick={() => onAbrirOficina(o.clave)} data-testid={`lista-oficina-abrir-${o.clave}`} className="min-h-11 rounded-full border border-border/60 bg-background/70 px-3 py-1 text-xs normal-case sm:min-h-8 sm:px-2.5">Entrar a la oficina</button>}
             </p>
             <ul className="flex flex-wrap gap-1.5">
               {o.figuras.map((f) => (
                 <li key={f.id} className="inline-flex items-center gap-1">
-                  <button type="button" onClick={() => onElegir?.(f.id)} disabled={!onElegir} data-testid={`sala-lista-${f.id}`} className="min-h-8 rounded-full border border-border/60 bg-background/70 px-2.5 py-1 text-xs">
+                  <button type="button" onClick={() => onElegir?.(f.id)} disabled={!onElegir} data-testid={`sala-lista-${f.id}`} className="min-h-11 rounded-full border border-border/60 bg-background/70 px-3 py-1 text-xs sm:min-h-8 sm:px-2.5">
                     <span className="font-medium">{f.nombre}</span> <span className="text-foreground/70">· {texto(f)}</span>
                   </button>
-                  {hrefPestana && <a href={hrefPestana(f.id)} target="_blank" rel="noopener noreferrer" data-testid={`sala-pestana-${f.id}`} className="rounded-full px-2 py-1 text-xs underline" aria-label={`Abrir a ${f.nombre} en pestaña nueva`}>Abrir en pestaña</a>}
+                  {hrefPestana && <a href={hrefPestana(f.id)} target="_blank" rel="noopener noreferrer" data-testid={`sala-pestana-${f.id}`} className="hidden rounded-full px-2 py-1 text-xs underline sm:inline" aria-label={`Abrir a ${f.nombre} en pestaña nueva`}>Abrir en pestaña</a>}
                 </li>
               ))}
             </ul>

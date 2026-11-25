@@ -46,7 +46,7 @@ export function TrabajosAgente({ agentId, nombre, ahora, agente, convInicial = n
       <div className="zen-glass space-y-2 rounded-2xl p-3">
         <div className="flex items-center justify-between gap-2">
           <p className="text-sm font-medium">Conversaciones con {nombre}</p>
-          <Button type="button" size="sm" variant="outline" aria-expanded={formularioVisible} aria-controls="trabajos-nueva" data-testid="trabajos-nueva-abrir" onClick={() => setNuevaAbierta((v) => !v)}>
+          <Button type="button" size="sm" variant="outline" className="max-md:min-h-11" aria-expanded={formularioVisible} aria-controls="trabajos-nueva" data-testid="trabajos-nueva-abrir" onClick={() => setNuevaAbierta((v) => !v)}>
             <Plus className="mr-1 h-3.5 w-3.5" aria-hidden />Nueva
           </Button>
         </div>
@@ -60,8 +60,8 @@ export function TrabajosAgente({ agentId, nombre, ahora, agente, convInicial = n
                   <button type="button" aria-pressed={elegida === t.id} data-testid={`trabajo-${t.id}`} onClick={() => setElegida(elegida === t.id ? null : t.id)}
                     title={`${t.titulo || "Solicitud sin título"} · ${ETIQUETA_ESTADO[t.estado]?.texto ?? t.estado}`}
                     className={elegida
-                      ? `max-w-[15rem] truncate rounded-full border px-3 py-1 text-xs ${elegida === t.id ? "border-primary/60 bg-primary/10 font-medium" : "border-border/50"}`
-                      : `w-full rounded-xl border px-2.5 py-1.5 text-left text-sm ${elegida === t.id ? "border-primary/60 bg-primary/5" : "border-border/50"}`}>
+                      ? `max-w-[15rem] truncate rounded-full border px-3 py-1 text-xs max-md:min-h-11 ${elegida === t.id ? "border-primary/60 bg-primary/10 font-medium" : "border-border/50"}`
+                      : `w-full rounded-xl border px-2.5 py-1.5 text-left text-sm max-md:min-h-11 ${elegida === t.id ? "border-primary/60 bg-primary/5" : "border-border/50"}`}>
                     {elegida ? (t.titulo || "Solicitud sin título") : (
                       <>
                         <span className="flex flex-wrap items-center gap-2"><span className="font-medium">{t.titulo || "Solicitud sin título"}</span>

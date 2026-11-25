@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { creacionDe } from "@/lib/agentes/equipos";
 import { esPausado, esSoloLectura } from "@/lib/agentes/chat";
 import { usePermisosAgente } from "@/hooks/useAgenteConstructor";
+import { AclaracionEstado } from "@/components/agentes/AclaracionEstado";
 import { estaHabilitado } from "../../../supabase/functions/_shared/agentePermisos";
 import { nombreAgente, type AgenteRegistro } from "@/lib/agentes/registro";
 import { urlChat } from "@/lib/agentes/chat";
@@ -43,13 +44,15 @@ export function AvisoAgentesCreados({ agentes, ahora, onVerOficina, onRevisarPer
               <p className="text-sm">Para qué: <span className="text-muted-foreground">{creacion.para ?? "no lo dijo"}</span></p>
               <p className="text-xs text-muted-foreground">Oficina de {nombreAgente(creador)} · {creacion.cuando ? cuando(creacion.cuando) : ""}</p>
               <p className="text-xs font-medium" data-testid={`aviso-permisos-texto-${agente.id}`}>
-                {lectura ? "◇ Empieza en Solo lectura: no puede escribir ni usar accesos hasta que lo habilites." : habilitado ? "Permisos habilitados por una persona." : "Permisos: los que tiene configurados."}
-                {pausado && " · ⏸ Pausado: no recibe tareas."}
+                {lectura ? "◇ Empieza en Solo lectura hasta que lo habilites." : habilitado ? "Permisos habilitados por una persona." : "Permisos: los que tiene configurados."}
+                {pausado && " · ⏸ Pausado."}
               </p>
+              {lectura && <AclaracionEstado estado="solo_lectura" id={agente.id} />}
+              {pausado && <AclaracionEstado estado="pausado" id={agente.id} />}
               {permisos.isError && <p role="alert" className="text-xs text-destructive">{(permisos.error as Error).message}</p>}
               {confirmando === agente.id && (
                 <p className="text-xs" data-testid={`aviso-confirmar-${agente.id}`}>
-                  Dejará de estar en Solo lectura y podrá usar los permisos que tenga configurados.{" "}
+                  Dejará de estar en Solo lectura y Kawiil dejará de quitarle accesos y permisos de escritura a lo que le mandes.{" "}
                   <button type="button" className="font-medium underline" disabled={permisos.isPending} data-testid={`aviso-habilitar-si-${agente.id}`}
                     onClick={() => permisos.mutate({ agent_id: agente.id, accion: "habilitar" }, { onSuccess: () => setConfirmando(null) })}>Sí, habilitarlo</button>{" · "}
                   <button type="button" className="underline" onClick={() => setConfirmando(null)}>Cancelar</button>
