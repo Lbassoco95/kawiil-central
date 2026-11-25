@@ -19,7 +19,7 @@ vi.mock("@/components/agentes/VistaOficina", () => ({ VistaOficina: ({ vista, pe
 
 import Agentes from "@/pages/Agentes";
 
-const Ubicacion = () => <span data-testid="url">{useLocation().search}</span>;
+const Ubicacion = () => { const l = useLocation(); return <><span data-testid="url">{l.search}</span><span data-testid="ruta">{l.pathname}</span></>; };
 const montar = (url: string) => render(<MemoryRouter initialEntries={[url]}><Agentes /><Ubicacion /></MemoryRouter>);
 
 describe("página Agentes con dos pestañas", () => {
@@ -56,11 +56,10 @@ describe("página Agentes con dos pestañas", () => {
     expect(screen.getByTestId("stub-oficina").textContent).toBe("plano:conversaciones");
     expect(screen.getByTestId("url").textContent).toBe("");
   });
-  it("«Abrir la conversación» de la barra lleva al escritorio del agente de esa tarea", () => {
+  it("«Abrir la conversación» de la barra lleva al chat del agente de esa tarea (pantalla aparte, R2.b)", () => {
     montar("/agentes");
     fireEvent.click(screen.getByTestId("stub-barra"));
-    expect(screen.getByTestId("stub-oficina").textContent).toBe("agente:conversaciones");
-    expect(screen.getByTestId("url").textContent).toContain(`vista=agente%3A${AG}`);
+    expect(screen.getByTestId("ruta").textContent).toBe(`/agentes/chat/${AG}`);
   });
   it("después de crear un agente, «Programar» lleva a su pestaña Rutinas", () => {
     montar("/agentes?pestana=administrar");

@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Agentes: sala de Cumplimiento con el chat mejorado</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="ds/kawiil-os/colors_and_type.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+*{box-sizing:border-box}
+.k{font-family:Inter,system-ui,sans-serif;color:hsl(228 20% 14%);font-size:14px;line-height:1.5}
+.mut{color:hsl(230 9% 38%)}
+.soft{background:hsl(0 0% 98.5%);border:1px solid hsl(220 13% 90%);border-radius:28px;box-shadow:0 1px 2px rgb(15 23 42 / .04),0 14px 32px -18px rgb(15 23 42 / .12)}
+.in{background:#fff;border:1px solid hsl(220 13% 90%);border-radius:20px}
+.pillb{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 14px;border-radius:9999px;border:1px solid hsl(220 13% 88%);background:#fff;color:hsl(228 20% 14%);font:500 13px Inter,system-ui,sans-serif;text-decoration:none;cursor:pointer}
+.pillb:hover{border-color:hsl(215 80% 60% / .5);background:hsl(215 100% 98%)}
+.pillb:active{transform:scale(.98)}
+.btnp{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 22px;border-radius:9999px;border:0;background:hsl(215 85% 42%);color:#fff;font:600 14px Inter,system-ui,sans-serif;cursor:pointer;text-decoration:none}
+.btnp:active{transform:scale(.98)}
+.micro{font-size:11.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:hsl(230 9% 38%)}
+.lab{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:1px;min-width:104px;padding:5px 12px 6px;border-radius:16px;background:#fff;border:1px solid hsl(220 13% 86%);box-shadow:0 4px 12px -4px rgb(15 23 42 / .18);text-decoration:none;color:inherit;line-height:1.2;white-space:nowrap}
+.lab:hover{border-color:hsl(215 80% 55%)}
+.tab{display:inline-flex;align-items:center;flex:none;min-height:40px;padding:0 16px;border-radius:9999px;font-weight:500;color:hsl(230 9% 32%);text-decoration:none;white-space:nowrap}
+.mrow{display:flex;align-items:center;gap:12px;min-height:60px;padding:6px 14px 6px 8px;border-radius:9999px;border:1px solid hsl(220 13% 90%);background:#fff;text-decoration:none;color:inherit}
+.mrow:hover{border-color:hsl(215 80% 60% / .5);background:hsl(215 100% 98%)}
+a:focus-visible,button:focus-visible,textarea:focus-visible,summary:focus-visible{outline:2px solid hsl(215 85% 45%);outline-offset:2px}
+</style>
+</helmet>
+<div class="k" style="display:flex;flex-wrap:wrap;min-height:1420px;background:hsl(220 14% 96%)">
+  <dc-import name="Barra" active="agentes" h="1420" hint-size="224px,1420px"></dc-import>
+  <main style="flex:999 1 560px;min-width:0;max-width:1216px;padding:28px 32px 48px;display:flex;flex-direction:column;gap:18px">
+
+    <header style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px">
+      <div>
+        <h1 class="gradient-text" style="margin:0;font-size:30px;font-weight:700;letter-spacing:-.02em;line-height:1.15">Agentes</h1>
+        <p class="mut" style="margin:4px 0 0;display:flex;align-items:center;gap:8px;font-size:13px"><span style="width:9px;height:9px;border-radius:9999px;background:hsl(142 70% 40%)" aria-hidden="true"></span>En vivo · actualizado hace 9 s</p>
+      </div>
+      <div role="tablist" aria-label="Sección" style="display:flex;gap:4px;padding:4px;background:#fff;border:1px solid hsl(220 13% 90%);border-radius:9999px">
+        <a role="tab" aria-selected="true" href="Oficina.dc.html" class="tab" style="background:hsl(220 14% 95%);color:hsl(228 20% 14%);font-weight:600">Oficina</a>
+        <a role="tab" aria-selected="false" href="Oficina.dc.html" class="tab">Administrar</a>
+      </div>
+    </header>
+
+    <section class="soft" aria-label="Equipo en vivo" style="padding:14px 22px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px">
+      <span><strong>Equipo en vivo</strong> <span class="mut">· nadie trabaja ahora</span></span>
+      <span style="display:flex;flex-wrap:wrap;gap:8px;margin-left:auto">
+        <span class="pill pill-pendiente" style="font-size:12px;padding:3px 10px">Haciendo 0</span>
+        <span class="pill pill-pendiente" style="font-size:12px;padding:3px 10px">En cola 0</span>
+        <span class="pill pill-completada" style="font-size:12px;padding:3px 10px">Hechas 62</span>
+        <span class="pill pill-cancelada" style="font-size:12px;padding:3px 10px">1 con error</span>
+      </span>
+    </section>
+
+    <nav aria-label="Ruta" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+      <a href="Main.dc.html" class="pillb">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg>
+        Todos los departamentos</a>
+      <a href="Oficina.dc.html" class="pillb">Cumplimiento</a>
+      <span aria-current="page" style="font-weight:600;padding:0 6px">Vigilante SITI</span>
+    </nav>
+
+    <div style="display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start">
+
+      <section class="soft" aria-label="Sala de Cumplimiento" style="flex:1 1 560px;max-width:660px;min-width:0;padding:16px;display:flex;flex-direction:column;gap:16px">
+        <div style="position:relative;width:100%;line-height:0">
+          <img src="/_blob/41a19379335cec778f684e8a8f9e5563" alt="Sala isométrica del departamento de Cumplimiento con tres agentes en sus escritorios" style="display:block;width:100%;height:auto">
+          <svg style="position:absolute;left:0;top:0;width:100%;height:100%" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><polygon points="66.7,61.1 82.6,51.3 94,61.1 80.5,71.6" fill="hsl(255 70% 70% / .26)" stroke="hsl(255 45% 48%)" stroke-width="2" stroke-dasharray="6 4" vector-effect="non-scaling-stroke"></polygon></svg>
+          <a class="lab" href="Equipo.dc.html" style="left:80.5%;top:43%;border:2px solid hsl(255 45% 52%);background:hsl(255 60% 97%)">
+            <span style="font-size:13px;font-weight:700;color:hsl(255 45% 30%)">Oficina de Vizumi</span>
+            <span style="font-size:12px;color:hsl(230 9% 30%)">1 agente · Entrar</span>
+          </a>
+          <span style="position:absolute;left:80.4%;top:63.2%;width:104px;height:40px;transform:translate(-50%,-50%);border-radius:50%;border:2px solid hsl(215 85% 45%);background:hsl(215 85% 45% / .12)" aria-hidden="true"></span>
+          <sc-for list="{{etiquetas}}" as="e" hint-placeholder-count="3">
+            <a class="lab" href="Oficina.dc.html" style="{{e.style}}">
+              <span style="font-size:13px;font-weight:700">{{e.name}}</span>
+              <span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:hsl(230 9% 30%)"><span style="{{e.dot}}"></span>{{e.status}}</span>
+            </a>
+          </sc-for>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(250px,100%),1fr));gap:12px;line-height:1.5">
+          <sc-for list="{{zonas}}" as="z" hint-placeholder-count="2">
+            <div class="in" style="padding:14px;display:flex;flex-direction:column;gap:10px;background:hsl(0 0% 97%)">
+              <div style="display:flex;align-items:baseline;justify-content:space-between"><span class="micro">{{z.name}}</span><span class="mut" style="font-size:12.5px">{{z.count}}</span></div>
+              <p class="mut" style="margin:-4px 0 0;font-size:12.5px">{{z.sub}}</p>
+              <sc-for list="{{z.miembros}}" as="m" hint-placeholder-count="2">
+                <div class="mrow" style="{{m.sel}}"><a href="Oficina.dc.html" style="display:flex;align-items:center;gap:12px;flex-grow:1;min-width:0;min-height:48px;text-decoration:none;color:inherit">
+                  <span style="width:44px;height:44px;flex:none;border-radius:9999px;background:hsl(140 30% 93%);display:flex;align-items:flex-end;justify-content:center;overflow:hidden"><img src="{{m.img}}" alt="" style="width:36px;height:auto;image-rendering:pixelated;margin-bottom:-2px"></span>
+                  <span style="display:flex;flex-direction:column;min-width:0;flex-grow:1">
+                    <span style="font-weight:600">{{m.name}}</span>
+                    <span class="mut" style="font-size:12.5px;display:inline-flex;align-items:center;gap:5px"><span style="{{m.dot}}"></span>{{m.status}}</span>
+                  </span>
+                </a>
+                <a href="Trabajo.dc.html" class="pillb" aria-label="Abrir el chat de {{m.name}} en una pestaña nueva" style="width:40px;padding:0;justify-content:center;flex:none">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6 M10 14 21 3 M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg>
+                </a>
+              </div>
+              </sc-for>
+              <sc-if value="{{z.cta}}" hint-placeholder-val="{{ false }}">
+                <a class="pillb" href="Equipo.dc.html" style="min-height:48px;justify-content:center;font-weight:600;color:hsl(255 45% 34%);border-color:hsl(255 40% 75%);background:hsl(255 60% 97%)">Entrar a la Oficina de Vizumi</a>
+                <a class="pillb" href="Crear.dc.html" style="min-height:48px;border-style:dashed;justify-content:center;font-weight:600;color:hsl(215 85% 34%)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14 M5 12h14"></path></svg>
+                  Pedirle a Vizumi que cree un agente</a>
+              </sc-if>
+            </div>
+          </sc-for>
+        </div>
+
+      </section>
+
+      <aside class="soft" aria-label="Detalle de Vigilante SITI" style="flex:1 1 440px;min-width:0;padding:20px;display:flex;flex-direction:column;gap:14px">
+
+        <div style="display:flex;gap:16px;align-items:flex-start">
+          <div class="in" style="width:96px;height:96px;flex:none;display:flex;align-items:flex-end;justify-content:center;overflow:hidden;background:hsl(140 30% 94%)">
+            <img src="/_blob/1319c0dcb2934d03ea65f815f2f1cdae" alt="Vigilante SITI" style="width:84px;height:auto;image-rendering:pixelated;margin-bottom:-4px">
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;min-width:0;flex-grow:1">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <h2 style="margin:0;font-size:22px;font-weight:700;letter-spacing:-.015em">Vigilante SITI</h2>
+              <span class="pill pill-pendiente" style="font-size:12px;padding:3px 10px">Vizum</span>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px">
+              <span class="pill pill-completada" style="font-size:12px;padding:3px 10px">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>
+                Terminó · hace 46 min</span>
+              <span class="pill pill-progreso" style="font-size:12px;padding:3px 10px">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 11h14v10H5z M8 11V7a4 4 0 0 1 8 0v4"></path></svg>
+                Solo lectura</span>
+            </div>
+            <p style="margin:2px 0 0;font-size:13.5px">Revisa cada día, solo en modo consulta, el SITI AA (requerimientos de la autoridad) y el SITI PLD (avisos). <a href="Oficina.dc.html" style="color:hsl(215 85% 36%);font-weight:600;text-decoration:none">Ver más</a></p>
+            <p class="mut" style="margin:0;font-size:13px;display:flex;align-items:center;gap:6px">
+              <svg width="48" height="16" viewBox="0 0 48 16" aria-hidden="true"><polygon points="8,1 10,6 15,6 11,9.5 12.5,15 8,11.8 3.5,15 5,9.5 1,6 6,6" fill="hsl(38 92% 45%)"></polygon><polygon points="24,1 26,6 31,6 27,9.5 28.5,15 24,11.8 19.5,15 21,9.5 17,6 22,6" fill="none" stroke="hsl(230 9% 45%)" stroke-width="1.2"></polygon><polygon points="40,1 42,6 47,6 43,9.5 44.5,15 40,11.8 35.5,15 37,9.5 33,6 38,6" fill="none" stroke="hsl(230 9% 45%)" stroke-width="1.2"></polygon></svg>
+              Aprendiz · nivel 1 de 3</p>
+          </div>
+          <a href="Oficina.dc.html" class="pillb" aria-label="Cerrar el panel" style="width:40px;padding:0;justify-content:center">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18 M6 6l12 12"></path></svg>
+          </a>
+        </div>
+
+        <div role="tablist" aria-label="Secciones del agente" style="display:flex;gap:4px;padding:4px;background:#fff;border:1px solid hsl(220 13% 90%);border-radius:9999px;overflow-x:auto">
+          <a role="tab" aria-selected="true" href="Oficina.dc.html" class="tab" style="background:hsl(220 14% 95%);color:hsl(228 20% 14%);font-weight:600">Conversaciones</a>
+          <a role="tab" aria-selected="false" href="Oficina.dc.html" class="tab">Perfil</a>
+          <a role="tab" aria-selected="false" href="Oficina.dc.html" class="tab">Aprendizaje</a>
+          <a role="tab" aria-selected="false" href="Oficina.dc.html" class="tab">Rutinas</a>
+          <a role="tab" aria-selected="false" href="Oficina.dc.html" class="tab">Documentos</a>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:8px">
+          <button type="button" class="pillb" aria-label="Elegir conversación. Ahora: PRUEBA 1" style="flex-grow:1;justify-content:space-between;min-height:44px;background:hsl(215 80% 95%);border-color:hsl(215 80% 75%)">
+            <span style="font-weight:600">PRUEBA 1</span>
+            <span class="mut" style="font-weight:400">hace 46 min</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+          </button>
+          <button type="button" class="pillb" style="min-height:44px">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14 M5 12h14"></path></svg>
+            Nueva</button>
+          <a href="Trabajo.dc.html" class="pillb" style="min-height:44px;font-weight:600;color:hsl(215 85% 34%)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6 M10 14 21 3 M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg>
+            Abrir el chat</a>
+        </div>
+
+        <div class="in" style="padding:16px;display:flex;flex-direction:column;gap:12px;background:hsl(0 0% 99%)">
+          <span class="micro">Última conversación · PRUEBA 1</span>
+          <div style="align-self:flex-end;max-width:92%;display:flex;flex-direction:column;gap:4px;align-items:flex-end">
+            <div style="background:hsl(215 70% 94%);border:1px solid hsl(215 80% 80%);border-radius:22px 22px 6px 22px;padding:12px 16px">has la revisión de hoy en la tarde y pásame la captura de que estás revisando correctamente la infromación en el sitial</div>
+            <span class="mut" style="font-size:12.5px">Tú · hace 46 min</span>
+          </div>
+          <div class="in" style="padding:12px 14px;display:flex;flex-direction:column;gap:4px">
+            <span style="font-weight:700">Reporte de la revisión de hoy</span>
+            <span><strong>Revisó:</strong> SITI AA y SITI PLD.</span>
+            <span><strong>Encontró:</strong> <span class="mut">[Resumen del reporte final del agente]</span></span>
+            <span><strong>No pudo:</strong> consultar Seguimiento y Resolución.</span>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 14px;border-radius:20px;background:hsl(40 90% 96%);border:1px solid hsl(38 80% 70%)">
+            <span style="flex-grow:1">Pediste una captura y no hay ninguna adjunta.</span>
+            <a href="Trabajo.dc.html" class="pillb" style="font-weight:600">Pedirla</a>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 14px;border-radius:9999px;background:hsl(215 70% 96%);border:1px solid hsl(215 70% 85%)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="hsl(215 85% 32%)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 11h14v10H5z M8 11V7a4 4 0 0 1 8 0v4"></path></svg>
+          <span style="font-size:13px;flex-grow:1"><strong>Solo lectura.</strong> Este agente consulta; no cambia nada.</span>
+          <a href="Trabajo.dc.html" style="font-size:13px;font-weight:600;color:hsl(215 85% 34%);text-decoration:none;min-height:36px;display:inline-flex;align-items:center">Pedir un permiso</a>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <a href="Trabajo.dc.html" class="btnp" style="min-height:52px;font-size:15px">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+            Abrir el chat con Vigilante SITI</a>
+          <span class="mut" style="font-size:12.5px;text-align:center">El chat siempre se abre en su propia pantalla, para leerlo y escribir con espacio.</span>
+        </div>
+      </aside>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1420}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dotOk = 'width:8px;height:8px;border-radius:9999px;background:hsl(142 70% 34%);display:inline-block';
+    const dotDone = 'width:8px;height:8px;border-radius:9999px;background:hsl(215 85% 45%);display:inline-block';
+    const pos = (l, t, sel) => 'left:' + l + ';top:' + t + ';' + (sel ? 'border:2px solid hsl(215 85% 45%);' : '');
+    const etiquetas = [
+      { name: 'Nelli', status: 'Disponible', dot: dotOk, style: pos('42.5%', '51.5%', false) },
+      { name: 'Vizumi', status: 'Disponible', dot: dotOk, style: pos('57.2%', '62.9%', false) },
+      { name: 'Vigilante SITI', status: 'Terminó · hace 46 min', dot: dotDone, style: pos('80.4%', '70.2%', true) }
+    ];
+    const zonas = [
+      { name: 'Listas y KYC', sub: 'Equipo principal de la sala.', count: '2 agentes', cta: false, miembros: [
+        { name: 'Nelli', status: 'Disponible', dot: dotOk, img: '/_blob/8ccbae3c0aa76c63567672b1000c9280', sel: '' },
+        { name: 'Vizumi', status: 'Disponible', dot: dotOk, img: '/_blob/6789b4817d843ed755ec32c0e1f97334', sel: '' }
+      ] },
+      { name: 'Oficina de Vizumi', sub: 'Equipo que Vizumi creó y dirige. Tiene su propio espacio en la sala.', count: '1 agente', cta: true, miembros: [
+        { name: 'Vigilante SITI', status: 'Terminó · hace 46 min', dot: dotDone, img: '/_blob/1319c0dcb2934d03ea65f815f2f1cdae', sel: 'border-color:hsl(215 85% 45%);background:hsl(215 80% 96%);' }
+      ] }
+    ];
+    return { etiquetas, zonas };
+  }
+}
+</script>
+</body>
+</html>

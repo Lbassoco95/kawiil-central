@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Barra lateral</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="ds/kawiil-os/colors_and_type.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.nav-i{display:flex;align-items:center;gap:10px;min-height:40px;padding:0 12px;border-radius:8px;text-decoration:none;font-weight:500}
+.nav-i:hover{background:hsl(228 16% 18% / .6)}
+.nav-i:focus-visible{outline:2px solid hsl(210 100% 62%);outline-offset:2px}
+</style>
+</helmet>
+<nav aria-label="Principal" style="width:224px;min-height:{{h}}px;box-sizing:border-box;background:hsl(228 20% 12%);color:hsl(220 15% 70%);font-family:Inter,system-ui,sans-serif;font-size:14px;padding:16px 12px;display:flex;flex-direction:column;gap:20px">
+  <div style="display:flex;align-items:center;gap:10px;padding:4px 8px">
+    <div style="width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,hsl(210 100% 47%),hsl(157 72% 36%));color:#fff;font-weight:800;font-size:15px;display:flex;align-items:center;justify-content:center">K</div>
+    <span style="font-weight:700;font-size:16px;color:hsl(220 15% 95%);letter-spacing:-.01em">kawiil OS</span>
+  </div>
+  <sc-for list="{{groups}}" as="g" hint-placeholder-count="5">
+    <div style="display:flex;flex-direction:column;gap:2px">
+      <div style="font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:hsl(220 12% 62%);padding:0 12px 4px">{{g.label}}</div>
+      <sc-for list="{{g.items}}" as="it" hint-placeholder-count="3">
+        <a class="nav-i" href="{{it.href}}" style="{{it.style}}">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{it.d}}"></path></svg>
+          <span>{{it.label}}</span>
+        </a>
+      </sc-for>
+    </div>
+  </sc-for>
+</nav>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"active":{"editor":"text","default":"agentes"},"h":{"editor":"int","default":900},"$preview":{"width":224,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const active = this.props.active ?? 'agentes';
+    const h = this.props.h ?? 900;
+    const on = 'background:hsl(228 16% 18%);color:hsl(220 15% 95%);box-shadow:inset 3px 0 0 hsl(210 100% 60%);';
+    const off = 'color:hsl(220 15% 72%);';
+    const mk = (id, label, d, href) => ({ label, d, href: href || '#', style: id === active ? on : off });
+    const groups = [
+      { label: 'Inicio', items: [ mk('dashboard', 'Dashboard', 'M3 3h7v9H3z M14 3h7v5h-7z M14 12h7v9h-7z M3 16h7v5H3z') ] },
+      { label: 'Trabajo', items: [
+        mk('clientes', 'Clientes', 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75'),
+        mk('proyectos', 'Proyectos', 'M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9l-.8-1.2A2 2 0 0 0 7.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z'),
+        mk('tareas', 'Tareas', 'm9 11 3 3L22 4 M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11')
+      ] },
+      { label: 'Integraciones', items: [
+        mk('comunicacion', 'Comunicación', 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z'),
+        mk('correo', 'Correo', 'M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z M22 7l-10 5L2 7')
+      ] },
+      { label: 'Inteligencia', items: [
+        mk('ai', 'Kawiil AI', 'M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z'),
+        mk('agentes', 'Agentes', 'M12 8V4H8 M4 8h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2z M2 14h2 M20 14h2 M15 13v2 M9 13v2', 'Main.dc.html'),
+        mk('marketing', 'Marketing', 'M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1z M16 8a5 5 0 0 1 0 8')
+      ] },
+      { label: 'Gestión', items: [
+        mk('documentos', 'Documentos', 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M8 13h8 M8 17h8'),
+        mk('config', 'Configuración', 'M4 21v-7 M4 10V3 M12 21v-9 M12 8V3 M20 21v-5 M20 12V3 M1 14h6 M9 8h6 M17 16h6')
+      ] }
+    ];
+    return { groups, h };
+  }
+}
+</script>
+</body>
+</html>

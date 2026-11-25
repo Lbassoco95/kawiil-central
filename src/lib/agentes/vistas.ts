@@ -1,11 +1,12 @@
 // Navegación de la Oficina de agentes: plano → isla → agente. La vista vive en la URL (`?vista=`) para poder compartirla y volver con «atrás».
 //   ?vista=plano            (o sin parámetro)   todas las islas
 //   ?vista=isla:<clave>                          una isla (clave de departamento)
+//   ?vista=oficina:<id del jefe>                 la oficina de un equipo dentro de la sala (Todos los departamentos → sala → oficina)
 //   ?vista=agente:<id>&tab=<pestaña>             el escritorio de un agente (conversaciones, perfil, aprendizaje, rutinas, documentos)
 // Aquí también se traducen las 12 pestañas viejas de /agentes a la nueva organización (Oficina y Administrar), para que los enlaces viejos sigan sirviendo.
 import { DEPARTAMENTOS } from "./departamentos";
 
-export type Vista = { tipo: "plano" } | { tipo: "isla"; clave: string } | { tipo: "agente"; id: string };
+export type Vista = { tipo: "plano" } | { tipo: "isla"; clave: string } | { tipo: "oficina"; id: string } | { tipo: "agente"; id: string };
 export const VISTA_PLANO: Vista = { tipo: "plano" };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -14,9 +15,10 @@ export function leerVista(param: string | null | undefined): Vista {
   const [tipo, valor] = param.split(":");
   if (tipo === "isla" && valor && Object.prototype.hasOwnProperty.call(DEPARTAMENTOS, valor)) return { tipo: "isla", clave: valor };
   if (tipo === "agente" && valor && UUID.test(valor)) return { tipo: "agente", id: valor.toLowerCase() };
+  if (tipo === "oficina" && valor && UUID.test(valor)) return { tipo: "oficina", id: valor.toLowerCase() };
   return VISTA_PLANO;   // cualquier valor raro vuelve al plano: nunca una pantalla vacía
 }
-export const escribirVista = (v: Vista): string | null => (v.tipo === "plano" ? null : v.tipo === "isla" ? `isla:${v.clave}` : `agente:${v.id}`);
+export const escribirVista = (v: Vista): string | null => (v.tipo === "plano" ? null : v.tipo === "isla" ? `isla:${v.clave}` : v.tipo === "oficina" ? `oficina:${v.id}` : `agente:${v.id}`);
 
 export type PestanaEscritorio = "conversaciones" | "perfil" | "aprendizaje" | "rutinas" | "documentos";
 export const PESTANAS_ESCRITORIO_VALORES: PestanaEscritorio[] = ["conversaciones", "perfil", "aprendizaje", "rutinas", "documentos"];

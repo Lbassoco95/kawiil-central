@@ -4,7 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { useState } from "react";
 import type { PestanaEscritorio } from "@/lib/agentes/vistas";
 
-vi.mock("@/components/agentes/TrabajosAgente", () => ({ TrabajosAgente: ({ agentId }: { agentId: string }) => <div data-testid="stub-trabajos">{agentId}</div> }));
+vi.mock("@/components/agentes/ResumenConversacion", () => ({ ResumenConversacion: ({ agentId }: { agentId: string }) => <div data-testid="stub-trabajos">{agentId}</div> }));
 vi.mock("@/components/agentes/MemoriaAgentes", () => ({ MemoriaAgentes: ({ agenteInicial, fijo }: { agenteInicial?: string; fijo?: boolean }) => <div data-testid="stub-memoria" data-fijo={String(fijo)}>{agenteInicial}</div> }));
 vi.mock("@/components/agentes/EnsenarAgente", () => ({ ensenable: (a: { kind: string | null; config?: { origen?: string } | null }) => a.config?.origen === "constructor_agentes", EnsenarAgente: () => <div data-testid="stub-ensenar" /> }));
 vi.mock("@/components/agentes/ProgramarAgente", () => ({ programable: () => false, ProgramarAgente: () => <div data-testid="stub-programar" /> }));

@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Espacio de trabajo con pestañas</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="ds/kawiil-os/colors_and_type.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+*{box-sizing:border-box}
+.k{font-family:Inter,system-ui,sans-serif;color:hsl(228 20% 14%);font-size:14px;line-height:1.5}
+.mut{color:hsl(230 9% 38%)}
+.soft{background:hsl(0 0% 98.5%);border:1px solid hsl(220 13% 90%);border-radius:28px;box-shadow:0 1px 2px rgb(15 23 42 / .04),0 14px 32px -18px rgb(15 23 42 / .12)}
+.in{background:#fff;border:1px solid hsl(220 13% 90%);border-radius:20px}
+.pillb{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 14px;border-radius:9999px;border:1px solid hsl(220 13% 88%);background:#fff;color:hsl(228 20% 14%);font:500 13px Inter,system-ui,sans-serif;text-decoration:none;cursor:pointer;white-space:nowrap}
+.pillb:hover{border-color:hsl(215 80% 60% / .5);background:hsl(215 100% 98%)}
+.pillb:active{transform:scale(.98)}
+.btnp{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 22px;border-radius:9999px;border:0;background:hsl(215 85% 42%);color:#fff;font:600 14px Inter,system-ui,sans-serif;cursor:pointer;text-decoration:none}
+.btnp:active{transform:scale(.98)}
+.micro{font-size:11.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:hsl(230 9% 38%)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.seg{display:inline-flex;align-items:center;min-height:36px;padding:0 16px;border-radius:9999px;font-weight:500;color:hsl(230 9% 32%);cursor:pointer;white-space:nowrap}
+.wrap:has(#v1:checked) label[for=v1],.wrap:has(#v2:checked) label[for=v2]{background:hsl(220 14% 95%);color:hsl(228 20% 14%);font-weight:600}
+.wrap:has(#v1:focus-visible) label[for=v1],.wrap:has(#v2:focus-visible) label[for=v2]{outline:2px solid hsl(215 85% 45%);outline-offset:2px}
+.wrap:has(#v1:checked) .varios{display:none!important}
+.wrap:has(#v2:checked) .uno{display:none!important}
+.rq3{display:none}
+.wrap:has(#r3:checked) .rq3{display:flex}
+.wrap:has(#r1:checked) .rq2,.wrap:has(#r1:checked) .rq3{display:none!important}
+.wrap:has(#r2:checked) .rq1,.wrap:has(#r2:checked) .rq3{display:none!important}
+.wrap:has(#r3:checked) .rq1,.wrap:has(#r3:checked) .rq2{display:none!important}
+.wrap:has(#r3:checked) label[for=r3]{background:hsl(220 14% 95%);color:hsl(228 20% 14%);font-weight:600}
+.wrap:has(#r3:focus-visible) label[for=r3]{outline:2px solid hsl(215 85% 45%);outline-offset:2px}
+.wrap:has(#r1:checked) label[for=r1],.wrap:has(#r2:checked) label[for=r2]{background:hsl(220 14% 95%);color:hsl(228 20% 14%);font-weight:600}
+.wrap:has(#r1:focus-visible) label[for=r1],.wrap:has(#r2:focus-visible) label[for=r2]{outline:2px solid hsl(215 85% 45%);outline-offset:2px}
+.ptab{display:flex;align-items:center;gap:10px;min-height:48px;padding:0 8px 0 12px;border-radius:20px 20px 0 0;border:1px solid hsl(220 13% 88%);border-bottom:0;background:hsl(220 14% 93%);color:hsl(230 9% 28%);text-decoration:none;flex:0 1 230px;min-width:0}
+.ptab.on{background:#fff;color:hsl(228 20% 14%);box-shadow:0 -2px 0 hsl(215 85% 45%) inset}
+.xb{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:9999px;border:0;background:transparent;color:hsl(230 9% 38%);cursor:pointer;flex:none}
+.xb:hover{background:hsl(220 14% 90%)}
+.mon{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border-radius:20px;border:1px solid hsl(220 13% 90%);background:#fff;text-decoration:none;color:inherit}
+.mon:hover{border-color:hsl(215 80% 60% / .5);background:hsl(215 100% 98%)}
+.bub{max-width:88%;padding:10px 14px;border-radius:20px;font-size:14px;line-height:1.5}
+.chip{display:inline-flex;align-items:center;min-height:32px;padding:0 12px;border-radius:9999px;border:1px solid hsl(215 70% 82%);background:hsl(215 70% 96%);color:hsl(215 85% 30%);font:600 13px Inter,system-ui,sans-serif;cursor:pointer}
+a:focus-visible,button:focus-visible,textarea:focus-visible,summary:focus-visible{outline:2px solid hsl(215 85% 45%);outline-offset:2px}
+</style>
+</helmet>
+<div class="k wrap" style="display:flex;flex-wrap:wrap;min-height:1180px;background:hsl(220 14% 96%);position:relative">
+  <input class="sr" type="radio" name="vista" id="v1" checked aria-label="Una conversación">
+  <input class="sr" type="radio" name="vista" id="v2" aria-label="Varios a la vez">
+  <input class="sr" type="radio" name="req" id="r1" checked aria-label="Pendientes de ti">
+  <input class="sr" type="radio" name="req" id="r2" aria-label="De la autoridad">
+  <input class="sr" type="radio" name="req" id="r3" aria-label="Documentos">
+
+  <dc-import name="Barra" active="agentes" h="1180" hint-size="224px,1180px"></dc-import>
+
+  <main style="flex:999 1 560px;min-width:0;max-width:1216px;padding:22px 24px 28px;display:flex;flex-direction:column;gap:14px">
+
+    <header style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 16px">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <a href="Oficina.dc.html" class="pillb">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg>
+          Sala de Cumplimiento</a>
+        <h1 style="margin:0;font-size:22px;font-weight:700;letter-spacing:-.01em">Espacio de trabajo</h1>
+        <span class="mut" style="font-size:13px">3 conversaciones abiertas · Datos de muestra</span>
+      </div>
+      <div role="group" aria-label="Cómo ver las conversaciones" style="display:flex;gap:4px;padding:4px;background:#fff;border:1px solid hsl(220 13% 90%);border-radius:9999px">
+        <label class="seg" for="v1">Una conversación</label>
+        <label class="seg" for="v2">Varios a la vez</label>
+      </div>
+    </header>
+
+    <nav aria-label="Conversaciones abiertas" style="display:flex;align-items:flex-end;gap:6px;overflow-x:auto;padding-top:2px;border-bottom:1px solid hsl(220 13% 88%)">
+      <sc-for list="{{pestanas}}" as="t" hint-placeholder-count="3">
+        <div class="ptab {{t.cls}}">
+          <a href="Trabajo.dc.html" style="display:flex;align-items:center;gap:10px;flex-grow:1;min-width:0;min-height:48px;text-decoration:none;color:inherit" aria-current="{{t.current}}">
+            <img src="{{t.img}}" alt="" width="28" height="28" style="width:28px;height:28px;border-radius:9999px;object-fit:cover;background:hsl(220 14% 95%);flex:none">
+            <span style="min-width:0;line-height:1.25">
+              <span style="display:block;font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{t.name}}</span>
+              <span style="display:flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap" class="mut"><span style="{{t.dot}}"></span>{{t.status}}</span>
+            </span>
+          </a>
+          <button type="button" class="xb" aria-label="Cerrar la pestaña de {{t.name}}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18 M6 6l12 12"></path></svg>
+          </button>
+        </div>
+      </sc-for>
+      <button type="button" class="pillb" style="margin:0 0 6px 4px;min-height:40px;flex:none">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14 M5 12h14"></path></svg>
+        Abrir otro agente</button>
+    </nav>
+
+    <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start">
+
+      <!-- En curso -->
+      <aside class="soft" aria-label="En curso" style="flex:0 0 244px;padding:16px;display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;align-items:baseline;justify-content:space-between"><span class="micro">En curso</span><span class="mut" style="font-size:12.5px">se actualiza solo</span></div>
+        <sc-for list="{{enCurso}}" as="c" hint-placeholder-count="3">
+          <a class="mon" href="Trabajo.dc.html">
+            <span style="display:flex;align-items:center;justify-content:space-between;gap:8px"><strong style="font-size:13.5px">{{c.name}}</strong><span style="display:inline-flex;align-items:center;gap:5px;font-size:12px" class="mut"><span style="{{c.dot}}"></span>{{c.status}}</span></span>
+            <span class="mut" style="font-size:13px;line-height:1.4">{{c.preview}}</span>
+            <span style="height:6px;border-radius:9999px;background:hsl(220 14% 92%);overflow:hidden" aria-hidden="true"><span style="{{c.bar}}"></span></span>
+          </a>
+        </sc-for>
+        <p class="mut" style="margin:0;font-size:12.5px;line-height:1.45">Toca una para abrir su pestaña y leer la conversación que va en curso.</p>
+      </aside>
+
+      <!-- Centro -->
+      <section style="flex:1 1 520px;min-width:0;display:flex;flex-direction:column;gap:12px">
+
+        <!-- Modo: una conversación -->
+        <div class="soft uno" aria-label="Chat con Vigilante SITI" style="padding:18px;display:flex;flex-direction:column;gap:14px">
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px">
+            <img src="/_blob/1319c0dcb2934d03ea65f815f2f1cdae" alt="" width="40" height="40" style="width:40px;height:40px;border-radius:9999px;object-fit:cover;background:hsl(220 14% 95%)">
+            <div style="line-height:1.25"><strong style="font-size:16px">Vigilante SITI</strong><div class="mut" style="font-size:12.5px">Oficina de Vizumi · Solo lectura</div></div>
+            <span style="margin-left:auto;display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+              <span class="mut" style="font-size:12.5px">En esta conversación:</span>
+              <span class="pillb" style="min-height:32px"><span style="width:8px;height:8px;border-radius:9999px;background:hsl(215 85% 45%)" aria-hidden="true"></span>Vigilante SITI</span>
+              <span class="pillb" style="min-height:32px"><span style="width:8px;height:8px;border-radius:9999px;background:hsl(38 90% 45%)" aria-hidden="true"></span>Vizumi (invitado)</span>
+              <button type="button" class="pillb" style="min-height:32px;border-style:dashed;color:hsl(215 85% 34%);font-weight:600">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14 M5 12h14"></path></svg>
+                Llamar a otro agente</button>
+            </span>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:12px;padding:6px 2px">
+            <div class="bub" style="align-self:flex-end;background:hsl(215 85% 42%);color:#fff">Revisa si hay requerimientos nuevos en SITI AA y dime si alguno vence esta semana.</div>
+
+            <div class="in" style="align-self:flex-start;max-width:92%;padding:14px 16px;display:flex;flex-direction:column;gap:8px">
+              <span class="micro">Reporte de la revisión de hoy</span>
+              <div style="font-size:14px"><strong>Qué revisó:</strong> SITI AA y SITI PLD.</div>
+              <div style="font-size:14px"><strong>Qué encontró:</strong> <span class="mut">[Resumen del reporte final del agente]</span></div>
+              <div style="font-size:14px"><strong>Lo que no pudo:</strong> consultar Seguimiento y Resolución. Está bloqueado y no insistió.</div>
+            </div>
+
+            <!-- Llamada entre agentes -->
+            <div style="align-self:stretch;display:flex;flex-direction:column;gap:8px;padding:12px 14px;border-radius:20px;border:1px dashed hsl(38 80% 55%);background:hsl(40 90% 96%)">
+              <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="hsl(32 90% 30%)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 1l4 4-4 4 M3 11V9a4 4 0 0 1 4-4h14 M7 23l-4-4 4-4 M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
+                <strong style="font-size:13.5px">Vigilante SITI llamó a Vizumi</strong>
+                <span style="margin-left:auto;display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;color:hsl(32 90% 26%)"><span style="width:8px;height:8px;border-radius:9999px;background:hsl(38 90% 45%)" aria-hidden="true"></span>Vizumi está trabajando · paso 2 de 4</span>
+              </div>
+              <div style="font-size:13.5px">Le pidió ayuda para consultar Seguimiento y Resolución, que Vigilante SITI no puede abrir por su cuenta.</div>
+              <div style="display:flex;flex-wrap:wrap;gap:8px">
+                <a class="pillb" href="Trabajo.dc.html" style="font-weight:600;color:hsl(215 85% 34%)">Abrir la pestaña de Vizumi</a>
+                <button type="button" class="pillb">Detener la llamada</button>
+              </div>
+              <div class="mut" style="font-size:12.5px">Límites: hasta 6 turnos entre agentes y una llamada a la vez por conversación.</div>
+            </div>
+
+            <div class="in" style="align-self:flex-start;max-width:92%;padding:12px 16px;border-color:hsl(38 80% 70%);background:hsl(40 90% 96%);display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px">
+              <span style="font-size:14px;flex-grow:1"><strong>Pediste una captura y no hay ninguna adjunta.</strong></span>
+              <button type="button" class="pillb" style="font-weight:600">Pedirla</button>
+            </div>
+          </div>
+
+          <form style="display:flex;flex-direction:column;gap:8px" onsubmit="return false">
+            <label for="msg1" class="mut" style="font-size:12.5px;font-weight:600">Mensaje para Vigilante SITI</label>
+            <div style="display:flex;gap:10px;align-items:flex-end">
+              <textarea id="msg1" rows="2" placeholder="Escríbele. Usa @ para sumar a otro agente" style="flex-grow:1;resize:none;border:1px solid hsl(230 9% 55%);border-radius:20px;padding:12px 16px;font:400 14px/1.5 Inter,system-ui,sans-serif;color:hsl(228 20% 14%);background:#fff"></textarea>
+              <button type="button" class="btnp" style="height:48px">Enviar</button>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+              <span class="mut" style="font-size:12.5px">Sumar a la conversación:</span>
+              <button type="button" class="chip">@Vizumi</button>
+              <button type="button" class="chip">@Nelli</button>
+              <button type="button" class="chip" style="background:#fff;border-color:hsl(220 13% 85%);color:hsl(228 20% 14%)">Otro agente…</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Modo: varios a la vez -->
+        <div class="varios" style="display:flex;flex-direction:column;gap:12px">
+          <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:stretch">
+            <sc-for list="{{columnas}}" as="col" hint-placeholder-count="2">
+              <article class="soft" aria-label="Chat con {{col.name}}" style="flex:1 1 280px;min-width:0;padding:16px;display:flex;flex-direction:column;gap:12px">
+                <div style="display:flex;align-items:center;gap:10px">
+                  <img src="{{col.img}}" alt="" width="36" height="36" style="width:36px;height:36px;border-radius:9999px;object-fit:cover;background:hsl(220 14% 95%)">
+                  <div style="line-height:1.25;min-width:0"><strong>{{col.name}}</strong><div style="display:flex;align-items:center;gap:5px;font-size:12.5px" class="mut"><span style="{{col.dot}}"></span>{{col.status}}</div></div>
+                  <a href="Trabajo.dc.html" class="pillb" style="margin-left:auto;min-height:32px" aria-label="Abrir a {{col.name}} en su propia pestaña">Abrir en pestaña</a>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:10px;flex-grow:1">
+                  <div class="bub" style="align-self:flex-end;background:hsl(215 85% 42%);color:#fff">{{col.ask}}</div>
+                  <div class="in" style="align-self:flex-start;max-width:92%;padding:10px 14px;font-size:14px">{{col.reply}}</div>
+                </div>
+              </article>
+            </sc-for>
+          </div>
+          <form class="soft" style="padding:16px 18px;display:flex;flex-direction:column;gap:10px" onsubmit="return false">
+            <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px">
+              <span class="micro">Enviar a</span>
+              <label class="pillb" style="min-height:36px"><input type="checkbox" checked style="margin:0"> Vigilante SITI</label>
+              <label class="pillb" style="min-height:36px"><input type="checkbox" checked style="margin:0"> Nelli</label>
+              <label class="pillb" style="min-height:36px;margin-left:auto"><input type="checkbox" style="margin:0"> Abrir una sala para que conversen por turnos</label>
+            </div>
+            <div style="display:flex;gap:10px;align-items:flex-end">
+              <label for="msg2" class="sr">Mensaje para los agentes elegidos</label>
+              <textarea id="msg2" rows="2" placeholder="Escribe una vez y llega a los agentes marcados" style="flex-grow:1;resize:none;border:1px solid hsl(230 9% 55%);border-radius:20px;padding:12px 16px;font:400 14px/1.5 Inter,system-ui,sans-serif;color:hsl(228 20% 14%);background:#fff"></textarea>
+              <button type="button" class="btnp" style="height:48px">Enviar a 2</button>
+            </div>
+            <p class="mut" style="margin:0;font-size:12.5px">En una sala, los agentes hablan por turnos (máximo 6) y solo consultan. Las memorias que propongan las apruebas tú.</p>
+          </form>
+        </div>
+      </section>
+
+      <!-- Requerimientos -->
+      <aside class="soft" aria-label="Requerimientos" style="flex:0 0 288px;padding:16px;display:flex;flex-direction:column;gap:12px">
+        <span class="micro">Requerimientos</span>
+        <div role="group" aria-label="Tipo de requerimiento" style="display:flex;gap:4px;padding:4px;background:#fff;border:1px solid hsl(220 13% 90%);border-radius:9999px">
+          <label class="seg" for="r1" style="flex:1;justify-content:center;padding:0 8px;font-size:13px">Pendientes de ti</label>
+          <label class="seg" for="r2" style="flex:1;justify-content:center;padding:0 8px;font-size:13px">De la autoridad</label>
+          <label class="seg" for="r3" style="flex:1;justify-content:center;padding:0 8px;font-size:13px">Documentos</label>
+        </div>
+
+        <div class="rq1" style="display:flex;flex-direction:column;gap:10px">
+          <div class="in" style="padding:12px 14px;display:flex;flex-direction:column;gap:8px">
+            <span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:hsl(32 90% 26%)"><span style="width:8px;height:8px;border-radius:9999px;background:hsl(38 90% 45%)" aria-hidden="true"></span>Te necesita</span>
+            <span style="font-size:14px"><strong>Falta una captura.</strong> Vigilante SITI no la encontró adjunta.</span>
+            <button type="button" class="pillb" style="align-self:flex-start;font-weight:600">Pedirla</button>
+          </div>
+          <div class="in" style="padding:12px 14px;display:flex;flex-direction:column;gap:8px">
+            <span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:hsl(32 90% 26%)"><span style="width:8px;height:8px;border-radius:9999px;background:hsl(38 90% 45%)" aria-hidden="true"></span>Falta un permiso</span>
+            <span style="font-size:14px"><strong>Consultar Seguimiento y Resolución</strong> está bloqueado para este agente.</span>
+            <button type="button" class="pillb" style="align-self:flex-start;font-weight:600">Pedir ayuda a Vizumi</button>
+          </div>
+        </div>
+
+        <div class="rq2" style="display:flex;flex-direction:column;gap:10px">
+          <p class="mut" style="margin:0;font-size:12.5px;line-height:1.45">Lo que la autoridad pide en SITI AA. Aquí van datos de ejemplo hasta conectar los reales.</p>
+          <div class="in" style="padding:12px 14px;display:flex;flex-direction:column;gap:6px">
+            <span style="font-size:14px;font-weight:600">[Folio] · [Autoridad]</span>
+            <span class="mut" style="font-size:13px">Plazo [fecha]</span>
+            <a href="Trabajo.dc.html" class="pillb" style="align-self:flex-start;margin-top:2px">Pedir a Vigilante SITI que lo revise</a>
+          </div>
+          <div class="in" style="padding:12px 14px;display:flex;flex-direction:column;gap:6px">
+            <span style="font-size:14px;font-weight:600">[Folio] · [Autoridad]</span>
+            <span class="mut" style="font-size:13px">Plazo [fecha]</span>
+            <a href="Trabajo.dc.html" class="pillb" style="align-self:flex-start;margin-top:2px">Pedir a Vigilante SITI que lo revise</a>
+          </div>
+        </div>
+        <div class="rq3" style="flex-direction:column;gap:10px">
+          <span class="micro">Documentos de esta conversación</span>
+          <div class="in" style="padding:12px 14px;display:flex;flex-direction:column;gap:8px">
+            <span style="font-size:14px;font-weight:600">[Nombre del documento].pdf</span>
+            <span class="mut" style="font-size:13px">Entregado por Vigilante SITI · [fecha]</span>
+            <span style="display:flex;gap:8px"><a href="Trabajo.dc.html" class="pillb">Ver PDF</a><a href="Trabajo.dc.html" class="pillb">Descargar</a></span>
+          </div>
+          <p class="mut" style="margin:0;font-size:12.5px">Datos de ejemplo.</p>
+        </div>
+      </aside>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1180}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dot = (c) => 'width:8px;height:8px;border-radius:9999px;display:inline-block;background:' + c;
+    const verde = dot('hsl(142 70% 34%)'), ambar = dot('hsl(38 90% 45%)'), azul = dot('hsl(215 85% 45%)');
+    const siti = '/_blob/1319c0dcb2934d03ea65f815f2f1cdae';
+    const vizumi = '/_blob/6789b4817d843ed755ec32c0e1f97334';
+    const nelli = '/_blob/8ccbae3c0aa76c63567672b1000c9280';
+    const pestanas = [
+      { name: 'Vigilante SITI', status: 'Terminó', dot: azul, img: siti, cls: 'on', current: 'page' },
+      { name: 'Vizumi', status: 'Te necesita', dot: ambar, img: vizumi, cls: '', current: 'false' },
+      { name: 'Nelli', status: 'Trabajando', dot: ambar, img: nelli, cls: '', current: 'false' }
+    ];
+    const barra = (p) => 'display:block;height:100%;border-radius:9999px;background:hsl(215 85% 45%);width:' + p;
+    const enCurso = [
+      { name: 'Vigilante SITI', status: 'Terminó', dot: azul, preview: 'Reporte listo. Le falta una captura.', bar: barra('100%') },
+      { name: 'Vizumi', status: 'Te necesita', dot: ambar, preview: 'Consultando Seguimiento para Vigilante SITI. Paso 2 de 4.', bar: barra('50%') },
+      { name: 'Nelli', status: 'Trabajando', dot: ambar, preview: 'Revisando listas para un KYC. Paso 1 de 3.', bar: barra('33%') }
+    ];
+    const columnas = [
+      { name: 'Vigilante SITI', status: 'Terminó', dot: azul, img: siti, ask: 'Revisa si hay requerimientos nuevos en SITI AA.', reply: 'Revisé SITI AA y SITI PLD. [Resumen del reporte final del agente]' },
+      { name: 'Nelli', status: 'Trabajando', dot: ambar, img: nelli, ask: 'Revisa a [nombre del cliente] en las listas.', reply: 'Estoy revisando las listas. Te aviso cuando termine.' }
+    ];
+    return { pestanas, enCurso, columnas };
+  }
+}
+</script>
+</body>
+</html>

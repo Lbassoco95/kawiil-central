@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EscritorioAgente, EstilosOficina } from "@/components/agentes/escritorio";
-import { TrabajosAgente } from "@/components/agentes/TrabajosAgente";
+import { ResumenConversacion } from "@/components/agentes/ResumenConversacion";
 import { MemoriaAgentes } from "@/components/agentes/MemoriaAgentes";
 import { EnsenarAgente, ensenable } from "@/components/agentes/EnsenarAgente";
 import { CalendarioRutinas } from "@/components/agentes/CalendarioRutinas";
@@ -14,8 +14,8 @@ import { descripcionAgente, nombreAgente, type AgenteRegistro, type TareaAgente 
 import type { FiguraOficina } from "@/lib/agentes/oficina";
 import type { PestanaEscritorio } from "@/lib/agentes/vistas";
 
-// Escritorio del agente (panel derecho): lo de ESTE agente en cinco pestañas, con los componentes que ya existían (conversaciones, memoria, enseñar,
-// rutinas, documentos). El perfil se lee de las propuestas iniciales (personajesDatos.ts): editarlo con versiones es una fase aparte que confirma Dirección.
+// Escritorio del agente (panel derecho): lo de ESTE agente en cinco pestañas, con los componentes que ya existían (memoria, enseñar, rutinas, documentos).
+// «Conversaciones» solo resume la última y lleva a su chat aparte (R2.b): aquí no se escribe. El perfil se lee de las propuestas iniciales (personajesDatos.ts): editarlo con versiones es una fase aparte que confirma Dirección.
 // Solo Dirección escribe, y siempre a través de las funciones de cada pestaña; este panel no escribe nada por su cuenta.
 export const PESTANAS_ESCRITORIO: Array<{ v: PestanaEscritorio; t: string }> = [
   { v: "conversaciones", t: "Conversaciones" }, { v: "perfil", t: "Perfil" }, { v: "aprendizaje", t: "Aprendizaje" }, { v: "rutinas", t: "Rutinas" }, { v: "documentos", t: "Documentos" },
@@ -104,7 +104,7 @@ export function PanelAgente({ figura: f, agente, agentes, tareas, ahora, pestana
           {PESTANAS_ESCRITORIO.map((p) => <TabsTrigger key={p.v} value={p.v} className="text-foreground/75 data-[state=active]:text-foreground" data-testid={`pestana-${p.v}`}>{p.t}</TabsTrigger>)}
         </TabsList>
         <TabsContent value="conversaciones" className="mt-3 space-y-3">
-          {!sistema && <TrabajosAgente agentId={agente.id} nombre={f.nombre} ahora={ahora} agente={agente} />}
+          {!sistema && <ResumenConversacion agentId={agente.id} nombre={f.nombre} ahora={ahora} />}
           {sistema && !esComunicacion && <Nota id="conv-sistema">Este agente de Marketing trabaja por su cuenta; sus seguimientos están en <Link className="underline" to="/marketing">Marketing</Link>.</Nota>}
           {esComunicacion && <ComunicacionInterna />}
         </TabsContent>

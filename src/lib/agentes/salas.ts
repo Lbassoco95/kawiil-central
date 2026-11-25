@@ -49,3 +49,32 @@ export function distribuirSala<T>(deptoClave: string, items: T[], claveDe: (t: T
   if (nuevaZona) zonas.push(nuevaZona);
   return { n, puestos, zonas };
 }
+
+// ── Oficinas de equipo dentro de la sala (R1.b y R1.d) ───────────────────────────────────────────────────────
+// Cada oficina ocupa una franja propia debajo de las zonas de la sala: un escritorio por agente y siempre un lugar libre al final. Si no cabe, la
+// oficina se ensancha (más columnas) y, si la sala se queda corta, la sala crece; el color y el letrero no cambian.
+export interface EscritorioOficina<T> { item: T | null; u: number; v: number }
+export interface OficinaColocada<T> { clave: string; u0: number; v0: number; u1: number; v1: number; escritorios: Array<EscritorioOficina<T>> }
+export interface SalaConOficinas<T> { n: number; oficinas: Array<OficinaColocada<T>> }
+
+export function distribuirOficinas<T>(sala: SalaCalculada<T>, oficinas: Array<{ clave: string; items: T[] }>): SalaConOficinas<T> {
+  if (oficinas.length === 0) return { n: sala.n, oficinas: [] };
+  const maxV = sala.puestos.length ? Math.max(...sala.puestos.map((p) => p.v)) : ORIGEN - 3.9;
+  const vInicio = maxV + 3.9;   // deja un pasillo entre las zonas de la sala y la primera oficina
+  let n = sala.n;
+  for (;;) {
+    const colsMax = Math.max(1, Math.floor((n - 0.15 - 1.3 - ORIGEN) / PASO) + 1);
+    const colocadas: Array<OficinaColocada<T>> = [];
+    let v = vInicio;
+    for (const o of oficinas) {
+      const lugares = o.items.length + 1;   // el último es el lugar libre
+      const cols = Math.min(lugares, colsMax), filas = Math.ceil(lugares / cols);
+      const escritorios: Array<EscritorioOficina<T>> = Array.from({ length: lugares }, (_, k) => ({ item: o.items[k] ?? null, u: ORIGEN + (k % cols) * PASO, v: v + Math.floor(k / cols) * PASO }));
+      colocadas.push({ clave: o.clave, u0: ORIGEN - 1.3, v0: v - 1.3, u1: ORIGEN + (cols - 1) * PASO + 1.3, v1: v + (filas - 1) * PASO + 1.3, escritorios });
+      v += filas * PASO + 1.0;
+    }
+    const fondo = Math.max(...colocadas.map((c) => c.v1));
+    if (fondo <= n - 0.15) return { n, oficinas: colocadas };
+    n += 3;   // la sala crece una fila/columna de escritorios, como con los agentes nuevos
+  }
+}

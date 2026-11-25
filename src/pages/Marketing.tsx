@@ -3,6 +3,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Megaphone } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
 import { useAgentesEnVivo } from "@/hooks/useAgentesEnVivo";
 import { useCalibracion, useCasos, useColchon, useCobertura, useInformeDiario, usePiezas, useUltimaCorrida, useReglaHistorial, useReglas, useBitacora, usePropuestas, useDecisiones, useEstadoTrabajos, useAgentesRegistro, useTareasAgentes, useTareasMarketingAgentes, useConsultasAnalista, preguntarAlAnalista, useSeguimientosAnalista, gestionarSeguimiento } from "@/hooks/useMarketing";
@@ -34,6 +35,7 @@ export default function Marketing() {
   const propuestas = usePropuestas();
   const decisiones = useDecisiones();
   const trabajos = useEstadoTrabajos();
+  const navigate = useNavigate();
   const agentesReg = useAgentesRegistro();
   const tareasReg = useTareasAgentes();
   useAgentesEnVivo();   // la oficina de Marketing también se refresca sola cuando un agente empieza o termina algo
@@ -78,7 +80,7 @@ export default function Marketing() {
             <TabsContent value="reglas" className="mt-4"><Reglas reglas={reglas.data!} historial={historial.data!} puedeDecidir={puedeDecidir} /></TabsContent>
             <TabsContent value="agentes" className="mt-4">
               <h2 className="mb-3 text-base font-medium">Oficina de agentes</h2>
-              <OficinaAgentes agentes={agentesReg.data ?? []} tareasMarketing={tareasMk.data ?? []}
+              <OficinaAgentes onAbrirOficina={(id) => navigate(`/agentes?vista=oficina:${id}`)} agentes={agentesReg.data ?? []} tareasMarketing={tareasMk.data ?? []}
                 estadoAgentes={agentesReg.isError ? "error" : agentesReg.isLoading ? "cargando" : "ok"}
                 estadoTareas={tareasMk.isError ? "error" : tareasMk.isLoading ? "cargando" : "ok"}
                 analista={{

@@ -21,3 +21,6 @@ Pantallas en HTML (formato del lienzo de diseño). Se leen como maquetas: estruc
 - sala_marketing_anterior.png: la sala de Marketing que se reemplaza.
 
 Todos los datos de actividad, estados, niveles y tareas son de ejemplo.
+
+## tableros-v2/ y capturas-v2/ (25 nov 2026)
+Segunda ronda de tableros (Oficina, Equipo, Crear, Trabajo, Movil, Barra, canvas.json y oficina_vizumi.png): referencia de R1 a R7. No reemplazan a los de `tableros/`. Lo implementado hasta ahora (R1 y R2) y sus supuestos: `docs/agentes-oficinas-equipo.md`; capturas en `capturas-v2/` (datos de muestra).

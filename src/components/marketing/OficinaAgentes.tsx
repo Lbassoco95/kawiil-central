@@ -7,6 +7,8 @@ import { cuandoRelativo, ESTADO_TAREA, type AgenteRegistro, type TareaMarketing 
 import { personajes, figurasDeSala } from "./oficinaAgentesLogica";
 import { SalaIsometrica } from "@/components/agentes/SalaIsometrica";
 import { DEPARTAMENTOS } from "@/lib/agentes/departamentos";
+import { oficinasDe } from "@/lib/agentes/equipos";
+import { figurasOficina } from "@/lib/agentes/oficina";
 
 export type EstadoCarga = "cargando" | "error" | "ok";
 
@@ -24,8 +26,9 @@ const COLOR_TAREA = (s: string) => (ESTADO_TAREA[s]?.falla ? "rojo" : s === "com
 // ── Componente ──────────────────────────────────────────────────────────────────────────────────────────────────────
 // Fase 1: solo lectura. Muestra a los agentes de Marketing con su estado real y, al elegir uno, su objetivo, cumplimiento e historial.
 // Preguntarles y dejarles tareas llega en fases siguientes (ver docs/marketing-equipo-agentes-diseno.md).
-export function OficinaAgentes({ agentes, tareasMarketing, estadoAgentes, estadoTareas, ahora, analista }: {
+export function OficinaAgentes({ agentes, tareasMarketing, estadoAgentes, estadoTareas, ahora, analista, onAbrirOficina }: {
   agentes: AgenteRegistro[]; tareasMarketing: TareaMarketing[]; estadoAgentes: EstadoCarga; estadoTareas: EstadoCarga; ahora?: Date; analista?: AnalistaProps;
+  onAbrirOficina?: (jefeId: string) => void;   // la pantalla de una oficina vive en /agentes; Marketing solo la dibuja en su sala (R1.5)
 }) {
   const [pensandoId, setPensandoId] = useState<string | null>(null);
   const [reloj, setReloj] = useState(() => new Date());
@@ -37,6 +40,10 @@ export function OficinaAgentes({ agentes, tareasMarketing, estadoAgentes, estado
 
   const figuras = useMemo(() => figurasDeSala(lista), [lista]);
   const etiquetas = useMemo(() => new Map(lista.map((p) => [p.id, p.estado.etiqueta])), [lista]);
+  // Oficinas de equipo (R1.5): los agentes que crea un agente de Marketing viven en su oficina dentro de esta sala, con su piso y su letrero.
+  const oficinas = useMemo(() => oficinasDe(agentes as never).filter((o) => lista.some((p) => p.id === o.jefeId)).map((o) => ({
+    clave: o.jefeId, nombre: o.nombre, tinte: o.tinte, figuras: figurasOficina(o.miembros.map((m) => m.agente), [], now),
+  })), [agentes, lista, now]);
 
   if (estadoAgentes === "error") return <Vacio>No pudimos leer los agentes de Marketing. Inténtalo de nuevo.</Vacio>;
   if (estadoAgentes === "cargando") return <Vacio>Preparando la oficina…</Vacio>;
@@ -45,7 +52,8 @@ export function OficinaAgentes({ agentes, tareasMarketing, estadoAgentes, estado
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(300px,1fr)]" data-testid="oficina-agentes">
       <div className="min-w-0 space-y-3">
-        <SalaIsometrica depto={DEPARTAMENTOS.marketing} figuras={figuras} elegidoId={elegido?.id} etiqueta={(f) => etiquetas.get(f.id) ?? ""} onElegir={setElegidoId} />
+        <SalaIsometrica depto={DEPARTAMENTOS.marketing} figuras={figuras} elegidoId={elegido?.id} etiqueta={(f) => etiquetas.get(f.id) ?? ""} onElegir={(id) => { if (etiquetas.has(id)) setElegidoId(id); }}
+          oficinas={oficinas} onAbrirOficina={onAbrirOficina} />
         <div className="zen-glass rounded-2xl p-3">
         <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Agentes de Marketing">
           {lista.map((p) => (
