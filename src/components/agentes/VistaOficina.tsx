@@ -7,6 +7,7 @@ import { PanelAgente } from "@/components/agentes/PanelAgente";
 import { OficinaEquipo } from "@/components/agentes/OficinaEquipo";
 import { idsEnOficinas } from "@/lib/agentes/equipos";
 import { urlChat } from "@/lib/agentes/chat";
+import { totalPendientes } from "@/lib/agentes/pendientes";
 import type { OficinaEnSala } from "@/components/agentes/SalaIsometrica";
 import { agruparPorDepartamento } from "@/lib/agentes/departamentos";
 import { nombreAgente } from "@/lib/agentes/registro";
@@ -62,7 +63,7 @@ export function VistaOficina({ figuras, agentes, tareas, ahora, vista, onVista, 
   );
   return (
     <div className="space-y-3" data-testid="vista-oficina" data-vista={vista.tipo === "plano" ? "plano" : vista.tipo === "isla" ? `isla:${vista.clave}` : vista.tipo === "oficina" ? `oficina:${vista.id}` : `agente:${vista.id}`}>
-      <FranjaEnVivo figuras={figuras} departamentoDe={(id) => deptoDe.get(id) ?? "Otros"} onElegir={alElegir} esperan={esperan} actividad={(f) => actividadDe(f.id, f.estado, tareas)} />
+      <FranjaEnVivo figuras={figuras} departamentoDe={(id) => deptoDe.get(id) ?? "Otros"} onElegir={alElegir} esperan={esperan} pendientes={totalPendientes(tareas)} actividad={(f) => actividadDe(f.id, f.estado, tareas)} />
       {migas}
       {vista.tipo === "plano" && (
         <p className="px-1 text-sm text-muted-foreground" data-testid="resumen-agentes">

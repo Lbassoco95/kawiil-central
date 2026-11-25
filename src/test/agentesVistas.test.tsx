@@ -88,10 +88,10 @@ describe("VistaOficina", () => {
     render(<VistaOficina figuras={figs} agentes={AGENTES} tareas={TAREAS} ahora={AHORA} vista={{ tipo: "agente", id: "no-existe" }} onVista={vi.fn()} onElegirAgente={vi.fn()} />);
     expect(screen.getByTestId("agente-no-existe")).toBeTruthy();
   });
-  it("la franja cuenta lo que te espera y pone la tarea en curso en la actividad", () => {
-    const t = [...TAREAS, { ...ta("t9", "a2", "waiting_approval") }];
+  it("la franja cuenta lo que te espera (total de pendientes de todos los agentes) y pone la tarea en curso en la actividad", () => {
+    const t = [...TAREAS, { ...ta("t9", "a2", "waiting_approval") }, { ...ta("t10", "a2", "waiting_approval") }];
     render(<VistaOficina figuras={figurasOficina(AGENTES, t, AHORA)} agentes={AGENTES} tareas={t} ahora={AHORA} vista={VISTA_PLANO} onVista={vi.fn()} onElegirAgente={vi.fn()} />);
-    expect(screen.getByTestId("franja-esperan").textContent).toContain("1 te espera");
+    expect(screen.getByTestId("franja-esperan").textContent).toContain("2 pendientes de ti");   // se cuenta por tarea, no por agente
     expect(screen.getByTestId("franja-a1").textContent).toContain("Trabajando · consulta");
     expect(screen.getByTestId("franja-a2").textContent).toContain("te espera");
   });
