@@ -24,4 +24,6 @@ Seis agentes inventados (Vizumi, Nelli, Vigilante SITI —creado por Vizumi, en 
   | `VERCEL_ENV=production` | no (0 archivos) |
   | sin variable (como Railway) | no (0 archivos) |
 - Pruebas automáticas (`src/test/agentesPrueba.test.ts`): nada sale a la red, las demás tablas no se escriben y ningún archivo de la app importa el modo de prueba salvo `main.tsx` y `App.tsx`, de forma dinámica y detrás de la constante.
-- Para comprobarlo tú: en la dirección de producción, `/agentes/prueba` debe abrir la pantalla de «página no encontrada».
+- Para comprobarlo tú, dos formas:
+  1. **A simple vista:** con tu sesión, abre `https://www.kawiil-central.mx/agentes/prueba`. Debe salir «página no encontrada»; no debe aparecer la franja amarilla ni datos de ejemplo.
+  2. **Con el revisor automático:** `bash tools/agentes/verificar_prueba_ausente.sh https://www.kawiil-central.mx` busca el texto del modo de prueba en todos los archivos que carga el sitio. Probado contra el build de vista previa (dice «SÍ está») y contra el de producción (dice «NO está»).
