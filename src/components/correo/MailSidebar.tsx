@@ -62,6 +62,11 @@ interface MailSidebarProps {
   activeCustomFolderId?: string;
   activeLabelId?: string | null;
   onSelectLabel: (id: string | null) => void;
+  /**
+   * "desktop": columna fija de 200px, visible solo desde `lg`.
+   * "sheet": ancho completo y siempre visible; se usa dentro de la hoja de buzones en móvil.
+   */
+  variant?: "desktop" | "sheet";
 }
 
 interface NavItem {
@@ -450,7 +455,9 @@ export function MailSidebar({
   activeCustomFolderId,
   activeLabelId,
   onSelectLabel,
+  variant = "desktop",
 }: MailSidebarProps) {
+  const isSheet = variant === "sheet";
   const colorForAccount = useAccountColor();
   // Fallback: no leídos entre los correos ya cargados (por si aún no llega la lista de carpetas).
   const { data: inboxData } = useOutlookEmails("inbox");
@@ -545,17 +552,26 @@ export function MailSidebar({
   const isTabActive = (id: MailTabId) => activeTab === id && !activeCustomFolderId && activeLabelId == null;
 
   return (
-    <div className="hidden lg:flex w-[200px] shrink-0 bg-card border-r border-border/40 flex-col h-full min-h-0">
-      {/* Compose button */}
-      <div className="px-3 pt-4 pb-2 shrink-0">
-        <button
-          onClick={onCompose}
-          className="w-full flex items-center justify-center gap-2 h-9 rounded-full bg-primary text-primary-foreground text-[12.5px] font-semibold hover:bg-primary/90 transition-colors"
-        >
-          <PenLine className="w-3.5 h-3.5" />
-          Redactar
-        </button>
-      </div>
+    <div
+      className={cn(
+        "flex flex-col bg-card",
+        isSheet
+          ? "w-full"
+          : "hidden lg:flex w-[200px] shrink-0 border-r border-border/40 h-full min-h-0",
+      )}
+    >
+      {/* Compose button (en la hoja móvil ya existe "Redactar" en la barra de la lista) */}
+      {!isSheet && (
+        <div className="px-3 pt-4 pb-2 shrink-0">
+          <button
+            onClick={onCompose}
+            className="w-full flex items-center justify-center gap-2 h-9 rounded-full bg-primary text-primary-foreground text-[12.5px] font-semibold hover:bg-primary/90 transition-colors"
+          >
+            <PenLine className="w-3.5 h-3.5" />
+            Redactar
+          </button>
+        </div>
+      )}
 
       {/* Navigation items — fixed, never scroll away */}
       <nav className="flex flex-col gap-0.5 px-2 pb-2 shrink-0">
@@ -633,7 +649,7 @@ export function MailSidebar({
       <div className="mx-3 border-t border-border/40 shrink-0" />
 
       {/* Todo lo de abajo comparte un solo scroll — evita que las secciones se encimen en pantallas bajas */}
-      <div className="flex-1 min-h-0 overflow-y-auto">
+      <div className={cn(!isSheet && "flex-1 min-h-0 overflow-y-auto")}>
 
       {/* Carpetas section */}
       <div className="shrink-0">

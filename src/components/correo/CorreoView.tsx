@@ -332,7 +332,7 @@ ${detail.body?.contentType === "html" ? origBody : `<pre style="font-family:inhe
       </div>
 
       {/* Keyboard hint strip — solo sobre la lista de correos; no tapar sidebar (200px) ni panel de contacto */}
-      <div className="absolute bottom-0 left-[200px] right-[290px] z-20 flex items-center gap-4 px-4 py-1.5 bg-card/90 backdrop-blur-sm border-t border-border/30 text-[11px] text-muted-foreground/50 pointer-events-none">
+      <div className="hidden lg:flex absolute bottom-0 left-[200px] right-0 xl:right-[290px] z-20 items-center gap-4 px-4 py-1.5 bg-card/90 backdrop-blur-sm border-t border-border/30 text-[11px] text-muted-foreground/50 pointer-events-none">
         {[
           { key: "C", label: "Redactar" },
           { key: "F", label: "Reenviar" },
@@ -352,6 +352,24 @@ ${detail.body?.contentType === "html" ? origBody : `<pre style="font-family:inhe
         open={foldersOpen}
         onOpenChange={setFoldersOpen}
         onSelectFolder={handleSelectFolder}
+        onCompose={() => { setForwardState(null); setComposeOpen(true); }}
+        accountsPanel={
+          <MailSidebar
+            variant="sheet"
+            activeTab={activeTab}
+            onSelectTab={(tab) => { handleSelectTab(tab); setActiveLabelId(null); setFoldersOpen(false); }}
+            onCompose={() => { setFoldersOpen(false); setForwardState(null); setComposeOpen(true); }}
+            onSelectFolder={handleSelectFolder}
+            activeCustomFolderId={customFolderOverride ?? undefined}
+            activeLabelId={activeLabelId}
+            onSelectLabel={(id) => {
+              setActiveLabelId(id);
+              setCustomFolderOverride(null);
+              setCustomFolderName(null);
+              if (id) setFoldersOpen(false);
+            }}
+          />
+        }
       />
       <MailRulesSheet
         open={rulesOpen}

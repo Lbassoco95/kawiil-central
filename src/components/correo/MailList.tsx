@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
-import { Search, RefreshCw, Loader2, PenLine, FolderOpen, ListFilter, Paperclip } from "lucide-react";
+import { Search, RefreshCw, Loader2, PenLine, FolderOpen, ListFilter, Paperclip, Mail, ChevronDown } from "lucide-react";
 import { useOutlookEmails, useArchiveEmail, useMarkEmailRead, useMarkEmailUnread, useEmailUserLabels, useEmailLabelAssignmentsBulk, useMicrosoftConnection, useMailFolders } from "@/hooks/useMicrosoft";
 import {
   useLinkedOutlookEmailsAll,
@@ -422,6 +422,16 @@ const now = useMemo(() => new Date(), []);
         >
           <PenLine className="w-3.5 h-3.5" />
           Redactar
+        </button>
+        {/* Móvil: el sidebar de buzones está oculto; este botón abre la hoja con "Todas las cuentas" y cada buzón. */}
+        <button
+          onClick={onOpenFolders}
+          aria-label="Elegir buzón o ver todas las cuentas"
+          className="lg:hidden h-8 min-w-0 max-w-[45%] flex items-center gap-1 px-2.5 rounded-full border border-border/60 text-[12px] font-medium text-foreground hover:bg-accent transition-colors"
+        >
+          <Mail className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+          <span className="truncate">{isUnified ? "Todas" : customFolderName || "Buzones"}</span>
+          <ChevronDown className="w-3 h-3 shrink-0 text-muted-foreground" />
         </button>
         <div className="flex-1" />
         {(lastUpdatedAt > 0 || isFetching) && (
