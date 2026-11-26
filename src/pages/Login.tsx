@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ACTIVE_SUPABASE_HOST, supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,7 +12,6 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
-  const supabaseHost = ACTIVE_SUPABASE_HOST;
 
   const isInvalidCredentialsMessage = (message: string) => {
     const n = message.toLowerCase();
@@ -140,10 +139,6 @@ const Login = () => {
               {loading ? "Ingresando..." : "Ingresar"}
             </Button>
           </form>
-
-          <p className="text-center text-[10px] text-muted-foreground/70">
-            Supabase: {supabaseHost}
-          </p>
         </div>
       </div>
 

@@ -446,8 +446,14 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    if (_bearer !== Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")) {
-      const _caller = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const isServiceRole = _bearer === supabaseServiceKey;
+    let callerUserId: string | null = null;
+
+    if (!isServiceRole) {
+      const _caller = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
         global: { headers: { Authorization: _authHeader } },
       });
       const { data: { user: _user }, error: _authErr } = await _caller.auth.getUser();
@@ -457,13 +463,11 @@ serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+      callerUserId = _user.id;
     }
 
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
     // Use service role for backend processing
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -482,6 +486,22 @@ serve(async (req) => {
 
     if (docError || !document) {
       throw new Error(`Document not found: ${docError?.message}`);
+    }
+
+    // Anti-IDOR: un usuario solo puede procesar documentos de su organización.
+    if (!isServiceRole && callerUserId) {
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("organization_id")
+        .eq("user_id", callerUserId)
+        .maybeSingle();
+      const callerOrg = (prof?.organization_id as string | undefined) ?? null;
+      if (!callerOrg || callerOrg !== document.organization_id) {
+        return new Response(JSON.stringify({ error: "Forbidden" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     // Check if already processed
