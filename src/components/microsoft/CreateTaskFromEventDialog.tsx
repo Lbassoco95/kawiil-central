@@ -23,7 +23,8 @@ import { useClientSelectOptions } from "@/hooks/useClientSelectOptions";
 import { useProjects } from "@/hooks/useProjects";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
-import { CheckSquare, Loader2, MapPin, Clock } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { CheckSquare, Loader2, MapPin, Clock, X } from "lucide-react";
 import { toast } from "sonner";
 import { formatMX } from "@/lib/dateUtils";
 import { parseISO } from "date-fns";
@@ -63,6 +64,7 @@ export function CreateTaskFromEventDialog({ open, onOpenChange, event }: Props) 
   const [clientId, setClientId] = useState(NO_CLIENT_VALUE);
   const [projectId, setProjectId] = useState("");
   const [dueDate, setDueDate] = useState("");
+  const [additionalAssignees, setAdditionalAssignees] = useState<string[]>([]);
 
   const createTask = useCreateTask();
   const { data: clients } = useClients();
@@ -103,6 +105,7 @@ export function CreateTaskFromEventDialog({ open, onOpenChange, event }: Props) 
     setDescription(derivedDescription);
     setPriority("media");
     setAssignedTo(UNASSIGNED_VALUE);
+    setAdditionalAssignees([]);
     setClientId(NO_CLIENT_VALUE);
     setProjectId("");
     setDueDate(startDate ? formatMX(startDate, "yyyy-MM-dd") : "");
@@ -127,6 +130,18 @@ export function CreateTaskFromEventDialog({ open, onOpenChange, event }: Props) 
       ...clientSelectOptions,
     ],
     [clientSelectOptions],
+  );
+
+  const teamOptions = useMemo(
+    () =>
+      (users ?? [])
+        .map((u: any) => ({ value: (u.user_id || u.id) as string, label: (u.full_name || u.email || "Usuario") as string }))
+        .filter((o) => !!o.value),
+    [users],
+  );
+  const availableTeam = useMemo(
+    () => teamOptions.filter((o) => o.value !== assignedTo && !additionalAssignees.includes(o.value)),
+    [teamOptions, assignedTo, additionalAssignees],
   );
 
   const handleClientChange = (value: string) => {
@@ -157,6 +172,7 @@ export function CreateTaskFromEventDialog({ open, onOpenChange, event }: Props) 
         assigned_to: assignedTo === UNASSIGNED_VALUE ? undefined : assignedTo,
         client_id: clientId === NO_CLIENT_VALUE ? undefined : clientId,
         project_id: projectId || undefined,
+        additional_assignees: additionalAssignees.filter((uid) => uid !== assignedTo),
       },
       {
         onSuccess: () => {
@@ -252,6 +268,34 @@ export function CreateTaskFromEventDialog({ open, onOpenChange, event }: Props) 
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Colaboradores del equipo</Label>
+            {additionalAssignees.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {additionalAssignees.map((uid) => (
+                  <Badge key={uid} variant="secondary" className="gap-1 pr-1 text-xs">
+                    {teamOptions.find((o) => o.value === uid)?.label || uid}
+                    <button
+                      type="button"
+                      aria-label="Quitar colaborador"
+                      className="flex h-5 w-5 items-center justify-center rounded-full hover:text-destructive"
+                      onClick={() => setAdditionalAssignees((a) => a.filter((x) => x !== uid))}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+            )}
+            <SearchableSelect
+              options={availableTeam}
+              value=""
+              onValueChange={(uid) => uid && setAdditionalAssignees((a) => (a.includes(uid) ? a : [...a, uid]))}
+              placeholder="Agregar del equipo..."
+              searchPlaceholder="Buscar persona..."
+            />
           </div>
 
           <div className="space-y-2">

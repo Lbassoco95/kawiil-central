@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Check, ChevronsUpDown, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 export interface SearchableOption {
   value: string;
@@ -39,6 +39,7 @@ export function SearchableSelect({
 }: Props) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const isMobile = useIsMobile();
 
   const sorted = useMemo(() => {
     const seen: string[] = [];
@@ -76,22 +77,29 @@ export function SearchableSelect({
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+      <PopoverContent
+        className="w-[--radix-popover-trigger-width] min-w-[220px] max-w-[calc(100vw-24px)] p-0"
+        align="start"
+        collisionPadding={12}
+        // En móvil no enfocamos el buscador al abrir: el teclado se comería la lista.
+        // El teclado aparece solo si la persona toca el campo de búsqueda.
+        onOpenAutoFocus={(e) => { if (isMobile) e.preventDefault(); }}
+      >
         <div className="flex items-center border-b px-3 py-2">
           <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={searchPlaceholder}
-            className="h-8 border-0 bg-transparent p-0 shadow-none focus-visible:ring-0"
+            className="h-8 border-0 bg-transparent p-0 text-base shadow-none focus-visible:ring-0 md:text-sm"
           />
         </div>
-        <div className="max-h-[300px] overflow-y-auto">
+        <div className="max-h-[min(300px,calc(var(--radix-popover-content-available-height,300px)-52px))] overflow-y-auto overscroll-contain">
           <div className="p-1">
             {emptyLabel && !search && (
               <button
                 className={cn(
-                  "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground cursor-pointer text-muted-foreground",
+                  "flex w-full items-center gap-2 rounded-sm px-2 py-2.5 md:py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground cursor-pointer text-muted-foreground",
                   !value && "bg-accent"
                 )}
                 onClick={() => {
@@ -116,7 +124,7 @@ export function SearchableSelect({
                 )}
               <button
                 className={cn(
-                  "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground cursor-pointer",
+                  "flex w-full items-center gap-2 rounded-sm px-2 py-2.5 md:py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground cursor-pointer",
                   value === option.value && "bg-accent"
                 )}
                 onClick={() => {
