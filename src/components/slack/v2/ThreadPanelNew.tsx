@@ -12,9 +12,16 @@ interface Props {
   rootMessage: SlackMessage | null;
   replies: SlackMessage[];
   isLoading: boolean;
+  loadError?: string | null;
+  /** La raíz ya se ve y todavía llegan las respuestas. */
+  isFetchingReplies?: boolean;
+  expectedReplies?: number;
   isSending?: boolean;
   onSendReply: (text: string, files?: File[]) => void;
   onReact?: (ts: string, emoji: string) => void;
+  quickReactions?: string[];
+  showQuickReactions?: boolean;
+  frequentEmoji?: string[];
   onCreateTask?: (msg: SlackMessage) => void;
   userMap?: Record<string, { display_name?: string; real_name?: string; avatar_url?: string }>;
   customEmoji?: SlackCustomEmojiMap;
@@ -33,9 +40,15 @@ export function ThreadPanelNew({
   rootMessage,
   replies,
   isLoading,
+  loadError = null,
+  isFetchingReplies = false,
+  expectedReplies = 0,
   isSending,
   onSendReply,
   onReact,
+  quickReactions,
+  showQuickReactions,
+  frequentEmoji,
   onCreateTask,
   userMap = {},
   customEmoji,
@@ -88,7 +101,7 @@ export function ThreadPanelNew({
         >
         {/* Mensajes del hilo */}
         <div className="sl-thread-stream" ref={scrollRef}>
-          {isLoading && (
+          {isLoading && !rootMessage && (
             <div style={{ padding: 24, textAlign: "center", color: "hsl(var(--muted-foreground))", fontSize: 13 }}>
               Cargando hilo…
             </div>
@@ -128,11 +141,24 @@ export function ThreadPanelNew({
                   userMap={userMap}
                   customEmoji={customEmoji}
                   onReact={onReact}
+                  quickReactions={quickReactions}
+                  showQuickReactions={showQuickReactions}
+                  frequentEmoji={frequentEmoji}
                   onCreateTask={onCreateTask}
                 />
               </div>
             );
           })}
+          {loadError && (
+            <p className="sl-thread-pending">{loadError}</p>
+          )}
+          {isFetchingReplies && (
+            <p className="sl-thread-pending">
+              {expectedReplies > 0
+                ? `Cargando ${expectedReplies} ${expectedReplies === 1 ? "respuesta" : "respuestas"}…`
+                : "Cargando respuestas…"}
+            </p>
+          )}
         </div>
 
         {/* Composer del hilo — con @menciones */}
