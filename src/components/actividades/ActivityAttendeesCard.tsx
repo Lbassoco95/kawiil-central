@@ -4,9 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
+import { Progress } from "@/components/ui/progress";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -28,6 +26,7 @@ import {
   useActivityAttendees, useCreateActivityAttendee, useUpdateActivityAttendee,
   useDeleteActivityAttendee, type ActivityAttendee,
 } from "@/hooks/useActivityExtras";
+import { buildGuestOverview, type GuestOverview, type GuestStatus } from "@/lib/activityGuestOverview";
 
 function AttendeeDialog({
   activityId, attendee, trigger,
@@ -209,6 +208,209 @@ function AttendeeDialog({
   );
 }
 
+function ConfirmSelect({
+  value, onChange,
+}: { value: string; onChange: (v: string) => void }) {
+  const status = (value === "si" || value === "no" ? value : "pendiente") as AttendeeConfirmed;
+  return (
+    <Select value={status} onValueChange={onChange}>
+      <SelectTrigger className="h-8 w-[124px] text-xs">
+        <Badge variant="outline" className={ATTENDEE_CONFIRMED_STYLES[status]}>
+          {ATTENDEE_CONFIRMED_LABELS[status]}
+        </Badge>
+      </SelectTrigger>
+      <SelectContent>
+        {ATTENDEE_CONFIRMED_OPTIONS.map((o) => (
+          <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+const STATUS_TONE: Record<GuestStatus, string> = {
+  si: "text-emerald-800",
+  no: "text-rose-800",
+  pendiente: "text-muted-foreground",
+};
+
+function GuestOverviewPanel({ overview }: { overview: GuestOverview }) {
+  const total = overview.invitadosTotal;
+  const pct = total === 0 ? 0 : Math.round((overview.confirman / total) * 100);
+  const approvedExtras = overview.extras.filter((e) => e.status === "aprobado");
+  const showCompanions = overview.plusOnes.length > 0 || overview.plusSinNombre > 0 || approvedExtras.length > 0;
+  const headline = overview.confirman === 0
+    ? `Nadie ha confirmado · ${total} ${total === 1 ? "invitado" : "invitados"}`
+    : overview.confirman === total
+      ? (total === 1 ? "El invitado confirma" : `Los ${total} invitados confirman`)
+      : `${overview.confirman} de ${total} invitados confirman`;
+
+  return (
+    <div className="mb-4 space-y-3 rounded-lg border bg-muted/30 p-3">
+      <div className="space-y-1">
+        <p className="text-sm font-medium">Cómo vamos</p>
+        <p className="text-sm">{headline}</p>
+        <p className="text-xs text-muted-foreground">
+          Vienen {overview.vienen} {overview.vienen === 1 ? "persona" : "personas"}
+          {(overview.plusOnes.length > 0 || overview.plusSinNombre > 0 || approvedExtras.length > 0)
+            ? " (con +1 y extras)"
+            : ""}
+          {overview.porConfirmar > 0 ? ` · ${overview.porConfirmar} por confirmar` : ""}
+        </p>
+      </div>
+      <Progress value={pct} aria-label={`${overview.confirman} de ${total} invitados confirman`} />
+      <div className="grid grid-cols-3 gap-2">
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-center">
+          <p className="text-lg font-semibold leading-none text-emerald-800">{overview.confirman}</p>
+          <p className="mt-1 text-[11px] text-emerald-800/80">Confirman</p>
+        </div>
+        <div className="rounded-md border bg-background px-2 py-1.5 text-center">
+          <p className="text-lg font-semibold leading-none">{overview.pendientes}</p>
+          <p className="mt-1 text-[11px] text-muted-foreground">Pendientes</p>
+        </div>
+        <div className={`rounded-md border px-2 py-1.5 text-center ${overview.noAsisten > 0 ? "border-rose-200 bg-rose-50" : "bg-background"}`}>
+          <p className={`text-lg font-semibold leading-none ${overview.noAsisten > 0 ? "text-rose-800" : ""}`}>{overview.noAsisten}</p>
+          <p className={`mt-1 text-[11px] ${overview.noAsisten > 0 ? "text-rose-800/80" : "text-muted-foreground"}`}>No asisten</p>
+        </div>
+      </div>
+
+      {showCompanions && (
+        <div className="space-y-1.5 border-t pt-3">
+          <p className="text-xs font-medium text-muted-foreground">Acompañantes, con nombre</p>
+          {overview.plusOnes.length > 0 && (
+            <ul className="space-y-1.5">
+              {overview.plusOnes.map((p) => (
+                <li key={p.attendeeId} className="text-sm">
+                  <span className="font-medium">{p.name}</span>
+                  <span className="text-muted-foreground"> · con {p.host}</span>
+                  <span className={`ml-1.5 text-xs ${p.hostDeclined ? "text-rose-800" : STATUS_TONE[p.status]}`}>
+                    {p.hostDeclined ? "No viene" : ATTENDEE_CONFIRMED_LABELS[p.status]}
+                  </span>
+                  {p.dietary && (
+                    <span className="block text-xs text-muted-foreground">{p.dietary}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          {overview.plusSinNombre > 0 && (
+            <p className="text-xs text-muted-foreground">
+              {overview.plusSinNombre === 1
+                ? "1 acompañante todavía sin nombre"
+                : `${overview.plusSinNombre} acompañantes todavía sin nombre`}
+            </p>
+          )}
+          {approvedExtras.length > 0 && (
+            <ul className="space-y-1">
+              {approvedExtras.map((e) => (
+                <li key={`${e.attendeeId}-extra`} className="text-sm">
+                  <span className="font-medium">
+                    +{e.count} extra {e.count === 1 ? "aprobado" : "aprobados"}
+                  </span>
+                  <span className="text-muted-foreground"> · de {e.host}</span>
+                  {e.note && <span className="block text-xs text-muted-foreground">{e.note}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AttendeeRow({
+  activityId, attendee, pend, onConfirm, onPlusConfirm, onApproveExtra, onRejectExtra, onDelete, busy,
+}: {
+  activityId: string;
+  attendee: ActivityAttendee;
+  pend?: { done: number; total: number };
+  onConfirm: (v: string) => void;
+  onPlusConfirm: (v: string) => void;
+  onApproveExtra: () => void;
+  onRejectExtra: () => void;
+  onDelete: () => void;
+  busy: boolean;
+}) {
+  const detail = [attendee.phone, attendee.dietary_restriction].filter(Boolean).join(" · ");
+  return (
+    <li className="px-3 py-2.5">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-medium">{attendee.name}</p>
+          {(detail || pend) && (
+            <p className="text-xs text-muted-foreground">
+              {detail}
+              {detail && pend ? " · " : ""}
+              {pend ? `Pendientes ${pend.done}/${pend.total}` : ""}
+            </p>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <ConfirmSelect value={attendee.confirmed} onChange={onConfirm} />
+          <AttendeeDialog
+            activityId={activityId}
+            attendee={attendee}
+            trigger={
+              <Button size="icon" variant="ghost" className="h-7 w-7">
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+            }
+          />
+          <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={onDelete}>
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </div>
+
+      {attendee.has_plus_one && (
+        <div className="mt-2 ml-1 flex flex-wrap items-start justify-between gap-2 border-l pl-3">
+          <div className="min-w-0">
+            <p className="text-sm">
+              <span className="text-muted-foreground">+1 </span>
+              {attendee.plus_one_name?.trim() || "Sin nombre"}
+            </p>
+            {(attendee.plus_one_phone || attendee.plus_one_dietary) && (
+              <p className="text-xs text-muted-foreground">
+                {[attendee.plus_one_phone, attendee.plus_one_dietary].filter(Boolean).join(" · ")}
+              </p>
+            )}
+          </div>
+          <ConfirmSelect value={attendee.plus_one_confirmed} onChange={onPlusConfirm} />
+        </div>
+      )}
+
+      {attendee.extra_guests_status === "solicitado" && (
+        <div className="mt-2 space-y-1.5 rounded-md border border-amber-200 bg-amber-50 p-2">
+          <p className="text-xs font-medium text-amber-900">
+            Pide {attendee.extra_guests_requested} {attendee.extra_guests_requested === 1 ? "invitado extra" : "invitados extra"}
+          </p>
+          {attendee.extra_guests_note && (
+            <p className="text-xs text-amber-900/80">{attendee.extra_guests_note}</p>
+          )}
+          <div className="flex gap-1.5">
+            <Button size="sm" className="h-7 px-2 text-xs" disabled={busy} onClick={onApproveExtra}>
+              <Check className="mr-1 h-3 w-3" />Aprobar
+            </Button>
+            <Button size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={busy} onClick={onRejectExtra}>
+              <X className="mr-1 h-3 w-3" />Rechazar
+            </Button>
+          </div>
+        </div>
+      )}
+      {attendee.extra_guests_status === "aprobado" && (
+        <p className="mt-1.5 text-xs text-emerald-800">
+          +{attendee.extra_guests_requested} extra {attendee.extra_guests_requested === 1 ? "aprobado" : "aprobados"}
+          {attendee.extra_guests_note ? ` · ${attendee.extra_guests_note}` : ""}
+        </p>
+      )}
+      {attendee.extra_guests_status === "rechazado" && (
+        <p className="mt-1.5 text-xs text-muted-foreground">Extra rechazado</p>
+      )}
+    </li>
+  );
+}
+
 export function ActivityAttendeesCard({ activityId }: { activityId: string }) {
   const { data: attendees, isLoading } = useActivityAttendees(activityId);
   const updateAttendee = useUpdateActivityAttendee();
@@ -216,12 +418,7 @@ export function ActivityAttendeesCard({ activityId }: { activityId: string }) {
 
   const { data: tasks } = useActivityTasks(activityId);
   const list = attendees ?? [];
-  // Personas = asistentes + acompañantes (cuenta para comida, lugares, souvenirs).
-  const extras = (a: ActivityAttendee) => (a.extra_guests_status === "aprobado" ? a.extra_guests_requested : 0);
-  const personas = list.reduce((n, a) => n + 1 + (a.has_plus_one ? 1 : 0) + extras(a), 0);
-  const confirmados = list.reduce(
-    (n, a) => n + (a.confirmed === "si" ? 1 + extras(a) : 0) + (a.has_plus_one && a.plus_one_confirmed === "si" ? 1 : 0), 0);
-  const porAprobar = list.filter((a) => a.extra_guests_status === "solicitado").length;
+  const overview = buildGuestOverview(list);
   const pendCount: Record<string, { done: number; total: number }> = {};
   for (const t of tasks ?? []) {
     if (!t.activity_attendee_id) continue;
@@ -229,21 +426,21 @@ export function ActivityAttendeesCard({ activityId }: { activityId: string }) {
     c.total += 1;
     if (t.status === "completada") c.done += 1;
   }
+  const groups = [
+    { key: "si", title: "Confirman", items: list.filter((a) => a.confirmed === "si") },
+    { key: "pendiente", title: "Pendientes", items: list.filter((a) => a.confirmed !== "si" && a.confirmed !== "no") },
+    { key: "no", title: "No asisten", items: list.filter((a) => a.confirmed === "no") },
+  ].filter((g) => g.items.length > 0);
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-        <CardTitle className="text-base flex items-center gap-2">
+      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0 pb-3">
+        <CardTitle className="text-base flex flex-wrap items-center gap-2">
           <Users className="h-4 w-4" />
           Asistentes
-          {list.length > 0 && (
-            <span className="text-xs font-normal text-muted-foreground">
-              {confirmados}/{personas} personas confirmadas
-            </span>
-          )}
-          {porAprobar > 0 && (
+          {overview.porAprobar > 0 && (
             <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-800">
-              {porAprobar} {porAprobar === 1 ? "solicitud" : "solicitudes"} de invitados extra por aprobar
+              {overview.porAprobar} {overview.porAprobar === 1 ? "solicitud" : "solicitudes"} de invitados extra por aprobar
             </Badge>
           )}
         </CardTitle>
@@ -269,138 +466,33 @@ export function ActivityAttendeesCard({ activityId }: { activityId: string }) {
             Sin asistentes aún. Agrega a las personas del equipo o invitados.
           </p>
         ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nombre</TableHead>
-                  <TableHead>Confirmación</TableHead>
-                  <TableHead>Acompañante (+1)</TableHead>
-                  <TableHead>Restricción</TableHead>
-                  <TableHead>Pendientes</TableHead>
-                  <TableHead className="w-[80px]" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {list.map((a) => (
-                  <TableRow key={a.id}>
-                    <TableCell className="font-medium">
-                      {a.name}
-                      {a.phone && (
-                        <span className="block text-xs font-normal text-muted-foreground">{a.phone}</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Select
-                        value={a.confirmed}
-                        onValueChange={(v) => updateAttendee.mutate({ id: a.id, confirmed: v })}
-                      >
-                        <SelectTrigger className="h-8 w-[130px] text-xs">
-                          <Badge
-                            variant="outline"
-                            className={ATTENDEE_CONFIRMED_STYLES[a.confirmed as AttendeeConfirmed]}
-                          >
-                            {ATTENDEE_CONFIRMED_LABELS[a.confirmed as AttendeeConfirmed] ?? a.confirmed}
-                          </Badge>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {ATTENDEE_CONFIRMED_OPTIONS.map((o) => (
-                            <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                    <TableCell>
-                      <div className="space-y-1.5">
-                        {a.has_plus_one ? (
-                          <div className="space-y-1">
-                            <span className="block text-sm">{a.plus_one_name || "Por definir"}</span>
-                            {a.plus_one_phone && (
-                              <span className="block text-xs text-muted-foreground">{a.plus_one_phone}</span>
-                            )}
-                            <Select
-                              value={a.plus_one_confirmed}
-                              onValueChange={(v) => updateAttendee.mutate({ id: a.id, plus_one_confirmed: v })}
-                            >
-                              <SelectTrigger className="h-7 w-[130px] text-xs">
-                                <Badge
-                                  variant="outline"
-                                  className={ATTENDEE_CONFIRMED_STYLES[a.plus_one_confirmed as AttendeeConfirmed]}
-                                >
-                                  {ATTENDEE_CONFIRMED_LABELS[a.plus_one_confirmed as AttendeeConfirmed] ?? a.plus_one_confirmed}
-                                </Badge>
-                              </SelectTrigger>
-                              <SelectContent>
-                                {ATTENDEE_CONFIRMED_OPTIONS.map((o) => (
-                                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        ) : "—"}
-                        {a.extra_guests_status === "solicitado" && (
-                          <div className="space-y-1.5 rounded-md border border-amber-200 bg-amber-50 p-2">
-                            <p className="text-xs font-medium text-amber-900">
-                              Pide {a.extra_guests_requested} {a.extra_guests_requested === 1 ? "invitado extra" : "invitados extra"}
-                            </p>
-                            {a.extra_guests_note && (
-                              <p className="text-xs text-amber-900/80">{a.extra_guests_note}</p>
-                            )}
-                            <div className="flex gap-1.5">
-                              <Button size="sm" className="h-7 px-2 text-xs" disabled={updateAttendee.isPending}
-                                onClick={() => updateAttendee.mutate({ id: a.id, extra_guests_status: "aprobado" })}>
-                                <Check className="mr-1 h-3 w-3" />Aprobar
-                              </Button>
-                              <Button size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={updateAttendee.isPending}
-                                onClick={() => updateAttendee.mutate({ id: a.id, extra_guests_status: "rechazado" })}>
-                                <X className="mr-1 h-3 w-3" />Rechazar
-                              </Button>
-                            </div>
-                          </div>
-                        )}
-                        {a.extra_guests_status === "aprobado" && (
-                          <div className="text-xs text-emerald-800">
-                            +{a.extra_guests_requested} extra {a.extra_guests_requested === 1 ? "aprobado" : "aprobados"}
-                            {a.extra_guests_note && <span className="block text-muted-foreground">{a.extra_guests_note}</span>}
-                          </div>
-                        )}
-                        {a.extra_guests_status === "rechazado" && (
-                          <span className="block text-xs text-muted-foreground">Extra rechazado</span>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {a.dietary_restriction || "—"}
-                      {a.has_plus_one && a.plus_one_dietary && (
-                        <span className="block text-xs text-muted-foreground">+1: {a.plus_one_dietary}</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {pendCount[a.id] ? `${pendCount[a.id].done}/${pendCount[a.id].total}` : "—"}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center justify-end gap-1">
-                        <AttendeeDialog
-                          activityId={activityId}
-                          attendee={a}
-                          trigger={
-                            <Button size="icon" variant="ghost" className="h-7 w-7">
-                              <Pencil className="h-3.5 w-3.5" />
-                            </Button>
-                          }
-                        />
-                        <Button
-                          size="icon" variant="ghost" className="h-7 w-7 text-destructive"
-                          onClick={() => deleteAttendee.mutate({ id: a.id, activityId })}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+          <div>
+            <GuestOverviewPanel overview={overview} />
+            <div className="space-y-4">
+              {groups.map((group) => (
+                <section key={group.key}>
+                  <h3 className="mb-1.5 text-xs font-medium text-muted-foreground">
+                    {group.title} · {group.items.length}
+                  </h3>
+                  <ul className="divide-y rounded-lg border">
+                    {group.items.map((a) => (
+                      <AttendeeRow
+                        key={a.id}
+                        activityId={activityId}
+                        attendee={a}
+                        pend={pendCount[a.id]}
+                        busy={updateAttendee.isPending}
+                        onConfirm={(v) => updateAttendee.mutate({ id: a.id, confirmed: v })}
+                        onPlusConfirm={(v) => updateAttendee.mutate({ id: a.id, plus_one_confirmed: v })}
+                        onApproveExtra={() => updateAttendee.mutate({ id: a.id, extra_guests_status: "aprobado" })}
+                        onRejectExtra={() => updateAttendee.mutate({ id: a.id, extra_guests_status: "rechazado" })}
+                        onDelete={() => deleteAttendee.mutate({ id: a.id, activityId })}
+                      />
+                    ))}
+                  </ul>
+                </section>
+              ))}
+            </div>
           </div>
         )}
       </CardContent>

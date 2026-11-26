@@ -96,7 +96,7 @@ export function FoodCountDialog({ activityId }: { activityId: string }) {
 
         {list.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            Aún no hay confirmados. Marca la confirmación de cada asistente en la tabla.
+            Aún no hay confirmados. Marca la confirmación de cada asistente en la lista.
           </p>
         ) : (
           <div className="overflow-x-auto">
