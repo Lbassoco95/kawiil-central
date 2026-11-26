@@ -1493,24 +1493,38 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
                       </SelectContent>
                     </Select>
                   </div>
-                  {assignees.length > 0 && (
-                    <div>
-                      <label className="text-[10px] text-muted-foreground block mb-1">Colaboradores ({assignees.length})</label>
-                      <div className="flex flex-wrap gap-1">
+                  <div>
+                    <label className="text-[10px] text-muted-foreground block mb-1">
+                      Colaboradores{assignees.length > 0 ? ` (${assignees.length})` : ""}
+                    </label>
+                    {assignees.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mb-1.5">
                         {assignees.map((a: any) => (
-                          <UserAvatar
-                            key={a.id}
-                            name={a.profile?.full_name}
-                            email={a.profile?.email}
-                            avatarUrl={a.profile?.avatar_url}
-                            userId={a.user_id}
-                            size="sm"
-                            className="border border-background -ml-1 first:ml-0"
-                          />
+                          <Badge key={a.id} variant="secondary" className="gap-1 pr-1 text-xs">
+                            {a.profile?.full_name || a.user_id}
+                            <button
+                              type="button"
+                              aria-label={`Quitar a ${a.profile?.full_name || "colaborador"}`}
+                              className="flex h-5 w-5 items-center justify-center rounded-full hover:text-destructive"
+                              onClick={() => removeAssignee.mutate({ taskId: taskId!, userId: a.user_id })}
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </Badge>
                         ))}
                       </div>
-                    </div>
-                  )}
+                    )}
+                    <SearchableSelect
+                      options={sortedProfiles.filter(
+                        (p) => p.value !== currentAssignedTo && !assignees.some((a: any) => a.user_id === p.value),
+                      )}
+                      value=""
+                      onValueChange={(uid) => uid && addAssignee.mutate({ taskId: taskId!, userId: uid })}
+                      placeholder="Agregar del equipo..."
+                      searchPlaceholder="Buscar persona..."
+                      className="h-8 w-full text-xs"
+                    />
+                  </div>
                 </div>
               </section>
 
